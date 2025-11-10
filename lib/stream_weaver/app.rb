@@ -68,6 +68,14 @@ module StreamWeaver
       @components << Components::Text.new(content)
     end
 
+    # DSL method: Add a text area component
+    #
+    # @param key [Symbol] The state key for this text area
+    # @param options [Hash] Options (e.g., placeholder, rows)
+    def text_area(key, **options)
+      @components << Components::TextArea.new(key, **options)
+    end
+
     # DSL method: Add a div container component
     #
     # @param options [Hash] Options (e.g., class: "container")

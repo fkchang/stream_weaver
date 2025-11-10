@@ -8,9 +8,13 @@ App = app "User Survey" do
   text "## User Information Survey"
   text "Please fill out this form. When you click Submit, the data will be returned to the calling process."
 
-  text_field :name, placeholder: "Your full name"
-  text_field :email, placeholder: "Your email"
+  text "Your Name:"
+  text_field :name, placeholder: "Enter your full name"
 
+  text "Your Email:"
+  text_field :email, placeholder: "Enter your email address"
+
+  text "Priority Level:"
   select :priority, ["Low", "Medium", "High", "Critical"]
 
   checkbox :agree, "I agree to terms and conditions"

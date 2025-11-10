@@ -41,18 +41,29 @@ module StreamWeaver
       # @param options [Hash] Options (e.g., placeholder)
       def initialize(key, **options)
         @key = key
-        @placeholder = options[:placeholder] || ""
         @options = options
       end
 
       def render(view, state)
-        view.input(
-          type: "text",
-          name: @key.to_s,
-          value: state[@key] || "",
-          placeholder: @placeholder,
-          "x-model" => @key.to_s
-        )
+        # Delegate to adapter - no framework knowledge in component
+        view.adapter.render_text_field(view, @key, @options, state)
+      end
+    end
+
+    # TextArea component for multi-line text input
+    class TextArea < Base
+      attr_reader :key
+
+      # @param key [Symbol] The state key
+      # @param options [Hash] Options (e.g., placeholder, rows)
+      def initialize(key, **options)
+        @key = key
+        @options = options
+      end
+
+      def render(view, state)
+        # Delegate to adapter - no framework knowledge in component
+        view.adapter.render_text_area(view, @key, @options, state)
       end
     end
 
@@ -73,15 +84,8 @@ module StreamWeaver
       end
 
       def render(view, state)
-        style = @options[:style] == :secondary ? "secondary" : "primary"
-
-        view.button(
-          class: "btn btn-#{style}",
-          "hx-post" => "/action/#{@button_id}",
-          "hx-include" => "[x-model]",
-          "hx-target" => "#app-container",
-          "hx-swap" => "innerHTML"
-        ) { @label }
+        # Delegate to adapter - no framework knowledge in component
+        view.adapter.render_button(view, @button_id, @label, @options)
       end
 
       # Execute the button's action block
@@ -158,15 +162,8 @@ module StreamWeaver
       end
 
       def render(view, state)
-        view.label do
-          view.input(
-            type: "checkbox",
-            name: @key.to_s,
-            checked: state[@key],
-            "x-model" => @key.to_s
-          )
-          view.plain " #{@label}"
-        end
+        # Delegate to adapter - no framework knowledge in component
+        view.adapter.render_checkbox(view, @key, @label, @options, state)
       end
     end
 
@@ -184,17 +181,8 @@ module StreamWeaver
       end
 
       def render(view, state)
-        view.select(
-          name: @key.to_s,
-          "x-model" => @key.to_s
-        ) do
-          @choices.each do |choice|
-            view.option(
-              value: choice,
-              selected: state[@key] == choice
-            ) { choice }
-          end
-        end
+        # Delegate to adapter - no framework knowledge in component
+        view.adapter.render_select(view, @key, @choices, @options, state)
       end
     end
   end

@@ -18,6 +18,9 @@ module StreamWeaver
       end
     }
 
+    # Disable protection in test mode to allow Rack::Test requests
+    set :protection, false if ENV['RACK_ENV'] == 'test'
+
     # Disable Sinatra's startup messages for cleaner output
     set :logging, false
     set :show_exceptions, :after_handler
@@ -30,19 +33,39 @@ module StreamWeaver
       # Store the streamlit app for access in routes
       set :streamlit_app, streamlit_app
 
+      # Create adapter instance (Alpine.js by default)
+      set :adapter, Adapter::AlpineJS.new
+
       # Define routes
       get '/' do
-        state = session[:streamlit_state] ||= {}
-        streamlit_app = settings.streamlit_app
-        streamlit_app.rebuild_with_state(state)
+        # For agentic mode, always start with fresh state
+        # For regular mode, preserve state across requests
         is_agentic = settings.respond_to?(:result_container)
-        Views::AppView.new(streamlit_app, state, is_agentic).call
+        if is_agentic
+          # Completely clear the session to avoid any stale data
+          session.clear
+          state = {}
+          session[:streamlit_state] = state
+        else
+          state = session[:streamlit_state] ||= {}
+        end
+
+        # Prevent browser caching for all forms to ensure fresh rendering
+        cache_control :no_cache, :no_store, :must_revalidate, max_age: 0
+        headers 'Pragma' => 'no-cache'
+
+        streamlit_app = settings.streamlit_app
+        adapter = settings.adapter
+        streamlit_app.rebuild_with_state(state)
+        Views::AppView.new(streamlit_app, state, adapter, is_agentic).call
       end
 
       # Update state from form inputs
       post '/update' do
         state = session[:streamlit_state] ||= {}
         streamlit_app = settings.streamlit_app
+        adapter = settings.adapter
+        is_agentic = settings.respond_to?(:result_container)
 
         # Update state with posted params
         params.each do |key, value|
@@ -62,7 +85,7 @@ module StreamWeaver
 
         # Re-render with new state
         streamlit_app.rebuild_with_state(state)
-        Views::AppContentView.new(streamlit_app, state).call
+        Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
       end
 
       # Button actions
@@ -70,6 +93,8 @@ module StreamWeaver
         state = session[:streamlit_state] ||= {}
         button_id = params[:button_id]
         streamlit_app = settings.streamlit_app
+        adapter = settings.adapter
+        is_agentic = settings.respond_to?(:result_container)
 
         # First, rebuild to get all current input component keys
         streamlit_app.rebuild_with_state(state)
@@ -107,7 +132,7 @@ module StreamWeaver
 
         # Re-render with updated state
         streamlit_app.rebuild_with_state(state)
-        Views::AppContentView.new(streamlit_app, state).call
+        Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
       end
 
       # Submit endpoint for agentic mode
@@ -346,53 +371,128 @@ module StreamWeaver
       original_stdout = $stdout
       original_stderr = $stderr
 
-      # Start server in background thread
-      server_instance = nil
-      server_thread = Thread.new do
-        # Suppress output in server thread only
-        original_thread_stdout = $stdout
-        original_thread_stderr = $stderr
-        unless ENV['DEBUG']
-          $stdout = StringIO.new
-          $stderr = StringIO.new
-        end
-        begin
-          # Use Rackup for agentic mode
-          require 'rackup'
-          require 'webrick'
+      # Setup interrupt handler for clean exit
+      interrupted = false
+      trap('INT') do
+        interrupted = true
+        puts "\n\n👋 Shutting down StreamWeaver (agentic mode)..."
+      end
 
-          server_instance = Rackup::Server.new(
-            app: self,
-            Host: host,
-            Port: port,
-            server: 'webrick',
-            Logger: WEBrick::Log.new(StringIO.new, WEBrick::Log::FATAL),
-            AccessLog: []
-          )
-          server_instance.start
+      # Start server in background thread
+      server_container = { server: nil, error: nil, ready: false }
+
+      # Enable thread exception reporting
+      Thread.abort_on_exception = true if ENV['DEBUG']
+
+      server_thread = Thread.new do
+        begin
+          puts "DEBUG: Starting server thread..." if ENV['DEBUG']
+
+          # Don't suppress output - we need to see errors
+          require 'puma'
+          puts "DEBUG: Puma loaded" if ENV['DEBUG']
+
+          # Create Puma server directly with thread pool configuration
+          # Puma 6.x+ requires threads to be configured in constructor
+          puts "DEBUG: Creating Puma::Server..." if ENV['DEBUG']
+          puma_server = Puma::Server.new(self, nil, {min_threads: 0, max_threads: 4})
+          puts "DEBUG: Puma::Server created" if ENV['DEBUG']
+
+          puma_server.add_tcp_listener(host, port)
+          puts "DEBUG: TCP listener added on #{host}:#{port}" if ENV['DEBUG']
+
+          # Store server reference
+          server_container[:server] = puma_server
+          server_container[:ready] = true
+          Thread.current[:server_started] = true
+          puts "DEBUG: Server marked as ready" if ENV['DEBUG']
+
+          # Suppress Puma output only after initialization
+          unless ENV['DEBUG']
+            $stdout = StringIO.new
+            $stderr = StringIO.new
+          end
+
+          puts "DEBUG: Starting puma_server.run..." if ENV['DEBUG']
+          # Run server - this spawns threads but doesn't block
+          puma_server.run
+          puts "DEBUG: puma_server.run returned, server running: #{puma_server.running}" if ENV['DEBUG']
+
+          # Keep thread alive while server is running
+          while puma_server.running
+            sleep 0.1
+          end
+          puts "DEBUG: Server stopped running" if ENV['DEBUG']
         rescue => e
-          $stdout = original_thread_stdout
-          $stderr = original_thread_stderr
-          puts "Server error: #{e.message}" if ENV['DEBUG']
-          puts e.backtrace.first(5).join("\n") if ENV['DEBUG']
-        ensure
-          # Restore stdout/stderr in server thread
-          $stdout = original_thread_stdout
-          $stderr = original_thread_stderr
+          # Store error for display in main thread
+          server_container[:error] = e
+          puts "Server thread error: #{e.class}: #{e.message}"
+          puts e.backtrace.first(10).join("\n")
         end
       end
 
-      # Wait for server to start
+      # Wait for server to start and verify it's responding
       sleep 1
 
-      # Wait for result or timeout
+      # Check if server thread crashed
+      unless server_thread.alive?
+        $stdout = original_stdout
+        $stderr = original_stderr
+        if server_container[:error]
+          puts "\n❌ Server failed to start:"
+          puts "   #{server_container[:error].class}: #{server_container[:error].message}"
+          puts "\n   Backtrace:"
+          server_container[:error].backtrace.first(10).each do |line|
+            puts "     #{line}"
+          end
+        else
+          puts "\n❌ Server failed to start. Check error messages above."
+        end
+        exit(1)
+      end
+
+      # Try to ping the server to make sure it's responding
+      begin
+        require 'net/http'
+        uri = URI(url)
+        response = Net::HTTP.get_response(uri)
+        unless response.is_a?(Net::HTTPSuccess) || response.is_a?(Net::HTTPRedirection)
+          puts "\n⚠️  Server started but returned unexpected response: #{response.code}"
+        end
+      rescue => e
+        $stdout = original_stdout
+        $stderr = original_stderr
+        puts "\n❌ Server not responding: #{e.message}"
+        puts "   Make sure port #{port} is available and try again."
+        if server_container[:server]
+          server_container[:server].stop(true) rescue nil
+        end
+        server_thread.kill if server_thread.alive?
+        exit(1)
+      end
+
+      # Wait for result, timeout, or interrupt
       start_time = Time.now
-      until result_container[:ready] || (Time.now - start_time > timeout)
+      until result_container[:ready] || (Time.now - start_time > timeout) || interrupted
         sleep 0.1
       end
 
       # Shutdown server gracefully
-      server_thread.kill
+      if server_container[:server]
+        begin
+          server_container[:server].stop(true) # true = graceful shutdown
+        rescue => e
+          # Ignore shutdown errors
+        end
+      end
+      server_thread.kill if server_thread.alive?
+
+      # If interrupted, exit immediately
+      if interrupted
+        $stdout = original_stdout
+        $stderr = original_stderr
+        exit(0)
+      end
 
       result = result_container[:result] || {}
 

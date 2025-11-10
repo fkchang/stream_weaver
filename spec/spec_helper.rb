@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+# Set RACK_ENV to test to disable Sinatra protection middleware
+ENV['RACK_ENV'] = 'test'
+
 require "stream_weaver"
 
 RSpec.configure do |config|
