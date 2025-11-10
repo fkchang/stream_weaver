@@ -181,8 +181,31 @@ module StreamWeaver
           settings.result_container[:ready] = true
         end
 
-        # Return confirmation page
-        "<html><body><h1>✅ Submitted!</h1><p>Data has been sent to the agent. You can close this window.</p></body></html>"
+        # Return confirmation page or auto-close
+        auto_close = settings.respond_to?(:auto_close_window) && settings.auto_close_window
+        if auto_close
+          # Auto-close window with JavaScript
+          <<~HTML
+            <html>
+              <head>
+                <title>Submitted</title>
+              </head>
+              <body>
+                <h1>✅ Submitted!</h1>
+                <p>Data has been sent to the agent. This window will close automatically...</p>
+                <script>
+                  // Close window after brief delay to allow user to see confirmation
+                  setTimeout(function() {
+                    window.close();
+                  }, 1000);
+                </script>
+              </body>
+            </html>
+          HTML
+        else
+          # Show confirmation message without auto-close
+          "<html><body><h1>✅ Submitted!</h1><p>Data has been sent to the agent. You can close this window.</p></body></html>"
+        end
       end
 
       # Return the class itself (it's the Rack app)
@@ -332,15 +355,18 @@ module StreamWeaver
     # @option options [Symbol] :output Output mode (:stdout or :file, default: :stdout)
     # @option options [String] :output_file File path to write JSON result
     # @option options [Integer] :timeout Timeout in seconds (default: 300)
+    # @option options [Boolean] :auto_close_window Auto-close browser window after submit (default: false)
     # @return [Hash] The submitted state
     def self.run_once!(options = {})
       output_mode = options.fetch(:output, :stdout)
       output_file = options[:output_file]
       timeout = options.fetch(:timeout, 300)
+      auto_close_window = options.fetch(:auto_close_window, false)
 
       # Container for result (shared between server and main thread)
       result_container = { result: nil, ready: false }
       set :result_container, result_container
+      set :auto_close_window, auto_close_window
 
       # Find port and configure
       port = options[:port] || find_available_port
