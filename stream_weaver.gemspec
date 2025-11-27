@@ -33,9 +33,11 @@ Gem::Specification.new do |spec|
 
   # Runtime dependencies
   spec.add_dependency "sinatra", "~> 4.0"
-  spec.add_dependency "phlex", "~> 1.11"
+  spec.add_dependency "phlex", "~> 2.0"
   spec.add_dependency "puma", "~> 6.4"
   spec.add_dependency "rackup", "~> 2.1"
+  spec.add_dependency "kramdown", "~> 2.4"
+  spec.add_dependency "kramdown-parser-gfm", "~> 1.1"
 
   # Development dependencies
   spec.add_development_dependency "rack-test", "~> 2.1"

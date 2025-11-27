@@ -7,7 +7,7 @@ RSpec.describe "StreamWeaver Server" do
 
   let(:stream_weaver_app) do
     StreamWeaver::App.new("Test App") do
-      text "# Welcome"
+      header1 "Welcome"
       text_field :name, placeholder: "Enter name"
 
       button "Greet" do |state|
@@ -357,7 +357,7 @@ RSpec.describe "StreamWeaver Server" do
   describe "complex app integration" do
     let(:todo_stream_weaver_app) do
       StreamWeaver::App.new("Todo") do
-        text "# Todo List"
+        header1 "Todo List"
 
         text_field :new_todo
 

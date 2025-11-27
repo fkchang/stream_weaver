@@ -4,7 +4,7 @@
 require_relative '../lib/stream_weaver'
 
 App = app "Hello World" do
-  text "# Welcome to StreamWeaver!"
+  header1 "Welcome to StreamWeaver!"
 
   text_field :name, placeholder: "Enter your name"
 

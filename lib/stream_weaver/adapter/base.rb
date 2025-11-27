@@ -88,6 +88,22 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_select"
       end
 
+      # Render a radio button group for single-choice selection
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param key [Symbol] The state key for this radio group
+      # @param choices [Array<String>] The available choices
+      # @param options [Hash] Component options
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      #
+      # @example
+      #   adapter.render_radio_group(view, :answer, ["Option A", "Option B"], {}, state)
+      def render_radio_group(view, key, choices, options, state)
+        raise NotImplementedError, "#{self.class} must implement #render_radio_group"
+      end
+
       # Render a button that executes an action
       #
       # @param view [Phlex::HTML] The Phlex view instance

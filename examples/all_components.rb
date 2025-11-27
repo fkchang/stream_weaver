@@ -3,26 +3,51 @@
 
 require_relative '../lib/stream_weaver'
 
-# Demo of all 6 MVP components
+# Demo of all StreamWeaver components
 App = app "Component Showcase" do
-  text "## StreamWeaver Component Showcase"
+  header "StreamWeaver Component Showcase"
 
-  text "### Text Field"
+  # --- Text Components ---
+  header3 "Text (Literal)"
+  text "Plain text renders literally - **asterisks** stay as asterisks"
+
+  header3 "Markdown (Parsed)"
+  md "**Bold**, *italic*, `code`, and [links](https://example.com) are parsed"
+
+  header3 "Headers"
+  text "header (h2 default), header1-header6 for explicit levels"
+
+  # --- Form Components ---
+  header3 "Text Field"
   text_field :username, placeholder: "Enter username"
 
-  text "### Checkbox"
+  header3 "Text Area"
+  text_area :bio, placeholder: "Enter bio", rows: 3
+
+  header3 "Checkbox"
   checkbox :enabled, "Enable feature"
 
-  text "### Select Dropdown"
-  select :color, ["Red", "Green", "Blue", "Yellow"]
+  header3 "Select Dropdown (with default)"
+  select :color, ["Red", "Green", "Blue", "Yellow"], default: "Green"
 
-  text "### Div Container"
+  header3 "Radio Group"
+  radio_group :size, ["Small", "Medium", "Large"]
+
+  # --- Layout Components ---
+  header3 "Div Container"
   div class: "todo-item" do
     text "This is inside a div container"
     text "Multiple components can be nested"
   end
 
-  text "### Button (Primary)"
+  header3 "Card"
+  card do
+    text "Cards provide styled containers"
+    text "Great for grouping related content"
+  end
+
+  # --- Interactive Components ---
+  header3 "Buttons"
   button "Primary Action" do |state|
     state[:clicked] ||= 0
     state[:clicked] += 1
@@ -33,17 +58,20 @@ App = app "Component Showcase" do
   end
 
   if state[:clicked] && state[:clicked] > 0
-    text "Primary button clicked #{state[:clicked]} times"
+    md "Primary button clicked **#{state[:clicked]}** times"
   end
 
   if state[:secondary_clicked]
     text "Secondary button was clicked!"
   end
 
-  text "### Current State"
+  # --- Current State ---
+  header3 "Current State"
   text "Username: #{state[:username] || '(none)'}"
+  text "Bio: #{state[:bio] || '(none)'}"
   text "Enabled: #{state[:enabled] ? 'Yes' : 'No'}"
   text "Color: #{state[:color] || '(none)'}"
+  text "Size: #{state[:size] || '(none)'}"
 end
 
 App.run! if __FILE__ == $0

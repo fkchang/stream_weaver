@@ -2,7 +2,9 @@ PATH
   remote: .
   specs:
     stream_weaver (0.1.0)
-      phlex (~> 1.11)
+      kramdown (~> 2.4)
+      kramdown-parser-gfm (~> 1.1)
+      phlex (~> 2.0)
       puma (~> 6.4)
       rackup (~> 2.1)
       sinatra (~> 4.0)
@@ -13,11 +15,16 @@ GEM
     base64 (0.3.0)
     diff-lcs (1.6.2)
     docile (1.4.1)
+    kramdown (2.5.1)
+      rexml (>= 3.3.9)
+    kramdown-parser-gfm (1.1.0)
+      kramdown (~> 2.0)
     logger (1.7.0)
     mustermann (3.0.4)
       ruby2_keywords (~> 0.0.1)
     nio4r (2.7.5)
-    phlex (1.11.0)
+    phlex (2.3.1)
+      zeitwerk (~> 2.7)
     puma (6.6.1)
       nio4r (~> 2.0)
     rack (3.2.4)
@@ -33,6 +40,7 @@ GEM
     rackup (2.2.1)
       rack (>= 3)
     rake (13.3.1)
+    rexml (3.4.4)
     rspec (3.13.2)
       rspec-core (~> 3.13.0)
       rspec-expectations (~> 3.13.0)
@@ -62,6 +70,7 @@ GEM
       tilt (~> 2.0)
     tilt (2.6.1)
     yard (0.9.37)
+    zeitwerk (2.7.3)
 
 PLATFORMS
   arm64-darwin-23

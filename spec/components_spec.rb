@@ -217,7 +217,7 @@ RSpec.describe StreamWeaver::Components do
   end
 
   describe StreamWeaver::Components::Text do
-    describe "rendering plain text" do
+    describe "rendering" do
       let(:text) { described_class.new("Hello World") }
 
       it "renders paragraph for plain text" do
@@ -230,50 +230,26 @@ RSpec.describe StreamWeaver::Components do
         expect(mock_view).to receive(:p).and_yield
         text.render(mock_view, state)
       end
+
+      it "renders text literally (no markdown parsing)" do
+        text = described_class.new("## This stays as-is")
+        expect(mock_view).to receive(:p).and_yield
+        text.render(mock_view, state)
+      end
+
+      it "renders bold asterisks literally" do
+        text = described_class.new("**bold** stays as-is")
+        expect(mock_view).to receive(:p).and_yield
+        text.render(mock_view, state)
+      end
     end
 
-    describe "rendering markdown headers" do
-      it "renders h1 for # header" do
-        text = described_class.new("# Main Title")
-        expect(mock_view).to receive(:h1).and_yield
+    describe "dynamic content" do
+      it "evaluates proc content with state" do
+        text = described_class.new(-> (s) { "Hello #{s[:name]}" })
+        state[:name] = "Alice"
+        expect(mock_view).to receive(:p).and_yield
         text.render(mock_view, state)
-      end
-
-      it "renders h2 for ## header" do
-        text = described_class.new("## Section")
-        expect(mock_view).to receive(:h2).and_yield
-        text.render(mock_view, state)
-      end
-
-      it "renders h3 for ### header" do
-        text = described_class.new("### Subsection")
-        expect(mock_view).to receive(:h3).and_yield
-        text.render(mock_view, state)
-      end
-
-      it "renders h4 for #### header" do
-        text = described_class.new("#### Detail")
-        expect(mock_view).to receive(:h4).and_yield
-        text.render(mock_view, state)
-      end
-
-      it "renders h5 for ##### header" do
-        text = described_class.new("##### Fine Print")
-        expect(mock_view).to receive(:h5).and_yield
-        text.render(mock_view, state)
-      end
-
-      it "renders h6 for ###### header" do
-        text = described_class.new("###### Smallest")
-        expect(mock_view).to receive(:h6).and_yield
-        text.render(mock_view, state)
-      end
-
-      it "extracts text content without hashes" do
-        text = described_class.new("## Test Header")
-        expect(mock_view).to receive(:h2).with(no_args).and_yield
-        result = text.render(mock_view, state)
-        # The yielded block returns "Test Header"
       end
     end
 
@@ -294,6 +270,88 @@ RSpec.describe StreamWeaver::Components do
         text = described_class.new("")
         expect(mock_view).to receive(:p).and_yield
         text.render(mock_view, state)
+      end
+    end
+  end
+
+  describe StreamWeaver::Components::Markdown do
+    describe "initialization" do
+      it "stores content" do
+        md = described_class.new("**bold** text")
+        expect(md.instance_variable_get(:@content)).to eq("**bold** text")
+      end
+    end
+
+    describe "rendering" do
+      it "delegates to adapter render_markdown" do
+        md = described_class.new("**bold** and *italic*")
+        expect(adapter).to receive(:render_markdown).with(mock_view, "**bold** and *italic*", state)
+        md.render(mock_view, state)
+      end
+
+      it "evaluates proc content with state" do
+        md = described_class.new(-> (s) { "**#{s[:name]}** is bold" })
+        state[:name] = "Alice"
+        expect(adapter).to receive(:render_markdown).with(mock_view, "**Alice** is bold", state)
+        md.render(mock_view, state)
+      end
+
+      it "converts content to string" do
+        md = described_class.new(42)
+        expect(adapter).to receive(:render_markdown).with(mock_view, "42", state)
+        md.render(mock_view, state)
+      end
+    end
+  end
+
+  describe StreamWeaver::Components::Header do
+    describe "initialization" do
+      it "stores content and level" do
+        header = described_class.new("Title", level: 3)
+        expect(header.instance_variable_get(:@content)).to eq("Title")
+        expect(header.instance_variable_get(:@level)).to eq(3)
+      end
+
+      it "defaults to level 2" do
+        header = described_class.new("Title")
+        expect(header.instance_variable_get(:@level)).to eq(2)
+      end
+
+      it "clamps level to valid range (1-6)" do
+        header = described_class.new("Title", level: 0)
+        expect(header.instance_variable_get(:@level)).to eq(1)
+
+        header = described_class.new("Title", level: 10)
+        expect(header.instance_variable_get(:@level)).to eq(6)
+      end
+    end
+
+    describe "rendering" do
+      it "delegates to adapter render_header" do
+        header = described_class.new("Section Title", level: 2)
+        expect(adapter).to receive(:render_header).with(mock_view, "Section Title", 2, state)
+        header.render(mock_view, state)
+      end
+
+      it "evaluates proc content with state" do
+        header = described_class.new(-> (s) { "Welcome #{s[:name]}" }, level: 1)
+        state[:name] = "Alice"
+        expect(adapter).to receive(:render_header).with(mock_view, "Welcome Alice", 1, state)
+        header.render(mock_view, state)
+      end
+
+      it "converts content to string" do
+        header = described_class.new(42, level: 3)
+        expect(adapter).to receive(:render_header).with(mock_view, "42", 3, state)
+        header.render(mock_view, state)
+      end
+
+      it "renders all header levels correctly" do
+        (1..6).each do |level|
+          header = described_class.new("Level #{level}", level: level)
+          expect(adapter).to receive(:render_header).with(mock_view, "Level #{level}", level, state)
+          header.render(mock_view, state)
+        end
       end
     end
   end
@@ -503,6 +561,212 @@ RSpec.describe StreamWeaver::Components do
         expect(mock_view).to receive(:option).exactly(100).times.and_yield
 
         select.render(mock_view, state)
+      end
+    end
+  end
+
+  describe StreamWeaver::Components::RadioGroup do
+    describe "initialization" do
+      it "stores key and choices" do
+        radio = described_class.new(:answer, ["A", "B", "C"])
+        expect(radio.key).to eq(:answer)
+        expect(radio.instance_variable_get(:@choices)).to eq(["A", "B", "C"])
+      end
+    end
+
+    describe "rendering" do
+      let(:radio) { described_class.new(:answer, ["Option A", "Option B"]) }
+
+      it "renders div container with radio-group class" do
+        expect(mock_view).to receive(:div).with(class: "radio-group").and_yield
+        allow(mock_view).to receive(:label).and_yield
+        allow(mock_view).to receive(:input)
+        allow(mock_view).to receive(:span).and_yield
+
+        radio.render(mock_view, state)
+      end
+
+      it "renders label for each choice" do
+        expect(mock_view).to receive(:div).and_yield
+        expect(mock_view).to receive(:label).twice.and_yield
+        allow(mock_view).to receive(:input)
+        allow(mock_view).to receive(:span).and_yield
+
+        radio.render(mock_view, state)
+      end
+
+      it "renders radio input for each choice" do
+        expect(mock_view).to receive(:div).and_yield
+        allow(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:input).with(hash_including(type: "radio", name: "answer")).twice
+        allow(mock_view).to receive(:span).and_yield
+
+        radio.render(mock_view, state)
+      end
+
+      it "marks checked option from state" do
+        state[:answer] = "Option B"
+
+        expect(mock_view).to receive(:div).and_yield
+        allow(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:input).with(hash_including(value: "Option A", checked: false))
+        expect(mock_view).to receive(:input).with(hash_including(value: "Option B", checked: true))
+        allow(mock_view).to receive(:span).and_yield
+
+        radio.render(mock_view, state)
+      end
+
+      it "handles no selection (nil state)" do
+        expect(mock_view).to receive(:div).and_yield
+        allow(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:input).twice.with(hash_including(checked: false))
+        allow(mock_view).to receive(:span).and_yield
+
+        radio.render(mock_view, state)
+      end
+    end
+  end
+
+  describe StreamWeaver::Components::Card do
+    describe "initialization" do
+      it "initializes with empty children" do
+        card = described_class.new
+        expect(card.children).to eq([])
+      end
+
+      it "stores CSS class option" do
+        card = described_class.new(class: "question-card")
+        expect(card.instance_variable_get(:@options)[:class]).to eq("question-card")
+      end
+    end
+
+    describe "rendering" do
+      let(:card) { described_class.new }
+
+      it "renders div element with card class" do
+        expect(mock_view).to receive(:div).with(class: "card").and_yield
+        card.render(mock_view, state)
+      end
+
+      it "combines card class with custom class" do
+        card_with_class = described_class.new(class: "question-card")
+        expect(mock_view).to receive(:div).with(class: "card question-card").and_yield
+        card_with_class.render(mock_view, state)
+      end
+
+      it "renders nested children" do
+        child1 = StreamWeaver::Components::Text.new("Child 1")
+        child2 = StreamWeaver::Components::Text.new("Child 2")
+        card.children = [child1, child2]
+
+        expect(mock_view).to receive(:div).and_yield
+        expect(child1).to receive(:render).with(mock_view, state)
+        expect(child2).to receive(:render).with(mock_view, state)
+
+        card.render(mock_view, state)
+      end
+
+      it "handles empty card" do
+        expect(mock_view).to receive(:div).and_yield
+        card.render(mock_view, state)
+      end
+    end
+  end
+
+  describe StreamWeaver::Components::Phrase do
+    describe "initialization" do
+      it "stores content" do
+        phrase = described_class.new("Hello world")
+        expect(phrase.instance_variable_get(:@content)).to eq("Hello world")
+      end
+    end
+
+    describe "rendering" do
+      let(:phrase) { described_class.new("Some text") }
+
+      it "renders span element" do
+        expect(mock_view).to receive(:span).and_yield
+        phrase.render(mock_view, state)
+      end
+
+      it "handles empty string" do
+        phrase = described_class.new("")
+        expect(mock_view).to receive(:span).and_yield
+        phrase.render(mock_view, state)
+      end
+
+      it "handles special characters" do
+        phrase = described_class.new("Test <>&\"'")
+        expect(mock_view).to receive(:span).and_yield
+        phrase.render(mock_view, state)
+      end
+    end
+  end
+
+  describe StreamWeaver::Components::Term do
+    describe "initialization" do
+      it "stores term_key" do
+        term = described_class.new("bullish")
+        expect(term.term_key).to eq("bullish")
+      end
+
+      it "stores options" do
+        term = described_class.new("bullish", display: "Bull Market")
+        expect(term.instance_variable_get(:@options)).to include(display: "Bull Market")
+      end
+    end
+
+    describe "rendering" do
+      let(:term) { described_class.new("bullish") }
+
+      it "delegates to adapter render_term" do
+        expect(adapter).to receive(:render_term).with(mock_view, "bullish", {}, state)
+        term.render(mock_view, state)
+      end
+
+      it "passes display option to adapter" do
+        term_with_display = described_class.new("Quad 4", display: "Q4")
+        expect(adapter).to receive(:render_term).with(mock_view, "Quad 4", { display: "Q4" }, state)
+        term_with_display.render(mock_view, state)
+      end
+    end
+  end
+
+  describe StreamWeaver::Components::LessonText do
+    describe "initialization" do
+      it "initializes with empty children" do
+        lesson = described_class.new
+        expect(lesson.children).to eq([])
+      end
+
+      it "stores glossary" do
+        glossary = { "bullish" => { simple: "Up", detailed: "Expecting increase" } }
+        lesson = described_class.new(glossary: glossary)
+        expect(lesson.glossary).to eq(glossary)
+      end
+
+      it "defaults to empty glossary" do
+        lesson = described_class.new
+        expect(lesson.glossary).to eq({})
+      end
+    end
+
+    describe "rendering" do
+      let(:glossary) { { "bullish" => { simple: "Up", detailed: "Expecting increase" } } }
+      let(:lesson) { described_class.new(glossary: glossary) }
+
+      it "delegates to adapter render_lesson_text" do
+        expect(adapter).to receive(:render_lesson_text).with(mock_view, glossary, [], {}, state)
+        lesson.render(mock_view, state)
+      end
+
+      it "passes children to adapter" do
+        phrase = StreamWeaver::Components::Phrase.new("Hello ")
+        term = StreamWeaver::Components::Term.new("bullish")
+        lesson.children = [phrase, term]
+
+        expect(adapter).to receive(:render_lesson_text).with(mock_view, glossary, [phrase, term], {}, state)
+        lesson.render(mock_view, state)
       end
     end
   end

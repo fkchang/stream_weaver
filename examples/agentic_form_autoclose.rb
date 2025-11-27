@@ -5,7 +5,7 @@ require_relative '../lib/stream_weaver'
 
 # Agentic mode example with auto-close window feature
 App = app "Quick Survey" do
-  text "## Quick User Survey"
+  header "Quick User Survey"
   text "Fill out this form. The window will close automatically after submission."
 
   text "Your Name:"

@@ -93,10 +93,90 @@ RSpec.describe StreamWeaver::App do
         expect(app.components.first).to be_a(StreamWeaver::Components::Text)
       end
 
-      it "supports markdown headers" do
+      it "stores content literally (no markdown parsing)" do
         app.text("# Title")
         component = app.components.first
         expect(component.instance_variable_get(:@content)).to eq("# Title")
+      end
+    end
+
+    describe "#md" do
+      it "adds Markdown component" do
+        app.md("**bold** text")
+        expect(app.components.length).to eq(1)
+        expect(app.components.first).to be_a(StreamWeaver::Components::Markdown)
+      end
+
+      it "stores content for parsing" do
+        app.md("**bold** and *italic*")
+        component = app.components.first
+        expect(component.instance_variable_get(:@content)).to eq("**bold** and *italic*")
+      end
+    end
+
+    describe "#markdown" do
+      it "is an alias for md" do
+        app.markdown("**bold** text")
+        expect(app.components.length).to eq(1)
+        expect(app.components.first).to be_a(StreamWeaver::Components::Markdown)
+      end
+    end
+
+    describe "#header" do
+      it "adds Header component with default level 2" do
+        app.header("Section Title")
+        expect(app.components.length).to eq(1)
+        expect(app.components.first).to be_a(StreamWeaver::Components::Header)
+        expect(app.components.first.instance_variable_get(:@level)).to eq(2)
+      end
+    end
+
+    describe "#header1" do
+      it "adds Header component with level 1" do
+        app.header1("Page Title")
+        expect(app.components.length).to eq(1)
+        expect(app.components.first).to be_a(StreamWeaver::Components::Header)
+        expect(app.components.first.instance_variable_get(:@level)).to eq(1)
+      end
+    end
+
+    describe "#header2" do
+      it "adds Header component with level 2" do
+        app.header2("Section")
+        component = app.components.first
+        expect(component.instance_variable_get(:@level)).to eq(2)
+      end
+    end
+
+    describe "#header3" do
+      it "adds Header component with level 3" do
+        app.header3("Subsection")
+        component = app.components.first
+        expect(component.instance_variable_get(:@level)).to eq(3)
+      end
+    end
+
+    describe "#header4" do
+      it "adds Header component with level 4" do
+        app.header4("Minor Section")
+        component = app.components.first
+        expect(component.instance_variable_get(:@level)).to eq(4)
+      end
+    end
+
+    describe "#header5" do
+      it "adds Header component with level 5" do
+        app.header5("Small Section")
+        component = app.components.first
+        expect(component.instance_variable_get(:@level)).to eq(5)
+      end
+    end
+
+    describe "#header6" do
+      it "adds Header component with level 6" do
+        app.header6("Smallest Section")
+        component = app.components.first
+        expect(component.instance_variable_get(:@level)).to eq(6)
       end
     end
 
@@ -152,6 +232,68 @@ RSpec.describe StreamWeaver::App do
         expect(app.components.length).to eq(1)
         expect(app.components.first).to be_a(StreamWeaver::Components::Select)
         expect(app.components.first.key).to eq(:color)
+      end
+
+      it "sets default value in state when provided" do
+        app.select(:color, ["Red", "Green", "Blue"], default: "Green")
+        expect(app.state[:color]).to eq("Green")
+      end
+
+      it "does not override existing state with default" do
+        app.state[:color] = "Blue"
+        app.select(:color, ["Red", "Green", "Blue"], default: "Green")
+        expect(app.state[:color]).to eq("Blue")
+      end
+
+      it "does not set state when no default provided" do
+        app.select(:color, ["Red", "Green", "Blue"])
+        expect(app.state.key?(:color)).to be false
+      end
+    end
+
+    describe "#radio_group" do
+      it "adds RadioGroup component" do
+        app.radio_group(:answer, ["A", "B", "C"])
+        expect(app.components.length).to eq(1)
+        expect(app.components.first).to be_a(StreamWeaver::Components::RadioGroup)
+        expect(app.components.first.key).to eq(:answer)
+      end
+    end
+
+    describe "#card" do
+      it "adds Card component" do
+        app.card {}
+        expect(app.components.length).to eq(1)
+        expect(app.components.first).to be_a(StreamWeaver::Components::Card)
+      end
+
+      it "passes CSS class option" do
+        app.card(class: "question-card") {}
+        component = app.components.first
+        expect(component.instance_variable_get(:@options)[:class]).to eq("question-card")
+      end
+
+      it "captures nested components" do
+        app.card do
+          text("Question")
+          radio_group(:answer, ["A", "B"])
+        end
+
+        card = app.components.first
+        expect(card.children.length).to eq(2)
+        expect(card.children[0]).to be_a(StreamWeaver::Components::Text)
+        expect(card.children[1]).to be_a(StreamWeaver::Components::RadioGroup)
+      end
+
+      it "maintains component order in parent after card" do
+        app.text("Before")
+        app.card { text("Inside") }
+        app.text("After")
+
+        expect(app.components.length).to eq(3)
+        expect(app.components[0]).to be_a(StreamWeaver::Components::Text)
+        expect(app.components[1]).to be_a(StreamWeaver::Components::Card)
+        expect(app.components[2]).to be_a(StreamWeaver::Components::Text)
       end
     end
   end
@@ -373,6 +515,163 @@ RSpec.describe StreamWeaver::App do
 
       stream_weaver_app.rebuild_with_state({})
       expect(stream_weaver_app.components.length).to eq(1)
+    end
+  end
+
+  describe "lesson text DSL methods" do
+    let(:glossary) do
+      {
+        "bullish" => { simple: "Expecting UP", detailed: "A bullish outlook means expecting prices to increase." },
+        "bearish" => { simple: "Expecting DOWN", detailed: "A bearish outlook means expecting prices to decrease." }
+      }
+    end
+    let(:app) { described_class.new("Test") {} }
+
+    describe "#phrase" do
+      it "adds Phrase component" do
+        app.phrase("Hello world")
+        expect(app.components.length).to eq(1)
+        expect(app.components.first).to be_a(StreamWeaver::Components::Phrase)
+      end
+    end
+
+    describe "#term" do
+      it "adds Term component" do
+        app.term("bullish")
+        expect(app.components.length).to eq(1)
+        expect(app.components.first).to be_a(StreamWeaver::Components::Term)
+        expect(app.components.first.term_key).to eq("bullish")
+      end
+
+      it "passes display option" do
+        app.term("bullish", display: "Bull Market")
+        component = app.components.first
+        expect(component.instance_variable_get(:@options)).to include(display: "Bull Market")
+      end
+    end
+
+    describe "#lesson_text with block" do
+      it "adds LessonText component" do
+        app.lesson_text(glossary: glossary) do
+          phrase "Hello "
+          term "bullish"
+        end
+
+        expect(app.components.length).to eq(1)
+        expect(app.components.first).to be_a(StreamWeaver::Components::LessonText)
+      end
+
+      it "captures nested phrase and term components" do
+        app.lesson_text(glossary: glossary) do
+          phrase "When analysts are "
+          term "bullish"
+          phrase " on stocks."
+        end
+
+        lesson = app.components.first
+        expect(lesson.children.length).to eq(3)
+        expect(lesson.children[0]).to be_a(StreamWeaver::Components::Phrase)
+        expect(lesson.children[1]).to be_a(StreamWeaver::Components::Term)
+        expect(lesson.children[2]).to be_a(StreamWeaver::Components::Phrase)
+      end
+
+      it "stores glossary" do
+        app.lesson_text(glossary: glossary) do
+          term "bullish"
+        end
+
+        lesson = app.components.first
+        expect(lesson.glossary).to eq(glossary)
+      end
+
+      it "maintains component order in parent after lesson_text" do
+        app.text("Before")
+        app.lesson_text(glossary: glossary) { term "bullish" }
+        app.text("After")
+
+        expect(app.components.length).to eq(3)
+        expect(app.components[0]).to be_a(StreamWeaver::Components::Text)
+        expect(app.components[1]).to be_a(StreamWeaver::Components::LessonText)
+        expect(app.components[2]).to be_a(StreamWeaver::Components::Text)
+      end
+    end
+
+    describe "#lesson_text with string" do
+      it "adds LessonText component" do
+        app.lesson_text("The market is {bullish} today.", glossary: glossary)
+
+        expect(app.components.length).to eq(1)
+        expect(app.components.first).to be_a(StreamWeaver::Components::LessonText)
+      end
+
+      it "parses string into phrase and term children" do
+        app.lesson_text("The market is {bullish} today.", glossary: glossary)
+
+        lesson = app.components.first
+        expect(lesson.children.length).to eq(3)
+        expect(lesson.children[0]).to be_a(StreamWeaver::Components::Phrase)
+        expect(lesson.children[1]).to be_a(StreamWeaver::Components::Term)
+        expect(lesson.children[2]).to be_a(StreamWeaver::Components::Phrase)
+      end
+
+      it "extracts term from braces" do
+        app.lesson_text("Feeling {bullish}!", glossary: glossary)
+
+        lesson = app.components.first
+        term = lesson.children.find { |c| c.is_a?(StreamWeaver::Components::Term) }
+        expect(term.term_key).to eq("bullish")
+      end
+
+      it "handles multiple terms" do
+        app.lesson_text("Either {bullish} or {bearish}.", glossary: glossary)
+
+        lesson = app.components.first
+        terms = lesson.children.select { |c| c.is_a?(StreamWeaver::Components::Term) }
+        expect(terms.length).to eq(2)
+        expect(terms[0].term_key).to eq("bullish")
+        expect(terms[1].term_key).to eq("bearish")
+      end
+
+      it "handles terms at beginning" do
+        app.lesson_text("{bullish} sentiment.", glossary: glossary)
+
+        lesson = app.components.first
+        expect(lesson.children[0]).to be_a(StreamWeaver::Components::Term)
+        expect(lesson.children[1]).to be_a(StreamWeaver::Components::Phrase)
+      end
+
+      it "handles terms at end" do
+        app.lesson_text("Sentiment is {bullish}", glossary: glossary)
+
+        lesson = app.components.first
+        expect(lesson.children[0]).to be_a(StreamWeaver::Components::Phrase)
+        expect(lesson.children[1]).to be_a(StreamWeaver::Components::Term)
+      end
+
+      it "handles adjacent terms" do
+        app.lesson_text("{bullish}{bearish}", glossary: glossary)
+
+        lesson = app.components.first
+        expect(lesson.children.length).to eq(2)
+        expect(lesson.children[0]).to be_a(StreamWeaver::Components::Term)
+        expect(lesson.children[1]).to be_a(StreamWeaver::Components::Term)
+      end
+
+      it "handles terms with spaces in key" do
+        glossary_with_spaces = { "Quad 4" => { simple: "Deflation", detailed: "Growth and inflation both falling" } }
+        app.lesson_text("In {Quad 4}, bonds rally.", glossary: glossary_with_spaces)
+
+        lesson = app.components.first
+        term = lesson.children.find { |c| c.is_a?(StreamWeaver::Components::Term) }
+        expect(term.term_key).to eq("Quad 4")
+      end
+
+      it "stores glossary" do
+        app.lesson_text("Market is {bullish}.", glossary: glossary)
+
+        lesson = app.components.first
+        expect(lesson.glossary).to eq(glossary)
+      end
     end
   end
 end

@@ -9,3 +9,25 @@
 
 # rspec failure tracking
 .rspec_status
+
+# Gem build artifacts
+*.gem
+Gemfile.lock
+
+# OS files
+.DS_Store
+
+# Logs
+*.log
+
+# SDRD discoveries (project-specific learnings)
+/discoveries/
+
+# Archived docs
+IMPLEMENTATION_SUMMARY_v0.1.0.md
+
+# Draft content (not ready for release)
+blog_post_streamweaver_vs_react.md
+
+# Claude Code local settings
+.claude/

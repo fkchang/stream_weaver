@@ -100,34 +100,16 @@ module StreamWeaver
       end
     end
 
-    # Text component for displaying content
+    # Text component for displaying literal content (no markdown parsing)
     class Text < Base
-      # @param content [String] The text content
+      # @param content [String, Proc] The text content (can be a proc for dynamic content)
       def initialize(content)
         @content = content
       end
 
       def render(view, state)
-        # Evaluate content if it's a string with interpolation context
         content = @content.is_a?(Proc) ? @content.call(state) : @content
-        content_str = content.to_s
-
-        # Check if content starts with markdown-style headers (## or ###, etc.)
-        if match = content_str.match(/^(\#{1,6})\s+(.+)/)
-          level = match[1].length
-          text = match[2]
-
-          case level
-          when 1 then view.h1 { text }
-          when 2 then view.h2 { text }
-          when 3 then view.h3 { text }
-          when 4 then view.h4 { text }
-          when 5 then view.h5 { text }
-          when 6 then view.h6 { text }
-          end
-        else
-          view.p { content_str }
-        end
+        view.p { content.to_s }
       end
     end
 
@@ -183,6 +165,153 @@ module StreamWeaver
       def render(view, state)
         # Delegate to adapter - no framework knowledge in component
         view.adapter.render_select(view, @key, @choices, @options, state)
+      end
+    end
+
+    # RadioGroup component for single-choice selection (radio buttons)
+    # Unlike Select, radio buttons show all options at once and have no pre-selected value
+    class RadioGroup < Base
+      attr_reader :key
+
+      # @param key [Symbol] The state key
+      # @param choices [Array<String>] The available choices
+      # @param options [Hash] Additional options (e.g., placeholder)
+      def initialize(key, choices, **options)
+        @key = key
+        @choices = choices
+        @options = options
+      end
+
+      def render(view, state)
+        # Delegate to adapter - no framework knowledge in component
+        view.adapter.render_radio_group(view, @key, @choices, @options, state)
+      end
+    end
+
+    # Card component for visual grouping of content
+    class Card < Base
+      attr_accessor :children
+
+      # @param options [Hash] Options (e.g., class: "question-card")
+      def initialize(**options)
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        css_class = ["card", @options[:class]].compact.join(" ")
+        view.div(class: css_class) do
+          @children.each { |child| child.render(view, state) }
+        end
+      end
+    end
+
+    # Phrase component for plain text within lesson content
+    class Phrase < Base
+      # @param content [String] The text content
+      def initialize(content)
+        @content = content
+      end
+
+      def render(view, state)
+        view.span { @content }
+      end
+    end
+
+    # Term component for hoverable glossary terms with tooltips
+    class Term < Base
+      attr_reader :term_key
+
+      # @param term_key [String] The term to display (also used as glossary key)
+      # @param options [Hash] Options (e.g., display: "alternate text")
+      def initialize(term_key, **options)
+        @term_key = term_key
+        @options = options
+      end
+
+      def render(view, state)
+        # Delegate to adapter - no framework knowledge in component
+        view.adapter.render_term(view, @term_key, @options, state)
+      end
+    end
+
+    # LessonText component for interactive educational content with glossary tooltips
+    class LessonText < Base
+      attr_accessor :children
+      attr_reader :glossary
+
+      # @param glossary [Hash] Glossary definitions {term => {simple:, detailed:}}
+      # @param options [Hash] Additional options
+      def initialize(glossary: {}, **options)
+        @glossary = glossary
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        # Delegate to adapter - no framework knowledge in component
+        view.adapter.render_lesson_text(view, @glossary, @children, @options, state)
+      end
+    end
+
+    # Collapsible component for expandable/collapsible content sections
+    class Collapsible < Base
+      attr_accessor :children
+
+      # @param label [String] The header label text
+      # @param expanded [Boolean] Whether to start expanded (default: false)
+      # @param options [Hash] Additional options
+      def initialize(label, expanded: false, **options)
+        @label = label
+        @expanded = expanded
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_collapsible(view, @label, @expanded, @children, @options, state)
+      end
+    end
+
+    # ScoreTable component for displaying metrics with color-coded scores
+    class ScoreTable < Base
+      # @param scores [Array<Hash>] Array of {label:, value:, max:} hashes
+      # @param options [Hash] Additional options
+      def initialize(scores:, **options)
+        @scores = scores
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_score_table(view, @scores, @options, state)
+      end
+    end
+
+    # Markdown component for rendering markdown-formatted content
+    class Markdown < Base
+      # @param content [String, Proc] The markdown content (can be a proc for dynamic content)
+      def initialize(content)
+        @content = content
+      end
+
+      def render(view, state)
+        content = @content.is_a?(Proc) ? @content.call(state) : @content
+        view.adapter.render_markdown(view, content.to_s, state)
+      end
+    end
+
+    # Header component for semantic headers (h1-h6)
+    class Header < Base
+      # @param content [String, Proc] The header text (can be a proc for dynamic content)
+      # @param level [Integer] Header level (1-6, default: 2)
+      def initialize(content, level: 2)
+        @content = content
+        @level = level.clamp(1, 6)
+      end
+
+      def render(view, state)
+        content = @content.is_a?(Proc) ? @content.call(state) : @content
+        view.adapter.render_header(view, content.to_s, @level, state)
       end
     end
   end

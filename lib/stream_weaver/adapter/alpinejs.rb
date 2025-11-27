@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base'
+require 'kramdown'
 
 module StreamWeaver
   module Adapter
@@ -94,9 +95,13 @@ module StreamWeaver
       # @param key [Symbol] The state key for this select
       # @param choices [Array<String>] The available choices
       # @param options [Hash] Component options
+      # @option options [String] :default Default selected value when state is nil
       # @param state [Hash] Current state hash (symbol keys)
       # @return [void] Renders to view
       def render_select(view, key, choices, options, state)
+        # Use state value, or fall back to default option
+        current_value = state[key] || options[:default]
+
         view.select(
           name: key.to_s,
           "x-model" => key.to_s,  # Alpine.js two-way binding
@@ -109,8 +114,40 @@ module StreamWeaver
           choices.each do |choice|
             view.option(
               value: choice,
-              selected: state[key] == choice
+              selected: current_value == choice
             ) { choice }
+          end
+        end
+      end
+
+      # Render a radio button group with Alpine.js binding
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param key [Symbol] The state key for this radio group
+      # @param choices [Array<String>] The available choices
+      # @param options [Hash] Component options
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      def render_radio_group(view, key, choices, options, state)
+        current_value = state[key]
+
+        view.div(class: "radio-group") do
+          choices.each do |choice|
+            view.label(class: "radio-option") do
+              view.input(
+                type: "radio",
+                name: key.to_s,
+                value: choice,
+                checked: current_value == choice,
+                "x-model" => key.to_s,  # Alpine.js two-way binding
+                "hx-post" => "/update",
+                "hx-include" => input_selector,
+                "hx-target" => "#app-container",
+                "hx-swap" => "innerHTML",
+                "hx-trigger" => "change"  # Immediate update on change
+              )
+              view.span { choice }
+            end
           end
         end
       end
@@ -176,6 +213,201 @@ module StreamWeaver
       def input_selector
         "[x-model]"  # Alpine.js selector for all bound inputs
       end
+
+      # Render a term with tooltip functionality
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param term_key [String] The glossary term key
+      # @param options [Hash] Component options
+      # @option options [String] :display Alternative display text
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      def render_term(view, term_key, options, state)
+        display_text = options[:display] || term_key
+        # Normalize the term key for use as an identifier (lowercase, underscores)
+        term_id = term_key.to_s.downcase.gsub(/\s+/, '_')
+
+        view.span(
+          class: "term",
+          "data-term" => term_id,
+          "@mouseenter" => "showTooltip('#{term_id}', $el)",
+          "@mouseleave" => "hideTooltip()",
+          "@focus" => "showTooltip('#{term_id}', $el)",
+          "@blur" => "hideTooltip()",
+          "tabindex" => "0"
+        ) { display_text }
+      end
+
+      # Render a lesson text container with glossary support
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param glossary [Hash] Glossary definitions {term => {simple:, detailed:}}
+      # @param children [Array] Child components (Phrase and Term)
+      # @param options [Hash] Component options
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      def render_lesson_text(view, glossary, children, options, state)
+        # Convert glossary to JSON for Alpine.js
+        # Normalize keys to match term_id format
+        normalized_glossary = {}
+        glossary.each do |term, definitions|
+          term_id = term.to_s.downcase.gsub(/\s+/, '_')
+          normalized_glossary[term_id] = {
+            term: term.to_s,
+            simple: definitions[:simple] || definitions["simple"] || "",
+            detailed: definitions[:detailed] || definitions["detailed"] || ""
+          }
+        end
+        glossary_json = JSON.generate(normalized_glossary)
+
+        view.div(
+          class: "lesson-text",
+          "x-data" => "{
+            activeTooltip: null,
+            tooltipContent: '',
+            tooltipDetailed: '',
+            showDetailed: false,
+            tooltipX: 0,
+            tooltipY: 0,
+            glossary: #{glossary_json},
+            showTooltip(termId, el) {
+              this.activeTooltip = termId;
+              const def = this.glossary[termId];
+              if (def) {
+                this.tooltipContent = def.simple;
+                this.tooltipDetailed = def.detailed;
+              }
+              this.showDetailed = false;
+              // Position tooltip above the term
+              const rect = el.getBoundingClientRect();
+              this.tooltipX = rect.left + (rect.width / 2);
+              this.tooltipY = rect.top - 8;
+            },
+            hideTooltip() {
+              this.activeTooltip = null;
+              this.showDetailed = false;
+            },
+            toggleDetailed() {
+              this.showDetailed = !this.showDetailed;
+            }
+          }"
+        ) do
+          # Render child components (Phrase and Term)
+          children.each do |child|
+            child.render(view, state)
+          end
+
+          # Render the floating tooltip (positioned dynamically via Alpine.js)
+          view.div(
+            class: "tooltip",
+            "x-show" => "activeTooltip !== null",
+            "x-cloak" => true,
+            "@click" => "toggleDetailed()",
+            ":style" => "'left: ' + tooltipX + 'px; top: ' + tooltipY + 'px;'"
+          ) do
+            view.div(class: "tooltip-content") do
+              view.span("x-text" => "showDetailed ? tooltipDetailed : tooltipContent")
+            end
+            view.div(class: "tooltip-hint", "x-show" => "tooltipDetailed && !showDetailed") do
+              view.plain "Tap for more detail"
+            end
+          end
+        end
+      end
+
+      # Render a collapsible section with expand/collapse functionality
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param label [String] The header label text
+      # @param expanded [Boolean] Whether to start expanded
+      # @param children [Array] Child components to render inside
+      # @param options [Hash] Component options
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      def render_collapsible(view, label, expanded, children, options, state)
+        view.div(class: "collapsible", "x-data" => "{ open: #{expanded} }") do
+          view.div(class: "collapsible-header", "@click" => "open = !open") do
+            view.span(class: "collapsible-icon", "x-text" => "open ? '▼' : '▶'")
+            view.span(class: "collapsible-label") { label }
+          end
+          view.div(class: "collapsible-content", "x-show" => "open", "x-cloak" => true) do
+            children.each { |child| child.render(view, state) }
+          end
+        end
+      end
+
+      # Render a score table with color-coded metrics
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param scores [Array<Hash>] Array of {label:, value:, max:} hashes
+      # @param options [Hash] Component options
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      def render_score_table(view, scores, options, state)
+        view.table(class: "score-table") do
+          view.thead do
+            view.tr do
+              view.th { "Metric" }
+              view.th { "Score" }
+              view.th { "Meaning" }
+            end
+          end
+          view.tbody do
+            scores.each do |score|
+              value = score[:value] || 0
+              max = score[:max] || 10
+              ratio = value.to_f / max
+
+              color_class = ratio >= 0.7 ? "score-high" : (ratio >= 0.4 ? "score-medium" : "score-low")
+              interpretation = ratio >= 0.8 ? "Excellent" : (ratio >= 0.7 ? "Strong" : (ratio >= 0.5 ? "Moderate" : "Weak"))
+
+              view.tr do
+                view.td { score[:label] }
+                view.td(class: "score-cell #{color_class}") { value.to_s }
+                view.td(class: "score-meaning") { interpretation }
+              end
+            end
+          end
+        end
+      end
+
+      # Render markdown content with inline parsing
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param content [String] The markdown content
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      def render_markdown(view, content, state)
+        html = Kramdown::Document.new(
+          content,
+          input: 'GFM',
+          hard_wrap: false,
+          syntax_highlighter: nil
+        ).to_html
+        view.div(class: "markdown-content") do
+          view.raw view.safe(html)
+        end
+      end
+
+      # Render a semantic header (h1-h6)
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param content [String] The header text
+      # @param level [Integer] Header level (1-6)
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      def render_header(view, content, level, state)
+        case level
+        when 1 then view.h1 { content }
+        when 2 then view.h2 { content }
+        when 3 then view.h3 { content }
+        when 4 then view.h4 { content }
+        when 5 then view.h5 { content }
+        when 6 then view.h6 { content }
+        else view.h2 { content }
+        end
+      end
+
     end
   end
 end

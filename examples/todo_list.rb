@@ -5,7 +5,7 @@ require_relative '../lib/stream_weaver'
 
 # Full CRUD Todo List App
 App = app "Todo Manager" do
-  text "## 📝 Todo List"
+  header "📝 Todo List"
 
   text_field :new_todo, placeholder: "Enter a new todo"
 
@@ -23,7 +23,7 @@ App = app "Todo Manager" do
   if state[:todos].empty?
     text "No todos yet. Add one above!"
   else
-    text "### Your Todos (#{state[:todos].length})"
+    header3 "Your Todos (#{state[:todos].length})"
 
     state[:todos].each_with_index do |todo, idx|
       div class: "todo-item" do

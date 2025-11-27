@@ -39,6 +39,14 @@ RSpec.describe StreamWeaver::Adapter::Base do
     end
   end
 
+  describe "#render_radio_group" do
+    it "raises NotImplementedError" do
+      expect {
+        adapter.render_radio_group(mock_view, :answer, ["A", "B"], {}, state)
+      }.to raise_error(NotImplementedError, /must implement #render_radio_group/)
+    end
+  end
+
   describe "#render_button" do
     it "raises NotImplementedError" do
       expect {
