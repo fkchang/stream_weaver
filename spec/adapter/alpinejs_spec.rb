@@ -704,4 +704,131 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
       adapter.render_lesson_text(mock_view, {}, [], {}, state)
     end
   end
+
+  describe "#render_checkbox_group" do
+    let(:item1) do
+      item = StreamWeaver::Components::CheckboxItem.new("email_1")
+      item.children = [StreamWeaver::Components::Text.new("First Email")]
+      item
+    end
+
+    let(:item2) do
+      item = StreamWeaver::Components::CheckboxItem.new("email_2")
+      item.children = [StreamWeaver::Components::Text.new("Second Email")]
+      item
+    end
+
+    let(:children) { [item1, item2] }
+
+    it "renders container div with checkbox-group class" do
+      expect(mock_view).to receive(:div).with(hash_including(class: "checkbox-group")).and_yield
+      allow(mock_view).to receive(:div)
+      allow(mock_view).to receive(:label)
+      allow(mock_view).to receive(:input)
+      allow(mock_view).to receive(:p)
+
+      adapter.render_checkbox_group(mock_view, :selected, children, {}, state)
+    end
+
+    it "renders checkbox input for each item with x-model binding to array" do
+      allow(mock_view).to receive(:div).and_yield
+      allow(mock_view).to receive(:p)
+
+      expect(mock_view).to receive(:label).twice.and_yield
+      expect(mock_view).to receive(:input).with(
+        hash_including(
+          type: "checkbox",
+          name: "selected",
+          value: "email_1",
+          "x-model" => "selected"
+        )
+      )
+      expect(mock_view).to receive(:input).with(
+        hash_including(
+          type: "checkbox",
+          name: "selected",
+          value: "email_2",
+          "x-model" => "selected"
+        )
+      )
+
+      adapter.render_checkbox_group(mock_view, :selected, children, {}, state)
+    end
+
+    it "marks checked items from array state" do
+      state[:selected] = ["email_2"]
+
+      allow(mock_view).to receive(:div).and_yield
+      allow(mock_view).to receive(:label).and_yield
+      allow(mock_view).to receive(:p)
+
+      expect(mock_view).to receive(:input).with(
+        hash_including(value: "email_1", checked: false)
+      )
+      expect(mock_view).to receive(:input).with(
+        hash_including(value: "email_2", checked: true)
+      )
+
+      adapter.render_checkbox_group(mock_view, :selected, children, {}, state)
+    end
+
+    it "handles empty state (no selections)" do
+      state[:selected] = []
+
+      allow(mock_view).to receive(:div).and_yield
+      allow(mock_view).to receive(:label).and_yield
+      allow(mock_view).to receive(:p)
+
+      expect(mock_view).to receive(:input).twice.with(
+        hash_including(checked: false)
+      )
+
+      adapter.render_checkbox_group(mock_view, :selected, children, {}, state)
+    end
+
+    it "renders select all button when option provided" do
+      allow(mock_view).to receive(:div).and_yield
+      allow(mock_view).to receive(:label)
+      allow(mock_view).to receive(:input)
+      allow(mock_view).to receive(:p)
+
+      # JSON.generate produces double quotes
+      expect(mock_view).to receive(:button).with(
+        hash_including(
+          type: "button",
+          "@click" => 'selected = ["email_1","email_2"]'
+        )
+      ).and_yield
+
+      adapter.render_checkbox_group(mock_view, :selected, children, { select_all: "Select All" }, state)
+    end
+
+    it "renders select none button when option provided" do
+      allow(mock_view).to receive(:div).and_yield
+      allow(mock_view).to receive(:label)
+      allow(mock_view).to receive(:input)
+      allow(mock_view).to receive(:p)
+
+      expect(mock_view).to receive(:button).with(
+        hash_including(
+          type: "button",
+          "@click" => "selected = []"
+        )
+      ).and_yield
+
+      adapter.render_checkbox_group(mock_view, :selected, children, { select_none: "Clear" }, state)
+    end
+
+    it "renders item children content" do
+      text_component = item1.children.first
+
+      allow(mock_view).to receive(:div).and_yield
+      allow(mock_view).to receive(:label).and_yield
+      allow(mock_view).to receive(:input)
+
+      expect(text_component).to receive(:render).with(mock_view, state)
+
+      adapter.render_checkbox_group(mock_view, :selected, [item1], {}, state)
+    end
+  end
 end

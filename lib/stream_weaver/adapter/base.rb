@@ -169,6 +169,20 @@ module StreamWeaver
       def input_selector
         raise NotImplementedError, "#{self.class} must implement #input_selector"
       end
+
+      # Render a checkbox group with select all/none functionality
+      # State is stored as an array of selected values
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param key [Symbol] The state key for this group (stores array)
+      # @param children [Array<CheckboxItem>] The checkbox items
+      # @param options [Hash] Component options (select_all, select_none labels)
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_checkbox_group(view, key, children, options, state)
+        raise NotImplementedError, "#{self.class} must implement #render_checkbox_group"
+      end
     end
   end
 end

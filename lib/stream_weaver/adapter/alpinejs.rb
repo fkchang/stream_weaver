@@ -152,6 +152,66 @@ module StreamWeaver
         end
       end
 
+      # Render a checkbox group with select all/none functionality
+      # State is stored as an array of selected values
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param key [Symbol] The state key for this group (stores array)
+      # @param children [Array<CheckboxItem>] The checkbox items
+      # @param options [Hash] Component options (select_all, select_none labels)
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      def render_checkbox_group(view, key, children, options, state)
+        current_values = state[key] || []
+        all_values = children.map(&:value)
+
+        view.div(class: "checkbox-group") do
+          # Render select all/none buttons if options provided
+          if options[:select_all] || options[:select_none]
+            view.div(class: "checkbox-group-actions") do
+              if options[:select_all]
+                view.button(
+                  type: "button",
+                  class: "btn btn-sm",
+                  "@click" => "#{key} = #{JSON.generate(all_values)}"
+                ) { options[:select_all] }
+              end
+
+              if options[:select_none]
+                view.button(
+                  type: "button",
+                  class: "btn btn-sm",
+                  "@click" => "#{key} = []"
+                ) { options[:select_none] }
+              end
+            end
+          end
+
+          # Render each checkbox item
+          children.each do |item|
+            view.label(class: "checkbox-item") do
+              view.input(
+                type: "checkbox",
+                name: key.to_s,
+                value: item.value,
+                checked: current_values.include?(item.value),
+                "x-model" => key.to_s,  # Alpine.js array binding
+                "hx-post" => "/update",
+                "hx-include" => input_selector,
+                "hx-target" => "#app-container",
+                "hx-swap" => "innerHTML",
+                "hx-trigger" => "change"
+              )
+
+              # Render item's nested content
+              item.children.each do |child|
+                child.render(view, state)
+              end
+            end
+          end
+        end
+      end
+
       # Render a button with HTMX attributes for server interaction
       #
       # @param view [Phlex::HTML] The Phlex view instance

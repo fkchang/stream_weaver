@@ -260,6 +260,68 @@ RSpec.describe StreamWeaver::App do
       end
     end
 
+    describe "#checkbox_group" do
+      it "adds CheckboxGroup component" do
+        app.checkbox_group(:selected_emails) {}
+        expect(app.components.length).to eq(1)
+        expect(app.components.first).to be_a(StreamWeaver::Components::CheckboxGroup)
+        expect(app.components.first.key).to eq(:selected_emails)
+      end
+
+      it "passes options" do
+        app.checkbox_group(:selected_emails, select_all: "Select All", select_none: "Clear") {}
+        component = app.components.first
+        expect(component.instance_variable_get(:@options)).to include(
+          select_all: "Select All",
+          select_none: "Clear"
+        )
+      end
+
+      it "captures item children with values" do
+        app.checkbox_group(:selected_emails) do
+          item("email_1") { text("First email") }
+          item("email_2") { text("Second email") }
+        end
+
+        group = app.components.first
+        expect(group.children.length).to eq(2)
+        expect(group.children[0]).to be_a(StreamWeaver::Components::CheckboxItem)
+        expect(group.children[0].value).to eq("email_1")
+        expect(group.children[1].value).to eq("email_2")
+      end
+
+      it "captures nested components within items" do
+        app.checkbox_group(:selected_emails) do
+          item("email_1") do
+            text("From: sender@example.com")
+            text("Subject: Hello")
+          end
+        end
+
+        group = app.components.first
+        item = group.children.first
+        expect(item.children.length).to eq(2)
+        expect(item.children[0]).to be_a(StreamWeaver::Components::Text)
+        expect(item.children[1]).to be_a(StreamWeaver::Components::Text)
+      end
+
+      it "initializes state as empty array" do
+        app.checkbox_group(:selected_emails) {}
+        expect(app.state[:selected_emails]).to eq([])
+      end
+
+      it "does not override existing array state" do
+        app.state[:selected_emails] = ["email_1", "email_3"]
+        app.checkbox_group(:selected_emails) {}
+        expect(app.state[:selected_emails]).to eq(["email_1", "email_3"])
+      end
+
+      it "supports default option for initial selection" do
+        app.checkbox_group(:selected_emails, default: ["email_2"]) {}
+        expect(app.state[:selected_emails]).to eq(["email_2"])
+      end
+    end
+
     describe "#card" do
       it "adds Card component" do
         app.card {}

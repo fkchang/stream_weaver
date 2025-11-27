@@ -76,6 +76,7 @@ See `examples/` directory for more:
 - `hello_world.rb` - Basic form
 - `todo_list.rb` - Full CRUD app
 - `all_components.rb` - Component showcase
+- `checkbox_group_demo.rb` - Batch selection with select all/none
 - `markdown_demo.rb` - Full GFM markdown demo
 - `agentic_form.rb` - Agentic mode demo
 
@@ -132,6 +133,17 @@ text_area :bio, placeholder: "Bio", rows: 5
 checkbox :agree, "I accept the terms"
 select :color, ["Red", "Green", "Blue"], default: "Green"
 radio_group :size, ["Small", "Medium", "Large"]
+
+# Checkbox group with select all/none (for batch operations)
+checkbox_group :selected, select_all: "Select All", select_none: "Clear" do
+  item "item_1" do
+    text "First item"
+  end
+  item "item_2" do
+    text "Second item"
+  end
+end
+# state[:selected] = ["item_1", "item_2", ...] (array of selected values)
 ```
 
 ### Buttons

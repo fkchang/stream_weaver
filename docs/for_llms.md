@@ -122,6 +122,21 @@ checkbox :agree, "I accept the terms"
 # state[:agree] will be true/false
 ```
 
+### Checkbox Group (Multi-Select with Select All/None)
+
+```ruby
+# For batch selection (e.g., emails, files, items)
+checkbox_group :selected_items, select_all: "Select All", select_none: "Clear" do
+  items.each do |item|
+    item item.id do
+      text item.name
+      # Any components can be nested here
+    end
+  end
+end
+# state[:selected_items] = ["id1", "id3", ...] (array of selected values)
+```
+
 ### Buttons
 
 ```ruby

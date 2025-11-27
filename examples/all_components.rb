@@ -33,6 +33,19 @@ App = app "Component Showcase" do
   header3 "Radio Group"
   radio_group :size, ["Small", "Medium", "Large"]
 
+  header3 "Checkbox Group (Multi-Select)"
+  checkbox_group :selected_items, select_all: "Select All", select_none: "Clear" do
+    item "item_1" do
+      text "First item"
+    end
+    item "item_2" do
+      text "Second item"
+    end
+    item "item_3" do
+      text "Third item"
+    end
+  end
+
   # --- Layout Components ---
   header3 "Div Container"
   div class: "todo-item" do
@@ -72,6 +85,7 @@ App = app "Component Showcase" do
   text "Enabled: #{state[:enabled] ? 'Yes' : 'No'}"
   text "Color: #{state[:color] || '(none)'}"
   text "Size: #{state[:size] || '(none)'}"
+  text "Selected items: #{(state[:selected_items] || []).join(', ').then { |s| s.empty? ? '(none)' : s }}"
 end
 
 App.run! if __FILE__ == $0

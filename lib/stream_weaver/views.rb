@@ -291,6 +291,56 @@ module StreamWeaver
                 }
 
                 /* ===========================================
+                   Checkbox Group
+                   =========================================== */
+                .checkbox-group {
+                  display: flex;
+                  flex-direction: column;
+                  gap: var(--sw-spacing-sm);
+                  margin: var(--sw-spacing-sm) 0 var(--sw-spacing-md) 0;
+                }
+
+                .checkbox-group-actions {
+                  display: flex;
+                  gap: var(--sw-spacing-sm);
+                  margin-bottom: var(--sw-spacing-sm);
+                }
+
+                .checkbox-group-actions .btn-sm {
+                  padding: var(--sw-spacing-xs) var(--sw-spacing-sm);
+                  font-size: var(--sw-font-size-sm);
+                }
+
+                .checkbox-item {
+                  display: flex;
+                  align-items: flex-start;
+                  gap: var(--sw-spacing-sm);
+                  padding: var(--sw-spacing-sm) var(--sw-spacing-md);
+                  border: 1px solid var(--sw-color-border);
+                  border-radius: var(--sw-radius-md);
+                  cursor: pointer;
+                  transition: background-color var(--sw-transition), border-color var(--sw-transition);
+                  margin: 0;
+                }
+
+                .checkbox-item:hover {
+                  background-color: var(--sw-color-bg);
+                  border-color: var(--sw-color-text-light);
+                }
+
+                .checkbox-item input[type="checkbox"] {
+                  margin: 0;
+                  margin-top: 2px;
+                  cursor: pointer;
+                  accent-color: var(--sw-color-primary);
+                  flex-shrink: 0;
+                }
+
+                .checkbox-item input[type="checkbox"]:checked ~ p {
+                  color: var(--sw-color-primary);
+                }
+
+                /* ===========================================
                    Card
                    =========================================== */
                 .card {

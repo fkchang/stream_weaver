@@ -314,5 +314,36 @@ module StreamWeaver
         view.adapter.render_header(view, content.to_s, @level, state)
       end
     end
+
+    # CheckboxGroup component for multi-select with select all/none
+    # State is stored as an array of selected values
+    class CheckboxGroup < Base
+      attr_reader :key
+      attr_accessor :children
+
+      # @param key [Symbol] The state key (stores array of selected values)
+      # @param options [Hash] Options including select_all, select_none labels
+      def initialize(key, **options)
+        @key = key
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_checkbox_group(view, @key, @children, @options, state)
+      end
+    end
+
+    # CheckboxItem component - individual item within a CheckboxGroup
+    class CheckboxItem < Base
+      attr_reader :value
+      attr_accessor :children
+
+      # @param value [String] The value added to the group's array when checked
+      def initialize(value)
+        @value = value
+        @children = []
+      end
+    end
   end
 end

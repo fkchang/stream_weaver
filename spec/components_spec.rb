@@ -770,4 +770,69 @@ RSpec.describe StreamWeaver::Components do
       end
     end
   end
+
+  describe StreamWeaver::Components::CheckboxGroup do
+    describe "initialization" do
+      it "stores the key" do
+        group = described_class.new(:selected_emails)
+        expect(group.key).to eq(:selected_emails)
+      end
+
+      it "stores options" do
+        group = described_class.new(:selected_emails, select_all: "Select All", select_none: "Clear")
+        expect(group.instance_variable_get(:@options)).to include(select_all: "Select All", select_none: "Clear")
+      end
+
+      it "initializes with empty children" do
+        group = described_class.new(:selected_emails)
+        expect(group.children).to eq([])
+      end
+    end
+
+    describe "rendering" do
+      let(:group) { described_class.new(:selected_emails, select_all: "Select All", select_none: "Clear") }
+
+      it "delegates rendering to adapter" do
+        expect(adapter).to receive(:render_checkbox_group).with(
+          mock_view,
+          :selected_emails,
+          [],
+          hash_including(select_all: "Select All", select_none: "Clear"),
+          state
+        )
+
+        group.render(mock_view, state)
+      end
+
+      it "passes children to adapter" do
+        item1 = StreamWeaver::Components::CheckboxItem.new("email_1")
+        item2 = StreamWeaver::Components::CheckboxItem.new("email_2")
+        group.children = [item1, item2]
+
+        expect(adapter).to receive(:render_checkbox_group).with(
+          mock_view,
+          :selected_emails,
+          [item1, item2],
+          anything,
+          state
+        )
+
+        group.render(mock_view, state)
+      end
+    end
+  end
+
+  describe StreamWeaver::Components::CheckboxItem do
+    describe "initialization" do
+      it "stores the value" do
+        item = described_class.new("email_123")
+        expect(item.value).to eq("email_123")
+      end
+
+      it "initializes with empty children" do
+        item = described_class.new("email_123")
+        expect(item.children).to eq([])
+      end
+    end
+  end
 end

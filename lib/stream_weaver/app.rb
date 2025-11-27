@@ -198,6 +198,51 @@ module StreamWeaver
       @components = parent_components
     end
 
+    # DSL method: Add a checkbox group with select all/none functionality
+    # State is stored as an array of selected values
+    #
+    # @param key [Symbol] The state key (stores array of selected values)
+    # @param options [Hash] Options (select_all:, select_none:, default:)
+    # @param block [Proc] Nested DSL block containing item() calls
+    def checkbox_group(key, **options, &block)
+      # Initialize state as array if not set
+      if !@_state.key?(key)
+        @_state[key] = options[:default] || []
+      end
+
+      group_component = Components::CheckboxGroup.new(key, **options)
+      @components << group_component
+
+      # Save current context and set up for capturing items
+      parent_components = @components
+      @current_checkbox_group = group_component
+      @components = []
+
+      instance_eval(&block) if block
+
+      group_component.children = @components
+      @components = parent_components
+      @current_checkbox_group = nil
+    end
+
+    # DSL method: Add an item within a checkbox_group
+    # Each item gets a checkbox with the specified value
+    #
+    # @param value [String] The value added to the group's array when checked
+    # @param block [Proc] Nested DSL block for item content
+    def item(value, &block)
+      item_component = Components::CheckboxItem.new(value)
+
+      # Capture nested components for this item
+      parent_components = @components
+      @components = []
+      instance_eval(&block) if block
+      item_component.children = @components
+      @components = parent_components
+
+      @components << item_component
+    end
+
     # DSL method: Add a phrase (plain text span) within lesson_text
     #
     # @param content [String] The text content
