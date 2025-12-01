@@ -78,6 +78,32 @@ App = app "Component Showcase" do
     text "Secondary button was clicked!"
   end
 
+  # --- Status & Selection Components ---
+  header3 "Status Badge"
+  text "Visual match indicators with reasoning:"
+  div class: "status-badges-demo" do
+    status_badge :strong, "Perfect match for your preferences"
+    status_badge :maybe, "Good fit, but has some dark themes"
+    status_badge :skip, "Not recommended - wrong genre"
+  end
+
+  header3 "Tag Buttons (Single Select)"
+  text "Default style:"
+  tag_buttons :category, ["Fiction", "Non-fiction", "Mystery", "Sci-Fi"]
+
+  text "Destructive style (for elimination):"
+  tag_buttons :eliminate_reason, ["Too dark", "Wrong genre", "Bad reviews", "Not interested"], style: :destructive
+
+  text "Selected category: #{state[:category] || '(none)'}"
+  text "Elimination reason: #{state[:eliminate_reason] || '(none)'}"
+
+  header3 "External Link Button"
+  text "Opens URL in new tab (no form submit):"
+  external_link_button "Visit Example.com", url: "https://example.com"
+
+  text "Opens URL AND submits form (for agentic mode):"
+  external_link_button "Submit & Open Google", url: "https://google.com", submit: true
+
   # --- Current State ---
   header3 "Current State"
   text "Username: #{state[:username] || '(none)'}"
@@ -86,6 +112,8 @@ App = app "Component Showcase" do
   text "Color: #{state[:color] || '(none)'}"
   text "Size: #{state[:size] || '(none)'}"
   text "Selected items: #{(state[:selected_items] || []).join(', ').then { |s| s.empty? ? '(none)' : s }}"
+  text "Category: #{state[:category] || '(none)'}"
+  text "Elimination reason: #{state[:eliminate_reason] || '(none)'}"
 end
 
 App.run! if __FILE__ == $0
