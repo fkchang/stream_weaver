@@ -187,6 +187,50 @@ collapsible "View Context (127 words)", expanded: true do
 end
 ```
 
+### Status Badge
+
+Display match indicators with reasoning:
+
+```ruby
+status_badge :strong, "Perfect tone match, Lovecraftian themes"
+status_badge :maybe, "Good genre fit, but reviews mention dark themes"
+status_badge :skip, "Heavy psychological suspense - not your preference"
+```
+
+Renders visual indicators:
+- 🟢 **Strong** — reasoning text (green background)
+- 🟡 **Maybe** — reasoning text (yellow background)
+- 🔴 **Skip** — reasoning text (red background)
+
+### Tag Buttons
+
+Quick-select tags for categorization or elimination:
+
+```ruby
+# Default style
+tag_buttons :category, ["Fiction", "Non-fiction", "Mystery"]
+
+# Destructive style (for elimination actions)
+tag_buttons :eliminate_reason, ["Too dark", "Wrong genre", "Bad reviews"], style: :destructive
+# state[:eliminate_reason] = "too_dark" (normalized to lowercase with underscores)
+```
+
+Single-select: clicking a tag selects it and deselects others. Values are normalized (lowercase, spaces become underscores).
+
+### External Link Button
+
+Button that opens URL in new tab, optionally submitting form first:
+
+```ruby
+# Just open link (renders as styled <a> tag)
+external_link_button "View on Amazon", url: "https://amazon.com/dp/B0XXX"
+
+# Submit form AND open link (for agentic mode)
+external_link_button "Get it!", url: book[:amazon_url], submit: true
+```
+
+The `submit: true` option is useful in agentic mode where you want to record the user's selection before opening the external link.
+
 ### Score Table
 
 Display metrics with color-coded scores and interpretations:
