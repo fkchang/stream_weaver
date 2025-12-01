@@ -543,6 +543,36 @@ module StreamWeaver
         end
       end
 
+      # Render a tag button group for quick selection
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param key [Symbol] The state key for selected tag
+      # @param tags [Array<String>] The available tag labels
+      # @param options [Hash] Options (style: :default or :destructive)
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_tag_buttons(view, key, tags, options, state)
+        current_value = state[key]
+        style_class = options[:style] == :destructive ? "tag-buttons-destructive" : "tag-buttons-default"
+
+        view.div(class: "tag-buttons #{style_class}") do
+          tags.each do |tag|
+            tag_value = tag.downcase.gsub(/\s+/, '_')
+            selected = current_value == tag_value
+
+            view.button(
+              type: "button",
+              class: "tag-btn #{selected ? 'tag-btn-selected' : ''}",
+              "hx-post" => "/update",
+              "hx-vals" => JSON.generate({ key.to_s => tag_value }),
+              "hx-include" => input_selector,
+              "hx-target" => "#app-container",
+              "hx-swap" => "innerHTML scroll:false"
+            ) { tag }
+          end
+        end
+      end
+
     end
   end
 end

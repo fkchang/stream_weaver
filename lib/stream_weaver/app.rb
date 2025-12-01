@@ -333,6 +333,16 @@ module StreamWeaver
       @components << Components::StatusBadge.new(status, reasoning)
     end
 
+    # DSL method: Add a tag buttons component for quick selection
+    #
+    # @param key [Symbol] The state key for selected tag
+    # @param tags [Array<String>] The available tag labels
+    # @param options [Hash] Options (e.g., style: :destructive)
+    def tag_buttons(key, tags, **options)
+      @_state[key] = @_state[key] || nil
+      @components << Components::TagButtons.new(key, tags, **options)
+    end
+
     private
 
     # Parse a string with {term} markers into Phrase and Term components

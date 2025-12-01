@@ -360,5 +360,24 @@ module StreamWeaver
         view.adapter.render_status_badge(view, @status, @reasoning, state)
       end
     end
+
+    # TagButtons component for quick-select tag groups
+    # Single-select: clicking a tag selects it (and deselects others)
+    class TagButtons < Base
+      attr_reader :key
+
+      # @param key [Symbol] The state key for selected tag
+      # @param tags [Array<String>] The available tag labels
+      # @param options [Hash] Options (e.g., style: :destructive)
+      def initialize(key, tags, **options)
+        @key = key
+        @tags = tags
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_tag_buttons(view, @key, @tags, @options, state)
+      end
+    end
   end
 end
