@@ -24,6 +24,8 @@ module StreamWeaver
     # Disable Sinatra's startup messages for cleaner output
     set :logging, false
     set :show_exceptions, :after_handler
+    set :dump_errors, true
+    set :raise_errors, false
 
     # Create a Sinatra app from a StreamWeaver::App instance
     #
@@ -62,77 +64,106 @@ module StreamWeaver
 
       # Update state from form inputs
       post '/update' do
-        state = session[:streamlit_state] ||= {}
-        streamlit_app = settings.streamlit_app
-        adapter = settings.adapter
-        is_agentic = settings.respond_to?(:result_container)
+        begin
+          state = session[:streamlit_state] ||= {}
+          streamlit_app = settings.streamlit_app
+          adapter = settings.adapter
+          is_agentic = settings.respond_to?(:result_container)
 
-        # Update state with posted params
-        params.each do |key, value|
-          next if ['splat', 'captures'].include?(key)
+          # Update state with posted params
+          params.each do |key, value|
+            next if ['splat', 'captures'].include?(key)
 
-          # Convert checkbox values
-          if value == "on"
-            state[key.to_sym] = true
-          elsif request.params[key].nil? && state[key.to_sym].is_a?(TrueClass)
-            state[key.to_sym] = false
-          else
-            state[key.to_sym] = value
+            key_sym = key.to_sym
+
+            # Convert checkbox values
+            if value == "on"
+              state[key_sym] = true
+            elsif request.params[key].nil? && state[key_sym].is_a?(TrueClass)
+              state[key_sym] = false
+            elsif state[key_sym].is_a?(Array)
+              # Preserve array type for checkbox_group
+              # Value comes as array when multiple checkboxes checked, string when one
+              state[key_sym] = Array(value)
+            else
+              state[key_sym] = value
+            end
           end
+
+          session[:streamlit_state] = state
+
+          # Re-render with new state
+          streamlit_app.rebuild_with_state(state)
+          Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+        rescue => e
+          File.open("/tmp/streamweaver_error.log", "a") do |f|
+            f.puts "#{Time.now} POST /update error: #{e.class}: #{e.message}"
+            f.puts e.backtrace.first(10).join("\n")
+            f.puts "---"
+          end
+          raise
         end
-
-        session[:streamlit_state] = state
-
-        # Re-render with new state
-        streamlit_app.rebuild_with_state(state)
-        Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
       end
 
       # Button actions
       post '/action/:button_id' do
-        state = session[:streamlit_state] ||= {}
-        button_id = params[:button_id]
-        streamlit_app = settings.streamlit_app
-        adapter = settings.adapter
-        is_agentic = settings.respond_to?(:result_container)
+        begin
+          state = session[:streamlit_state] ||= {}
+          button_id = params[:button_id]
+          streamlit_app = settings.streamlit_app
+          adapter = settings.adapter
+          is_agentic = settings.respond_to?(:result_container)
 
-        # First, rebuild to get all current input component keys
-        streamlit_app.rebuild_with_state(state)
+          # First, rebuild to get all current input component keys
+          streamlit_app.rebuild_with_state(state)
 
-        # Collect all input component keys
-        input_keys = self.class.collect_input_keys(streamlit_app.components)
+          # Collect all input component keys
+          input_keys = self.class.collect_input_keys(streamlit_app.components)
 
-        # Sync Alpine.js state from form inputs
-        params.each do |key, value|
-          next if ['splat', 'captures', 'button_id'].include?(key)
+          # Sync Alpine.js state from form inputs
+          params.each do |key, value|
+            next if ['splat', 'captures', 'button_id'].include?(key)
 
-          # Convert checkbox values
-          if value == "on"
-            state[key.to_sym] = true
-          else
-            state[key.to_sym] = value
+            key_sym = key.to_sym
+
+            # Convert checkbox values
+            if value == "on"
+              state[key_sym] = true
+            elsif state[key_sym].is_a?(Array)
+              # Preserve array type for checkbox_group
+              state[key_sym] = Array(value)
+            else
+              state[key_sym] = value
+            end
           end
-        end
 
-        # Handle unchecked checkboxes (they don't send params)
-        input_keys.each do |key|
-          # If it's a checkbox component and wasn't in params, set to false
-          component = self.class.find_component_by_key(streamlit_app.components, key)
-          if component.is_a?(Components::Checkbox) && !params.key?(key.to_s)
-            state[key] = false
+          # Handle unchecked checkboxes (they don't send params)
+          input_keys.each do |key|
+            # If it's a checkbox component and wasn't in params, set to false
+            component = self.class.find_component_by_key(streamlit_app.components, key)
+            if component.is_a?(Components::Checkbox) && !params.key?(key.to_s)
+              state[key] = false
+            end
           end
-        end
 
-        # Find and execute the button action
-        button = self.class.find_button_recursive(streamlit_app.components, button_id)
-        if button
-          button.execute(state)
-          session[:streamlit_state] = state
-        end
+          # Find and execute the button action
+          button = self.class.find_button_recursive(streamlit_app.components, button_id)
+          if button
+            button.execute(state)
+            session[:streamlit_state] = state
+          end
 
-        # Re-render with updated state
-        streamlit_app.rebuild_with_state(state)
-        Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+          # Re-render with updated state
+          streamlit_app.rebuild_with_state(state)
+          Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+        rescue => e
+          File.open("/tmp/streamweaver_error.log", "a") do |f|
+            f.puts "#{Time.now} POST /action/#{params[:button_id]} error: #{e.class}: #{e.message}"
+            f.puts e.backtrace.first(10).join("\n")
+            f.puts "---"
+          end
+          raise
+        end
       end
 
       # Submit endpoint for agentic mode
@@ -150,11 +181,16 @@ module StreamWeaver
         params.each do |key, value|
           next if ['splat', 'captures'].include?(key)
 
+          key_sym = key.to_sym
+
           # Convert checkbox values
           if value == "on"
-            state[key.to_sym] = true
+            state[key_sym] = true
+          elsif state[key_sym].is_a?(Array)
+            # Preserve array type for checkbox_group
+            state[key_sym] = Array(value)
           else
-            state[key.to_sym] = value
+            state[key_sym] = value
           end
         end
 

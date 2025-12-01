@@ -245,9 +245,9 @@ RSpec.describe StreamWeaver::App do
         expect(app.state[:color]).to eq("Blue")
       end
 
-      it "does not set state when no default provided" do
+      it "initializes state to empty string when no default provided" do
         app.select(:color, ["Red", "Green", "Blue"])
-        expect(app.state.key?(:color)).to be false
+        expect(app.state[:color]).to eq("")
       end
     end
 

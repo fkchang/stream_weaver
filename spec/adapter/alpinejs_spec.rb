@@ -282,7 +282,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
           "hx-post" => "/action/btn_submit_1",
           "hx-include" => "[x-model]",
           "hx-target" => "#app-container",
-          "hx-swap" => "innerHTML"
+          "hx-swap" => "innerHTML scroll:false"
         )
       ).and_yield
 

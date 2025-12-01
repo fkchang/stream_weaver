@@ -64,9 +64,13 @@ RSpec.describe "StreamWeaver Server" do
       expect(last_response.body).to include("htmx")
     end
 
-    it "initializes session state" do
+    it "initializes session state with component defaults" do
       get '/'
-      expect(last_request.session[:streamlit_state]).to eq({})
+      # State is initialized with default values for each form component
+      state = last_request.session[:streamlit_state]
+      expect(state[:name]).to eq("")       # text_field default
+      expect(state[:subscribe]).to eq(false) # checkbox default
+      expect(state[:color]).to eq("")      # select without default
     end
   end
 

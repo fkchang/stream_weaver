@@ -48,6 +48,8 @@ module StreamWeaver
     # @param key [Symbol] The state key for this field
     # @param options [Hash] Options (e.g., placeholder)
     def text_field(key, **options)
+      # Initialize state key for Alpine.js x-data binding
+      @_state[key] = @_state[key] || ""
       @components << Components::TextField.new(key, **options)
     end
 
@@ -132,6 +134,8 @@ module StreamWeaver
     # @param key [Symbol] The state key for this text area
     # @param options [Hash] Options (e.g., placeholder, rows)
     def text_area(key, **options)
+      # Initialize state key for Alpine.js x-data binding
+      @_state[key] = @_state[key] || ""
       @components << Components::TextArea.new(key, **options)
     end
 
@@ -157,6 +161,8 @@ module StreamWeaver
     # @param label [String] The label text
     # @param options [Hash] Additional options
     def checkbox(key, label, **options)
+      # Initialize state key for Alpine.js x-data binding
+      @_state[key] = @_state[key] || false
       @components << Components::Checkbox.new(key, label, **options)
     end
 
@@ -166,9 +172,10 @@ module StreamWeaver
     # @param choices [Array<String>] The available choices
     # @param options [Hash] Additional options (e.g., default: "value")
     def select(key, choices, **options)
-      # Apply default value to state if not already set
-      if options[:default] && !@_state.key?(key)
-        @_state[key] = options[:default]
+      # Initialize state key for Alpine.js x-data binding
+      # Use default if provided, otherwise empty string
+      if !@_state.key?(key)
+        @_state[key] = options[:default] || ""
       end
       @components << Components::Select.new(key, choices, **options)
     end
@@ -179,6 +186,8 @@ module StreamWeaver
     # @param choices [Array<String>] The available choices
     # @param options [Hash] Additional options (e.g., placeholder)
     def radio_group(key, choices, **options)
+      # Initialize state key for Alpine.js x-data binding
+      @_state[key] = @_state[key] || ""
       @components << Components::RadioGroup.new(key, choices, **options)
     end
 
@@ -314,6 +323,14 @@ module StreamWeaver
     # @param options [Hash] Additional options
     def score_table(scores:, **options)
       @components << Components::ScoreTable.new(scores: scores, **options)
+    end
+
+    # DSL method: Add a status badge component
+    #
+    # @param status [Symbol] One of :strong, :maybe, :skip
+    # @param reasoning [String] Explanation text
+    def status_badge(status, reasoning)
+      @components << Components::StatusBadge.new(status, reasoning)
     end
 
     private

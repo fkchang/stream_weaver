@@ -28,6 +28,7 @@ module StreamWeaver
       # @return [void] Renders to view
       def render_text_field(view, key, options, state)
         view.input(
+          id: "input-#{key}",  # Stable ID for HTMX focus restoration
           type: "text",
           name: key.to_s,
           value: state[key] || "",
@@ -36,7 +37,7 @@ module StreamWeaver
           "hx-post" => "/update",
           "hx-include" => input_selector,
           "hx-target" => "#app-container",
-          "hx-swap" => "innerHTML",
+          "hx-swap" => "innerHTML scroll:false",
           "hx-trigger" => "keyup changed delay:500ms"  # Debounced auto-update
         )
       end
@@ -52,6 +53,7 @@ module StreamWeaver
       # @return [void] Renders to view
       def render_text_area(view, key, options, state)
         view.textarea(
+          id: "input-#{key}",  # Stable ID for HTMX focus restoration
           name: key.to_s,
           placeholder: options[:placeholder] || "",
           rows: options[:rows] || 3,
@@ -59,7 +61,7 @@ module StreamWeaver
           "hx-post" => "/update",
           "hx-include" => input_selector,
           "hx-target" => "#app-container",
-          "hx-swap" => "innerHTML",
+          "hx-swap" => "innerHTML scroll:false",
           "hx-trigger" => "keyup changed delay:500ms"  # Debounced auto-update
         ) { state[key] || "" }
       end
@@ -82,7 +84,7 @@ module StreamWeaver
             "hx-post" => "/update",
             "hx-include" => input_selector,
             "hx-target" => "#app-container",
-            "hx-swap" => "innerHTML",
+            "hx-swap" => "innerHTML scroll:false",
             "hx-trigger" => "change"  # Immediate update on change
           )
           view.plain " #{label}"
@@ -108,7 +110,7 @@ module StreamWeaver
           "hx-post" => "/update",
           "hx-include" => input_selector,
           "hx-target" => "#app-container",
-          "hx-swap" => "innerHTML",
+          "hx-swap" => "innerHTML scroll:false",
           "hx-trigger" => "change"  # Immediate update on change
         ) do
           choices.each do |choice|
@@ -143,7 +145,7 @@ module StreamWeaver
                 "hx-post" => "/update",
                 "hx-include" => input_selector,
                 "hx-target" => "#app-container",
-                "hx-swap" => "innerHTML",
+                "hx-swap" => "innerHTML scroll:false",
                 "hx-trigger" => "change"  # Immediate update on change
               )
               view.span { choice }
@@ -199,7 +201,7 @@ module StreamWeaver
                 "hx-post" => "/update",
                 "hx-include" => input_selector,
                 "hx-target" => "#app-container",
-                "hx-swap" => "innerHTML",
+                "hx-swap" => "innerHTML scroll:false",
                 "hx-trigger" => "change"
               )
 
@@ -228,7 +230,7 @@ module StreamWeaver
           "hx-post" => "/action/#{button_id}",     # HTMX POST to server
           "hx-include" => input_selector,          # Include all inputs with x-model
           "hx-target" => "#app-container",         # Replace app container
-          "hx-swap" => "innerHTML"                 # Replace inner HTML
+          "hx-swap" => "innerHTML scroll:false"    # Replace inner HTML, preserve scroll
         ) { label }
       end
 
@@ -265,6 +267,57 @@ module StreamWeaver
       def render_cdn_scripts(view)
         view.script(src: "https://unpkg.com/htmx.org@2.0.4")
         view.script(src: "https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js", defer: true)
+        # Focus and scroll restoration script - preserves state across HTMX swaps
+        view.script do
+          view.raw(view.safe(<<~JS))
+            (function() {
+              let focusState = null;
+              let scrollState = null;
+
+              // Before swap: save focus and scroll state
+              document.addEventListener('htmx:beforeSwap', function(e) {
+                // Save focus
+                const active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                  focusState = {
+                    id: active.id,
+                    selectionStart: active.selectionStart,
+                    selectionEnd: active.selectionEnd
+                  };
+                } else {
+                  focusState = null;
+                }
+
+                // Save scroll position
+                scrollState = {
+                  x: window.scrollX,
+                  y: window.scrollY
+                };
+              });
+
+              // After swap: restore focus and scroll state
+              document.addEventListener('htmx:afterSwap', function(e) {
+                // Restore focus
+                if (focusState && focusState.id) {
+                  const el = document.getElementById(focusState.id);
+                  if (el) {
+                    el.focus();
+                    if (typeof el.setSelectionRange === 'function' && focusState.selectionStart !== null) {
+                      el.setSelectionRange(focusState.selectionStart, focusState.selectionEnd);
+                    }
+                  }
+                  focusState = null;
+                }
+
+                // Restore scroll position
+                if (scrollState) {
+                  window.scrollTo(scrollState.x, scrollState.y);
+                  scrollState = null;
+                }
+              });
+            })();
+          JS
+        end
       end
 
       # Get the CSS selector for Alpine.js bound inputs
@@ -465,6 +518,28 @@ module StreamWeaver
         when 5 then view.h5 { content }
         when 6 then view.h6 { content }
         else view.h2 { content }
+        end
+      end
+
+      # Render a status badge with icon and reasoning
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param status [Symbol] One of :strong, :maybe, :skip
+      # @param reasoning [String] Explanation text
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_status_badge(view, status, reasoning, state)
+        icon, label, css_class = case status
+        when :strong then ["🟢", "Strong", "status-badge-strong"]
+        when :maybe then ["🟡", "Maybe", "status-badge-maybe"]
+        when :skip then ["🔴", "Skip", "status-badge-skip"]
+        else ["⚪", "Unknown", "status-badge-unknown"]
+        end
+
+        view.span(class: "status-badge #{css_class}") do
+          view.span(class: "status-badge-icon") { icon }
+          view.span(class: "status-badge-label") { label }
+          view.span(class: "status-badge-reasoning") { " — #{reasoning}" }
         end
       end
 

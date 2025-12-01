@@ -345,5 +345,20 @@ module StreamWeaver
         @children = []
       end
     end
+
+    # StatusBadge component for visual match indicators
+    # Displays: 🟢 Strong / 🟡 Maybe / 🔴 Skip with reasoning
+    class StatusBadge < Base
+      # @param status [Symbol] One of :strong, :maybe, :skip
+      # @param reasoning [String] Explanation text
+      def initialize(status, reasoning)
+        @status = status
+        @reasoning = reasoning
+      end
+
+      def render(view, state)
+        view.adapter.render_status_badge(view, @status, @reasoning, state)
+      end
+    end
   end
 end
