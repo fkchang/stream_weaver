@@ -192,6 +192,19 @@ score_table scores: [
 lesson_text "Learn about {terms} here.", glossary: {
   "terms" => { simple: "Key concepts", detailed: "Longer explanation..." }
 }
+
+# Status badges for match indicators
+status_badge :strong, "Perfect match for your preferences"
+status_badge :maybe, "Good fit, but has some concerns"
+status_badge :skip, "Not recommended"
+
+# Tag buttons for quick selection (single-select)
+tag_buttons :category, ["Fiction", "Non-fiction", "Mystery"]
+tag_buttons :reason, ["Too dark", "Wrong genre"], style: :destructive
+
+# External link button (opens URL, optionally submits form first)
+external_link_button "View on Amazon", url: "https://amazon.com/dp/B0XXX"
+external_link_button "Select & Open", url: "https://example.com", submit: true
 ```
 
 ## API Reference

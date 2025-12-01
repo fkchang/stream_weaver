@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Collapsible` for expandable/collapsible sections
   - `ScoreTable` for color-coded metrics display
   - `LessonText`, `Term`, `Phrase` for educational content with glossary tooltips
+  - `CheckboxGroup` with `item` for batch selection with select all/none
+  - `StatusBadge` for visual match indicators (🟢 Strong / 🟡 Maybe / 🔴 Skip)
+  - `TagButtons` for quick-select tag groups (single-select with destructive style option)
+  - `ExternalLinkButton` for buttons that open URLs in new tabs (with optional form submit)
 - `default:` option for `select` component to set initial value
 - `auto_close_window:` option for `run_once!` to close browser after submit
 - Automatic "Submit to Agent" button in agentic mode
