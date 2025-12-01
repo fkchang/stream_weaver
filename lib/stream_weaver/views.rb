@@ -518,6 +518,105 @@ module StreamWeaver
                 }
 
                 /* ===========================================
+                   Status Badge
+                   =========================================== */
+                .status-badge {
+                  display: inline-flex;
+                  align-items: center;
+                  gap: var(--sw-spacing-xs);
+                  padding: var(--sw-spacing-xs) var(--sw-spacing-sm);
+                  border-radius: var(--sw-radius-sm);
+                  font-size: var(--sw-font-size-sm);
+                  margin: var(--sw-spacing-xs) var(--sw-spacing-sm) var(--sw-spacing-xs) 0;
+                }
+
+                .status-badge-strong {
+                  background-color: rgba(16, 185, 129, 0.1);
+                  color: #059669;
+                }
+
+                .status-badge-maybe {
+                  background-color: rgba(245, 158, 11, 0.1);
+                  color: #d97706;
+                }
+
+                .status-badge-skip {
+                  background-color: rgba(239, 68, 68, 0.1);
+                  color: #dc2626;
+                }
+
+                .status-badge-icon {
+                  font-size: 1em;
+                }
+
+                .status-badge-label {
+                  font-weight: 600;
+                }
+
+                .status-badge-reasoning {
+                  color: var(--sw-color-text-muted);
+                }
+
+                /* ===========================================
+                   Tag Buttons
+                   =========================================== */
+                .tag-buttons {
+                  display: flex;
+                  flex-wrap: wrap;
+                  gap: var(--sw-spacing-xs);
+                  margin: var(--sw-spacing-sm) 0;
+                }
+
+                .tag-btn {
+                  padding: var(--sw-spacing-xs) var(--sw-spacing-sm);
+                  border: 1px solid var(--sw-color-border);
+                  border-radius: var(--sw-radius-sm);
+                  background: var(--sw-color-bg-card);
+                  color: var(--sw-color-text);
+                  font-size: var(--sw-font-size-sm);
+                  cursor: pointer;
+                  transition: all var(--sw-transition);
+                  margin: 0;
+                }
+
+                .tag-btn:hover {
+                  border-color: var(--sw-color-primary);
+                  background: rgba(59, 130, 246, 0.05);
+                }
+
+                .tag-btn-selected {
+                  border-color: var(--sw-color-primary);
+                  background: var(--sw-color-primary);
+                  color: white;
+                }
+
+                .tag-buttons-destructive .tag-btn:hover {
+                  border-color: #dc2626;
+                  background: rgba(220, 38, 38, 0.05);
+                }
+
+                .tag-buttons-destructive .tag-btn-selected {
+                  border-color: #dc2626;
+                  background: #dc2626;
+                  color: white;
+                }
+
+                /* ===========================================
+                   External Link Button
+                   =========================================== */
+                .external-link-btn {
+                  display: inline-flex;
+                  align-items: center;
+                  gap: var(--sw-spacing-xs);
+                  text-decoration: none;
+                }
+
+                .external-link-btn::after {
+                  content: "↗";
+                  font-size: 0.8em;
+                }
+
+                /* ===========================================
                    Utilities
                    =========================================== */
                 .todo-item {
