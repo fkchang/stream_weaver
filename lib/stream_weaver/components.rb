@@ -379,5 +379,21 @@ module StreamWeaver
         view.adapter.render_tag_buttons(view, @key, @tags, @options, state)
       end
     end
+
+    # ExternalLinkButton component - opens URL and optionally submits form
+    class ExternalLinkButton < Base
+      # @param label [String] Button label
+      # @param url [String] URL to open in new tab
+      # @param submit [Boolean] Whether to also submit the form (default: false)
+      def initialize(label, url:, submit: false)
+        @label = label
+        @url = url
+        @submit = submit
+      end
+
+      def render(view, state)
+        view.adapter.render_external_link_button(view, @label, @url, @submit, state)
+      end
+    end
   end
 end

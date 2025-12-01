@@ -343,6 +343,15 @@ module StreamWeaver
       @components << Components::TagButtons.new(key, tags, **options)
     end
 
+    # DSL method: Add an external link button
+    #
+    # @param label [String] Button label
+    # @param url [String] URL to open in new tab
+    # @param submit [Boolean] Whether to also submit form (default: false)
+    def external_link_button(label, url:, submit: false)
+      @components << Components::ExternalLinkButton.new(label, url: url, submit: submit)
+    end
+
     private
 
     # Parse a string with {term} markers into Phrase and Term components

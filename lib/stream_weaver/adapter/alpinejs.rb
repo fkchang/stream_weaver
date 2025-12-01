@@ -573,6 +573,36 @@ module StreamWeaver
         end
       end
 
+      # Render a button that opens external URL and optionally submits form
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param label [String] Button label
+      # @param url [String] URL to open
+      # @param submit [Boolean] Whether to also submit form
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_external_link_button(view, label, url, submit, state)
+        if submit
+          # Submit form via HTMX, then open URL
+          view.button(
+            type: "button",
+            class: "btn btn-primary external-link-btn",
+            "hx-post" => "/submit",
+            "hx-include" => input_selector,
+            "hx-target" => "#app-container",
+            "hx-swap" => "innerHTML",
+            "@click" => "setTimeout(() => window.open('#{url}', '_blank'), 100)"
+          ) { label }
+        else
+          # Just open URL, no form submit
+          view.a(
+            href: url,
+            target: "_blank",
+            class: "btn btn-primary external-link-btn"
+          ) { label }
+        end
+      end
+
     end
   end
 end
