@@ -3,14 +3,16 @@
 module StreamWeaver
   # Main app class that holds the DSL block and manages the component tree
   class App
-    attr_reader :title, :components, :block
+    attr_reader :title, :components, :block, :layout
 
     # Initialize a new StreamWeaver application
     #
     # @param title [String] The title of the application
+    # @param layout [Symbol] Layout mode (:default, :wide, :full)
     # @param block [Proc] The DSL block defining the UI structure
-    def initialize(title, &block)
+    def initialize(title, layout: :default, &block)
       @title = title
+      @layout = layout
       @block = block
       @components = []
       @state_key = :streamlit_state
@@ -48,8 +50,18 @@ module StreamWeaver
     # @param key [Symbol] The state key for this field
     # @param options [Hash] Options (e.g., placeholder)
     def text_field(key, **options)
-      # Initialize state key for Alpine.js x-data binding
-      @_state[key] = @_state[key] || ""
+      # Inject form context if inside a form block
+      options[:form_context] = @form_context if @form_context
+
+      if @form_context
+        # Inside form: initialize in form's state hash
+        form_name = @form_context[:name]
+        @_state[form_name] ||= {}
+        @_state[form_name][key] ||= ""
+      else
+        # Standalone: initialize at top level
+        @_state[key] = @_state[key] || ""
+      end
       @components << Components::TextField.new(key, **options)
     end
 
@@ -134,8 +146,18 @@ module StreamWeaver
     # @param key [Symbol] The state key for this text area
     # @param options [Hash] Options (e.g., placeholder, rows)
     def text_area(key, **options)
-      # Initialize state key for Alpine.js x-data binding
-      @_state[key] = @_state[key] || ""
+      # Inject form context if inside a form block
+      options[:form_context] = @form_context if @form_context
+
+      if @form_context
+        # Inside form: initialize in form's state hash
+        form_name = @form_context[:name]
+        @_state[form_name] ||= {}
+        @_state[form_name][key] ||= ""
+      else
+        # Standalone: initialize at top level
+        @_state[key] = @_state[key] || ""
+      end
       @components << Components::TextArea.new(key, **options)
     end
 
@@ -161,8 +183,18 @@ module StreamWeaver
     # @param label [String] The label text
     # @param options [Hash] Additional options
     def checkbox(key, label, **options)
-      # Initialize state key for Alpine.js x-data binding
-      @_state[key] = @_state[key] || false
+      # Inject form context if inside a form block
+      options[:form_context] = @form_context if @form_context
+
+      if @form_context
+        # Inside form: initialize in form's state hash
+        form_name = @form_context[:name]
+        @_state[form_name] ||= {}
+        @_state[form_name][key] = @_state[form_name][key] || false
+      else
+        # Standalone: initialize at top level
+        @_state[key] = @_state[key] || false
+      end
       @components << Components::Checkbox.new(key, label, **options)
     end
 
@@ -172,10 +204,21 @@ module StreamWeaver
     # @param choices [Array<String>] The available choices
     # @param options [Hash] Additional options (e.g., default: "value")
     def select(key, choices, **options)
-      # Initialize state key for Alpine.js x-data binding
-      # Use default if provided, otherwise empty string
-      if !@_state.key?(key)
-        @_state[key] = options[:default] || ""
+      # Inject form context if inside a form block
+      options[:form_context] = @form_context if @form_context
+
+      if @form_context
+        # Inside form: initialize in form's state hash
+        form_name = @form_context[:name]
+        @_state[form_name] ||= {}
+        if !@_state[form_name].key?(key)
+          @_state[form_name][key] = options[:default] || ""
+        end
+      else
+        # Standalone: initialize at top level
+        if !@_state.key?(key)
+          @_state[key] = options[:default] || ""
+        end
       end
       @components << Components::Select.new(key, choices, **options)
     end
@@ -186,8 +229,18 @@ module StreamWeaver
     # @param choices [Array<String>] The available choices
     # @param options [Hash] Additional options (e.g., placeholder)
     def radio_group(key, choices, **options)
-      # Initialize state key for Alpine.js x-data binding
-      @_state[key] = @_state[key] || ""
+      # Inject form context if inside a form block
+      options[:form_context] = @form_context if @form_context
+
+      if @form_context
+        # Inside form: initialize in form's state hash
+        form_name = @form_context[:name]
+        @_state[form_name] ||= {}
+        @_state[form_name][key] ||= ""
+      else
+        # Standalone: initialize at top level
+        @_state[key] = @_state[key] || ""
+      end
       @components << Components::RadioGroup.new(key, choices, **options)
     end
 
@@ -350,6 +403,100 @@ module StreamWeaver
     # @param submit [Boolean] Whether to also submit form (default: false)
     def external_link_button(label, url:, submit: false)
       @components << Components::ExternalLinkButton.new(label, url: url, submit: submit)
+    end
+
+    # DSL method: Add a multi-column layout container
+    #
+    # @param widths [Array<String>, nil] Optional column widths (e.g., ['30%', '70%'])
+    # @param options [Hash] Additional options (e.g., gap)
+    # @param block [Proc] Nested DSL block containing column() calls
+    def columns(widths: nil, **options, &block)
+      columns_component = Components::Columns.new(widths: widths, **options)
+      @components << columns_component
+
+      # Save current context and set up for capturing columns
+      parent_components = @components
+      @current_columns = columns_component
+      @components = []
+
+      instance_eval(&block) if block
+
+      columns_component.children = @components
+      @components = parent_components
+      @current_columns = nil
+    end
+
+    # DSL method: Add an individual column within a columns container
+    #
+    # @param options [Hash] Additional options (e.g., class)
+    # @param block [Proc] Nested DSL block for column content
+    def column(**options, &block)
+      column_component = Components::Column.new(**options)
+
+      # Capture nested components for this column
+      parent_components = @components
+      @components = []
+      instance_eval(&block) if block
+      column_component.children = @components
+      @components = parent_components
+
+      @components << column_component
+    end
+
+    # DSL method: Add a form block with deferred submission
+    # Form elements inside use client-side only state until submit
+    #
+    # @param name [Symbol] The form name (used as state key, e.g., :edit_person)
+    # @param options [Hash] Additional options
+    # @param block [Proc] Nested DSL block containing form fields, submit, cancel
+    def form(name, **options, &block)
+      form_component = Components::Form.new(name, **options)
+      @components << form_component
+
+      # Initialize form state as empty hash if not present
+      @_state[name] ||= {}
+
+      # Save current context and set up form context
+      parent_components = @components
+      @current_form = form_component
+      @form_context = { name: name }
+      @components = []
+
+      instance_eval(&block) if block
+
+      form_component.children = @components
+      @components = parent_components
+      @current_form = nil
+      @form_context = nil
+    end
+
+    # DSL method: Add a submit button within a form block
+    # On click: sends all form values to server, auto-updates state, runs block
+    #
+    # @param label [String] Button label text
+    # @param block [Proc] Action to execute after state is updated (receives form_values)
+    def submit(label, &block)
+      raise "submit can only be used inside a form block" unless @current_form
+
+      @current_form.set_submit(label, &block)
+    end
+
+    # DSL method: Add a cancel button within a form block
+    # On click: resets form to original values (client-side only, no server request)
+    #
+    # @param label [String] Button label text
+    def cancel(label)
+      raise "cancel can only be used inside a form block" unless @current_form
+
+      @current_form.set_cancel(label)
+    end
+
+    # Check if currently inside a form block
+    # Used by adapters to determine rendering behavior
+    #
+    # @return [Hash, nil] Form context with :name key, or nil if not in form
+    def form_context
+      @form_context
     end
 
     private

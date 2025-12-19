@@ -27,61 +27,81 @@ module StreamWeaver
             title { @app.title }
             # Inject adapter-specific CDN scripts using Phlex methods
             @adapter.render_cdn_scripts(self)
+            # Google Fonts: Source Sans 3 (humanist sans - readable with character)
+            link(rel: "preconnect", href: "https://fonts.googleapis.com")
+            link(rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "anonymous")
+            link(rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap")
             style do
               raw(safe(<<~CSS))
                 /* ===========================================
-                   StreamWeaver CSS Custom Properties (Theme)
-                   Override these in your app's CSS to customize
+                   StreamWeaver CSS - "Warm Industrial" Theme
+                   A distinctive, craft-inspired aesthetic
                    =========================================== */
                 :root {
-                  /* Typography */
-                  --sw-font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-                  --sw-font-size-base: 16px;
-                  --sw-font-size-sm: 14px;
-                  --sw-font-size-lg: 18px;
-                  --sw-line-height: 1.6;
+                  /* Typography - Source Sans 3: humanist, readable, distinctive */
+                  --sw-font-display: 'Source Sans 3', system-ui, sans-serif;
+                  --sw-font-body: 'Source Sans 3', system-ui, sans-serif;
+                  --sw-font-family: var(--sw-font-body);
+                  --sw-font-size-base: 17px;
+                  --sw-font-size-sm: 15px;
+                  --sw-font-size-lg: 19px;
+                  --sw-font-size-xl: 24px;
+                  --sw-line-height: 1.7;
 
-                  /* Colors - Primary */
-                  --sw-color-primary: #2563eb;
-                  --sw-color-primary-hover: #1d4ed8;
-                  --sw-color-primary-light: #dbeafe;
+                  /* Colors - High Contrast with Warm Accent */
+                  --sw-color-primary: #c2410c;        /* Terracotta/burnt orange */
+                  --sw-color-primary-hover: #9a3412;  /* Deeper terracotta */
+                  --sw-color-primary-light: #fff7ed; /* Very light warm tint */
+                  --sw-color-primary-glow: rgba(194, 65, 12, 0.12);
 
-                  /* Colors - Neutral */
-                  --sw-color-text: #1f2937;
-                  --sw-color-text-muted: #6b7280;
-                  --sw-color-text-light: #9ca3af;
-                  --sw-color-bg: #f9fafb;
+                  /* Colors - High Contrast Neutrals */
+                  --sw-color-text: #111111;           /* Near black - high contrast */
+                  --sw-color-text-muted: #444444;     /* Dark gray - still readable */
+                  --sw-color-text-light: #888888;     /* Placeholder gray */
+                  --sw-color-bg: #f8f8f8;             /* Clean light gray */
                   --sw-color-bg-card: #ffffff;
-                  --sw-color-border: #e5e7eb;
+                  --sw-color-bg-elevated: #f3f3f3;   /* Subtle elevation */
+                  --sw-color-border: #e0e0e0;        /* Clean border */
+                  --sw-color-border-strong: #cccccc;
                   --sw-color-border-focus: var(--sw-color-primary);
 
                   /* Colors - Secondary */
-                  --sw-color-secondary: #6b7280;
-                  --sw-color-secondary-hover: #4b5563;
+                  --sw-color-secondary: #333333;
+                  --sw-color-secondary-hover: #1a1a1a;
 
-                  /* Spacing */
-                  --sw-spacing-xs: 0.25rem;
-                  --sw-spacing-sm: 0.5rem;
-                  --sw-spacing-md: 1rem;
-                  --sw-spacing-lg: 1.5rem;
-                  --sw-spacing-xl: 2rem;
+                  /* Colors - Accent (teal for links/highlights) */
+                  --sw-color-accent: #0d9488;
+                  --sw-color-accent-light: #e6fffa;
 
-                  /* Border Radius */
-                  --sw-radius-sm: 4px;
-                  --sw-radius-md: 8px;
-                  --sw-radius-lg: 12px;
+                  /* Spacing - More Generous */
+                  --sw-spacing-xs: 0.5rem;
+                  --sw-spacing-sm: 0.75rem;
+                  --sw-spacing-md: 1.25rem;
+                  --sw-spacing-lg: 2rem;
+                  --sw-spacing-xl: 3rem;
+                  --sw-spacing-2xl: 4rem;
 
-                  /* Shadows */
-                  --sw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-                  --sw-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-                  --sw-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+                  /* Border Radius - Confident, not overly rounded */
+                  --sw-radius-sm: 3px;
+                  --sw-radius-md: 6px;
+                  --sw-radius-lg: 10px;
+                  --sw-radius-xl: 16px;
 
-                  /* Transitions */
-                  --sw-transition: 150ms ease;
+                  /* Shadows - Deep, warm */
+                  --sw-shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.06);
+                  --sw-shadow-md: 0 4px 8px -2px rgba(28, 25, 23, 0.08), 0 2px 4px -1px rgba(28, 25, 23, 0.04);
+                  --sw-shadow-lg: 0 12px 24px -4px rgba(28, 25, 23, 0.12), 0 4px 8px -2px rgba(28, 25, 23, 0.06);
+                  --sw-shadow-xl: 0 20px 40px -8px rgba(28, 25, 23, 0.16), 0 8px 16px -4px rgba(28, 25, 23, 0.08);
+                  --sw-shadow-inner: inset 0 1px 2px rgba(28, 25, 23, 0.06);
+
+                  /* Transitions - Smooth, deliberate */
+                  --sw-transition-fast: 120ms ease-out;
+                  --sw-transition: 200ms ease-out;
+                  --sw-transition-slow: 350ms ease-out;
 
                   /* Tooltip */
-                  --sw-tooltip-bg: #1e293b;
-                  --sw-tooltip-text: #f8fafc;
+                  --sw-tooltip-bg: #292524;
+                  --sw-tooltip-text: #fafaf9;
 
                   /* Term highlighting */
                   --sw-term-color: var(--sw-color-primary);
@@ -91,17 +111,41 @@ module StreamWeaver
                 /* ===========================================
                    Base Styles
                    =========================================== */
+                *, *::before, *::after {
+                  box-sizing: border-box;
+                }
+
+                /* Allow overflow with scrollbar when needed */
+                html {
+                  overflow-x: auto;
+                }
+
                 body {
-                  font-family: var(--sw-font-family);
+                  font-family: var(--sw-font-body);
                   font-size: var(--sw-font-size-base);
                   line-height: var(--sw-line-height);
                   color: var(--sw-color-text);
-                  max-width: 800px;
                   margin: 0 auto;
-                  padding: var(--sw-spacing-lg);
+                  padding: var(--sw-spacing-xl);
                   background: var(--sw-color-bg);
                   -webkit-font-smoothing: antialiased;
                   -moz-osx-font-smoothing: grayscale;
+                  min-height: 100vh;
+                }
+
+                /* Layout modes */
+                body.sw-layout-default { max-width: 900px; }
+                body.sw-layout-wide { max-width: 1100px; }
+                body.sw-layout-full { max-width: 1400px; }
+                body.sw-layout-fluid { max-width: 100%; padding-left: var(--sw-spacing-xl); padding-right: var(--sw-spacing-xl); }
+
+                /* Page title outside container */
+                body > h1 {
+                  font-size: 2.5rem;
+                  font-weight: 700;
+                  color: var(--sw-color-text);
+                  letter-spacing: -0.02em;
+                  margin: 0 0 var(--sw-spacing-lg) 0;
                 }
 
                 #app-container {
@@ -109,45 +153,88 @@ module StreamWeaver
                   padding: var(--sw-spacing-xl);
                   border-radius: var(--sw-radius-lg);
                   box-shadow: var(--sw-shadow-md);
+                  border: 1px solid var(--sw-color-border);
+                  overflow-x: auto;
+                  word-wrap: break-word;
+                  overflow-wrap: break-word;
                 }
 
                 /* ===========================================
-                   Typography
+                   Typography - Clean, Scannable Hierarchy
                    =========================================== */
                 h1, h2, h3, h4, h5, h6 {
-                  font-family: var(--sw-font-family);
+                  font-family: var(--sw-font-body);
+                  font-weight: 600;
+                  letter-spacing: -0.01em;
+                  color: var(--sw-color-text);
                 }
 
                 h1 {
-                  color: var(--sw-color-text);
-                  font-size: 1.875rem;
+                  font-size: 2.25rem;
                   font-weight: 700;
-                  letter-spacing: -0.025em;
                   margin-top: 0;
-                  margin-bottom: var(--sw-spacing-sm);
+                  margin-bottom: var(--sw-spacing-lg);
                 }
 
                 h2 {
-                  color: var(--sw-color-text);
-                  font-size: 1.25rem;
+                  font-size: 1.625rem;
                   font-weight: 600;
-                  letter-spacing: -0.02em;
                   margin-top: var(--sw-spacing-xl);
                   margin-bottom: var(--sw-spacing-md);
+                  padding-bottom: var(--sw-spacing-sm);
+                  border-bottom: 2px solid var(--sw-color-border);
                 }
 
                 h3 {
-                  color: var(--sw-color-text);
-                  font-size: 1.125rem;
+                  font-size: 1.25rem;
                   font-weight: 600;
                   margin-top: var(--sw-spacing-lg);
                   margin-bottom: var(--sw-spacing-sm);
                 }
 
+                h4 {
+                  font-size: 1.2rem;
+                  font-weight: 700;
+                  margin-top: var(--sw-spacing-md);
+                  margin-bottom: var(--sw-spacing-xs);
+                }
+
+                h5 {
+                  font-size: 1.1rem;
+                  font-weight: 700;
+                  margin-top: var(--sw-spacing-md);
+                  margin-bottom: var(--sw-spacing-xs);
+                }
+
+                h6 {
+                  font-size: 1rem;
+                  font-weight: 700;
+                  text-transform: uppercase;
+                  letter-spacing: 0.05em;
+                  color: var(--sw-color-text-muted);
+                  margin-top: var(--sw-spacing-md);
+                  margin-bottom: var(--sw-spacing-xs);
+                }
+
                 p {
                   color: var(--sw-color-text-muted);
                   line-height: var(--sw-line-height);
-                  margin: var(--sw-spacing-sm) 0 var(--sw-spacing-lg) 0;
+                  margin: var(--sw-spacing-sm) 0 var(--sw-spacing-md) 0;
+                  word-wrap: break-word;
+                  overflow-wrap: break-word;
+                }
+
+                /* Handle long URLs and strings */
+                a, code, pre {
+                  word-wrap: break-word;
+                  overflow-wrap: break-word;
+                  word-break: break-word;
+                }
+
+                /* Strong text */
+                strong, b {
+                  font-weight: 600;
+                  color: var(--sw-color-text);
                 }
 
                 p + input, p + select, p + textarea {
@@ -161,71 +248,126 @@ module StreamWeaver
                 }
 
                 /* ===========================================
-                   Form Controls
+                   Form Controls - Refined Inputs
                    =========================================== */
                 input[type="text"], input[type="email"], select, textarea {
-                  padding: var(--sw-spacing-sm) var(--sw-spacing-md);
+                  padding: var(--sw-spacing-md);
                   margin: var(--sw-spacing-sm) 0 var(--sw-spacing-md) 0;
                   border: 1px solid var(--sw-color-border);
                   border-radius: var(--sw-radius-md);
                   font-size: var(--sw-font-size-base);
+                  font-family: var(--sw-font-body);
                   width: 100%;
-                  box-sizing: border-box;
-                  font-family: inherit;
                   background: var(--sw-color-bg-card);
                   color: var(--sw-color-text);
-                  transition: border-color var(--sw-transition), box-shadow var(--sw-transition);
+                  box-shadow: var(--sw-shadow-inner);
+                  transition:
+                    border-color var(--sw-transition),
+                    box-shadow var(--sw-transition),
+                    background-color var(--sw-transition);
+                }
+
+                input[type="text"]:hover, input[type="email"]:hover, select:hover, textarea:hover {
+                  border-color: var(--sw-color-border-strong);
                 }
 
                 input[type="text"]:focus, input[type="email"]:focus, select:focus, textarea:focus {
                   outline: none;
-                  border-color: var(--sw-color-border-focus);
-                  box-shadow: 0 0 0 3px var(--sw-color-primary-light);
+                  border-color: var(--sw-color-primary);
+                  box-shadow:
+                    var(--sw-shadow-inner),
+                    0 0 0 3px var(--sw-color-primary-glow);
+                  background: #fff;
                 }
 
                 input[type="text"]::placeholder, input[type="email"]::placeholder, textarea::placeholder {
                   color: var(--sw-color-text-light);
+                  font-style: italic;
                 }
 
                 textarea {
                   resize: vertical;
-                  min-height: 80px;
+                  min-height: 100px;
+                  line-height: 1.5;
                 }
 
                 /* ===========================================
-                   Buttons
+                   Buttons - Bold, Confident
                    =========================================== */
                 button, .btn {
+                  display: inline-flex;
+                  align-items: center;
+                  justify-content: center;
+                  gap: var(--sw-spacing-xs);
                   padding: var(--sw-spacing-sm) var(--sw-spacing-md);
                   margin: var(--sw-spacing-sm) var(--sw-spacing-sm) var(--sw-spacing-sm) 0;
                   border: none;
                   border-radius: var(--sw-radius-md);
+                  font-family: var(--sw-font-body);
                   font-size: var(--sw-font-size-sm);
-                  font-weight: 500;
+                  font-weight: 600;
+                  letter-spacing: 0.01em;
                   cursor: pointer;
-                  transition: background var(--sw-transition), transform var(--sw-transition);
+                  white-space: nowrap;
+                  transition:
+                    background var(--sw-transition),
+                    transform var(--sw-transition-fast),
+                    box-shadow var(--sw-transition);
+                  position: relative;
+                  overflow: hidden;
+                }
+
+                button:hover {
+                  transform: translateY(-1px);
                 }
 
                 button:active {
-                  transform: scale(0.98);
+                  transform: translateY(0) scale(0.98);
                 }
 
+                /* Primary - Terracotta with depth */
                 .btn-primary {
-                  background: var(--sw-color-primary);
+                  background: linear-gradient(
+                    135deg,
+                    var(--sw-color-primary) 0%,
+                    var(--sw-color-primary-hover) 100%
+                  );
                   color: white;
+                  box-shadow:
+                    0 2px 4px rgba(194, 65, 12, 0.2),
+                    0 4px 8px rgba(194, 65, 12, 0.15);
                 }
 
                 .btn-primary:hover {
-                  background: var(--sw-color-primary-hover);
+                  background: linear-gradient(
+                    135deg,
+                    #d9520f 0%,
+                    var(--sw-color-primary-hover) 100%
+                  );
+                  box-shadow:
+                    0 4px 8px rgba(194, 65, 12, 0.25),
+                    0 8px 16px rgba(194, 65, 12, 0.2);
                 }
 
+                /* Secondary - Slate with subtle style */
                 .btn-secondary {
-                  background: var(--sw-color-secondary);
-                  color: white;
+                  background: var(--sw-color-bg-elevated);
+                  color: var(--sw-color-text);
+                  border: 1px solid var(--sw-color-border-strong);
+                  box-shadow: var(--sw-shadow-sm);
                 }
 
                 .btn-secondary:hover {
-                  background: var(--sw-color-secondary-hover);
+                  background: var(--sw-color-border);
+                  border-color: var(--sw-color-text-light);
+                }
+
+                /* Button focus states */
+                button:focus-visible {
+                  outline: none;
+                  box-shadow:
+                    0 0 0 2px var(--sw-color-bg-card),
+                    0 0 0 4px var(--sw-color-primary);
                 }
 
                 /* ===========================================
@@ -341,15 +483,20 @@ module StreamWeaver
                 }
 
                 /* ===========================================
-                   Card
+                   Card - Clean, Elevated
                    =========================================== */
                 .card {
                   background: var(--sw-color-bg-card);
                   border: 1px solid var(--sw-color-border);
+                  border-left: 3px solid var(--sw-color-primary);
                   border-radius: var(--sw-radius-md);
                   padding: var(--sw-spacing-lg);
                   margin-bottom: var(--sw-spacing-md);
                   box-shadow: var(--sw-shadow-sm);
+                  overflow-x: auto;
+                  word-wrap: break-word;
+                  overflow-wrap: break-word;
+                  max-width: 100%;
                 }
 
                 .card h3 {
@@ -428,22 +575,29 @@ module StreamWeaver
                 }
 
                 /* ===========================================
-                   Collapsible
+                   Collapsible - Refined Accordion
                    =========================================== */
                 .collapsible {
-                  margin: 12px 0;
+                  margin: var(--sw-spacing-md) 0;
                   border: 1px solid var(--sw-color-border);
-                  border-radius: var(--sw-radius-md);
+                  border-radius: var(--sw-radius-lg);
+                  overflow: hidden;
+                  transition: box-shadow var(--sw-transition);
+                }
+
+                .collapsible:hover {
+                  box-shadow: var(--sw-shadow-sm);
                 }
 
                 .collapsible-header {
                   display: flex;
                   align-items: center;
-                  gap: 8px;
-                  padding: 12px 16px;
-                  background: var(--sw-color-bg);
+                  gap: var(--sw-spacing-sm);
+                  padding: var(--sw-spacing-md) var(--sw-spacing-lg);
+                  background: var(--sw-color-bg-elevated);
                   cursor: pointer;
-                  border-radius: var(--sw-radius-md);
+                  transition: background var(--sw-transition);
+                  user-select: none;
                 }
 
                 .collapsible-header:hover {
@@ -451,20 +605,31 @@ module StreamWeaver
                 }
 
                 .collapsible-icon {
-                  font-size: 12px;
-                  color: var(--sw-color-text-muted);
-                  width: 12px;
+                  font-size: 10px;
+                  color: var(--sw-color-primary);
+                  width: 16px;
+                  height: 16px;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  background: var(--sw-color-primary-light);
+                  border-radius: var(--sw-radius-sm);
+                  transition: transform var(--sw-transition);
                 }
 
                 .collapsible-label {
-                  font-weight: 500;
+                  font-family: var(--sw-font-body);
+                  font-weight: 600;
+                  font-size: var(--sw-font-size-sm);
                   color: var(--sw-color-text);
+                  letter-spacing: 0.01em;
                 }
 
                 .collapsible-content {
-                  padding: 16px;
+                  padding: var(--sw-spacing-lg);
                   border-top: 1px solid var(--sw-color-border);
                   line-height: var(--sw-line-height);
+                  background: var(--sw-color-bg-card);
                 }
 
                 /* ===========================================
@@ -617,6 +782,74 @@ module StreamWeaver
                 }
 
                 /* ===========================================
+                   Columns Layout
+                   =========================================== */
+                .sw-columns {
+                  display: flex;
+                  gap: var(--sw-spacing-md);
+                  align-items: flex-start;
+                }
+
+                .sw-column {
+                  min-width: 0; /* Prevent flex items from overflowing */
+                }
+
+                .sw-column p {
+                  margin: var(--sw-spacing-xs) 0;
+                  color: var(--sw-color-text);
+                }
+
+                /* Monica-style sidebar sections */
+                .sw-column.sidebar-facts {
+                  display: flex;
+                  flex-direction: column;
+                  gap: var(--sw-spacing-sm);
+                }
+
+                .sidebar-section {
+                  background: var(--sw-color-bg-card);
+                  border: 1px solid var(--sw-color-border);
+                  border-radius: var(--sw-radius-md);
+                  padding: var(--sw-spacing-md);
+                }
+
+                .sidebar-section h4 {
+                  margin: 0 0 var(--sw-spacing-xs) 0;
+                  color: var(--sw-color-text-muted);
+                  font-size: 11px;
+                  font-weight: 600;
+                  text-transform: uppercase;
+                  letter-spacing: 0.05em;
+                }
+
+                .sidebar-section p {
+                  margin: 0;
+                  color: var(--sw-color-text);
+                  font-size: var(--sw-font-size-sm);
+                }
+
+                .sidebar-section a {
+                  color: var(--sw-color-primary);
+                  text-decoration: none;
+                }
+
+                .sidebar-section a:hover {
+                  text-decoration: underline;
+                }
+
+                /* Responsive: Stack columns on mobile */
+                @media (max-width: 768px) {
+                  .sw-columns {
+                    flex-direction: column;
+                  }
+
+                  .sw-column {
+                    flex: none !important;
+                    width: 100% !important;
+                  }
+                }
+
+                /* ===========================================
                    Utilities
                    =========================================== */
                 .todo-item {
@@ -642,6 +875,28 @@ module StreamWeaver
                 }
 
                 /* ===========================================
+                   Animations - Subtle, Non-distracting
+                   =========================================== */
+                @keyframes fadeIn {
+                  from { opacity: 0; }
+                  to { opacity: 1; }
+                }
+
+                /* Gentle page load */
+                #app-container {
+                  animation: fadeIn 0.3s ease-out;
+                }
+
+                /* Reduce motion for accessibility */
+                @media (prefers-reduced-motion: reduce) {
+                  *, *::before, *::after {
+                    animation-duration: 0.01ms !important;
+                    animation-iteration-count: 1 !important;
+                    transition-duration: 0.01ms !important;
+                  }
+                }
+
+                /* ===========================================
                    Embedded Mode - Disable standalone styles
                    Add class="sw-embedded" to body to use minimal styles
                    =========================================== */
@@ -661,7 +916,7 @@ module StreamWeaver
               CSS
             end
           end
-          body do
+          body(class: "sw-layout-#{@app.layout}") do
             h1 { @app.title }
             # Merge adapter-specific container attributes with container id
             div(id: "app-container", **@adapter.container_attributes(@state)) do

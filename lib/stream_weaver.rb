@@ -31,13 +31,13 @@ module StreamWeaver
   #   my_app = app "My App" do
   #     text "Hello, world!"
   #   end
-  def self.app(title, &block)
-    app = App.new(title, &block)
+  def self.app(title, layout: :default, &block)
+    app = App.new(title, layout: layout, &block)
     app.generate
   end
 end
 
 # Global helper method (exported to main namespace)
-def app(title, &block)
-  StreamWeaver.app(title, &block)
+def app(title, layout: :default, &block)
+  StreamWeaver.app(title, layout: layout, &block)
 end

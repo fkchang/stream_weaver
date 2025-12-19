@@ -24,22 +24,40 @@ module StreamWeaver
       # @param key [Symbol] The state key for this input
       # @param options [Hash] Component options
       # @option options [String] :placeholder Placeholder text
+      # @option options [Hash] :form_context Form context if inside a form block
       # @param state [Hash] Current state hash (symbol keys)
       # @return [void] Renders to view
       def render_text_field(view, key, options, state)
-        view.input(
-          id: "input-#{key}",  # Stable ID for HTMX focus restoration
-          type: "text",
-          name: key.to_s,
-          value: state[key] || "",
-          placeholder: options[:placeholder] || "",
-          "x-model" => key.to_s,  # Alpine.js two-way binding
-          "hx-post" => "/update",
-          "hx-include" => input_selector,
-          "hx-target" => "#app-container",
-          "hx-swap" => "innerHTML scroll:false",
-          "hx-trigger" => "keyup changed delay:500ms"  # Debounced auto-update
-        )
+        form_context = options[:form_context]
+
+        if form_context
+          # Inside form: use form-scoped x-model, no HTMX
+          form_name = form_context[:name]
+          form_state = state[form_name] || {}
+          view.input(
+            id: "input-#{form_name}-#{key}",
+            type: "text",
+            name: "#{form_name}[#{key}]",  # Rails-style nested params
+            value: form_state[key] || "",
+            placeholder: options[:placeholder] || "",
+            "x-model" => "_form.#{key}"  # Form-local Alpine scope
+          )
+        else
+          # Standalone: immediate HTMX sync on change
+          view.input(
+            id: "input-#{key}",  # Stable ID for HTMX focus restoration
+            type: "text",
+            name: key.to_s,
+            value: state[key] || "",
+            placeholder: options[:placeholder] || "",
+            "x-model" => key.to_s,  # Alpine.js two-way binding
+            "hx-post" => "/update",
+            "hx-include" => input_selector,
+            "hx-target" => "#app-container",
+            "hx-swap" => "innerHTML scroll:false",
+            "hx-trigger" => "keyup changed delay:500ms"  # Debounced auto-update
+          )
+        end
       end
 
       # Render a multi-line text area with Alpine.js binding
@@ -49,21 +67,38 @@ module StreamWeaver
       # @param options [Hash] Component options
       # @option options [String] :placeholder Placeholder text
       # @option options [Integer] :rows Number of rows (default: 3)
+      # @option options [Hash] :form_context Form context if inside a form block
       # @param state [Hash] Current state hash (symbol keys)
       # @return [void] Renders to view
       def render_text_area(view, key, options, state)
-        view.textarea(
-          id: "input-#{key}",  # Stable ID for HTMX focus restoration
-          name: key.to_s,
-          placeholder: options[:placeholder] || "",
-          rows: options[:rows] || 3,
-          "x-model" => key.to_s,  # Alpine.js two-way binding
-          "hx-post" => "/update",
-          "hx-include" => input_selector,
-          "hx-target" => "#app-container",
-          "hx-swap" => "innerHTML scroll:false",
-          "hx-trigger" => "keyup changed delay:500ms"  # Debounced auto-update
-        ) { state[key] || "" }
+        form_context = options[:form_context]
+
+        if form_context
+          # Inside form: use form-scoped x-model, no HTMX
+          form_name = form_context[:name]
+          form_state = state[form_name] || {}
+          view.textarea(
+            id: "input-#{form_name}-#{key}",
+            name: "#{form_name}[#{key}]",  # Rails-style nested params
+            placeholder: options[:placeholder] || "",
+            rows: options[:rows] || 3,
+            "x-model" => "_form.#{key}"  # Form-local Alpine scope
+          ) { form_state[key] || "" }
+        else
+          # Standalone: immediate HTMX sync on change
+          view.textarea(
+            id: "input-#{key}",  # Stable ID for HTMX focus restoration
+            name: key.to_s,
+            placeholder: options[:placeholder] || "",
+            rows: options[:rows] || 3,
+            "x-model" => key.to_s,  # Alpine.js two-way binding
+            "hx-post" => "/update",
+            "hx-include" => input_selector,
+            "hx-target" => "#app-container",
+            "hx-swap" => "innerHTML scroll:false",
+            "hx-trigger" => "keyup changed delay:500ms"  # Debounced auto-update
+          ) { state[key] || "" }
+        end
       end
 
       # Render a checkbox input with Alpine.js binding
@@ -72,22 +107,43 @@ module StreamWeaver
       # @param key [Symbol] The state key for this checkbox
       # @param label [String] The label text
       # @param options [Hash] Component options
+      # @option options [Hash] :form_context Form context if inside a form block
       # @param state [Hash] Current state hash (symbol keys)
       # @return [void] Renders to view
       def render_checkbox(view, key, label, options, state)
-        view.label do
-          view.input(
-            type: "checkbox",
-            name: key.to_s,
-            checked: state[key],
-            "x-model" => key.to_s,  # Alpine.js two-way binding
-            "hx-post" => "/update",
-            "hx-include" => input_selector,
-            "hx-target" => "#app-container",
-            "hx-swap" => "innerHTML scroll:false",
-            "hx-trigger" => "change"  # Immediate update on change
-          )
-          view.plain " #{label}"
+        form_context = options[:form_context]
+
+        if form_context
+          # Inside form: use form-scoped x-model, no HTMX
+          form_name = form_context[:name]
+          form_state = state[form_name] || {}
+          view.label do
+            view.input(
+              type: "checkbox",
+              name: "#{form_name}[#{key}]",
+              value: "true",
+              checked: form_state[key],
+              "x-model" => "_form.#{key}"  # Form-local Alpine scope
+            )
+            view.plain " #{label}"
+          end
+        else
+          # Standalone: immediate HTMX sync on change
+          view.label do
+            view.input(
+              type: "checkbox",
+              name: key.to_s,
+              value: "true",
+              checked: state[key],
+              "x-model" => key.to_s,  # Alpine.js two-way binding
+              "hx-post" => "/update",
+              "hx-include" => input_selector,
+              "hx-target" => "#app-container",
+              "hx-swap" => "innerHTML scroll:false",
+              "hx-trigger" => "change"  # Immediate update on change
+            )
+            view.plain " #{label}"
+          end
         end
       end
 
@@ -98,26 +154,48 @@ module StreamWeaver
       # @param choices [Array<String>] The available choices
       # @param options [Hash] Component options
       # @option options [String] :default Default selected value when state is nil
+      # @option options [Hash] :form_context Form context if inside a form block
       # @param state [Hash] Current state hash (symbol keys)
       # @return [void] Renders to view
       def render_select(view, key, choices, options, state)
-        # Use state value, or fall back to default option
-        current_value = state[key] || options[:default]
+        form_context = options[:form_context]
 
-        view.select(
-          name: key.to_s,
-          "x-model" => key.to_s,  # Alpine.js two-way binding
-          "hx-post" => "/update",
-          "hx-include" => input_selector,
-          "hx-target" => "#app-container",
-          "hx-swap" => "innerHTML scroll:false",
-          "hx-trigger" => "change"  # Immediate update on change
-        ) do
-          choices.each do |choice|
-            view.option(
-              value: choice,
-              selected: current_value == choice
-            ) { choice }
+        if form_context
+          # Inside form: use form-scoped x-model, no HTMX
+          form_name = form_context[:name]
+          form_state = state[form_name] || {}
+          current_value = form_state[key] || options[:default]
+
+          view.select(
+            name: "#{form_name}[#{key}]",  # Rails-style nested params
+            "x-model" => "_form.#{key}"  # Form-local Alpine scope
+          ) do
+            choices.each do |choice|
+              view.option(
+                value: choice,
+                selected: current_value == choice
+              ) { choice }
+            end
+          end
+        else
+          # Standalone: immediate HTMX sync on change
+          current_value = state[key] || options[:default]
+
+          view.select(
+            name: key.to_s,
+            "x-model" => key.to_s,  # Alpine.js two-way binding
+            "hx-post" => "/update",
+            "hx-include" => input_selector,
+            "hx-target" => "#app-container",
+            "hx-swap" => "innerHTML scroll:false",
+            "hx-trigger" => "change"  # Immediate update on change
+          ) do
+            choices.each do |choice|
+              view.option(
+                value: choice,
+                selected: current_value == choice
+              ) { choice }
+            end
           end
         end
       end
@@ -128,27 +206,53 @@ module StreamWeaver
       # @param key [Symbol] The state key for this radio group
       # @param choices [Array<String>] The available choices
       # @param options [Hash] Component options
+      # @option options [Hash] :form_context Form context if inside a form block
       # @param state [Hash] Current state hash (symbol keys)
       # @return [void] Renders to view
       def render_radio_group(view, key, choices, options, state)
-        current_value = state[key]
+        form_context = options[:form_context]
 
-        view.div(class: "radio-group") do
-          choices.each do |choice|
-            view.label(class: "radio-option") do
-              view.input(
-                type: "radio",
-                name: key.to_s,
-                value: choice,
-                checked: current_value == choice,
-                "x-model" => key.to_s,  # Alpine.js two-way binding
-                "hx-post" => "/update",
-                "hx-include" => input_selector,
-                "hx-target" => "#app-container",
-                "hx-swap" => "innerHTML scroll:false",
-                "hx-trigger" => "change"  # Immediate update on change
-              )
-              view.span { choice }
+        if form_context
+          # Inside form: use form-scoped x-model, no HTMX
+          form_name = form_context[:name]
+          form_state = state[form_name] || {}
+          current_value = form_state[key]
+
+          view.div(class: "radio-group") do
+            choices.each do |choice|
+              view.label(class: "radio-option") do
+                view.input(
+                  type: "radio",
+                  name: "#{form_name}[#{key}]",
+                  value: choice,
+                  checked: current_value == choice,
+                  "x-model" => "_form.#{key}"  # Form-local Alpine scope
+                )
+                view.span { choice }
+              end
+            end
+          end
+        else
+          # Standalone: immediate HTMX sync on change
+          current_value = state[key]
+
+          view.div(class: "radio-group") do
+            choices.each do |choice|
+              view.label(class: "radio-option") do
+                view.input(
+                  type: "radio",
+                  name: key.to_s,
+                  value: choice,
+                  checked: current_value == choice,
+                  "x-model" => key.to_s,  # Alpine.js two-way binding
+                  "hx-post" => "/update",
+                  "hx-include" => input_selector,
+                  "hx-target" => "#app-container",
+                  "hx-swap" => "innerHTML scroll:false",
+                  "hx-trigger" => "change"  # Immediate update on change
+                )
+                view.span { choice }
+              end
             end
           end
         end
@@ -600,6 +704,96 @@ module StreamWeaver
             target: "_blank",
             class: "btn btn-primary external-link-btn"
           ) { label }
+        end
+      end
+
+      # Render a multi-column layout container
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param widths [Array<String>, nil] Optional column widths (e.g., ['30%', '70%'])
+      # @param children [Array<Column>] Column components
+      # @param options [Hash] Component options (e.g., gap)
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_columns(view, widths, children, options, state)
+        gap = options[:gap] || "var(--sw-spacing-lg)"
+
+        view.div(class: "sw-columns", style: "display: flex; gap: #{gap};") do
+          children.each_with_index do |column, index|
+            # Apply width if specified, otherwise equal flex
+            column.width = widths&.[](index)
+            column.render(view, state)
+          end
+        end
+      end
+
+      # Render an individual column within a Columns container
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param width [String, nil] Column width (e.g., '30%') or nil for equal flex
+      # @param children [Array] Child components
+      # @param options [Hash] Component options
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_column(view, width, children, options, state)
+        css_class = ["sw-column", options[:class]].compact.join(" ")
+
+        style = if width
+          "flex: 1 1 #{width}; min-width: 0;"  # Grow/shrink proportionally from width basis
+        else
+          "flex: 1 1 0; min-width: 0;"  # Equal distribution
+        end
+
+        view.div(class: css_class, style: style) do
+          children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # Render a form block with deferred submission
+      # Uses Alpine.js for local state, single HTMX POST on submit
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param name [Symbol] The form name (state key)
+      # @param children [Array] Child components (form fields)
+      # @param submit_label [String, nil] Submit button label
+      # @param cancel_label [String, nil] Cancel button label
+      # @param options [Hash] Component options
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_form(view, name, children, submit_label, cancel_label, options, state)
+        form_state = state[name] || {}
+
+        # Build Alpine.js x-data with _form (editable) and _original (for cancel reset)
+        form_json = JSON.generate(form_state.transform_keys(&:to_s))
+
+        view.div(
+          class: "sw-form",
+          "x-data" => "{ _form: #{form_json}, _original: #{form_json} }"
+        ) do
+          # Render child components (form fields)
+          children.each { |child| child.render(view, state) }
+
+          # Render form buttons
+          view.div(class: "sw-form-actions") do
+            if submit_label
+              view.button(
+                type: "button",
+                class: "btn btn-primary",
+                "hx-post" => "/form/#{name}",
+                "hx-include" => "[name^='#{name}[']",
+                "hx-target" => "#app-container",
+                "hx-swap" => "innerHTML scroll:false"
+              ) { submit_label }
+            end
+
+            if cancel_label
+              view.button(
+                type: "button",
+                class: "btn btn-secondary",
+                "@click" => "_form = JSON.parse(JSON.stringify(_original))"
+              ) { cancel_label }
+            end
+          end
         end
       end
 
