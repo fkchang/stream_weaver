@@ -16,12 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `RadioGroup` for single-choice radio buttons
   - `Card` for styled content containers
   - `Collapsible` for expandable/collapsible sections
+  - `Columns` and `Column` for multi-column layouts with custom widths
+  - `Form` with `submit`/`cancel` for deferred submission forms (client-side only until submit)
   - `ScoreTable` for color-coded metrics display
   - `LessonText`, `Term`, `Phrase` for educational content with glossary tooltips
   - `CheckboxGroup` with `item` for batch selection with select all/none
   - `StatusBadge` for visual match indicators (🟢 Strong / 🟡 Maybe / 🔴 Skip)
   - `TagButtons` for quick-select tag groups (single-select with destructive style option)
   - `ExternalLinkButton` for buttons that open URLs in new tabs (with optional form submit)
+- **Layout modes** via `layout:` parameter: `:default` (900px), `:wide` (1100px), `:full` (1400px), `:fluid` (100%)
 - `default:` option for `select` component to set initial value
 - `auto_close_window:` option for `run_once!` to close browser after submit
 - Automatic "Submit to Agent" button in agentic mode
@@ -31,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `Text` component now renders literal text only (no markdown parsing)
 - Refactored component rendering to use adapter pattern for future extensibility
+- **New "Warm Industrial" theme**: Source Sans 3 font, terracotta primary color (#c2410c), 17px base font with 1.7 line-height
 
 ### Fixed
 - Checkbox state properly handles unchecked values

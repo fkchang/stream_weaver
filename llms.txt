@@ -30,6 +30,21 @@ app "Title" do
 end
 ```
 
+#### Layout Modes
+Control container width with the `layout:` parameter:
+
+```ruby
+app "Wide App", layout: :wide do
+  # Content in wider container
+end
+```
+
+Available modes:
+- `:default` — 900px container (mobile-friendly default)
+- `:wide` — 1100px container (more breathing room)
+- `:full` — 1400px container (desktop displays)
+- `:fluid` — 100% width (full browser width with padding)
+
 ### 2. State
 State is a hash accessed via `state[:key]`. Components automatically bind to state keys. State persists across re-renders.
 
@@ -385,6 +400,11 @@ Server runs continuously, UI updates reactively:
 app "My App" do
   # ...
 end.run!
+
+# With layout mode:
+app "Dashboard", layout: :wide do
+  # ...
+end.run!
 ```
 
 ### Agentic Mode
@@ -442,13 +462,20 @@ Pattern for agentic wizards:
 
 ## CSS Customization
 
+### Default Theme
+StreamWeaver uses a "Warm Industrial" theme with:
+- **Font**: Source Sans 3 (humanist sans-serif for readability)
+- **Primary color**: Terracotta (#c2410c)
+- **Base font size**: 17px with 1.7 line-height
+
 ### CSS Variables
 Override theme via CSS custom properties:
 
 ```css
 :root {
-  --sw-color-primary: #10b981;      /* Change primary color */
+  --sw-color-primary: #2563eb;       /* Override terracotta with blue */
   --sw-font-family: "My Font";       /* Change font */
+  --sw-font-size-base: 16px;         /* Smaller text */
   --sw-radius-md: 4px;               /* Less rounded corners */
 }
 ```

@@ -80,6 +80,7 @@ gem 'stream_weaver'
 - **Single-File Apps** - No separate HTML/CSS/JS files, no build step
 - **Automatic State Management** - Session-based state with Alpine.js frontend sync
 - **Zero Configuration** - Auto port detection, browser opening, graceful shutdown
+- **Layout Modes** - Configurable container widths (`:default`, `:wide`, `:full`, `:fluid`)
 - **Token Efficient** - 10-50x fewer tokens than HTML/React for GenAI generation
 - **Full Markdown Support** - GitHub Flavored Markdown via Kramdown
 - **Cross-Platform** - Works on macOS, Linux, Windows
@@ -213,8 +214,25 @@ collapsible "Show Details" do
   text "Hidden content revealed on click"
 end
 
-collapsible "Expanded Section", expanded: true do
-  text "Visible initially"
+# Multi-column layouts
+columns widths: ['30%', '70%'] do
+  column do
+    header4 "Sidebar"
+    text "Narrow column"
+  end
+  column do
+    text "Main content area"
+  end
+end
+
+# Deferred submission forms
+form :edit_user do
+  text_field :name
+  text_field :email
+  submit "Save" do |form_values|
+    save_user(form_values)
+  end
+  cancel "Cancel"
 end
 ```
 
@@ -247,6 +265,22 @@ external_link_button "Select & Open", url: "https://example.com", submit: true
 ```
 
 ## API Reference
+
+### `app(title, layout:, &block)`
+
+Create an application with optional layout mode:
+
+```ruby
+app "My App" do                       # Default 900px container
+  # components...
+end
+
+app "Dashboard", layout: :wide do     # 1100px container
+  # components...
+end
+
+# Layout options: :default (900px), :wide (1100px), :full (1400px), :fluid (100%)
+```
 
 ### `run!(options)`
 

@@ -17,6 +17,11 @@ RSpec.describe StreamWeaver do
     expect(sinatra_app.settings.streamlit_app.title).to eq("Test")
   end
 
+  it "passes layout option through app helper" do
+    sinatra_app = app("Test", layout: :wide) { text "content" }
+    expect(sinatra_app.settings.streamlit_app.layout).to eq(:wide)
+  end
+
   it "loads all component classes" do
     expect(defined?(StreamWeaver::Components::TextField)).to eq("constant")
     expect(defined?(StreamWeaver::Components::Button)).to eq("constant")

@@ -27,6 +27,28 @@ RSpec.describe StreamWeaver::App do
       app = described_class.new("Test") {}
       expect(app.instance_variable_get(:@button_counter)).to eq(0)
     end
+
+    describe "layout option" do
+      it "defaults to :default layout" do
+        app = described_class.new("Test") {}
+        expect(app.layout).to eq(:default)
+      end
+
+      it "accepts :wide layout" do
+        app = described_class.new("Test", layout: :wide) {}
+        expect(app.layout).to eq(:wide)
+      end
+
+      it "accepts :full layout" do
+        app = described_class.new("Test", layout: :full) {}
+        expect(app.layout).to eq(:full)
+      end
+
+      it "accepts :fluid layout" do
+        app = described_class.new("Test", layout: :fluid) {}
+        expect(app.layout).to eq(:fluid)
+      end
+    end
   end
 
   describe "DSL methods" do
