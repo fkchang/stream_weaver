@@ -170,6 +170,63 @@ card class: "custom-card" do
 end
 ```
 
+### Columns (Multi-Column Layout)
+
+Create multi-column layouts like Monica CRM's contact page with sidebar:
+
+```ruby
+# Equal-width columns (default)
+columns do
+  column do
+    text "Left column"
+  end
+  column do
+    text "Right column"
+  end
+end
+
+# Custom widths (Monica-style sidebar + main content)
+columns widths: ['30%', '70%'] do
+  column do
+    # Narrow sidebar with quick facts
+    header4 "Work"
+    text "Software Engineer at Company"
+
+    header4 "Location"
+    text "San Francisco, CA"
+
+    header4 "Contact"
+    text "email@example.com"
+  end
+
+  column do
+    # Wide main content area
+    collapsible "Context", expanded: true do
+      md "Background information here..."
+    end
+
+    collapsible "Key Facts" do
+      md "- Fact 1\n- Fact 2"
+    end
+  end
+end
+
+# Three equal columns
+columns do
+  column { card { text "Col 1" } }
+  column { card { text "Col 2" } }
+  column { card { text "Col 3" } }
+end
+
+# Custom gap between columns
+columns gap: "2rem" do
+  column { text "More space" }
+  column { text "Between columns" }
+end
+```
+
+Columns stack vertically on mobile (< 768px) for responsive design.
+
 ### Collapsible Sections
 
 Expandable/collapsible content sections with click-to-toggle:
@@ -184,6 +241,51 @@ end
 # Start expanded
 collapsible "View Context (127 words)", expanded: true do
   text "This content is visible initially"
+end
+```
+
+### Form Blocks (Deferred Submission)
+
+Group multiple form elements for batch editing. Fields use client-side only state until submit - no server round-trips on each keystroke.
+
+```ruby
+form :edit_person do
+  text_field :name, placeholder: 'Name'
+  select :status, %w[active paused archived]
+  text_area :notes, placeholder: 'Notes...', rows: 3
+
+  submit 'Save' do |form_values|
+    # form_values = { name: "...", status: "...", notes: "..." }
+    # state[:edit_person] already updated at this point
+    api.save_person(form_values)  # optional side effects
+  end
+
+  cancel 'Cancel'  # resets to original values, no server request
+end
+```
+
+**Key behaviors:**
+- State stored as nested hash: `state[:edit_person][:name]` (Rails-style)
+- Form reads initial values from `state[:form_name]` - your app populates this before rendering
+- On submit: state auto-updates with form values, THEN submit block runs
+- On cancel: Alpine.js resets to original values (pure client-side, no server request)
+- Same DSL methods (`text_field`, `select`, etc.) work inside/outside forms - context determines behavior
+
+**Important:** Submit block is for side effects (API calls, logging), not state management. State is already updated when your block runs.
+
+```ruby
+# Typical pattern: load data into state, then render form
+if state[:selected_person_id]
+  person = Person.find(state[:selected_person_id])
+  state[:edit_person] = { name: person.name, status: person.status }
+end
+
+form :edit_person do
+  text_field :name
+  select :status, %w[active paused archived]
+  submit 'Save' do |form_values|
+    Person.update(state[:selected_person_id], form_values)
+  end
 end
 ```
 
@@ -307,6 +409,37 @@ result = app "Quick Form" do
 end.run_once!(auto_close_window: true)
 ```
 
+### Agentic Mode Button Behavior
+
+In agentic mode, regular buttons execute their actions but do NOT submit the form.
+Only the built-in "Submit to Agent" button (or `external_link_button` with `submit: true`) triggers form submission.
+
+**Important:** Only input component values (text_field, select, checkbox, etc.) are returned.
+State set by button actions (`s[:flag] = true`) is NOT included in the returned result.
+
+```ruby
+# WRONG - button sets state but it won't be in result
+result = app "Setup" do
+  select :preset, ["ruby", "node"]
+  button "Install" do |s|
+    s[:ready] = true  # This won't be in result!
+  end
+end.run_once!
+# result = { "preset" => "ruby" }  # No :ready key!
+
+# RIGHT - use input components for all data, let Submit button handle submission
+result = app "Setup" do
+  select :preset, ["ruby", "node"]
+  # StreamWeaver adds "Submit to Agent" button automatically
+end.run_once!
+# result = { "preset" => "ruby" }  # Process this directly
+```
+
+Pattern for agentic wizards:
+- Use input components for data collection
+- Let the built-in Submit button handle form submission
+- Don't add custom "Submit" or "Install" buttons that set state flags
+
 ## CSS Customization
 
 ### CSS Variables
@@ -410,6 +543,22 @@ end
 - **State**: Server-side, persisted in session
 - **Updates**: HTMX swaps `#app-container` innerHTML on state changes
 
+### Session Persistence
+
+**Important:** State persists across server restarts via browser cookies. The session cookie survives even when you stop and restart the server. This means:
+- Users see their previous state when revisiting
+- Developers may see stale state during development
+
+To reset state during development, either:
+1. Clear browser cookies for localhost
+2. Add a "Reset" button to clear state:
+```ruby
+button "Reset Demo", style: :secondary do |s|
+  s.clear
+end
+```
+3. Use browser incognito mode for fresh sessions
+
 ## File Structure
 
 ```
@@ -429,3 +578,108 @@ lib/stream_weaver/
 2. **Mutating state outside button blocks** - State changes should happen in button actions
 3. **Missing run!** - App won't start without `.run!` or `.run_once!`
 4. **Glossary key mismatch** - Term keys must match glossary keys exactly (case-sensitive)
+
+## Testing StreamWeaver Apps
+
+### Unit Testing with `rebuild_with_state`
+
+Test component logic without running a server:
+
+```ruby
+require 'spec_helper'
+
+RSpec.describe "My App" do
+  let(:my_app) do
+    StreamWeaver::App.new("Test") do
+      text_field :name
+      if state[:name] == "Alice"
+        text "Hello Alice!"
+      end
+    end
+  end
+
+  it "shows greeting when name is Alice" do
+    my_app.rebuild_with_state({ name: "Alice" })
+    expect(my_app.components.length).to eq(2)  # text_field + text
+  end
+
+  it "hides greeting when name is empty" do
+    my_app.rebuild_with_state({ name: "" })
+    expect(my_app.components.length).to eq(1)  # just text_field
+  end
+end
+```
+
+### Integration Testing with Rack::Test
+
+Test HTTP endpoints and button actions without opening a browser:
+
+```ruby
+require 'spec_helper'
+require 'rack/test'
+
+RSpec.describe "My App Integration" do
+  include Rack::Test::Methods
+
+  let(:stream_app) do
+    StreamWeaver.app "Test" do
+      text_field :name
+      button "Greet" do |s|
+        s[:greeted] = true
+        s[:greeting] = "Hello, #{s[:name]}!"
+      end
+    end
+  end
+  let(:app) { stream_app.generate }  # Get Sinatra app for Rack::Test
+
+  it "renders initial form" do
+    get '/'
+    expect(last_response).to be_ok
+    expect(last_response.body).to include('name')
+  end
+
+  it "handles button click with session state" do
+    # Inject state before request
+    env 'rack.session', { streamlit_state: { name: "Alice" } }
+
+    # Simulate button click (button names normalized: lowercase, underscores)
+    post '/action/btn_greet_1', { name: "Alice" }
+
+    # Verify state was updated
+    state = last_request.session[:streamlit_state]
+    expect(state[:greeted]).to be true
+    expect(state[:greeting]).to eq("Hello, Alice!")
+  end
+
+  it "handles form field update" do
+    env 'rack.session', { streamlit_state: { name: "" } }
+    post '/update', { name: "Bob" }
+
+    state = last_request.session[:streamlit_state]
+    expect(state[:name]).to eq("Bob")
+  end
+end
+```
+
+### Key Testing Patterns
+
+1. **`rebuild_with_state(hash)`** - Re-evaluates DSL block with given state, for testing conditional rendering
+2. **`app.generate`** - Returns the Sinatra app for Rack::Test
+3. **`env 'rack.session', { streamlit_state: {...} }`** - Inject state before requests
+4. **`last_request.session[:streamlit_state]`** - Read state after requests
+5. **Button actions** - POST to `/action/btn_<name>_<id>` (names normalized: lowercase, underscores)
+6. **Form updates** - POST to `/update` with field values
+
+### Testing Agentic Mode (`run_once!`)
+
+The `/submit` endpoint can be tested directly:
+
+```ruby
+it "handles form submission" do
+  env 'rack.session', { streamlit_state: { name: "Test", priority: "High" } }
+  post '/submit', { name: "Test", priority: "High" }
+  expect(last_response).to be_ok
+end
+```
+
+Note: Testing the full `run_once!` flow (with browser wait loop) requires manual testing or browser automation.

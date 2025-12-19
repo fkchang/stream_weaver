@@ -4,6 +4,45 @@
 
 StreamWeaver enables GenAI agents (like Claude Code) and developers to rapidly build interactive web UIs using a declarative Ruby DSL. Perfect for agentic workflows, developer utilities, and rapid prototyping.
 
+---
+
+## Why StreamWeaver?
+
+**TL;DR:** I want a quick UI. What do I need? Some text, a few inputs, a button. Why isn't *that* the interface? Instead: HTML, CSS, JavaScript, backend wiring... Streamlit showed me the interface *can* just be "text, inputs, button." StreamWeaver brings that to Ruby - and it turns out this minimal approach is perfect for AI agents too.
+
+[Skip to Quick Start →](#quick-start)
+
+<details>
+<summary><b>The Longer Story</b></summary>
+
+### The Interface Should Be What You Need
+
+Think about what a simple UI actually requires: some text, a few inputs, maybe a dropdown, a button. That's it. That's what you're trying to build. But to get there you're dealing with HTML structure, CSS styling, JavaScript (or a backend framework), controllers, state management...
+
+Streamlit's brilliance was recognizing that the DSL *can* just be the interface. You describe what you need - text, inputs, button - and you're done. StreamWeaver brings that philosophy to Ruby.
+
+### Why This Matters for AI Agents
+
+When you're building with Claude Code (or other AI coding assistants), this "what matters" approach pays off even more:
+
+1. **Smaller generation = faster + cheaper** - The LLM generates a concise DSL instead of verbose HTML/React. Fewer tokens means faster responses and lower costs.
+
+2. **Richer interactions** - Instead of walls of terminal text for complex decisions, spin up an actual UI. What would be 5 pages of back-and-forth becomes one well-designed form.
+
+3. **Data-Only Generation** - Even better: pre-build your StreamWeaver app once, then have the LLM just generate the *data* to feed it. Minimal tokens, maximum speed.
+
+```ruby
+# Agent generates just this data:
+books = [{ title: "...", author: "...", rating: 5 }, ...]
+
+# Pre-built app renders it:
+BookSelectorApp.new(books: books).run_once!
+```
+
+</details>
+
+---
+
 ## Quick Start
 
 ```ruby

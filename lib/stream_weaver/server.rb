@@ -70,16 +70,24 @@ module StreamWeaver
           adapter = settings.adapter
           is_agentic = settings.respond_to?(:result_container)
 
+          # First, rebuild to get all current input component keys
+          streamlit_app.rebuild_with_state(state)
+          input_keys = self.class.collect_input_keys(streamlit_app.components)
+
           # Update state with posted params
           params.each do |key, value|
             next if ['splat', 'captures'].include?(key)
 
             key_sym = key.to_sym
 
-            # Convert checkbox values
-            if value == "on"
+            # Convert checkbox/checkbox_group values
+            # Rack combines duplicate keys into an array (for checkbox_group)
+            if value.is_a?(Array)
+              # checkbox_group sends array of selected values
+              state[key_sym] = value
+            elsif value == "on" || value == "true"
               state[key_sym] = true
-            elsif request.params[key].nil? && state[key_sym].is_a?(TrueClass)
+            elsif value == "false"
               state[key_sym] = false
             elsif state[key_sym].is_a?(Array)
               # Preserve array type for checkbox_group
@@ -87,6 +95,14 @@ module StreamWeaver
               state[key_sym] = Array(value)
             else
               state[key_sym] = value
+            end
+          end
+
+          # Handle unchecked checkboxes (they don't send params when unchecked)
+          input_keys.each do |key|
+            component = self.class.find_component_by_key(streamlit_app.components, key)
+            if component.is_a?(Components::Checkbox) && !params.key?(key.to_s)
+              state[key] = false
             end
           end
 
@@ -101,7 +117,16 @@ module StreamWeaver
             f.puts e.backtrace.first(10).join("\n")
             f.puts "---"
           end
-          raise
+          # Return error details in response for debugging
+          status 500
+          content_type 'text/html'
+          <<~HTML
+            <div style="color: red; padding: 1rem; border: 1px solid red; margin: 1rem; font-family: monospace;">
+              <h3>Error in /update</h3>
+              <p><strong>#{e.class}:</strong> #{Rack::Utils.escape_html(e.message)}</p>
+              <pre style="background: #f5f5f5; padding: 0.5rem; overflow-x: auto;">#{Rack::Utils.escape_html(e.backtrace.first(15).join("\n"))}</pre>
+            </div>
+          HTML
         end
       end
 
@@ -162,7 +187,16 @@ module StreamWeaver
             f.puts e.backtrace.first(10).join("\n")
             f.puts "---"
           end
-          raise
+          # Return error details in response for debugging
+          status 500
+          content_type 'text/html'
+          <<~HTML
+            <div style="color: red; padding: 1rem; border: 1px solid red; margin: 1rem; font-family: monospace;">
+              <h3>Error in /action/#{params[:button_id]}</h3>
+              <p><strong>#{e.class}:</strong> #{Rack::Utils.escape_html(e.message)}</p>
+              <pre style="background: #f5f5f5; padding: 0.5rem; overflow-x: auto;">#{Rack::Utils.escape_html(e.backtrace.first(15).join("\n"))}</pre>
+            </div>
+          HTML
         end
       end
 
@@ -244,6 +278,64 @@ module StreamWeaver
         end
       end
 
+      # Form submission endpoint for deferred form blocks
+      # Receives Rails-style nested params (form_name[field]) and updates state
+      post '/form/:form_name' do
+        begin
+          form_name = params[:form_name].to_sym
+          state = session[:streamlit_state] ||= {}
+          streamlit_app = settings.streamlit_app
+          adapter = settings.adapter
+          is_agentic = settings.respond_to?(:result_container)
+
+          # Parse Rails-style nested params: form_name[field] → { field: value }
+          form_params = params[form_name.to_s] || {}
+          form_values = {}
+          form_params.each do |key, value|
+            key_sym = key.to_sym
+            # Convert checkbox values
+            if value == "on" || value == "true"
+              form_values[key_sym] = true
+            elsif value == "false"
+              form_values[key_sym] = false
+            else
+              form_values[key_sym] = value
+            end
+          end
+
+          # Auto-update state with form values (the key behavior we designed)
+          state[form_name] = form_values
+          session[:streamlit_state] = state
+
+          # Rebuild to find the form component
+          streamlit_app.rebuild_with_state(state)
+
+          # Find and execute submit block if defined
+          form_component = self.class.find_form_recursive(streamlit_app.components, form_name)
+          form_component&.execute_submit(state, form_values)
+
+          # Re-render with updated state
+          streamlit_app.rebuild_with_state(state)
+          Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+        rescue => e
+          File.open("/tmp/streamweaver_error.log", "a") do |f|
+            f.puts "#{Time.now} POST /form/#{params[:form_name]} error: #{e.class}: #{e.message}"
+            f.puts e.backtrace.first(10).join("\n")
+            f.puts "---"
+          end
+          # Return error details in response for debugging
+          status 500
+          content_type 'text/html'
+          <<~HTML
+            <div style="color: red; padding: 1rem; border: 1px solid red; margin: 1rem; font-family: monospace;">
+              <h3>Error in /form/#{params[:form_name]}</h3>
+              <p><strong>#{e.class}:</strong> #{Rack::Utils.escape_html(e.message)}</p>
+              <pre style="background: #f5f5f5; padding: 0.5rem; overflow-x: auto;">#{Rack::Utils.escape_html(e.backtrace.first(15).join("\n"))}</pre>
+            </div>
+          HTML
+        end
+      end
+
       # Return the class itself (it's the Rack app)
       self
     end
@@ -259,6 +351,23 @@ module StreamWeaver
 
         if component.respond_to?(:children) && component.children
           found = find_button_recursive(component.children, button_id)
+          return found if found
+        end
+      end
+      nil
+    end
+
+    # Find a form component recursively in the component tree
+    #
+    # @param components [Array] Array of components
+    # @param form_name [Symbol] Form name to find
+    # @return [Components::Form, nil] The form or nil
+    def self.find_form_recursive(components, form_name)
+      components.each do |component|
+        return component if component.is_a?(Components::Form) && component.name == form_name
+
+        if component.respond_to?(:children) && component.children
+          found = find_form_recursive(component.children, form_name)
           return found if found
         end
       end

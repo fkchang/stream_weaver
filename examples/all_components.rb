@@ -59,6 +59,64 @@ App = app "Component Showcase" do
     text "Great for grouping related content"
   end
 
+  header3 "Columns (Monica-style sidebar layout)"
+  columns widths: ['30%', '70%'] do
+    column class: "sidebar-facts" do
+      div class: "sidebar-section" do
+        header4 "Work"
+        text "Software Engineer at Acme Corp"
+      end
+
+      div class: "sidebar-section" do
+        header4 "Location"
+        text "San Francisco, CA"
+      end
+
+      div class: "sidebar-section" do
+        header4 "Contact"
+        text "email@example.com"
+        text "(555) 123-4567"
+      end
+
+      div class: "sidebar-section" do
+        header4 "Significant Other"
+        text "Jane Doe"
+      end
+    end
+
+    column do
+      collapsible "Background", expanded: true do
+        md "This person has been working in tech for **10 years** and specializes in Ruby development."
+      end
+
+      collapsible "Key Facts" do
+        md "- Met at RubyConf 2023\n- Interested in open source\n- Coffee enthusiast"
+      end
+    end
+  end
+
+  header3 "Equal-width Columns"
+  columns do
+    column do
+      card do
+        text "Column 1"
+        text "Equal width flex"
+      end
+    end
+    column do
+      card do
+        text "Column 2"
+        text "Also equal width"
+      end
+    end
+    column do
+      card do
+        text "Column 3"
+        text "Three columns!"
+      end
+    end
+  end
+
   # --- Interactive Components ---
   header3 "Buttons"
   button "Primary Action" do |state|

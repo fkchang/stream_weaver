@@ -395,5 +395,84 @@ module StreamWeaver
         view.adapter.render_external_link_button(view, @label, @url, @submit, state)
       end
     end
+
+    # Columns component for multi-column layouts
+    # Contains Column children for flexible sidebar/content arrangements
+    class Columns < Base
+      attr_accessor :children
+      attr_reader :widths
+
+      # @param widths [Array<String>, nil] Optional column widths (e.g., ['30%', '70%'])
+      # @param options [Hash] Additional options (e.g., gap)
+      def initialize(widths: nil, **options)
+        @widths = widths
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_columns(view, @widths, @children, @options, state)
+      end
+    end
+
+    # Column component - individual column within a Columns container
+    class Column < Base
+      attr_accessor :children, :width
+
+      # @param options [Hash] Options (e.g., class for additional styling)
+      def initialize(**options)
+        @options = options
+        @children = []
+        @width = nil # Set by parent Columns during render
+      end
+
+      def render(view, state)
+        view.adapter.render_column(view, @width, @children, @options, state)
+      end
+    end
+
+    # Form component for deferred submission forms
+    # Groups multiple form elements together, uses client-side only state until submission,
+    # and sends all values in a single HTMX POST on submit.
+    class Form < Base
+      attr_reader :name, :submit_label, :cancel_label, :submit_action
+      attr_accessor :children
+
+      # @param name [Symbol] The form name (used as state key, e.g., :edit_person)
+      # @param options [Hash] Additional options
+      def initialize(name, **options)
+        @name = name
+        @options = options
+        @children = []
+        @submit_label = nil
+        @cancel_label = nil
+        @submit_action = nil
+      end
+
+      # Set the submit button configuration
+      # @param label [String] Button label text
+      # @param block [Proc] Action to execute on submit (receives form_values hash)
+      def set_submit(label, &block)
+        @submit_label = label
+        @submit_action = block
+      end
+
+      # Set the cancel button configuration
+      # @param label [String] Button label text
+      def set_cancel(label)
+        @cancel_label = label
+      end
+
+      # Execute the submit action block
+      # @param state [Hash] Current state hash
+      # @param form_values [Hash] The submitted form values
+      def execute_submit(state, form_values)
+        @submit_action&.call(form_values)
+      end
+
+      def render(view, state)
+        view.adapter.render_form(view, @name, @children, @submit_label, @cancel_label, @options, state)
+      end
+    end
   end
 end

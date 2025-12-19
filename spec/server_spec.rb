@@ -74,6 +74,36 @@ RSpec.describe "StreamWeaver Server" do
     end
   end
 
+  describe "POST /update" do
+    it "handles checkbox state (checked)" do
+      env 'rack.session', { streamlit_state: { subscribe: false } }
+
+      post '/update', { subscribe: "true" }
+
+      session_state = last_request.session[:streamlit_state]
+      expect(session_state[:subscribe]).to be true
+    end
+
+    it "handles checkbox state (unchecked)" do
+      env 'rack.session', { streamlit_state: { subscribe: true } }
+
+      # Unchecked checkboxes don't send params - HTMX only includes [x-model] elements
+      post '/update', {}
+
+      session_state = last_request.session[:streamlit_state]
+      expect(session_state[:subscribe]).to be false
+    end
+
+    it "updates text field state" do
+      env 'rack.session', { streamlit_state: { name: "" } }
+
+      post '/update', { name: "Alice" }
+
+      session_state = last_request.session[:streamlit_state]
+      expect(session_state[:name]).to eq("Alice")
+    end
+  end
+
   describe "POST /action/:button_id" do
     it "executes button action" do
       # Set up session
