@@ -43,19 +43,20 @@ module StreamWeaver
             "x-model" => "_form.#{key}"  # Form-local Alpine scope
           )
         else
-          # Standalone: immediate HTMX sync on change
+          trigger_str, endpoint = build_input_triggers(key, options)
+
           view.input(
-            id: "input-#{key}",  # Stable ID for HTMX focus restoration
+            id: "input-#{key}",
             type: "text",
             name: key.to_s,
             value: state[key] || "",
             placeholder: options[:placeholder] || "",
-            "x-model" => key.to_s,  # Alpine.js two-way binding
-            "hx-post" => "/update",
+            "x-model" => key.to_s,
+            "hx-post" => endpoint,
             "hx-include" => input_selector,
             "hx-target" => "#app-container",
             "hx-swap" => "innerHTML scroll:false",
-            "hx-trigger" => "keyup changed delay:500ms"  # Debounced auto-update
+            "hx-trigger" => trigger_str
           )
         end
       end
@@ -85,18 +86,19 @@ module StreamWeaver
             "x-model" => "_form.#{key}"  # Form-local Alpine scope
           ) { form_state[key] || "" }
         else
-          # Standalone: immediate HTMX sync on change
+          trigger_str, endpoint = build_input_triggers(key, options)
+
           view.textarea(
-            id: "input-#{key}",  # Stable ID for HTMX focus restoration
+            id: "input-#{key}",
             name: key.to_s,
             placeholder: options[:placeholder] || "",
             rows: options[:rows] || 3,
-            "x-model" => key.to_s,  # Alpine.js two-way binding
-            "hx-post" => "/update",
+            "x-model" => key.to_s,
+            "hx-post" => endpoint,
             "hx-include" => input_selector,
             "hx-target" => "#app-container",
             "hx-swap" => "innerHTML scroll:false",
-            "hx-trigger" => "keyup changed delay:500ms"  # Debounced auto-update
+            "hx-trigger" => trigger_str
           ) { state[key] || "" }
         end
       end
@@ -128,19 +130,22 @@ module StreamWeaver
             view.plain " #{label}"
           end
         else
-          # Standalone: immediate HTMX sync on change
+          # Use /event endpoint if there's a callback
+          has_on_change = options[:on_change]
+          endpoint = has_on_change ? "/event/#{key}" : "/update"
+
           view.label do
             view.input(
               type: "checkbox",
               name: key.to_s,
               value: "true",
               checked: state[key],
-              "x-model" => key.to_s,  # Alpine.js two-way binding
-              "hx-post" => "/update",
+              "x-model" => key.to_s,
+              "hx-post" => endpoint,
               "hx-include" => input_selector,
               "hx-target" => "#app-container",
               "hx-swap" => "innerHTML scroll:false",
-              "hx-trigger" => "change"  # Immediate update on change
+              "hx-trigger" => "change"
             )
             view.plain " #{label}"
           end
@@ -178,17 +183,19 @@ module StreamWeaver
             end
           end
         else
-          # Standalone: immediate HTMX sync on change
+          # Use /event endpoint if there's a callback
+          has_on_change = options[:on_change]
+          endpoint = has_on_change ? "/event/#{key}" : "/update"
           current_value = state[key] || options[:default]
 
           view.select(
             name: key.to_s,
-            "x-model" => key.to_s,  # Alpine.js two-way binding
-            "hx-post" => "/update",
+            "x-model" => key.to_s,
+            "hx-post" => endpoint,
             "hx-include" => input_selector,
             "hx-target" => "#app-container",
             "hx-swap" => "innerHTML scroll:false",
-            "hx-trigger" => "change"  # Immediate update on change
+            "hx-trigger" => "change"
           ) do
             choices.each do |choice|
               view.option(
@@ -325,17 +332,32 @@ module StreamWeaver
       # @param label [String] The button label text
       # @param options [Hash] Component options
       # @option options [Symbol] :style Button style (:primary or :secondary)
+      # @param modal_context [Hash, nil] Modal context if button is inside a modal
       # @return [void] Renders to view
-      def render_button(view, button_id, label, options)
+      def render_button(view, button_id, label, options, modal_context = nil)
         style_class = options[:style] == :secondary ? "secondary" : "primary"
 
-        view.button(
-          class: "btn btn-#{style_class}",
-          "hx-post" => "/action/#{button_id}",     # HTMX POST to server
-          "hx-include" => input_selector,          # Include all inputs with x-model
-          "hx-target" => "#app-container",         # Replace app container
-          "hx-swap" => "innerHTML scroll:false"    # Replace inner HTML, preserve scroll
-        ) { label }
+        if modal_context
+          # Inside a modal: close via Alpine before HTMX request fires
+          # hx-on::before-request runs before HTMX sends, allowing Alpine to close modal
+          view.button(
+            class: "btn btn-#{style_class}",
+            "hx-post" => "/action/#{button_id}",
+            "hx-include" => input_selector,
+            "hx-target" => "#app-container",
+            "hx-swap" => "innerHTML scroll:false",
+            "hx-on::before-request" => "open = false"
+          ) { label }
+        else
+          # Normal button: use standard HTMX
+          view.button(
+            class: "btn btn-#{style_class}",
+            "hx-post" => "/action/#{button_id}",     # HTMX POST to server
+            "hx-include" => input_selector,          # Include all inputs with x-model
+            "hx-target" => "#app-container",         # Replace app container
+            "hx-swap" => "innerHTML scroll:false"    # Replace inner HTML, preserve scroll
+          ) { label }
+        end
       end
 
       # Get HTML attributes for the app container with Alpine.js initialization
@@ -352,6 +374,32 @@ module StreamWeaver
         end
 
         { "x-data" => JSON.generate(state_data) }
+      end
+
+      # Render a div container with optional hover support
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Div] The div component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_div(view, component, state)
+        css_class = component.instance_variable_get(:@options)[:class]
+        hover_class = component.hover_class
+
+        attrs = {}
+        attrs[:class] = css_class if css_class
+
+        # Client-side hover class toggle (no server round-trip for performance)
+        if hover_class
+          attrs["x-data"] = "{ hovered: false }"
+          attrs["@mouseenter"] = "hovered = true"
+          attrs["@mouseleave"] = "hovered = false"
+          attrs[":class"] = "{ '#{hover_class}': hovered }"
+        end
+
+        view.div(**attrs) do
+          component.children.each { |child| child.render(view, state) }
+        end
       end
 
       # Get CDN script tags for Alpine.js and HTMX
@@ -371,15 +419,36 @@ module StreamWeaver
       def render_cdn_scripts(view)
         view.script(src: "https://unpkg.com/htmx.org@2.0.4")
         view.script(src: "https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js", defer: true)
-        # Focus and scroll restoration script - preserves state across HTMX swaps
+        # Focus, scroll restoration, and Alpine.js state sync script
         view.script do
           view.raw(view.safe(<<~JS))
             (function() {
               let focusState = null;
               let scrollState = null;
 
-              // Before swap: save focus and scroll state
+              // =============================================================
+              // Alpine.js Defer Mutations Pattern for HTMX Integration
+              // =============================================================
+              // Problem: HTMX swaps innerHTML but Alpine's x-data on outer
+              // container keeps stale values. Alpine's x-model then overwrites
+              // correct server-rendered values with old data.
+              //
+              // Solution: Pause Alpine's MutationObserver during HTMX swap,
+              // then resume after DOM settles. This lets Alpine reinitialize
+              // with fresh x-data from server response.
+              //
+              // References:
+              // - https://github.com/alpinejs/alpine/discussions/3985
+              // - https://github.com/bigskysoftware/htmx/discussions/1367
+              // =============================================================
+
+              // Before swap: save focus/scroll state and pause Alpine mutations
               document.addEventListener('htmx:beforeSwap', function(e) {
+                // Defer Alpine mutations during swap to prevent stale state conflicts
+                if (typeof Alpine !== 'undefined' && Alpine.deferMutations) {
+                  Alpine.deferMutations();
+                }
+
                 // Save focus
                 const active = document.activeElement;
                 if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
@@ -399,8 +468,36 @@ module StreamWeaver
                 };
               });
 
-              // After swap: restore focus and scroll state
-              document.addEventListener('htmx:afterSwap', function(e) {
+              // After settle: reinitialize Alpine with fresh state, restore focus/scroll
+              // afterSettle fires after DOM is fully updated, safer than afterSwap
+              document.addEventListener('htmx:afterSettle', function(e) {
+                // Reinitialize Alpine with fresh state from server response
+                // The partial includes a script#sw-state-data with the new state JSON
+                const stateEl = document.getElementById('sw-state-data');
+                const container = document.getElementById('app-container');
+
+                if (stateEl && container && typeof Alpine !== 'undefined') {
+                  try {
+                    const newState = JSON.parse(stateEl.textContent);
+                    // Update Alpine's reactive data on the container
+                    // Alpine.$data gives access to the component's reactive data proxy
+                    const alpineData = Alpine.$data(container);
+                    if (alpineData) {
+                      // Merge new state into existing Alpine data
+                      Object.keys(newState).forEach(key => {
+                        alpineData[key] = newState[key];
+                      });
+                    }
+                  } catch (err) {
+                    console.warn('StreamWeaver: Failed to reinitialize Alpine state', err);
+                  }
+                }
+
+                // Resume Alpine mutations after state is updated
+                if (typeof Alpine !== 'undefined' && Alpine.flushAndStopDeferringMutations) {
+                  Alpine.flushAndStopDeferringMutations();
+                }
+
                 // Restore focus
                 if (focusState && focusState.id) {
                   const el = document.getElementById(focusState.id);
@@ -794,6 +891,482 @@ module StreamWeaver
               ) { cancel_label }
             end
           end
+        end
+      end
+
+      def render_vstack(view, component, state)
+        render_stack(view, :vertical, component, state)
+      end
+
+      def render_hstack(view, component, state)
+        render_stack(view, :horizontal, component, state)
+      end
+
+      def render_grid(view, component, state)
+        css_classes = ["sw-grid"]
+        css_classes << component.options[:class] if component.options[:class]
+
+        gap_value = spacing_to_css(component.gap)
+        styles = ["gap: #{gap_value};"]
+
+        if component.columns.is_a?(Array)
+          cols_sm = component.columns[0] || 1
+          cols_md = component.columns[1] || cols_sm
+          cols_lg = component.columns[2] || cols_md
+
+          styles << "--sw-grid-cols-sm: #{cols_sm};"
+          styles << "--sw-grid-cols-md: #{cols_md};"
+          styles << "--sw-grid-cols-lg: #{cols_lg};"
+          styles << "grid-template-columns: repeat(#{cols_lg}, 1fr);"
+
+          view.div(
+            class: css_classes.join(" "),
+            style: styles.join(" "),
+            "data-cols-sm" => cols_sm,
+            "data-cols-md" => cols_md,
+            "data-cols-lg" => cols_lg
+          ) do
+            component.children.each { |child| child.render(view, state) }
+          end
+        else
+          styles << "grid-template-columns: repeat(#{component.columns}, 1fr);"
+
+          view.div(class: css_classes.join(" "), style: styles.join(" ")) do
+            component.children.each { |child| child.render(view, state) }
+          end
+        end
+      end
+
+      # =========================================
+      # Navigation components rendering
+      # =========================================
+
+      # Render a tabbed navigation container
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Tabs] The tabs component with children
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_tabs(view, component, state)
+        key = component.key
+        active_index = state[key] || 0
+        variant_class = "sw-tabs-#{component.variant}"
+
+        view.div(
+          id: "tabs-#{key}",
+          class: "sw-tabs #{variant_class}",
+          "x-data" => "{ activeTab: #{active_index} }",
+          # Preserve tabs during HTMX swaps to prevent flash when tab state changes
+          "hx-preserve" => "true"
+        ) do
+          # Tab headers
+          view.div(class: "sw-tabs-list") do
+            component.children.each_with_index do |tab, index|
+              # Pre-render active class server-side to prevent flash during HTMX swaps
+              # Alpine's :class maintains it after initialization
+              tab_classes = ["sw-tab-trigger"]
+              tab_classes << "sw-tab-active" if index == active_index
+
+              view.button(
+                type: "button",
+                class: tab_classes.join(" "),
+                ":class" => "{ 'sw-tab-active': activeTab === #{index} }",
+                "@click" => "activeTab = #{index}",
+                # Sync to server without re-rendering (hx-swap="none")
+                # This preserves Alpine state while persisting tab selection
+                "hx-post" => "/update",
+                "hx-vals" => JSON.generate({ key.to_s => index }),
+                "hx-swap" => "none"
+              ) { tab.label }
+            end
+          end
+
+          # Tab panels
+          component.children.each_with_index do |tab, index|
+            view.div(
+              class: "sw-tab-panel",
+              "x-show" => "activeTab === #{index}",
+              "x-cloak" => true
+            ) do
+              tab.children.each { |child| child.render(view, state) }
+            end
+          end
+        end
+      end
+
+      # Render a breadcrumbs navigation trail
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Breadcrumbs] The breadcrumbs component with children
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_breadcrumbs(view, component, state)
+        view.nav(class: "sw-breadcrumbs", "aria-label" => "Breadcrumb") do
+          view.ol(class: "sw-breadcrumbs-list") do
+            component.children.each_with_index do |crumb, index|
+              is_last = index == component.children.length - 1
+
+              view.li(class: "sw-breadcrumb-item") do
+                # Separator (except for first item)
+                if index > 0
+                  view.span(class: "sw-breadcrumb-separator", "aria-hidden" => "true") do
+                    component.separator
+                  end
+                end
+
+                # Crumb link or text
+                if crumb.href && !is_last
+                  view.a(href: crumb.href, class: "sw-breadcrumb-link") { crumb.label }
+                else
+                  aria = is_last ? { "aria-current" => "page" } : {}
+                  view.span(class: "sw-breadcrumb-current", **aria) { crumb.label }
+                end
+              end
+            end
+          end
+        end
+      end
+
+      # Render a dropdown menu container
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Dropdown] The dropdown component with trigger and menu
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_dropdown(view, component, state)
+        view.div(
+          class: "sw-dropdown",
+          "x-data" => "{ open: false }",
+          "@click.outside" => "open = false",
+          "@keydown.escape.window" => "open = false"
+        ) do
+          # Render trigger - use @click.capture.stop to intercept click BEFORE it reaches button's HTMX
+          # .capture = handle during capture phase (parent first), .stop = prevent reaching children
+          if component.trigger_component
+            view.div(class: "sw-dropdown-trigger", "@click.capture.stop" => "open = !open") do
+              component.trigger_component.children.each { |child| child.render(view, state) }
+            end
+          end
+
+          # Render menu
+          if component.menu_component
+            view.div(
+              class: "sw-dropdown-menu",
+              "x-show" => "open",
+              "x-cloak" => true,
+              "x-transition:enter" => "sw-transition-enter",
+              "x-transition:enter-start" => "sw-transition-enter-start",
+              "x-transition:enter-end" => "sw-transition-enter-end",
+              "x-transition:leave" => "sw-transition-leave",
+              "x-transition:leave-start" => "sw-transition-leave-start",
+              "x-transition:leave-end" => "sw-transition-leave-end"
+            ) do
+              component.menu_component.children.each do |item|
+                render_menu_item(view, item, state)
+              end
+            end
+          end
+        end
+      end
+
+      # Render a modal dialog
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Modal] The modal component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_modal(view, component, state)
+        key = component.key
+        open_key = :"#{key}_open"
+        is_open = state[open_key] || false
+        size_class = "sw-modal-#{component.size}"
+
+        # Modal container with Alpine.js state
+        # Uses a reactive binding to the state key
+        view.div(
+          class: "sw-modal-wrapper",
+          "x-data" => "{ open: #{is_open} }",
+          "x-init" => "$watch('open', v => { if(!v) htmx.ajax('POST', '/update', {target:'#app-container', swap:'innerHTML scroll:false', values:{'#{open_key}': 'false'}}) })",
+          "@keydown.escape.window" => "open = false"
+        ) do
+          # Backdrop overlay
+          view.div(
+            class: "sw-modal-backdrop",
+            "x-show" => "open",
+            "x-cloak" => true,
+            "x-transition:enter" => "sw-transition-fade-enter",
+            "x-transition:enter-start" => "sw-transition-fade-enter-start",
+            "x-transition:enter-end" => "sw-transition-fade-enter-end",
+            "x-transition:leave" => "sw-transition-fade-leave",
+            "x-transition:leave-start" => "sw-transition-fade-leave-start",
+            "x-transition:leave-end" => "sw-transition-fade-leave-end",
+            "@click" => "open = false"
+          )
+
+          # Modal dialog
+          view.div(
+            class: "sw-modal #{size_class}",
+            "x-show" => "open",
+            "x-cloak" => true,
+            "x-transition:enter" => "sw-transition-modal-enter",
+            "x-transition:enter-start" => "sw-transition-modal-enter-start",
+            "x-transition:enter-end" => "sw-transition-modal-enter-end",
+            "x-transition:leave" => "sw-transition-modal-leave",
+            "x-transition:leave-start" => "sw-transition-modal-leave-start",
+            "x-transition:leave-end" => "sw-transition-modal-leave-end",
+            "@click.stop" => ""  # Prevent clicks inside modal from closing it
+          ) do
+            # Header with title and close button
+            if component.title
+              view.div(class: "sw-modal-header") do
+                view.h3(class: "sw-modal-title") { component.title }
+                render_modal_close_button(view)
+              end
+            else
+              render_modal_close_button(view, close_only: true)
+            end
+
+            # Body content
+            view.div(class: "sw-modal-body") do
+              component.children.each { |child| child.render(view, state) }
+            end
+
+            # Footer (if present)
+            if component.footer_component
+              view.div(class: "sw-modal-footer") do
+                component.footer_component.children.each { |child| child.render(view, state) }
+              end
+            end
+          end
+        end
+      end
+
+      # =========================================
+      # Feedback components rendering
+      # =========================================
+
+      # Render an alert component
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Alert] The alert component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_alert(view, component, state)
+        variant_class = "sw-alert-#{component.variant}"
+        css_classes = ["sw-alert", variant_class]
+
+        icon = case component.variant
+        when :success then "✓"
+        when :warning then "⚠"
+        when :error then "✕"
+        else "ℹ" # :info
+        end
+
+        if component.dismissible
+          view.div(
+            class: css_classes.join(" "),
+            "x-data" => "{ dismissed: false }",
+            "x-show" => "!dismissed",
+            "x-transition:leave" => "sw-transition-fade-leave",
+            "x-transition:leave-start" => "sw-transition-fade-leave-start",
+            "x-transition:leave-end" => "sw-transition-fade-leave-end"
+          ) do
+            view.span(class: "sw-alert-icon") { icon }
+            view.div(class: "sw-alert-content") do
+              view.strong(class: "sw-alert-title") { component.title } if component.title
+              component.children.each { |child| child.render(view, state) }
+            end
+            view.button(
+              type: "button",
+              class: "sw-alert-dismiss",
+              "@click" => "dismissed = true",
+              "aria-label" => "Dismiss"
+            ) { "×" }
+          end
+        else
+          view.div(class: css_classes.join(" ")) do
+            view.span(class: "sw-alert-icon") { icon }
+            view.div(class: "sw-alert-content") do
+              view.strong(class: "sw-alert-title") { component.title } if component.title
+              component.children.each { |child| child.render(view, state) }
+            end
+          end
+        end
+      end
+
+      # Render a toast notification
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Toast] The toast component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_toast(view, component, state)
+        key = component.key
+        toast_state = state[key] || { visible: false, message: "" }
+        is_visible = toast_state.is_a?(Hash) ? toast_state[:visible] : false
+        message = toast_state.is_a?(Hash) ? toast_state[:message] : ""
+
+        variant_class = "sw-toast-#{component.variant}"
+        position_class = "sw-toast-#{component.position.to_s.gsub('_', '-')}"
+
+        icon = case component.variant
+        when :success then "✓"
+        when :warning then "⚠"
+        when :error then "✕"
+        else "ℹ"
+        end
+
+        # Auto-dismiss logic using Alpine's x-init
+        auto_dismiss = component.duration > 0 ? "setTimeout(() => { visible = false; syncToServer() }, #{component.duration})" : ""
+
+        view.div(
+          class: "sw-toast-container #{position_class}",
+          "x-data" => "{ visible: #{is_visible}, syncToServer() { htmx.ajax('POST', '/update', {target:'#app-container', swap:'innerHTML scroll:false', values:{'#{key}[visible]': 'false'}}) } }",
+          "x-init" => "if(visible) { #{auto_dismiss} }"
+        ) do
+          view.div(
+            class: "sw-toast #{variant_class}",
+            "x-show" => "visible",
+            "x-cloak" => true,
+            "x-transition:enter" => "sw-transition-toast-enter",
+            "x-transition:enter-start" => "sw-transition-toast-enter-start",
+            "x-transition:enter-end" => "sw-transition-toast-enter-end",
+            "x-transition:leave" => "sw-transition-toast-leave",
+            "x-transition:leave-start" => "sw-transition-toast-leave-start",
+            "x-transition:leave-end" => "sw-transition-toast-leave-end"
+          ) do
+            view.span(class: "sw-toast-icon") { icon }
+            view.span(class: "sw-toast-message") { message }
+            view.button(
+              type: "button",
+              class: "sw-toast-dismiss",
+              "@click" => "visible = false; syncToServer()",
+              "aria-label" => "Dismiss"
+            ) { "×" }
+          end
+        end
+      end
+
+      # Render a progress bar
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param value [Integer] Current value
+      # @param max [Integer] Maximum value
+      # @param variant [Symbol] Style variant
+      # @param show_label [Boolean] Show percentage label
+      # @param animated [Boolean] Show animation
+      # @param options [Hash] Additional options
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_progress_bar(view, value, max, variant, show_label, animated, options, state)
+        percentage = max > 0 ? ((value.to_f / max) * 100).round : 0
+        variant_class = "sw-progress-#{variant}"
+        css_classes = ["sw-progress", variant_class]
+        css_classes << "sw-progress-animated" if animated
+
+        view.div(class: css_classes.join(" "), role: "progressbar", "aria-valuenow" => value, "aria-valuemin" => 0, "aria-valuemax" => max) do
+          view.div(class: "sw-progress-bar", style: "width: #{percentage}%;")
+          if show_label
+            view.span(class: "sw-progress-label") { "#{percentage}%" }
+          end
+        end
+      end
+
+      # Render a spinner/loading indicator
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param size [Symbol] Spinner size (:sm, :md, :lg)
+      # @param label [String, nil] Optional loading text
+      # @param options [Hash] Additional options
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_spinner(view, size, label, options, state)
+        size_class = "sw-spinner-#{size}"
+
+        view.div(class: "sw-spinner-container") do
+          view.div(class: "sw-spinner #{size_class}", role: "status", "aria-label" => label || "Loading")
+          if label
+            view.span(class: "sw-spinner-label") { label }
+          end
+        end
+      end
+
+      private
+
+      # Render a modal close button with Alpine.js binding
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param close_only [Boolean] Whether this is the only element (adds extra class)
+      # @return [void] Renders to view
+      def render_modal_close_button(view, close_only: false)
+        css_class = close_only ? "sw-modal-close sw-modal-close-only" : "sw-modal-close"
+        view.button(
+          type: "button",
+          class: css_class,
+          "@click" => "open = false",
+          "aria-label" => "Close"
+        ) { "×" }
+      end
+
+      # Build HTMX trigger string and endpoint for input components with callbacks
+      #
+      # @param key [Symbol] The state key for this input
+      # @param options [Hash] Component options with optional :on_change, :on_blur, :debounce
+      # @return [Array<String, String>] [trigger_string, endpoint]
+      def build_input_triggers(key, options)
+        debounce_ms = options[:debounce] || 500
+        has_on_change = options[:on_change]
+        has_on_blur = options[:on_blur]
+
+        triggers = []
+        triggers << "keyup changed delay:#{debounce_ms}ms" if has_on_change || !has_on_blur
+        triggers << "blur" if has_on_blur
+        trigger_str = triggers.join(", ")
+
+        endpoint = (has_on_change || has_on_blur) ? "/event/#{key}" : "/update"
+
+        [trigger_str, endpoint]
+      end
+
+      def render_menu_item(view, item, state)
+        if item.is_a?(Components::MenuDivider)
+          item.render(view, state)
+        elsif item.is_a?(Components::MenuItem)
+          style_class = item.style == :destructive ? "sw-menu-item-destructive" : ""
+          item_id = item.instance_variable_get(:@id) || "menu_item_#{item.label.downcase.gsub(/\s+/, '_')}"
+
+          if item.action
+            # With action: use HTMX to trigger server-side action
+            view.button(
+              type: "button",
+              class: "sw-menu-item #{style_class}",
+              "hx-post" => "/action/#{item_id}",
+              "hx-include" => input_selector,
+              "hx-target" => "#app-container",
+              "hx-swap" => "innerHTML scroll:false",
+              "@click" => "open = false"
+            ) { item.label }
+          else
+            # No action: just close the menu
+            view.button(
+              type: "button",
+              class: "sw-menu-item #{style_class}",
+              "@click" => "open = false"
+            ) { item.label }
+          end
+        end
+      end
+
+      def render_stack(view, direction, component, state)
+        base_class = direction == :vertical ? "sw-vstack" : "sw-hstack"
+        css_classes = [base_class]
+        css_classes << "sw-align-#{component.align}" if component.align
+        css_classes << "sw-justify-#{component.justify}" if direction == :horizontal && component.justify
+        css_classes << "sw-divider" if component.divider
+        css_classes << component.options[:class] if component.options[:class]
+
+        view.div(class: css_classes.join(" "), style: "gap: #{spacing_to_css(component.spacing)};") do
+          component.children.each { |child| child.render(view, state) }
         end
       end
 
