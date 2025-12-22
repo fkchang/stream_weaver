@@ -235,8 +235,68 @@ card do
   text "Card content here"
 end
 
-card class: "custom-card" do
-  # Additional CSS class
+# Structured card with header, body, footer
+card do
+  card_header "Card Title"
+  card_body do
+    text "Main content goes here"
+    text_field :field
+  end
+  card_footer do
+    button "Cancel", style: :secondary
+    button "Save"
+  end
+end
+```
+
+### Stacking Layouts (VStack / HStack)
+
+```ruby
+# Vertical stack with spacing
+vstack spacing: :lg do
+  text "Item 1"
+  text "Item 2"
+  text "Item 3"
+end
+
+# VStack with dividers between items
+vstack spacing: :md, divider: true do
+  text "Item with divider below"
+  text "Another item"
+end
+
+# Horizontal stack
+hstack spacing: :md, align: :center do
+  button "Action 1"
+  button "Action 2", style: :secondary
+end
+
+# HStack with justify (spread content)
+hstack justify: :between do
+  text "Left"
+  text "Right"
+end
+```
+
+Spacing options: `:xs`, `:sm`, `:md`, `:lg`, `:xl`
+Align options: `:start`, `:center`, `:end`
+Justify options (hstack only): `:start`, `:center`, `:end`, `:between`, `:around`
+
+### Grid Layouts
+
+```ruby
+# Fixed 3-column grid
+grid columns: 3, gap: :md do
+  card { text "Item 1" }
+  card { text "Item 2" }
+  card { text "Item 3" }
+end
+
+# Responsive grid: 1 col mobile, 2 tablet, 3 desktop
+grid columns: [1, 2, 3], gap: :lg do
+  items.each do |item|
+    card { text item.name }
+  end
 end
 ```
 
@@ -359,6 +419,112 @@ form :edit_person do
 end
 ```
 
+### Tabs
+
+Tabbed navigation with persistent state:
+
+```ruby
+tabs :settings_tabs do
+  tab "General" do
+    text_field :app_name
+    checkbox :dark_mode, "Enable dark mode"
+  end
+
+  tab "Notifications" do
+    checkbox :email_notifications, "Email notifications"
+    checkbox :push_notifications, "Push notifications"
+  end
+
+  tab "Security" do
+    text "Security settings..."
+  end
+end
+# state[:settings_tabs] = 0 (active tab index, persisted)
+```
+
+Tab variants for different visual styles:
+
+```ruby
+tabs :demo, variant: :line do ... end        # Underline (default)
+tabs :demo, variant: :enclosed do ... end    # Boxed tabs
+tabs :demo, variant: :"soft-rounded" do ... end  # Pill-style tabs
+```
+
+### Breadcrumbs
+
+Navigation trails for hierarchical content:
+
+```ruby
+breadcrumbs do
+  crumb "Home", href: "/"
+  crumb "Products", href: "/products"
+  crumb "Electronics", href: "/products/electronics"
+  crumb "Laptops"  # Current page - no href
+end
+
+# Custom separator
+breadcrumbs separator: ">" do
+  crumb "Dashboard", href: "/dashboard"
+  crumb "Settings"
+end
+```
+
+### Dropdown Menu
+
+Click-triggered dropdown menus:
+
+```ruby
+dropdown do
+  trigger do
+    button "Actions"
+  end
+
+  menu do
+    menu_item "Edit" do |s|
+      s[:editing] = true
+    end
+    menu_item "Duplicate" do |s|
+      s[:items] << s[:items].last.dup
+    end
+    menu_divider
+    menu_item "Delete", style: :destructive do |s|
+      s[:items].pop
+    end
+  end
+end
+```
+
+### Modal Dialogs
+
+Overlay dialogs for confirmations, forms, and detailed content:
+
+```ruby
+# Open modal via button
+button "Open Settings" do |s|
+  s[:settings_open] = true
+end
+
+# Define modal (state key is :{name}_open)
+modal :settings, title: "Settings", size: :md do
+  text_field :setting_value
+  text "Configure your preferences here."
+
+  modal_footer do
+    button "Cancel", style: :secondary do |s|
+      s[:settings_open] = false
+    end
+    button "Save" do |s|
+      # save logic
+      s[:settings_open] = false
+    end
+  end
+end
+```
+
+Modal sizes: `:sm` (400px), `:md` (560px default), `:lg` (800px), `:xl` (1140px)
+
+Close methods: click backdrop, press Escape, or button action setting `s[:modal_key_open] = false`
+
 ### Status Badge
 
 Display match indicators with reasoning:
@@ -445,6 +611,110 @@ end
 # String syntax - terms in {braces}
 lesson_text "This has a {term} and {another term}.", glossary: glossary
 ```
+
+### Alerts
+
+Static feedback messages with variants:
+
+```ruby
+alert(variant: :info) do
+  text "This is an informational message."
+end
+
+alert(variant: :success, title: "Success!") do
+  text "Your changes have been saved."
+end
+
+alert(variant: :warning, title: "Warning") do
+  text "Your session will expire soon."
+end
+
+alert(variant: :error, title: "Error") do
+  text "Unable to connect to server."
+end
+
+# Dismissible alert (client-side X button)
+alert(variant: :info, dismissible: true) do
+  text "Click X to dismiss this alert."
+end
+```
+
+Variants: `:info`, `:success`, `:warning`, `:error`
+
+### Toast Notifications
+
+Temporary stacked notifications with auto-dismiss:
+
+```ruby
+# Add toast container (renders in corner)
+toast_container position: :top_right, duration: 5000
+
+# Trigger toasts from button actions
+button "Save" do |s|
+  # ... save logic
+  show_toast("Saved successfully!", variant: :success)
+end
+
+button "Delete" do |s|
+  show_toast("Item deleted", variant: :warning)
+end
+
+# Clear all toasts
+button "Clear" do |s|
+  clear_toasts
+end
+```
+
+Positions: `:top_right`, `:top_left`, `:bottom_right`, `:bottom_left`
+Variants: `:info`, `:success`, `:warning`, `:error`
+Duration: milliseconds (0 = no auto-dismiss)
+
+### Progress Bar
+
+Visual progress indicators:
+
+```ruby
+# Static progress
+progress_bar value: 75
+
+# With label showing percentage
+progress_bar value: 65, show_label: true
+
+# Variants for different contexts
+progress_bar value: 100, variant: :success
+progress_bar value: 50, variant: :warning
+progress_bar value: 25, variant: :error
+
+# Animated striped bar
+progress_bar value: 80, animated: true
+
+# Dynamic progress bound to state
+progress_bar value: :upload_progress, show_label: true
+button "+ 10" do |s|
+  s[:upload_progress] = [100, (s[:upload_progress] || 0) + 10].min
+end
+```
+
+Variants: `:default`, `:success`, `:warning`, `:error`
+
+### Spinner
+
+Loading indicators:
+
+```ruby
+# Basic spinner
+spinner
+
+# With size
+spinner size: :sm
+spinner size: :md  # default
+spinner size: :lg
+
+# With loading text
+spinner size: :md, label: "Loading data..."
+```
+
+Sizes: `:sm`, `:md`, `:lg`
 
 ## Running Modes
 

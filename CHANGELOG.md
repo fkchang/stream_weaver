@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Header` with `header1`-`header6` helpers for semantic headers
   - `TextArea` for multi-line text input
   - `RadioGroup` for single-choice radio buttons
-  - `Card` for styled content containers
+  - `Card` for styled content containers with `card_header`, `card_body`, `card_footer`
   - `Collapsible` for expandable/collapsible sections
   - `Columns` and `Column` for multi-column layouts with custom widths
   - `Form` with `submit`/`cancel` for deferred submission forms (client-side only until submit)
@@ -36,6 +36,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `StatusBadge` for visual match indicators (🟢 Strong / 🟡 Maybe / 🔴 Skip)
   - `TagButtons` for quick-select tag groups (single-select with destructive style option)
   - `ExternalLinkButton` for buttons that open URLs in new tabs (with optional form submit)
+- **Layout components**:
+  - `VStack` for vertical stacking with spacing and dividers
+  - `HStack` for horizontal stacking with alignment and justify options
+  - `Grid` for responsive grid layouts with breakpoint columns (`[1, 2, 3]`)
+- **Navigation components**:
+  - `Tabs` with `tab` for tabbed navigation (variants: `:line`, `:enclosed`, `:soft-rounded`)
+  - `Breadcrumbs` with `crumb` for hierarchical navigation trails
+  - `Dropdown` with `trigger`, `menu`, `menu_item`, `menu_divider` for action menus
+- **Modal dialogs**:
+  - `Modal` with `modal_footer` for overlay dialogs (sizes: `:sm`, `:md`, `:lg`, `:xl`)
+  - State-driven open/close via `state[:modal_key_open]`
+- **Feedback components**:
+  - `Alert` for static feedback messages (variants: `:info`, `:success`, `:warning`, `:error`)
+  - `ToastContainer` with `show_toast`/`clear_toasts` for stacked notifications
+  - `ProgressBar` for visual progress indicators with variants and animation
+  - `Spinner` for loading indicators with sizes and labels
+- **Event callbacks**:
+  - `on_change` callback for text_field, checkbox, select
+  - `on_blur` callback for text_field, text_area
+  - `debounce:` option for text input callbacks
+- **Custom component modules** via `components:` option on `app`
 - **Layout modes** via `layout:` parameter: `:default` (900px), `:wide` (1100px), `:full` (1400px), `:fluid` (100%)
 - `default:` option for `select` component to set initial value
 - `auto_close_window:` option for `run_once!` to close browser after submit

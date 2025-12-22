@@ -122,6 +122,11 @@ See `examples/` directory for more:
 - `agentic_form.rb` - Agentic mode demo
 - `theme_demo.rb` - Theme switching demo
 - `theme_tweaker.rb` - Visual theme editor
+- `layout_components_demo.rb` - VStack, HStack, Grid layouts
+- `navigation_demo.rb` - Tabs, Breadcrumbs, Dropdown menus
+- `modal_demo.rb` - Modal dialogs
+- `feedback_demo.rb` - Alerts, Toasts, Progress bars, Spinners
+- `events_demo.rb` - Event callbacks (on_change, on_blur)
 
 ## Agentic Mode
 
@@ -228,6 +233,22 @@ columns widths: ['30%', '70%'] do
   end
 end
 
+# Vertical/Horizontal stacking
+vstack spacing: :md do
+  text "Item 1"
+  text "Item 2"
+end
+
+hstack spacing: :sm, justify: :between do
+  button "Cancel", style: :secondary
+  button "Save"
+end
+
+# Responsive grid (1 col mobile, 2 tablet, 3 desktop)
+grid columns: [1, 2, 3], gap: :md do
+  items.each { |item| card { text item.name } }
+end
+
 # Deferred submission forms
 form :edit_user do
   text_field :name
@@ -237,6 +258,78 @@ form :edit_user do
   end
   cancel "Cancel"
 end
+```
+
+### Navigation
+
+```ruby
+# Tabs with persistent state
+tabs :settings do
+  tab "General" do
+    text_field :name
+  end
+  tab "Advanced" do
+    checkbox :debug, "Debug mode"
+  end
+end
+
+# Breadcrumbs
+breadcrumbs do
+  crumb "Home", href: "/"
+  crumb "Products", href: "/products"
+  crumb "Details"  # Current page
+end
+
+# Dropdown menu
+dropdown do
+  trigger { button "Actions" }
+  menu do
+    menu_item "Edit" { |s| s[:editing] = true }
+    menu_divider
+    menu_item "Delete", style: :destructive { |s| s[:items].pop }
+  end
+end
+```
+
+### Modals
+
+```ruby
+button "Open Modal" do |s|
+  s[:confirm_open] = true
+end
+
+modal :confirm, title: "Confirm Action", size: :sm do
+  text "Are you sure?"
+  modal_footer do
+    button "Cancel", style: :secondary do |s|
+      s[:confirm_open] = false
+    end
+    button "Confirm" do |s|
+      # action
+      s[:confirm_open] = false
+    end
+  end
+end
+```
+
+### Feedback
+
+```ruby
+# Alerts
+alert(variant: :success, title: "Saved!") { text "Changes saved." }
+alert(variant: :warning, dismissible: true) { text "Session expiring." }
+
+# Toast notifications
+toast_container position: :top_right
+button "Save" do |s|
+  show_toast("Saved!", variant: :success)
+end
+
+# Progress bar
+progress_bar value: 75, show_label: true, variant: :success
+
+# Spinner
+spinner size: :md, label: "Loading..."
 ```
 
 ### Advanced Components
