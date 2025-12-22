@@ -183,6 +183,75 @@ module StreamWeaver
       def render_checkbox_group(view, key, children, options, state)
         raise NotImplementedError, "#{self.class} must implement #render_checkbox_group"
       end
+
+      # Render a vertical stack container
+      def render_vstack(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_vstack"
+      end
+
+      # Render a horizontal stack container
+      def render_hstack(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_hstack"
+      end
+
+      # Render a responsive grid container
+      def render_grid(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_grid"
+      end
+
+      # =========================================
+      # Navigation component rendering
+      # =========================================
+
+      # Render a tabbed navigation container
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Tabs] The tabs component with children
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_tabs(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_tabs"
+      end
+
+      # Render a breadcrumbs navigation trail
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Breadcrumbs] The breadcrumbs component with children
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_breadcrumbs(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_breadcrumbs"
+      end
+
+      # Render a dropdown menu container
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Dropdown] The dropdown component with trigger and menu
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_dropdown(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_dropdown"
+      end
+
+      protected
+
+      # Convert spacing symbol to CSS value
+      #
+      # @param spacing [Symbol, String] Spacing value (:xs, :sm, :md, :lg, :xl or raw CSS)
+      # @return [String] CSS value
+      def spacing_to_css(spacing)
+        case spacing
+        when :xs then "var(--sw-spacing-xs)"
+        when :sm then "var(--sw-spacing-sm)"
+        when :md then "var(--sw-spacing-md)"
+        when :lg then "var(--sw-spacing-lg)"
+        when :xl then "var(--sw-spacing-xl)"
+        else spacing.to_s
+        end
+      end
     end
   end
 end

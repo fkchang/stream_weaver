@@ -1194,55 +1194,53 @@ module StreamWeaver
         end
       end
 
-      # Render a toast notification
+      # Render a toast container with multiple stacked notifications
+      # Each toast is rendered directly (no Alpine x-for) for reliable HTMX swap behavior
       #
       # @param view [Phlex::HTML] The Phlex view instance
-      # @param component [Toast] The toast component
+      # @param component [ToastContainer] The toast container component
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
-      def render_toast(view, component, state)
-        key = component.key
-        toast_state = state[key] || { visible: false, message: "" }
-        is_visible = toast_state.is_a?(Hash) ? toast_state[:visible] : false
-        message = toast_state.is_a?(Hash) ? toast_state[:message] : ""
-
-        variant_class = "sw-toast-#{component.variant}"
+      def render_toast_container(view, component, state)
         position_class = "sw-toast-#{component.position.to_s.gsub('_', '-')}"
+        toasts = state[:_toasts] || []
+        default_duration = component.duration
 
-        icon = case component.variant
-        when :success then "✓"
-        when :warning then "⚠"
-        when :error then "✕"
-        else "ℹ"
-        end
+        view.div(class: "sw-toast-container #{position_class}") do
+          toasts.each do |toast|
+            toast_id = toast[:id].to_s
+            message = toast[:message].to_s
+            variant = (toast[:variant] || :info).to_s
+            duration = toast[:duration] || default_duration
 
-        # Auto-dismiss logic using Alpine's x-init
-        auto_dismiss = component.duration > 0 ? "setTimeout(() => { visible = false; syncToServer() }, #{component.duration})" : ""
+            icon = case variant.to_sym
+            when :success then "✓"
+            when :warning then "⚠"
+            when :error then "✕"
+            else "ℹ"
+            end
 
-        view.div(
-          class: "sw-toast-container #{position_class}",
-          "x-data" => "{ visible: #{is_visible}, syncToServer() { htmx.ajax('POST', '/update', {target:'#app-container', swap:'innerHTML scroll:false', values:{'#{key}[visible]': 'false'}}) } }",
-          "x-init" => "if(visible) { #{auto_dismiss} }"
-        ) do
-          view.div(
-            class: "sw-toast #{variant_class}",
-            "x-show" => "visible",
-            "x-cloak" => true,
-            "x-transition:enter" => "sw-transition-toast-enter",
-            "x-transition:enter-start" => "sw-transition-toast-enter-start",
-            "x-transition:enter-end" => "sw-transition-toast-enter-end",
-            "x-transition:leave" => "sw-transition-toast-leave",
-            "x-transition:leave-start" => "sw-transition-toast-leave-start",
-            "x-transition:leave-end" => "sw-transition-toast-leave-end"
-          ) do
-            view.span(class: "sw-toast-icon") { icon }
-            view.span(class: "sw-toast-message") { message }
-            view.button(
-              type: "button",
-              class: "sw-toast-dismiss",
-              "@click" => "visible = false; syncToServer()",
-              "aria-label" => "Dismiss"
-            ) { "×" }
+            # Each toast has its own Alpine scope for dismiss + auto-dismiss
+            auto_dismiss = duration > 0 ? "setTimeout(() => dismiss(), #{duration})" : ""
+
+            view.div(
+              class: "sw-toast sw-toast-#{variant}",
+              "x-data" => "{ show: true, dismiss() { this.show = false; htmx.ajax('POST', '/toast/dismiss/#{toast_id}', {target:'#app-container', swap:'none'}); } }",
+              "x-show" => "show",
+              "x-init" => auto_dismiss,
+              "x-transition:leave" => "sw-transition-toast-leave",
+              "x-transition:leave-start" => "sw-transition-toast-leave-start",
+              "x-transition:leave-end" => "sw-transition-toast-leave-end"
+            ) do
+              view.span(class: "sw-toast-icon") { icon }
+              view.span(class: "sw-toast-message") { message }
+              view.button(
+                type: "button",
+                class: "sw-toast-dismiss",
+                "@click" => "dismiss()",
+                "aria-label" => "Dismiss"
+              ) { "×" }
+            end
           end
         end
       end

@@ -1011,12 +1011,17 @@ module StreamWeaver
                 .sw-alert-error .sw-alert-icon { color: #ef4444; }
 
                 /* ===========================================
-                   Toast Component
+                   Toast Component (Multi-toast Stack)
                    =========================================== */
                 .sw-toast-container {
                   position: fixed;
                   z-index: 1100;
                   pointer-events: none;
+                  display: flex;
+                  flex-direction: column;
+                  gap: var(--sw-spacing-sm);
+                  max-height: 100vh;
+                  overflow: hidden;
                 }
 
                 .sw-toast-container > * {
@@ -1025,8 +1030,8 @@ module StreamWeaver
 
                 .sw-toast-top-right { top: var(--sw-spacing-lg); right: var(--sw-spacing-lg); }
                 .sw-toast-top-left { top: var(--sw-spacing-lg); left: var(--sw-spacing-lg); }
-                .sw-toast-bottom-right { bottom: var(--sw-spacing-lg); right: var(--sw-spacing-lg); }
-                .sw-toast-bottom-left { bottom: var(--sw-spacing-lg); left: var(--sw-spacing-lg); }
+                .sw-toast-bottom-right { bottom: var(--sw-spacing-lg); right: var(--sw-spacing-lg); flex-direction: column-reverse; }
+                .sw-toast-bottom-left { bottom: var(--sw-spacing-lg); left: var(--sw-spacing-lg); flex-direction: column-reverse; }
 
                 .sw-toast {
                   display: flex;

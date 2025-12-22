@@ -38,6 +38,58 @@ module StreamWeaver
       # Create adapter instance (Alpine.js by default)
       set :adapter, Adapter::AlpineJS.new
 
+      # Helper methods for state synchronization
+      helpers do
+        # Coerce a form parameter value to the appropriate Ruby type
+        def coerce_param_value(value, current_value)
+          case
+          when value.is_a?(Array) then value
+          when value == "on" || value == "true" then true
+          when value == "false" then false
+          when current_value.is_a?(Array) then Array(value)
+          else value
+          end
+        end
+
+        # Sync form params to state hash
+        def sync_params_to_state(state, excluded_keys: [])
+          excluded = %w[splat captures] + excluded_keys.map(&:to_s)
+
+          params.each do |key, value|
+            next if excluded.include?(key)
+            state[key.to_sym] = coerce_param_value(value, state[key.to_sym])
+          end
+        end
+
+        # Set unchecked checkboxes to false (they don't send params)
+        def handle_unchecked_checkboxes(state, components)
+          self.class.collect_input_keys(components).each do |key|
+            component = self.class.find_component_by_key(components, key)
+            if component.is_a?(Components::Checkbox) && !params.key?(key.to_s)
+              state[key] = false
+            end
+          end
+        end
+
+        # Render error page for debugging
+        def render_error(route_name, error)
+          File.open("/tmp/streamweaver_error.log", "a") do |f|
+            f.puts "#{Time.now} POST #{route_name} error: #{error.class}: #{error.message}"
+            f.puts error.backtrace.first(10).join("\n")
+            f.puts "---"
+          end
+          status 500
+          content_type 'text/html'
+          <<~HTML
+            <div style="color: red; padding: 1rem; border: 1px solid red; margin: 1rem; font-family: monospace;">
+              <h3>Error in #{route_name}</h3>
+              <p><strong>#{error.class}:</strong> #{Rack::Utils.escape_html(error.message)}</p>
+              <pre style="background: #f5f5f5; padding: 0.5rem; overflow-x: auto;">#{Rack::Utils.escape_html(error.backtrace.first(15).join("\n"))}</pre>
+            </div>
+          HTML
+        end
+      end
+
       # Define routes
       get '/' do
         # For agentic mode, always start with fresh state
@@ -70,63 +122,15 @@ module StreamWeaver
           adapter = settings.adapter
           is_agentic = settings.respond_to?(:result_container)
 
-          # First, rebuild to get all current input component keys
           streamlit_app.rebuild_with_state(state)
-          input_keys = self.class.collect_input_keys(streamlit_app.components)
-
-          # Update state with posted params
-          params.each do |key, value|
-            next if ['splat', 'captures'].include?(key)
-
-            key_sym = key.to_sym
-
-            # Convert checkbox/checkbox_group values
-            # Rack combines duplicate keys into an array (for checkbox_group)
-            if value.is_a?(Array)
-              # checkbox_group sends array of selected values
-              state[key_sym] = value
-            elsif value == "on" || value == "true"
-              state[key_sym] = true
-            elsif value == "false"
-              state[key_sym] = false
-            elsif state[key_sym].is_a?(Array)
-              # Preserve array type for checkbox_group
-              # Value comes as array when multiple checkboxes checked, string when one
-              state[key_sym] = Array(value)
-            else
-              state[key_sym] = value
-            end
-          end
-
-          # Handle unchecked checkboxes (they don't send params when unchecked)
-          input_keys.each do |key|
-            component = self.class.find_component_by_key(streamlit_app.components, key)
-            if component.is_a?(Components::Checkbox) && !params.key?(key.to_s)
-              state[key] = false
-            end
-          end
-
+          sync_params_to_state(state)
+          handle_unchecked_checkboxes(state, streamlit_app.components)
           session[:streamlit_state] = state
 
-          # Re-render with new state
           streamlit_app.rebuild_with_state(state)
           Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
         rescue => e
-          File.open("/tmp/streamweaver_error.log", "a") do |f|
-            f.puts "#{Time.now} POST /update error: #{e.class}: #{e.message}"
-            f.puts e.backtrace.first(10).join("\n")
-            f.puts "---"
-          end
-          # Return error details in response for debugging
-          status 500
-          content_type 'text/html'
-          <<~HTML
-            <div style="color: red; padding: 1rem; border: 1px solid red; margin: 1rem; font-family: monospace;">
-              <h3>Error in /update</h3>
-              <p><strong>#{e.class}:</strong> #{Rack::Utils.escape_html(e.message)}</p>
-              <pre style="background: #f5f5f5; padding: 0.5rem; overflow-x: auto;">#{Rack::Utils.escape_html(e.backtrace.first(15).join("\n"))}</pre>
-            </div>
-          HTML
+          render_error("/update", e)
         end
       end
 
@@ -139,37 +143,9 @@ module StreamWeaver
           adapter = settings.adapter
           is_agentic = settings.respond_to?(:result_container)
 
-          # First, rebuild to get all current input component keys
           streamlit_app.rebuild_with_state(state)
-
-          # Collect all input component keys
-          input_keys = self.class.collect_input_keys(streamlit_app.components)
-
-          # Sync Alpine.js state from form inputs
-          params.each do |key, value|
-            next if ['splat', 'captures', 'button_id'].include?(key)
-
-            key_sym = key.to_sym
-
-            # Convert checkbox values
-            if value == "on"
-              state[key_sym] = true
-            elsif state[key_sym].is_a?(Array)
-              # Preserve array type for checkbox_group
-              state[key_sym] = Array(value)
-            else
-              state[key_sym] = value
-            end
-          end
-
-          # Handle unchecked checkboxes (they don't send params)
-          input_keys.each do |key|
-            # If it's a checkbox component and wasn't in params, set to false
-            component = self.class.find_component_by_key(streamlit_app.components, key)
-            if component.is_a?(Components::Checkbox) && !params.key?(key.to_s)
-              state[key] = false
-            end
-          end
+          sync_params_to_state(state, excluded_keys: [:button_id])
+          handle_unchecked_checkboxes(state, streamlit_app.components)
 
           # Find and execute the button action
           button = self.class.find_button_recursive(streamlit_app.components, button_id)
@@ -178,25 +154,10 @@ module StreamWeaver
             session[:streamlit_state] = state
           end
 
-          # Re-render with updated state
           streamlit_app.rebuild_with_state(state)
           Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
         rescue => e
-          File.open("/tmp/streamweaver_error.log", "a") do |f|
-            f.puts "#{Time.now} POST /action/#{params[:button_id]} error: #{e.class}: #{e.message}"
-            f.puts e.backtrace.first(10).join("\n")
-            f.puts "---"
-          end
-          # Return error details in response for debugging
-          status 500
-          content_type 'text/html'
-          <<~HTML
-            <div style="color: red; padding: 1rem; border: 1px solid red; margin: 1rem; font-family: monospace;">
-              <h3>Error in /action/#{params[:button_id]}</h3>
-              <p><strong>#{e.class}:</strong> #{Rack::Utils.escape_html(e.message)}</p>
-              <pre style="background: #f5f5f5; padding: 0.5rem; overflow-x: auto;">#{Rack::Utils.escape_html(e.backtrace.first(15).join("\n"))}</pre>
-            </div>
-          HTML
+          render_error("/action/#{params[:button_id]}", e)
         end
       end
 
@@ -205,39 +166,13 @@ module StreamWeaver
         state = session[:streamlit_state] ||= {}
         streamlit_app = settings.streamlit_app
 
-        # Rebuild to get current component structure
         streamlit_app.rebuild_with_state(state)
-
-        # Collect all input component keys
-        input_keys = self.class.collect_input_keys(streamlit_app.components)
-
-        # Sync Alpine.js state from form inputs (same as button action)
-        params.each do |key, value|
-          next if ['splat', 'captures'].include?(key)
-
-          key_sym = key.to_sym
-
-          # Convert checkbox values
-          if value == "on"
-            state[key_sym] = true
-          elsif state[key_sym].is_a?(Array)
-            # Preserve array type for checkbox_group
-            state[key_sym] = Array(value)
-          else
-            state[key_sym] = value
-          end
-        end
-
-        # Handle unchecked checkboxes
-        input_keys.each do |key|
-          component = self.class.find_component_by_key(streamlit_app.components, key)
-          if component.is_a?(Components::Checkbox) && !params.key?(key.to_s)
-            state[key] = false
-          end
-        end
-
-        # Update session
+        sync_params_to_state(state)
+        handle_unchecked_checkboxes(state, streamlit_app.components)
         session[:streamlit_state] = state
+
+        # Collect input keys for filtering the result
+        input_keys = self.class.collect_input_keys(streamlit_app.components)
 
         # Filter result to only include keys from input components
         filtered_result = {}
@@ -275,6 +210,36 @@ module StreamWeaver
         else
           # Show confirmation message without auto-close
           "<html><body><h1>✅ Submitted!</h1><p>Data has been sent to the agent. You can close this window.</p></body></html>"
+        end
+      end
+
+      # Event callback endpoint for on_change/on_blur handlers
+      post '/event/:key' do
+        begin
+          key = params[:key].to_sym
+          state = session[:streamlit_state] ||= {}
+          streamlit_app = settings.streamlit_app
+          adapter = settings.adapter
+          is_agentic = settings.respond_to?(:result_container)
+
+          streamlit_app.rebuild_with_state(state)
+          sync_params_to_state(state, excluded_keys: [:key])
+          handle_unchecked_checkboxes(state, streamlit_app.components)
+
+          # Find the component and execute callbacks
+          new_value = state[key]
+          component = self.class.find_component_by_key(streamlit_app.components, key)
+          if component
+            component.execute_on_change(state, new_value) if component.respond_to?(:execute_on_change)
+            component.execute_on_blur(state, new_value) if component.respond_to?(:execute_on_blur)
+          end
+
+          session[:streamlit_state] = state
+
+          streamlit_app.rebuild_with_state(state)
+          Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+        rescue => e
+          render_error("/event/#{params[:key]}", e)
         end
       end
 
@@ -318,22 +283,25 @@ module StreamWeaver
           streamlit_app.rebuild_with_state(state)
           Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
         rescue => e
-          File.open("/tmp/streamweaver_error.log", "a") do |f|
-            f.puts "#{Time.now} POST /form/#{params[:form_name]} error: #{e.class}: #{e.message}"
-            f.puts e.backtrace.first(10).join("\n")
-            f.puts "---"
-          end
-          # Return error details in response for debugging
-          status 500
-          content_type 'text/html'
-          <<~HTML
-            <div style="color: red; padding: 1rem; border: 1px solid red; margin: 1rem; font-family: monospace;">
-              <h3>Error in /form/#{params[:form_name]}</h3>
-              <p><strong>#{e.class}:</strong> #{Rack::Utils.escape_html(e.message)}</p>
-              <pre style="background: #f5f5f5; padding: 0.5rem; overflow-x: auto;">#{Rack::Utils.escape_html(e.backtrace.first(15).join("\n"))}</pre>
-            </div>
-          HTML
+          render_error("/form/#{params[:form_name]}", e)
         end
+      end
+
+      # Toast dismiss endpoint (called when a toast is closed client-side)
+      post '/toast/dismiss/:toast_id' do
+        state = session[:streamlit_state] ||= {}
+        toast_id = params[:toast_id]
+
+        # Remove the toast from state
+        if state[:_toasts].is_a?(Array)
+          state[:_toasts].reject! { |t| t[:id] == toast_id }
+        end
+
+        session[:streamlit_state] = state
+
+        # Return empty response (swap: none means no DOM update needed)
+        status 204
+        ""
       end
 
       # Return the class itself (it's the Rack app)
@@ -351,6 +319,12 @@ module StreamWeaver
 
         if component.respond_to?(:children) && component.children
           found = find_button_recursive(component.children, button_id)
+          return found if found
+        end
+
+        # Also search modal footer if present
+        if component.is_a?(Components::Modal) && component.footer_component&.children
+          found = find_button_recursive(component.footer_component.children, button_id)
           return found if found
         end
       end
