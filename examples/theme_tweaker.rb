@@ -8,7 +8,7 @@ require_relative "../lib/stream_weaver"
 # Note: Edit values in the controls, then click "Update Preview" to see changes.
 # This avoids flashing from constant re-renders on every keystroke.
 
-app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :fluid) do
+app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :fluid, theme: :dashboard) do
   # Initialize state
   state[:theme_name] ||= "my_custom_theme"
   state[:base_theme] ||= "default"
@@ -148,24 +148,6 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :fluid) do
                 radius_md: s[:radius_md],
                 card_border_left: s[:card_border_left]
               }
-            end
-
-            button "Reset", style: :secondary do |s|
-              # Reset form fields to current preview values
-              pv = s[:preview]
-              s[:font_family] = pv[:font_family]
-              s[:font_size_base] = pv[:font_size_base]
-              s[:line_height] = pv[:line_height]
-              s[:color_primary] = pv[:color_primary]
-              s[:color_primary_hover] = pv[:color_primary_hover]
-              s[:color_text] = pv[:color_text]
-              s[:color_text_muted] = pv[:color_text_muted]
-              s[:color_bg] = pv[:color_bg]
-              s[:color_bg_card] = pv[:color_bg_card]
-              s[:color_border] = pv[:color_border]
-              s[:spacing_md] = pv[:spacing_md]
-              s[:radius_md] = pv[:radius_md]
-              s[:card_border_left] = pv[:card_border_left]
             end
           end
         end
