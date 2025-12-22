@@ -290,17 +290,13 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :fluid, theme:
           end
         end
 
-        # Form elements stacked to show spacing
+        # Form elements stacked to show spacing (submit: false to prevent HTMX flashing)
         header3 "Form Elements"
         vstack do
-          text_field :preview_name, placeholder: "Name"
-          text_field :preview_email, placeholder: "Email"
-          select :preview_role, %w[Admin User Guest]
-          checkbox :preview_active, "Active account"
-          hstack do
-            button "Submit"
-            button "Cancel", style: :secondary
-          end
+          text_field :preview_name, placeholder: "Name", submit: false
+          text_field :preview_email, placeholder: "Email", submit: false
+          select :preview_role, %w[Admin User Guest], submit: false
+          checkbox :preview_active, "Active account", submit: false
         end
 
         # Alerts stacked

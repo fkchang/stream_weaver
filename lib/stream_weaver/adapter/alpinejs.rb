@@ -126,6 +126,7 @@ module StreamWeaver
       # @return [void] Renders to view
       def render_checkbox(view, key, label, options, state)
         form_context = options[:form_context]
+        should_submit = options.fetch(:submit, true)
 
         if form_context
           # Inside form: use form-scoped x-model, no HTMX
@@ -141,7 +142,7 @@ module StreamWeaver
             )
             view.plain " #{label}"
           end
-        else
+        elsif should_submit
           # Use /event endpoint if there's a callback
           has_on_change = options[:on_change]
           endpoint = has_on_change ? "/event/#{key}" : "/update"
@@ -161,6 +162,18 @@ module StreamWeaver
             )
             view.plain " #{label}"
           end
+        else
+          # No auto-submit: just Alpine.js binding, no HTMX
+          view.label do
+            view.input(
+              type: "checkbox",
+              name: key.to_s,
+              value: "true",
+              checked: state[key],
+              "x-model" => key.to_s
+            )
+            view.plain " #{label}"
+          end
         end
       end
 
@@ -176,6 +189,7 @@ module StreamWeaver
       # @return [void] Renders to view
       def render_select(view, key, choices, options, state)
         form_context = options[:form_context]
+        should_submit = options.fetch(:submit, true)
 
         if form_context
           # Inside form: use form-scoped x-model, no HTMX
@@ -194,7 +208,7 @@ module StreamWeaver
               ) { choice }
             end
           end
-        else
+        elsif should_submit
           # Use /event endpoint if there's a callback
           has_on_change = options[:on_change]
           endpoint = has_on_change ? "/event/#{key}" : "/update"
@@ -208,6 +222,21 @@ module StreamWeaver
             "hx-target" => "#app-container",
             "hx-swap" => "innerHTML scroll:false",
             "hx-trigger" => "change"
+          ) do
+            choices.each do |choice|
+              view.option(
+                value: choice,
+                selected: current_value == choice
+              ) { choice }
+            end
+          end
+        else
+          # No auto-submit: just Alpine.js binding, no HTMX
+          current_value = state[key] || options[:default]
+
+          view.select(
+            name: key.to_s,
+            "x-model" => key.to_s
           ) do
             choices.each do |choice|
               view.option(
