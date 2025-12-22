@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Multi-theme system** with three built-in themes:
+  - `:default` - Warm Industrial (Source Sans 3, 17px, generous spacing)
+  - `:dashboard` - Data Dense (15px, tighter spacing, minimal accents)
+  - `:document` - Reading Mode (Crimson Pro serif, 19px, paper background)
+- **Custom theme registration** via `StreamWeaver.register_theme`
+- **Runtime theme switching** via `theme_switcher` component
+- **Theme Tweaker app** (`examples/theme_tweaker.rb`) - Visual theme editor with live preview and export
+- **`submit: false` option** for form components to disable HTMX auto-submit:
+  - `text_field :key, submit: false`
+  - `checkbox :key, "Label", submit: false`
+  - `select :key, choices, submit: false`
+  - `button "Label", submit: false` (display-only button)
 - **Adapter pattern** for rendering - `StreamWeaver::Adapter::AlpineJS` handles all framework-specific rendering
 - **New components**:
   - `Markdown` / `md` - Full GitHub Flavored Markdown via Kramdown

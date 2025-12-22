@@ -81,6 +81,7 @@ gem 'stream_weaver'
 - **Automatic State Management** - Session-based state with Alpine.js frontend sync
 - **Zero Configuration** - Auto port detection, browser opening, graceful shutdown
 - **Layout Modes** - Configurable container widths (`:default`, `:wide`, `:full`, `:fluid`)
+- **Theming** - Built-in themes (`:default`, `:dashboard`, `:document`) + custom theme registration
 - **Token Efficient** - 10-50x fewer tokens than HTML/React for GenAI generation
 - **Full Markdown Support** - GitHub Flavored Markdown via Kramdown
 - **Cross-Platform** - Works on macOS, Linux, Windows
@@ -119,6 +120,8 @@ See `examples/` directory for more:
 - `checkbox_group_demo.rb` - Batch selection with select all/none
 - `markdown_demo.rb` - Full GFM markdown demo
 - `agentic_form.rb` - Agentic mode demo
+- `theme_demo.rb` - Theme switching demo
+- `theme_tweaker.rb` - Visual theme editor
 
 ## Agentic Mode
 
@@ -281,6 +284,40 @@ end
 
 # Layout options: :default (900px), :wide (1100px), :full (1400px), :fluid (100%)
 ```
+
+### Theming
+
+```ruby
+# Use built-in themes
+app "Dashboard", theme: :dashboard do    # Data-dense theme
+  # components...
+end
+
+app "Document", theme: :document do      # Reading-optimized theme
+  # components...
+end
+
+# Register custom themes
+StreamWeaver.register_theme :corporate, {
+  color_primary: "#0066cc",
+  font_family: "'Inter', system-ui, sans-serif",
+  spacing_md: "1rem"
+}, base: :dashboard, label: "Corporate", description: "Brand theme"
+
+app "My App", theme: :corporate do
+  # components...
+end
+
+# Runtime theme switching
+app "App" do
+  theme_switcher  # Dropdown to switch themes live
+end
+```
+
+**Built-in themes:**
+- `:default` - Warm Industrial (Source Sans 3, 17px, generous spacing)
+- `:dashboard` - Data Dense (15px font, tighter spacing, minimal accents)
+- `:document` - Reading Mode (Crimson Pro serif, 19px, paper background)
 
 ### `run!(options)`
 
