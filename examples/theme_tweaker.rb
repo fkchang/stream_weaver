@@ -87,68 +87,89 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :fluid) do
           text "Base Theme"
           select :base_theme, %w[default dashboard document]
 
-          button "Load Base Theme", style: :secondary do |s|
-            # Reset to base theme defaults
-            case s[:base_theme]
-            when "default"
-              s[:font_family] = "'Source Sans 3', system-ui, sans-serif"
-              s[:font_size_base] = "17px"
-              s[:line_height] = "1.7"
-              s[:color_primary] = "#c2410c"
-              s[:color_primary_hover] = "#9a3412"
-              s[:color_text] = "#111111"
-              s[:color_text_muted] = "#444444"
-              s[:color_bg] = "#f8f8f8"
-              s[:color_bg_card] = "#ffffff"
-              s[:color_border] = "#e0e0e0"
-              s[:spacing_md] = "1.25rem"
-              s[:radius_md] = "6px"
-              s[:card_border_left] = "3px solid #c2410c"
-            when "dashboard"
-              s[:font_family] = "'Source Sans 3', system-ui, sans-serif"
-              s[:font_size_base] = "15px"
-              s[:line_height] = "1.5"
-              s[:color_primary] = "#c2410c"
-              s[:color_primary_hover] = "#9a3412"
-              s[:color_text] = "#111111"
-              s[:color_text_muted] = "#555555"
-              s[:color_bg] = "#fafafa"
-              s[:color_bg_card] = "#ffffff"
-              s[:color_border] = "#e5e5e5"
-              s[:spacing_md] = "0.875rem"
-              s[:radius_md] = "4px"
-              s[:card_border_left] = "1px solid #e5e5e5"
-            when "document"
-              s[:font_family] = "'Crimson Pro', Georgia, serif"
-              s[:font_size_base] = "19px"
-              s[:line_height] = "1.85"
-              s[:color_primary] = "#6b7280"
-              s[:color_primary_hover] = "#4b5563"
-              s[:color_text] = "#1a1a1a"
-              s[:color_text_muted] = "#4a4a4a"
-              s[:color_bg] = "#faf8f5"
-              s[:color_bg_card] = "#ffffff"
-              s[:color_border] = "#e8e4df"
-              s[:spacing_md] = "1.5rem"
-              s[:radius_md] = "8px"
-              s[:card_border_left] = "none"
+          hstack do
+            button "Load Base Theme", style: :secondary do |s|
+              # Reset to base theme defaults (convert to string for comparison)
+              base = s[:base_theme].to_s
+              case base
+              when "default"
+                s[:font_family] = "'Source Sans 3', system-ui, sans-serif"
+                s[:font_size_base] = "17px"
+                s[:line_height] = "1.7"
+                s[:color_primary] = "#c2410c"
+                s[:color_primary_hover] = "#9a3412"
+                s[:color_text] = "#111111"
+                s[:color_text_muted] = "#444444"
+                s[:color_bg] = "#f8f8f8"
+                s[:color_bg_card] = "#ffffff"
+                s[:color_border] = "#e0e0e0"
+                s[:spacing_md] = "1.25rem"
+                s[:radius_md] = "6px"
+                s[:card_border_left] = "3px solid #c2410c"
+              when "dashboard"
+                s[:font_family] = "'Source Sans 3', system-ui, sans-serif"
+                s[:font_size_base] = "15px"
+                s[:line_height] = "1.5"
+                s[:color_primary] = "#c2410c"
+                s[:color_primary_hover] = "#9a3412"
+                s[:color_text] = "#111111"
+                s[:color_text_muted] = "#555555"
+                s[:color_bg] = "#fafafa"
+                s[:color_bg_card] = "#ffffff"
+                s[:color_border] = "#e5e5e5"
+                s[:spacing_md] = "0.875rem"
+                s[:radius_md] = "4px"
+                s[:card_border_left] = "1px solid #e5e5e5"
+              when "document"
+                s[:font_family] = "'Crimson Pro', Georgia, serif"
+                s[:font_size_base] = "19px"
+                s[:line_height] = "1.85"
+                s[:color_primary] = "#6b7280"
+                s[:color_primary_hover] = "#4b5563"
+                s[:color_text] = "#1a1a1a"
+                s[:color_text_muted] = "#4a4a4a"
+                s[:color_bg] = "#faf8f5"
+                s[:color_bg_card] = "#ffffff"
+                s[:color_border] = "#e8e4df"
+                s[:spacing_md] = "1.5rem"
+                s[:radius_md] = "8px"
+                s[:card_border_left] = "none"
+              end
+              # Also update preview immediately
+              s[:preview] = {
+                font_family: s[:font_family],
+                font_size_base: s[:font_size_base],
+                line_height: s[:line_height],
+                color_primary: s[:color_primary],
+                color_primary_hover: s[:color_primary_hover],
+                color_text: s[:color_text],
+                color_text_muted: s[:color_text_muted],
+                color_bg: s[:color_bg],
+                color_bg_card: s[:color_bg_card],
+                color_border: s[:color_border],
+                spacing_md: s[:spacing_md],
+                radius_md: s[:radius_md],
+                card_border_left: s[:card_border_left]
+              }
             end
-            # Also update preview immediately
-            s[:preview] = {
-              font_family: s[:font_family],
-              font_size_base: s[:font_size_base],
-              line_height: s[:line_height],
-              color_primary: s[:color_primary],
-              color_primary_hover: s[:color_primary_hover],
-              color_text: s[:color_text],
-              color_text_muted: s[:color_text_muted],
-              color_bg: s[:color_bg],
-              color_bg_card: s[:color_bg_card],
-              color_border: s[:color_border],
-              spacing_md: s[:spacing_md],
-              radius_md: s[:radius_md],
-              card_border_left: s[:card_border_left]
-            }
+
+            button "Reset", style: :secondary do |s|
+              # Reset form fields to current preview values
+              pv = s[:preview]
+              s[:font_family] = pv[:font_family]
+              s[:font_size_base] = pv[:font_size_base]
+              s[:line_height] = pv[:line_height]
+              s[:color_primary] = pv[:color_primary]
+              s[:color_primary_hover] = pv[:color_primary_hover]
+              s[:color_text] = pv[:color_text]
+              s[:color_text_muted] = pv[:color_text_muted]
+              s[:color_bg] = pv[:color_bg]
+              s[:color_bg_card] = pv[:color_bg_card]
+              s[:color_border] = pv[:color_border]
+              s[:spacing_md] = pv[:spacing_md]
+              s[:radius_md] = pv[:radius_md]
+              s[:card_border_left] = pv[:card_border_left]
+            end
           end
         end
       end
