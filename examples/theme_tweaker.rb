@@ -297,6 +297,10 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :fluid, theme:
           text_field :preview_email, placeholder: "Email", submit: false
           select :preview_role, %w[Admin User Guest], submit: false
           checkbox :preview_active, "Active account", submit: false
+          hstack do
+            button "Submit", submit: false
+            button "Cancel", style: :secondary, submit: false
+          end
         end
 
         # Alerts stacked

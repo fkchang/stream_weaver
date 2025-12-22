@@ -377,8 +377,15 @@ module StreamWeaver
       # @return [void] Renders to view
       def render_button(view, button_id, label, options, modal_context = nil)
         style_class = options[:style] == :secondary ? "secondary" : "primary"
+        should_submit = options.fetch(:submit, true)
 
-        if modal_context
+        if !should_submit
+          # Display-only button: no HTMX, just visual
+          view.button(
+            type: "button",
+            class: "btn btn-#{style_class}"
+          ) { label }
+        elsif modal_context
           # Inside a modal: close via Alpine before HTMX request fires
           # hx-on::before-request runs before HTMX sends, allowing Alpine to close modal
           view.button(
