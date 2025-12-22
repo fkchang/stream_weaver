@@ -241,35 +241,77 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :fluid, theme:
       div(style: preview_style) do
         header2 "Live Preview"
 
-        text "This preview reflects your current theme settings. Click 'Update Preview' after making changes."
+        text "Compare spacing, font size, and density between themes."
 
-        header3 "Typography"
-        text "Regular paragraph text demonstrating the body font styling. The quick brown fox jumps over the lazy dog. Notice the font family, size, and line height."
-
-        header3 "Card Component"
-
-        card do
-          card_header "Sample Card Title"
-          card_body do
-            text "Card content demonstrating border, background, and spacing styles."
-
-            hstack do
-              button "Primary Button"
-              button "Secondary", style: :secondary
+        # Data metrics row - shows density differences
+        header3 "Data Metrics"
+        grid cols: 3 do
+          card do
+            card_body do
+              text "Users"
+              header3 "1,234"
+              text "+12% from last week"
+            end
+          end
+          card do
+            card_body do
+              text "Revenue"
+              header3 "$45.6K"
+              text "+8% from last week"
+            end
+          end
+          card do
+            card_body do
+              text "Orders"
+              header3 "892"
+              text "+23% from last week"
             end
           end
         end
 
-        header3 "Form Elements"
-        text_field :preview_input, placeholder: "Sample text input"
-        checkbox :preview_checkbox, "Sample checkbox option"
+        # Typography comparison
+        header3 "Typography & Spacing"
+        text "Regular paragraph text. Notice how font size and line height affect readability and density."
+        text "A second paragraph shows vertical spacing between text blocks. Dashboard theme uses tighter spacing for data scanning."
 
+        # Cards with different content
+        header3 "Card Borders"
+        hstack do
+          card do
+            card_header "Card with Header"
+            card_body do
+              text "Notice the left border accent style."
+            end
+          end
+          card do
+            card_body do
+              text "Card without header, just body content with padding."
+            end
+          end
+        end
+
+        # Form elements stacked to show spacing
+        header3 "Form Elements"
+        vstack do
+          text_field :preview_name, placeholder: "Name"
+          text_field :preview_email, placeholder: "Email"
+          select :preview_role, %w[Admin User Guest]
+          checkbox :preview_active, "Active account"
+          hstack do
+            button "Submit"
+            button "Cancel", style: :secondary
+          end
+        end
+
+        # Alerts stacked
         header3 "Alerts"
-        alert(variant: :info) { text "This is an info alert message." }
-        alert(variant: :success) { text "Success! Operation completed." }
+        alert(variant: :info) { text "Info message" }
+        alert(variant: :success) { text "Success message" }
+        alert(variant: :warning) { text "Warning message" }
 
         header3 "Progress"
         progress_bar value: 65, show_label: true
+        progress_bar value: 30, variant: :success
       end
 
       # Export code display
