@@ -45,6 +45,48 @@ Available modes:
 - `:full` — 1400px container (desktop displays)
 - `:fluid` — 100% width (full browser width with padding)
 
+#### Theming
+
+Control visual density and styling with the `theme:` parameter:
+
+```ruby
+app "Dashboard", theme: :dashboard do
+  # Data-dense UI with tighter spacing
+end
+
+app "Article", theme: :document do
+  # Reading-optimized with serif font
+end
+```
+
+Built-in themes:
+- `:default` — Warm Industrial (Source Sans 3, 17px, generous spacing)
+- `:dashboard` — Data Dense (15px, tighter spacing, minimal card accents)
+- `:document` — Reading Mode (Crimson Pro serif, 19px, paper background)
+
+Custom themes:
+
+```ruby
+# Register before creating app
+StreamWeaver.register_theme :corporate, {
+  color_primary: "#0066cc",
+  font_family: "'Inter', system-ui, sans-serif",
+  spacing_md: "1rem"
+}, base: :dashboard, label: "Corporate", description: "Brand theme"
+
+app "My App", theme: :corporate do
+  # Uses custom theme
+end
+```
+
+Runtime theme switching:
+
+```ruby
+app "App" do
+  theme_switcher  # Dropdown to switch themes live
+end
+```
+
 ### 2. State
 State is a hash accessed via `state[:key]`. Components automatically bind to state keys. State persists across re-renders.
 
@@ -115,6 +157,9 @@ markdown "Same as md"                  # Alias for md
 ```ruby
 text_field :key, placeholder: "Hint text"
 text_area :key, placeholder: "Multi-line", rows: 5
+
+# Disable auto-submit (for display-only or manual submission)
+text_field :key, placeholder: "Edit me", submit: false
 ```
 
 ### Selection
@@ -128,6 +173,9 @@ select :priority, ["Low", "Medium", "High"], default: "Medium"
 
 # Radio buttons (all options visible)
 radio_group :answer, ["Option A", "Option B", "Option C"]
+
+# Disable auto-submit
+select :role, ["Admin", "User"], submit: false
 ```
 
 ### Boolean
@@ -135,6 +183,9 @@ radio_group :answer, ["Option A", "Option B", "Option C"]
 ```ruby
 checkbox :agree, "I accept the terms"
 # state[:agree] will be true/false
+
+# Disable auto-submit
+checkbox :preview_flag, "Show preview", submit: false
 ```
 
 ### Checkbox Group (Multi-Select with Select All/None)
@@ -163,6 +214,10 @@ end
 button "Secondary", style: :secondary do |state|
   # Secondary styling
 end
+
+# Display-only button (no server request, for previews)
+button "Preview Button", submit: false
+button "Cancel", style: :secondary, submit: false
 ```
 
 ### Layout Containers
@@ -462,14 +517,14 @@ Pattern for agentic wizards:
 
 ## CSS Customization
 
-### Default Theme
-StreamWeaver uses a "Warm Industrial" theme with:
-- **Font**: Source Sans 3 (humanist sans-serif for readability)
-- **Primary color**: Terracotta (#c2410c)
-- **Base font size**: 17px with 1.7 line-height
+### Built-in Themes
+StreamWeaver includes three themes (see Theming section above):
+- `:default` — Warm Industrial (Source Sans 3, 17px, generous spacing)
+- `:dashboard` — Data Dense (15px, tighter spacing)
+- `:document` — Reading Mode (Crimson Pro serif, 19px)
 
 ### CSS Variables
-Override theme via CSS custom properties:
+Override any theme via CSS custom properties or `theme_overrides:`:
 
 ```css
 :root {
