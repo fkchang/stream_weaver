@@ -50,26 +50,23 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :fluid) do
 
   hstack(justify: :between, align: :center) do
     header1 "Theme Tweaker"
-    hstack do
-      button "Update Preview" do |s|
-        # Copy form values to preview
-        s[:preview] = {
-          font_family: s[:font_family],
-          font_size_base: s[:font_size_base],
-          line_height: s[:line_height],
-          color_primary: s[:color_primary],
-          color_primary_hover: s[:color_primary_hover],
-          color_text: s[:color_text],
-          color_text_muted: s[:color_text_muted],
-          color_bg: s[:color_bg],
-          color_bg_card: s[:color_bg_card],
-          color_border: s[:color_border],
-          spacing_md: s[:spacing_md],
-          radius_md: s[:radius_md],
-          card_border_left: s[:card_border_left]
-        }
-      end
-      theme_switcher
+    button "Update Preview" do |s|
+      # Copy form values to preview
+      s[:preview] = {
+        font_family: s[:font_family],
+        font_size_base: s[:font_size_base],
+        line_height: s[:line_height],
+        color_primary: s[:color_primary],
+        color_primary_hover: s[:color_primary_hover],
+        color_text: s[:color_text],
+        color_text_muted: s[:color_text_muted],
+        color_bg: s[:color_bg],
+        color_bg_card: s[:color_bg_card],
+        color_border: s[:color_border],
+        spacing_md: s[:spacing_md],
+        radius_md: s[:radius_md],
+        card_border_left: s[:card_border_left]
+      }
     end
   end
 
