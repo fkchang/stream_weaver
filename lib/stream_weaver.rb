@@ -25,21 +25,23 @@ module StreamWeaver
   # Global app helper method for DSL
   #
   # @param title [String] The title of the application
-  # @param layout [Symbol] Layout mode (:default, :wide, :full)
+  # @param layout [Symbol] Layout mode (:default, :wide, :full, :fluid)
+  # @param theme [Symbol] Theme (:default, :dashboard, :document)
+  # @param theme_overrides [Hash] CSS variable overrides (e.g., { primary: "#0066cc" })
   # @param components [Array<Module>] Custom component modules to include
   # @param block [Proc] The DSL block defining the UI
   # @return [StreamWeaver::SinatraApp] The generated Sinatra application
   # @example
-  #   my_app = app "My App" do
+  #   my_app = app "My App", theme: :dashboard do
   #     text "Hello, world!"
   #   end
-  def self.app(title, layout: :default, components: [], &block)
-    app = App.new(title, layout: layout, components: components, &block)
+  def self.app(title, layout: :default, theme: :default, theme_overrides: {}, components: [], &block)
+    app = App.new(title, layout: layout, theme: theme, theme_overrides: theme_overrides, components: components, &block)
     app.generate
   end
 end
 
 # Global helper method (exported to main namespace)
-def app(title, layout: :default, components: [], &block)
-  StreamWeaver.app(title, layout: layout, components: components, &block)
+def app(title, layout: :default, theme: :default, theme_overrides: {}, components: [], &block)
+  StreamWeaver.app(title, layout: layout, theme: theme, theme_overrides: theme_overrides, components: components, &block)
 end

@@ -13,11 +13,13 @@ module StreamWeaver
       # @param state [Hash] The current state
       # @param adapter [StreamWeaver::Adapter::Base] The adapter for rendering
       # @param is_agentic [Boolean] Whether running in agentic mode
-      def initialize(app, state, adapter, is_agentic = false)
+      # @param session_theme [Symbol, nil] Theme override from session
+      def initialize(app, state, adapter, is_agentic = false, session_theme: nil)
         @app = app
         @state = state
         @adapter = adapter
         @is_agentic = is_agentic
+        @session_theme = session_theme
       end
 
       def view_template
@@ -27,17 +29,33 @@ module StreamWeaver
             title { @app.title }
             # Inject adapter-specific CDN scripts using Phlex methods
             @adapter.render_cdn_scripts(self)
-            # Google Fonts: Source Sans 3 (humanist sans - readable with character)
+            # Google Fonts: Source Sans 3 + Crimson Pro (for document theme)
             link(rel: "preconnect", href: "https://fonts.googleapis.com")
             link(rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "anonymous")
-            link(rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap")
+            link(rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap")
             style do
               raw(safe(<<~CSS))
                 /* ===========================================
-                   StreamWeaver CSS - "Warm Industrial" Theme
-                   A distinctive, craft-inspired aesthetic
+                   StreamWeaver CSS - Multi-Theme System
                    =========================================== */
+
+                /* Base variables (shared across all themes) */
                 :root {
+                  /* Transitions - Smooth, deliberate */
+                  --sw-transition-fast: 120ms ease-out;
+                  --sw-transition: 200ms ease-out;
+                  --sw-transition-slow: 350ms ease-out;
+
+                  /* Tooltip */
+                  --sw-tooltip-bg: #292524;
+                  --sw-tooltip-text: #fafaf9;
+                }
+
+                /* ===========================================
+                   Theme: Default (Warm Industrial)
+                   Distinctive, craft-inspired aesthetic
+                   =========================================== */
+                body.sw-theme-default {
                   /* Typography - Source Sans 3: humanist, readable, distinctive */
                   --sw-font-display: 'Source Sans 3', system-ui, sans-serif;
                   --sw-font-body: 'Source Sans 3', system-ui, sans-serif;
@@ -73,7 +91,7 @@ module StreamWeaver
                   --sw-color-accent: #0d9488;
                   --sw-color-accent-light: #e6fffa;
 
-                  /* Spacing - More Generous */
+                  /* Spacing - Generous */
                   --sw-spacing-xs: 0.5rem;
                   --sw-spacing-sm: 0.75rem;
                   --sw-spacing-md: 1.25rem;
@@ -81,7 +99,7 @@ module StreamWeaver
                   --sw-spacing-xl: 3rem;
                   --sw-spacing-2xl: 4rem;
 
-                  /* Border Radius - Confident, not overly rounded */
+                  /* Border Radius */
                   --sw-radius-sm: 3px;
                   --sw-radius-md: 6px;
                   --sw-radius-lg: 10px;
@@ -94,18 +112,177 @@ module StreamWeaver
                   --sw-shadow-xl: 0 20px 40px -8px rgba(28, 25, 23, 0.16), 0 8px 16px -4px rgba(28, 25, 23, 0.08);
                   --sw-shadow-inner: inset 0 1px 2px rgba(28, 25, 23, 0.06);
 
-                  /* Transitions - Smooth, deliberate */
-                  --sw-transition-fast: 120ms ease-out;
-                  --sw-transition: 200ms ease-out;
-                  --sw-transition-slow: 350ms ease-out;
-
-                  /* Tooltip */
-                  --sw-tooltip-bg: #292524;
-                  --sw-tooltip-text: #fafaf9;
+                  /* Card styling */
+                  --sw-card-border-left: 3px solid var(--sw-color-primary);
 
                   /* Term highlighting */
                   --sw-term-color: var(--sw-color-primary);
                   --sw-term-bg-hover: var(--sw-color-primary-light);
+                }
+
+                /* ===========================================
+                   Theme: Dashboard (Data Dense)
+                   Optimized for data tables, metrics, scanning
+                   =========================================== */
+                body.sw-theme-dashboard {
+                  /* Typography - Tighter, more compact */
+                  --sw-font-display: 'Source Sans 3', system-ui, sans-serif;
+                  --sw-font-body: 'Source Sans 3', system-ui, sans-serif;
+                  --sw-font-family: var(--sw-font-body);
+                  --sw-font-size-base: 15px;
+                  --sw-font-size-sm: 13px;
+                  --sw-font-size-lg: 17px;
+                  --sw-font-size-xl: 21px;
+                  --sw-line-height: 1.5;
+
+                  /* Colors - Same palette, cleaner */
+                  --sw-color-primary: #c2410c;
+                  --sw-color-primary-hover: #9a3412;
+                  --sw-color-primary-light: #fff7ed;
+                  --sw-color-primary-glow: rgba(194, 65, 12, 0.08);
+
+                  --sw-color-text: #111111;
+                  --sw-color-text-muted: #555555;
+                  --sw-color-text-light: #888888;
+                  --sw-color-bg: #fafafa;
+                  --sw-color-bg-card: #ffffff;
+                  --sw-color-bg-elevated: #f5f5f5;
+                  --sw-color-border: #e5e5e5;
+                  --sw-color-border-strong: #d0d0d0;
+                  --sw-color-border-focus: var(--sw-color-primary);
+
+                  --sw-color-secondary: #333333;
+                  --sw-color-secondary-hover: #1a1a1a;
+
+                  --sw-color-accent: #0d9488;
+                  --sw-color-accent-light: #e6fffa;
+
+                  /* Spacing - Reduced for density */
+                  --sw-spacing-xs: 0.375rem;
+                  --sw-spacing-sm: 0.5rem;
+                  --sw-spacing-md: 0.875rem;
+                  --sw-spacing-lg: 1.25rem;
+                  --sw-spacing-xl: 1.75rem;
+                  --sw-spacing-2xl: 2.5rem;
+
+                  /* Border Radius - Slightly smaller */
+                  --sw-radius-sm: 2px;
+                  --sw-radius-md: 4px;
+                  --sw-radius-lg: 6px;
+                  --sw-radius-xl: 10px;
+
+                  /* Shadows - Minimal */
+                  --sw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+                  --sw-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.06);
+                  --sw-shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.08);
+                  --sw-shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.1);
+                  --sw-shadow-inner: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+
+                  /* Card styling - No accent bar */
+                  --sw-card-border-left: 1px solid var(--sw-color-border);
+
+                  --sw-term-color: var(--sw-color-primary);
+                  --sw-term-bg-hover: var(--sw-color-primary-light);
+                }
+
+                /* Dashboard-specific adjustments */
+                body.sw-theme-dashboard h2 {
+                  font-size: 1.25rem;
+                  margin-top: var(--sw-spacing-lg);
+                  margin-bottom: var(--sw-spacing-sm);
+                }
+
+                body.sw-theme-dashboard .score-table th,
+                body.sw-theme-dashboard .score-table td {
+                  padding: 6px 10px;
+                }
+
+                /* ===========================================
+                   Theme: Document (Reading Optimized)
+                   Long-form reading, focus mode, elegant
+                   =========================================== */
+                body.sw-theme-document {
+                  /* Typography - Serif, larger, generous line height */
+                  --sw-font-display: 'Source Sans 3', system-ui, sans-serif;
+                  --sw-font-body: 'Crimson Pro', Georgia, 'Times New Roman', serif;
+                  --sw-font-family: var(--sw-font-body);
+                  --sw-font-size-base: 19px;
+                  --sw-font-size-sm: 16px;
+                  --sw-font-size-lg: 22px;
+                  --sw-font-size-xl: 28px;
+                  --sw-line-height: 1.85;
+
+                  /* Colors - Warm paper tones */
+                  --sw-color-primary: #6b7280;        /* Muted gray-blue */
+                  --sw-color-primary-hover: #4b5563;
+                  --sw-color-primary-light: #f3f4f6;
+                  --sw-color-primary-glow: rgba(107, 114, 128, 0.1);
+
+                  --sw-color-text: #1a1a1a;
+                  --sw-color-text-muted: #4a4a4a;
+                  --sw-color-text-light: #7a7a7a;
+                  --sw-color-bg: #faf8f5;             /* Warm paper */
+                  --sw-color-bg-card: #ffffff;
+                  --sw-color-bg-elevated: #f5f3f0;
+                  --sw-color-border: #e8e4df;
+                  --sw-color-border-strong: #d8d4cf;
+                  --sw-color-border-focus: var(--sw-color-primary);
+
+                  --sw-color-secondary: #4a4a4a;
+                  --sw-color-secondary-hover: #2a2a2a;
+
+                  --sw-color-accent: #2563eb;
+                  --sw-color-accent-light: #eff6ff;
+
+                  /* Spacing - More generous for reading */
+                  --sw-spacing-xs: 0.5rem;
+                  --sw-spacing-sm: 0.875rem;
+                  --sw-spacing-md: 1.5rem;
+                  --sw-spacing-lg: 2.5rem;
+                  --sw-spacing-xl: 4rem;
+                  --sw-spacing-2xl: 5rem;
+
+                  /* Border Radius - Softer */
+                  --sw-radius-sm: 4px;
+                  --sw-radius-md: 8px;
+                  --sw-radius-lg: 12px;
+                  --sw-radius-xl: 20px;
+
+                  /* Shadows - Very subtle */
+                  --sw-shadow-sm: none;
+                  --sw-shadow-md: 0 1px 3px rgba(0, 0, 0, 0.04);
+                  --sw-shadow-lg: 0 2px 6px rgba(0, 0, 0, 0.06);
+                  --sw-shadow-xl: 0 4px 12px rgba(0, 0, 0, 0.08);
+                  --sw-shadow-inner: none;
+
+                  /* Card styling - No accent, subtle */
+                  --sw-card-border-left: none;
+
+                  --sw-term-color: var(--sw-color-accent);
+                  --sw-term-bg-hover: var(--sw-color-accent-light);
+                }
+
+                /* Document-specific adjustments */
+                body.sw-theme-document {
+                  max-width: 720px;
+                }
+
+                body.sw-theme-document p {
+                  margin-bottom: 1.5em;
+                }
+
+                body.sw-theme-document h1, body.sw-theme-document h2,
+                body.sw-theme-document h3, body.sw-theme-document h4 {
+                  font-family: var(--sw-font-display);
+                }
+
+                body.sw-theme-document h2 {
+                  margin-top: 3rem;
+                }
+
+                body.sw-theme-document .card {
+                  border-left: none;
+                  border: 1px solid var(--sw-color-border);
                 }
 
                 /* ===========================================
@@ -488,7 +665,7 @@ module StreamWeaver
                 .card {
                   background: var(--sw-color-bg-card);
                   border: 1px solid var(--sw-color-border);
-                  border-left: 3px solid var(--sw-color-primary);
+                  border-left: var(--sw-card-border-left);
                   border-radius: var(--sw-radius-md);
                   padding: var(--sw-spacing-lg);
                   margin-bottom: var(--sw-spacing-md);
@@ -1182,6 +1359,105 @@ module StreamWeaver
                 }
 
                 /* ===========================================
+                   Theme Switcher Component
+                   =========================================== */
+                .sw-theme-switcher {
+                  display: inline-flex;
+                  align-items: center;
+                  gap: var(--sw-spacing-sm);
+                }
+
+                .sw-theme-switcher-fixed {
+                  position: fixed;
+                  top: var(--sw-spacing-md);
+                  right: var(--sw-spacing-md);
+                  z-index: 1000;
+                }
+
+                .sw-theme-switcher-label {
+                  font-size: var(--sw-font-size-sm);
+                  color: var(--sw-color-text-muted);
+                  font-weight: 500;
+                }
+
+                .sw-theme-switcher-dropdown {
+                  position: relative;
+                }
+
+                .sw-theme-switcher-trigger {
+                  display: flex;
+                  align-items: center;
+                  gap: var(--sw-spacing-xs);
+                  padding: var(--sw-spacing-xs) var(--sw-spacing-sm);
+                  background: var(--sw-color-bg-card);
+                  border: 1px solid var(--sw-color-border);
+                  border-radius: var(--sw-radius-md);
+                  font-size: var(--sw-font-size-sm);
+                  color: var(--sw-color-text);
+                  cursor: pointer;
+                  transition: border-color var(--sw-transition), box-shadow var(--sw-transition);
+                }
+
+                .sw-theme-switcher-trigger:hover {
+                  border-color: var(--sw-color-border-strong);
+                  transform: none;
+                }
+
+                .sw-theme-switcher-trigger:focus {
+                  outline: none;
+                  border-color: var(--sw-color-primary);
+                  box-shadow: 0 0 0 2px var(--sw-color-primary-glow);
+                }
+
+                .sw-theme-switcher-arrow {
+                  font-size: 10px;
+                  color: var(--sw-color-text-muted);
+                }
+
+                .sw-theme-switcher-menu {
+                  position: absolute;
+                  top: 100%;
+                  right: 0;
+                  margin-top: var(--sw-spacing-xs);
+                  min-width: 180px;
+                  background: var(--sw-color-bg-card);
+                  border: 1px solid var(--sw-color-border);
+                  border-radius: var(--sw-radius-md);
+                  box-shadow: var(--sw-shadow-lg);
+                  overflow: hidden;
+                  z-index: 1001;
+                }
+
+                .sw-theme-switcher-option {
+                  display: flex;
+                  flex-direction: column;
+                  align-items: flex-start;
+                  width: 100%;
+                  padding: var(--sw-spacing-sm) var(--sw-spacing-md);
+                  background: transparent;
+                  border: none;
+                  text-align: left;
+                  cursor: pointer;
+                  transition: background var(--sw-transition-fast);
+                }
+
+                .sw-theme-switcher-option:hover {
+                  background: var(--sw-color-bg-elevated);
+                  transform: none;
+                }
+
+                .sw-theme-switcher-option-label {
+                  font-size: var(--sw-font-size-sm);
+                  font-weight: 500;
+                  color: var(--sw-color-text);
+                }
+
+                .sw-theme-switcher-option-desc {
+                  font-size: 12px;
+                  color: var(--sw-color-text-muted);
+                }
+
+                /* ===========================================
                    Lesson Text & Terms (Educational Content)
                    =========================================== */
                 .lesson-text {
@@ -1621,7 +1897,10 @@ module StreamWeaver
               CSS
             end
           end
-          body(class: "sw-layout-#{@app.layout}") do
+          body(class: body_classes) do
+            # Theme overrides as inline CSS
+            render_theme_overrides if @app.theme_overrides.any?
+
             h1 { @app.title }
             # Merge adapter-specific container attributes with container id
             div(id: "app-container", **@adapter.container_attributes(@state)) do
@@ -1654,6 +1933,31 @@ module StreamWeaver
             "hx-post" => "/submit",
             "hx-include" => @adapter.input_selector
           ) { "🤖 Submit to Agent" }
+        end
+      end
+
+      # Generate body classes for layout and theme
+      def body_classes
+        effective_theme = @session_theme || @app.theme
+        "sw-layout-#{@app.layout} sw-theme-#{effective_theme}"
+      end
+
+      # Get the effective theme (session override or app default)
+      def effective_theme
+        @session_theme || @app.theme
+      end
+
+      # Render inline CSS for theme overrides
+      def render_theme_overrides
+        css_vars = @app.theme_overrides.map do |key, value|
+          css_var = key.to_s.tr('_', '-')
+          # Add sw- prefix if not present
+          css_var = "sw-#{css_var}" unless css_var.start_with?('sw-')
+          "--#{css_var}: #{value};"
+        end.join("\n  ")
+
+        style do
+          raw(safe("body { #{css_vars} }"))
         end
       end
     end

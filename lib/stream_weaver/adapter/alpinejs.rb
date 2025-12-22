@@ -1289,6 +1289,60 @@ module StreamWeaver
         end
       end
 
+      # Render a theme switcher dropdown
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [ThemeSwitcher] The theme switcher component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_theme_switcher(view, component, state)
+        themes = Components::ThemeSwitcher::THEMES
+        position_class = component.position == :fixed_top_right ? "sw-theme-switcher-fixed" : ""
+
+        view.div(
+          class: "sw-theme-switcher #{position_class}".strip,
+          "x-data" => "{ open: false }"
+        ) do
+          if component.show_label
+            view.span(class: "sw-theme-switcher-label") { "Theme:" }
+          end
+
+          view.div(class: "sw-theme-switcher-dropdown") do
+            view.button(
+              type: "button",
+              class: "sw-theme-switcher-trigger",
+              "@click" => "open = !open",
+              "@click.outside" => "open = false"
+            ) do
+              view.span(class: "sw-theme-switcher-current") { "Select theme" }
+              view.span(class: "sw-theme-switcher-arrow") { "\u25BC" }
+            end
+
+            view.div(
+              class: "sw-theme-switcher-menu",
+              "x-show" => "open",
+              "x-transition:enter" => "sw-transition-dropdown-enter",
+              "x-transition:enter-start" => "sw-transition-dropdown-enter-start",
+              "x-transition:enter-end" => "sw-transition-dropdown-enter-end",
+              "x-transition:leave" => "sw-transition-dropdown-leave",
+              "x-transition:leave-start" => "sw-transition-dropdown-leave-start",
+              "x-transition:leave-end" => "sw-transition-dropdown-leave-end"
+            ) do
+              themes.each do |theme|
+                view.button(
+                  type: "button",
+                  class: "sw-theme-switcher-option",
+                  "@click" => "open = false; document.body.className = document.body.className.replace(/sw-theme-\\w+/, 'sw-theme-#{theme[:id]}'); htmx.ajax('POST', '/theme/#{theme[:id]}', {swap:'none'})"
+                ) do
+                  view.span(class: "sw-theme-switcher-option-label") { theme[:label] }
+                  view.span(class: "sw-theme-switcher-option-desc") { theme[:description] }
+                end
+              end
+            end
+          end
+        end
+      end
+
       private
 
       # Render a modal close button with Alpine.js binding

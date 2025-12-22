@@ -3,11 +3,15 @@
 module StreamWeaver
   # Main app class that holds the DSL block and manages the component tree
   class App
-    attr_reader :title, :components, :block, :layout
+    VALID_THEMES = [:default, :dashboard, :document].freeze
 
-    def initialize(title, layout: :default, components: [], &block)
+    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides
+
+    def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], &block)
       @title = title
       @layout = layout
+      @theme = validate_theme(theme)
+      @theme_overrides = theme_overrides
       @block = block
       @components = []
       @state_key = :streamlit_state
@@ -16,6 +20,16 @@ module StreamWeaver
 
       components.each { |mod| singleton_class.include(mod) }
     end
+
+    private
+
+    def validate_theme(theme)
+      return theme if VALID_THEMES.include?(theme)
+      warn "StreamWeaver: Unknown theme '#{theme}', falling back to :default"
+      :default
+    end
+
+    public
 
     def state
       @_state
@@ -485,6 +499,13 @@ module StreamWeaver
 
     def spinner(size: :md, label: nil, **options)
       @components << Components::Spinner.new(size: size, label: label, **options)
+    end
+
+    # Theme switcher dropdown for runtime theme selection
+    # @param position [Symbol] Position (:inline, :fixed_top_right)
+    # @param show_label [Boolean] Show "Theme:" label (default: true)
+    def theme_switcher(position: :inline, show_label: true, **options)
+      @components << Components::ThemeSwitcher.new(position: position, show_label: show_label, **options)
     end
 
     private

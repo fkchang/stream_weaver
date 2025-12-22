@@ -110,8 +110,9 @@ module StreamWeaver
 
         streamlit_app = settings.streamlit_app
         adapter = settings.adapter
+        session_theme = session[:theme_override]
         streamlit_app.rebuild_with_state(state)
-        Views::AppView.new(streamlit_app, state, adapter, is_agentic).call
+        Views::AppView.new(streamlit_app, state, adapter, is_agentic, session_theme: session_theme).call
       end
 
       # Update state from form inputs
@@ -302,6 +303,24 @@ module StreamWeaver
         # Return empty response (swap: none means no DOM update needed)
         status 204
         ""
+      end
+
+      # Theme switching endpoint (for runtime theme changes)
+      post '/theme/:theme_name' do
+        theme = params[:theme_name].to_sym
+        valid_themes = StreamWeaver::App::VALID_THEMES
+
+        if valid_themes.include?(theme)
+          session[:theme_override] = theme
+          status 200
+          content_type 'text/plain'
+          # Return the new body classes for Alpine.js to update
+          "sw-theme-#{theme} sw-layout-#{settings.streamlit_app.layout}"
+        else
+          status 400
+          content_type 'text/plain'
+          "Invalid theme: #{theme}. Valid themes: #{valid_themes.join(', ')}"
+        end
       end
 
       # Return the class itself (it's the Rack app)

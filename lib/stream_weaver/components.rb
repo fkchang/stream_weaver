@@ -895,5 +895,30 @@ module StreamWeaver
         view.adapter.render_spinner(view, @size, @label, @options, state)
       end
     end
+
+    # ThemeSwitcher component for runtime theme selection
+    # Renders a dropdown to switch between available themes
+    class ThemeSwitcher < Base
+      attr_reader :position, :show_label
+
+      THEMES = [
+        { id: :default, label: "Default", description: "Warm Industrial" },
+        { id: :dashboard, label: "Dashboard", description: "Data Dense" },
+        { id: :document, label: "Document", description: "Reading Mode" }
+      ].freeze
+
+      # @param position [Symbol] Position (:inline, :fixed_top_right)
+      # @param show_label [Boolean] Show "Theme:" label
+      # @param options [Hash] Additional options
+      def initialize(position: :inline, show_label: true, **options)
+        @position = position
+        @show_label = show_label
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_theme_switcher(view, self, state)
+      end
+    end
   end
 end
