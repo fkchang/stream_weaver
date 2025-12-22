@@ -25,10 +25,12 @@ module StreamWeaver
       # @param options [Hash] Component options
       # @option options [String] :placeholder Placeholder text
       # @option options [Hash] :form_context Form context if inside a form block
+      # @option options [Boolean] :submit Whether to auto-submit on change (default: true)
       # @param state [Hash] Current state hash (symbol keys)
       # @return [void] Renders to view
       def render_text_field(view, key, options, state)
         form_context = options[:form_context]
+        should_submit = options.fetch(:submit, true)
 
         if form_context
           # Inside form: use form-scoped x-model, no HTMX
@@ -42,7 +44,7 @@ module StreamWeaver
             placeholder: options[:placeholder] || "",
             "x-model" => "_form.#{key}"  # Form-local Alpine scope
           )
-        else
+        elsif should_submit
           trigger_str, endpoint = build_input_triggers(key, options)
 
           view.input(
@@ -57,6 +59,16 @@ module StreamWeaver
             "hx-target" => "#app-container",
             "hx-swap" => "innerHTML scroll:false",
             "hx-trigger" => trigger_str
+          )
+        else
+          # No auto-submit: just Alpine.js binding, no HTMX
+          view.input(
+            id: "input-#{key}",
+            type: "text",
+            name: key.to_s,
+            value: state[key] || "",
+            placeholder: options[:placeholder] || "",
+            "x-model" => key.to_s
           )
         end
       end

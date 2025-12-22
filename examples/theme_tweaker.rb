@@ -155,47 +155,47 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :fluid) do
 
       collapsible "Typography", expanded: true do
         text "Font Family"
-        text_field :font_family, placeholder: "'Source Sans 3', system-ui, sans-serif"
+        text_field :font_family, placeholder: "'Source Sans 3', system-ui, sans-serif", submit: false
 
         text "Base Font Size"
-        text_field :font_size_base, placeholder: "17px"
+        text_field :font_size_base, placeholder: "17px", submit: false
 
         text "Line Height"
-        text_field :line_height, placeholder: "1.7"
+        text_field :line_height, placeholder: "1.7", submit: false
       end
 
       collapsible "Colors", expanded: true do
         text "Primary Color"
-        text_field :color_primary, placeholder: "#c2410c"
+        text_field :color_primary, placeholder: "#c2410c", submit: false
 
         text "Primary Hover"
-        text_field :color_primary_hover, placeholder: "#9a3412"
+        text_field :color_primary_hover, placeholder: "#9a3412", submit: false
 
         text "Text Color"
-        text_field :color_text, placeholder: "#111111"
+        text_field :color_text, placeholder: "#111111", submit: false
 
         text "Muted Text"
-        text_field :color_text_muted, placeholder: "#444444"
+        text_field :color_text_muted, placeholder: "#444444", submit: false
 
         text "Background"
-        text_field :color_bg, placeholder: "#f8f8f8"
+        text_field :color_bg, placeholder: "#f8f8f8", submit: false
 
         text "Card Background"
-        text_field :color_bg_card, placeholder: "#ffffff"
+        text_field :color_bg_card, placeholder: "#ffffff", submit: false
 
         text "Border Color"
-        text_field :color_border, placeholder: "#e0e0e0"
+        text_field :color_border, placeholder: "#e0e0e0", submit: false
       end
 
       collapsible "Spacing & Borders" do
         text "Spacing (md)"
-        text_field :spacing_md, placeholder: "1.25rem"
+        text_field :spacing_md, placeholder: "1.25rem", submit: false
 
         text "Border Radius (md)"
-        text_field :radius_md, placeholder: "6px"
+        text_field :radius_md, placeholder: "6px", submit: false
 
         text "Card Left Border"
-        text_field :card_border_left, placeholder: "3px solid #c2410c"
+        text_field :card_border_left, placeholder: "3px solid #c2410c", submit: false
       end
 
       card do
