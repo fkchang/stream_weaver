@@ -4,37 +4,78 @@ require_relative "../lib/stream_weaver"
 
 # StreamWeaver Theme Tweaker
 # A visual editor for creating and customizing themes
+#
+# Note: Edit values in the controls, then click "Update Preview" to see changes.
+# This avoids flashing from constant re-renders on every keystroke.
 
-app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :wide) do
+app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :fluid) do
   # Initialize state
   state[:theme_name] ||= "my_custom_theme"
   state[:base_theme] ||= "default"
   state[:export_format] ||= "ruby"
   state[:show_export] ||= false
 
-  # Initialize editable variables with defaults
-  state[:font_family] ||= "'Source Sans 3', system-ui, sans-serif"
-  state[:font_size_base] ||= "17px"
-  state[:line_height] ||= "1.7"
-  state[:color_primary] ||= "#c2410c"
-  state[:color_primary_hover] ||= "#9a3412"
-  state[:color_text] ||= "#111111"
-  state[:color_text_muted] ||= "#444444"
-  state[:color_bg] ||= "#f8f8f8"
-  state[:color_bg_card] ||= "#ffffff"
-  state[:color_border] ||= "#e0e0e0"
-  state[:spacing_md] ||= "1.25rem"
-  state[:radius_md] ||= "6px"
-  state[:card_border_left] ||= "3px solid var(--sw-color-primary)"
+  # Preview values (what's currently shown in preview)
+  # These only update when "Update Preview" is clicked
+  state[:preview] ||= {
+    font_family: "'Source Sans 3', system-ui, sans-serif",
+    font_size_base: "17px",
+    line_height: "1.7",
+    color_primary: "#c2410c",
+    color_primary_hover: "#9a3412",
+    color_text: "#111111",
+    color_text_muted: "#444444",
+    color_bg: "#f8f8f8",
+    color_bg_card: "#ffffff",
+    color_border: "#e0e0e0",
+    spacing_md: "1.25rem",
+    radius_md: "6px",
+    card_border_left: "3px solid #c2410c"
+  }
+
+  # Form values (what's being edited)
+  state[:font_family] ||= state[:preview][:font_family]
+  state[:font_size_base] ||= state[:preview][:font_size_base]
+  state[:line_height] ||= state[:preview][:line_height]
+  state[:color_primary] ||= state[:preview][:color_primary]
+  state[:color_primary_hover] ||= state[:preview][:color_primary_hover]
+  state[:color_text] ||= state[:preview][:color_text]
+  state[:color_text_muted] ||= state[:preview][:color_text_muted]
+  state[:color_bg] ||= state[:preview][:color_bg]
+  state[:color_bg_card] ||= state[:preview][:color_bg_card]
+  state[:color_border] ||= state[:preview][:color_border]
+  state[:spacing_md] ||= state[:preview][:spacing_md]
+  state[:radius_md] ||= state[:preview][:radius_md]
+  state[:card_border_left] ||= state[:preview][:card_border_left]
 
   hstack(justify: :between, align: :center) do
     header1 "Theme Tweaker"
-    theme_switcher
+    hstack do
+      button "Update Preview" do |s|
+        # Copy form values to preview
+        s[:preview] = {
+          font_family: s[:font_family],
+          font_size_base: s[:font_size_base],
+          line_height: s[:line_height],
+          color_primary: s[:color_primary],
+          color_primary_hover: s[:color_primary_hover],
+          color_text: s[:color_text],
+          color_text_muted: s[:color_text_muted],
+          color_bg: s[:color_bg],
+          color_bg_card: s[:color_bg_card],
+          color_border: s[:color_border],
+          spacing_md: s[:spacing_md],
+          radius_md: s[:radius_md],
+          card_border_left: s[:card_border_left]
+        }
+      end
+      theme_switcher
+    end
   end
 
-  text "Create custom themes by adjusting CSS variables. Preview changes live, then export as Ruby or JSON."
+  text "Edit theme values below, then click 'Update Preview' to see changes. Export when ready."
 
-  columns widths: ["320px", "1fr"] do
+  columns widths: ["340px", "1fr"] do
     # Left column: Controls
     column do
       card do
@@ -46,7 +87,7 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :wide) do
           text "Base Theme"
           select :base_theme, %w[default dashboard document]
 
-          button "Apply Base Theme", style: :secondary do |s|
+          button "Load Base Theme", style: :secondary do |s|
             # Reset to base theme defaults
             case s[:base_theme]
             when "default"
@@ -62,7 +103,7 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :wide) do
               s[:color_border] = "#e0e0e0"
               s[:spacing_md] = "1.25rem"
               s[:radius_md] = "6px"
-              s[:card_border_left] = "3px solid var(--sw-color-primary)"
+              s[:card_border_left] = "3px solid #c2410c"
             when "dashboard"
               s[:font_family] = "'Source Sans 3', system-ui, sans-serif"
               s[:font_size_base] = "15px"
@@ -76,7 +117,7 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :wide) do
               s[:color_border] = "#e5e5e5"
               s[:spacing_md] = "0.875rem"
               s[:radius_md] = "4px"
-              s[:card_border_left] = "1px solid var(--sw-color-border)"
+              s[:card_border_left] = "1px solid #e5e5e5"
             when "document"
               s[:font_family] = "'Crimson Pro', Georgia, serif"
               s[:font_size_base] = "19px"
@@ -92,6 +133,22 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :wide) do
               s[:radius_md] = "8px"
               s[:card_border_left] = "none"
             end
+            # Also update preview immediately
+            s[:preview] = {
+              font_family: s[:font_family],
+              font_size_base: s[:font_size_base],
+              line_height: s[:line_height],
+              color_primary: s[:color_primary],
+              color_primary_hover: s[:color_primary_hover],
+              color_text: s[:color_text],
+              color_text_muted: s[:color_text_muted],
+              color_bg: s[:color_bg],
+              color_bg_card: s[:color_bg_card],
+              color_border: s[:color_border],
+              spacing_md: s[:spacing_md],
+              radius_md: s[:radius_md],
+              card_border_left: s[:card_border_left]
+            }
           end
         end
       end
@@ -138,7 +195,7 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :wide) do
         text_field :radius_md, placeholder: "6px"
 
         text "Card Left Border"
-        text_field :card_border_left, placeholder: "3px solid var(--sw-color-primary)"
+        text_field :card_border_left, placeholder: "3px solid #c2410c"
       end
 
       card do
@@ -146,15 +203,8 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :wide) do
         card_body do
           select :export_format, %w[ruby json]
 
-          hstack do
-            button "Generate Export" do |s|
-              s[:show_export] = true
-            end
-
-            button "Copy to Clipboard", style: :secondary do |s|
-              # Note: actual clipboard copy requires JS, this just shows the code
-              s[:show_export] = true
-            end
+          button "Generate Export" do |s|
+            s[:show_export] = true
           end
         end
       end
@@ -162,63 +212,90 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :wide) do
 
     # Right column: Preview
     column do
-      # Preview container with inline style overrides
-      div(
-        class: "theme-preview-container",
-        style: <<~CSS.gsub("\n", " ")
-          --sw-font-family: #{state[:font_family]};
-          --sw-font-size-base: #{state[:font_size_base]};
-          --sw-line-height: #{state[:line_height]};
-          --sw-color-primary: #{state[:color_primary]};
-          --sw-color-primary-hover: #{state[:color_primary_hover]};
-          --sw-color-text: #{state[:color_text]};
-          --sw-color-text-muted: #{state[:color_text_muted]};
-          --sw-color-bg: #{state[:color_bg]};
-          --sw-color-bg-card: #{state[:color_bg_card]};
-          --sw-color-border: #{state[:color_border]};
-          --sw-spacing-md: #{state[:spacing_md]};
-          --sw-radius-md: #{state[:radius_md]};
-          --sw-card-border-left: #{state[:card_border_left]};
-          padding: var(--sw-spacing-md);
-          background: var(--sw-color-bg);
-          border-radius: 8px;
-          font-family: var(--sw-font-family);
-          font-size: var(--sw-font-size-base);
-          line-height: var(--sw-line-height);
-          color: var(--sw-color-text);
-        CSS
-      ) do
-        header2 "Live Preview"
+      # Get preview values
+      pv = state[:preview]
 
-        text "This preview shows how your theme looks. Adjust the controls on the left to see changes."
+      # Build inline style string with all CSS variables
+      preview_style = [
+        "--sw-font-family: #{pv[:font_family]}",
+        "--sw-font-size-base: #{pv[:font_size_base]}",
+        "--sw-line-height: #{pv[:line_height]}",
+        "--sw-color-primary: #{pv[:color_primary]}",
+        "--sw-color-primary-hover: #{pv[:color_primary_hover]}",
+        "--sw-color-text: #{pv[:color_text]}",
+        "--sw-color-text-muted: #{pv[:color_text_muted]}",
+        "--sw-color-bg: #{pv[:color_bg]}",
+        "--sw-color-bg-card: #{pv[:color_bg_card]}",
+        "--sw-color-border: #{pv[:color_border]}",
+        "--sw-spacing-md: #{pv[:spacing_md]}",
+        "--sw-radius-md: #{pv[:radius_md]}",
+        "--sw-card-border-left: #{pv[:card_border_left]}",
+        "padding: 1.5rem",
+        "background: #{pv[:color_bg]}",
+        "border-radius: 8px",
+        "border: 1px solid #{pv[:color_border]}"
+      ].join("; ")
 
-        header3 "Typography"
-        text "Regular paragraph text demonstrating the body font styling. The quick brown fox jumps over the lazy dog."
+      div(style: preview_style) do
+        # Preview header with custom styling
+        div(style: "font-family: #{pv[:font_family]}; font-size: 1.5rem; font-weight: 600; color: #{pv[:color_text]}; margin-bottom: 1rem;") do
+          text "Live Preview"
+        end
 
-        header3 "Components"
+        div(style: "font-family: #{pv[:font_family]}; font-size: #{pv[:font_size_base]}; line-height: #{pv[:line_height]}; color: #{pv[:color_text_muted]}; margin-bottom: 1.5rem;") do
+          text "This preview reflects your current theme settings. Click 'Update Preview' after making changes."
+        end
 
-        card do
-          card_header "Sample Card"
-          card_body do
-            text "Card content demonstrating spacing and border styling."
+        # Typography section
+        div(style: "font-family: #{pv[:font_family]}; font-size: 1.25rem; font-weight: 600; color: #{pv[:color_text]}; margin: 1.5rem 0 0.75rem;") do
+          text "Typography"
+        end
 
-            hstack do
-              button "Primary Button"
-              button "Secondary", style: :secondary
+        div(style: "font-family: #{pv[:font_family]}; font-size: #{pv[:font_size_base]}; line-height: #{pv[:line_height]}; color: #{pv[:color_text_muted]}; margin-bottom: 1rem;") do
+          text "Regular paragraph text demonstrating the body font styling. The quick brown fox jumps over the lazy dog. Notice the font family, size, and line height."
+        end
+
+        # Card preview
+        div(style: "font-family: #{pv[:font_family]}; font-size: 1.25rem; font-weight: 600; color: #{pv[:color_text]}; margin: 1.5rem 0 0.75rem;") do
+          text "Card Component"
+        end
+
+        div(style: "background: #{pv[:color_bg_card]}; border: 1px solid #{pv[:color_border]}; border-left: #{pv[:card_border_left]}; border-radius: #{pv[:radius_md]}; padding: #{pv[:spacing_md]}; margin-bottom: 1rem;") do
+          div(style: "font-family: #{pv[:font_family]}; font-weight: 600; color: #{pv[:color_text]}; margin-bottom: 0.5rem;") do
+            text "Sample Card Title"
+          end
+          div(style: "font-family: #{pv[:font_family]}; font-size: #{pv[:font_size_base]}; color: #{pv[:color_text_muted]};") do
+            text "Card content demonstrating border, background, and spacing styles."
+          end
+
+          # Button preview
+          div(style: "margin-top: 1rem;") do
+            div(style: "display: inline-block; background: linear-gradient(135deg, #{pv[:color_primary]} 0%, #{pv[:color_primary_hover]} 100%); color: white; padding: 0.5rem 1rem; border-radius: #{pv[:radius_md]}; font-family: #{pv[:font_family]}; font-weight: 600; font-size: 0.9rem; margin-right: 0.5rem;") do
+              text "Primary Button"
+            end
+            div(style: "display: inline-block; background: #{pv[:color_bg]}; color: #{pv[:color_text]}; border: 1px solid #{pv[:color_border]}; padding: 0.5rem 1rem; border-radius: #{pv[:radius_md]}; font-family: #{pv[:font_family]}; font-weight: 600; font-size: 0.9rem;") do
+              text "Secondary"
             end
           end
         end
 
-        header3 "Form Elements"
-        text_field :preview_input, placeholder: "Sample text input"
-        checkbox :preview_checkbox, "Sample checkbox option"
+        # Input preview
+        div(style: "font-family: #{pv[:font_family]}; font-size: 1.25rem; font-weight: 600; color: #{pv[:color_text]}; margin: 1.5rem 0 0.75rem;") do
+          text "Form Input"
+        end
 
-        header3 "Alerts"
-        alert(variant: :info) { text "This is an info alert message." }
-        alert(variant: :success) { text "Success! Operation completed." }
+        div(style: "background: #{pv[:color_bg_card]}; border: 1px solid #{pv[:color_border]}; border-radius: #{pv[:radius_md]}; padding: #{pv[:spacing_md]}; font-family: #{pv[:font_family]}; font-size: #{pv[:font_size_base]}; color: #{pv[:color_text_muted]};") do
+          text "Sample text input placeholder..."
+        end
 
-        header3 "Progress"
-        progress_bar value: 65, show_label: true
+        # Alert preview
+        div(style: "font-family: #{pv[:font_family]}; font-size: 1.25rem; font-weight: 600; color: #{pv[:color_text]}; margin: 1.5rem 0 0.75rem;") do
+          text "Alert"
+        end
+
+        div(style: "background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: #{pv[:radius_md]}; padding: #{pv[:spacing_md]}; font-family: #{pv[:font_family]}; font-size: #{pv[:font_size_base]}; color: #1e40af;") do
+          text "This is an info alert message with custom spacing and radius."
+        end
       end
 
       # Export code display
@@ -264,7 +341,7 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :wide) do
           })
         end
 
-        text_area :export_output, rows: 15, default: export_code
+        text_area :export_output, rows: 18, default: export_code
       end
     end
   end
