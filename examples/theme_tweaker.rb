@@ -215,9 +215,10 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :fluid) do
       # Get preview values
       pv = state[:preview]
 
-      # Build inline style string with all CSS variables
+      # Build inline style string with CSS variable overrides
       preview_style = [
         "--sw-font-family: #{pv[:font_family]}",
+        "--sw-font-body: #{pv[:font_family]}",
         "--sw-font-size-base: #{pv[:font_size_base]}",
         "--sw-line-height: #{pv[:line_height]}",
         "--sw-color-primary: #{pv[:color_primary]}",
@@ -236,66 +237,39 @@ app = StreamWeaver::App.new("StreamWeaver Theme Tweaker", layout: :fluid) do
         "border: 1px solid #{pv[:color_border]}"
       ].join("; ")
 
+      # Preview container with CSS variable overrides
       div(style: preview_style) do
-        # Preview header with custom styling
-        div(style: "font-family: #{pv[:font_family]}; font-size: 1.5rem; font-weight: 600; color: #{pv[:color_text]}; margin-bottom: 1rem;") do
-          text "Live Preview"
-        end
+        header2 "Live Preview"
 
-        div(style: "font-family: #{pv[:font_family]}; font-size: #{pv[:font_size_base]}; line-height: #{pv[:line_height]}; color: #{pv[:color_text_muted]}; margin-bottom: 1.5rem;") do
-          text "This preview reflects your current theme settings. Click 'Update Preview' after making changes."
-        end
+        text "This preview reflects your current theme settings. Click 'Update Preview' after making changes."
 
-        # Typography section
-        div(style: "font-family: #{pv[:font_family]}; font-size: 1.25rem; font-weight: 600; color: #{pv[:color_text]}; margin: 1.5rem 0 0.75rem;") do
-          text "Typography"
-        end
+        header3 "Typography"
+        text "Regular paragraph text demonstrating the body font styling. The quick brown fox jumps over the lazy dog. Notice the font family, size, and line height."
 
-        div(style: "font-family: #{pv[:font_family]}; font-size: #{pv[:font_size_base]}; line-height: #{pv[:line_height]}; color: #{pv[:color_text_muted]}; margin-bottom: 1rem;") do
-          text "Regular paragraph text demonstrating the body font styling. The quick brown fox jumps over the lazy dog. Notice the font family, size, and line height."
-        end
+        header3 "Card Component"
 
-        # Card preview
-        div(style: "font-family: #{pv[:font_family]}; font-size: 1.25rem; font-weight: 600; color: #{pv[:color_text]}; margin: 1.5rem 0 0.75rem;") do
-          text "Card Component"
-        end
-
-        div(style: "background: #{pv[:color_bg_card]}; border: 1px solid #{pv[:color_border]}; border-left: #{pv[:card_border_left]}; border-radius: #{pv[:radius_md]}; padding: #{pv[:spacing_md]}; margin-bottom: 1rem;") do
-          div(style: "font-family: #{pv[:font_family]}; font-weight: 600; color: #{pv[:color_text]}; margin-bottom: 0.5rem;") do
-            text "Sample Card Title"
-          end
-          div(style: "font-family: #{pv[:font_family]}; font-size: #{pv[:font_size_base]}; color: #{pv[:color_text_muted]};") do
+        card do
+          card_header "Sample Card Title"
+          card_body do
             text "Card content demonstrating border, background, and spacing styles."
-          end
 
-          # Button preview
-          div(style: "margin-top: 1rem;") do
-            div(style: "display: inline-block; background: linear-gradient(135deg, #{pv[:color_primary]} 0%, #{pv[:color_primary_hover]} 100%); color: white; padding: 0.5rem 1rem; border-radius: #{pv[:radius_md]}; font-family: #{pv[:font_family]}; font-weight: 600; font-size: 0.9rem; margin-right: 0.5rem;") do
-              text "Primary Button"
-            end
-            div(style: "display: inline-block; background: #{pv[:color_bg]}; color: #{pv[:color_text]}; border: 1px solid #{pv[:color_border]}; padding: 0.5rem 1rem; border-radius: #{pv[:radius_md]}; font-family: #{pv[:font_family]}; font-weight: 600; font-size: 0.9rem;") do
-              text "Secondary"
+            hstack do
+              button "Primary Button"
+              button "Secondary", style: :secondary
             end
           end
         end
 
-        # Input preview
-        div(style: "font-family: #{pv[:font_family]}; font-size: 1.25rem; font-weight: 600; color: #{pv[:color_text]}; margin: 1.5rem 0 0.75rem;") do
-          text "Form Input"
-        end
+        header3 "Form Elements"
+        text_field :preview_input, placeholder: "Sample text input"
+        checkbox :preview_checkbox, "Sample checkbox option"
 
-        div(style: "background: #{pv[:color_bg_card]}; border: 1px solid #{pv[:color_border]}; border-radius: #{pv[:radius_md]}; padding: #{pv[:spacing_md]}; font-family: #{pv[:font_family]}; font-size: #{pv[:font_size_base]}; color: #{pv[:color_text_muted]};") do
-          text "Sample text input placeholder..."
-        end
+        header3 "Alerts"
+        alert(variant: :info) { text "This is an info alert message." }
+        alert(variant: :success) { text "Success! Operation completed." }
 
-        # Alert preview
-        div(style: "font-family: #{pv[:font_family]}; font-size: 1.25rem; font-weight: 600; color: #{pv[:color_text]}; margin: 1.5rem 0 0.75rem;") do
-          text "Alert"
-        end
-
-        div(style: "background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: #{pv[:radius_md]}; padding: #{pv[:spacing_md]}; font-family: #{pv[:font_family]}; font-size: #{pv[:font_size_base]}; color: #1e40af;") do
-          text "This is an info alert message with custom spacing and radius."
-        end
+        header3 "Progress"
+        progress_bar value: 65, show_label: true
       end
 
       # Export code display

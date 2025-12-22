@@ -383,11 +383,16 @@ module StreamWeaver
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_div(view, component, state)
-        css_class = component.instance_variable_get(:@options)[:class]
+        options = component.instance_variable_get(:@options)
+        css_class = options[:class]
+        css_style = options[:style]
+        css_id = options[:id]
         hover_class = component.hover_class
 
         attrs = {}
         attrs[:class] = css_class if css_class
+        attrs[:style] = css_style if css_style
+        attrs[:id] = css_id if css_id
 
         # Client-side hover class toggle (no server round-trip for performance)
         if hover_class
