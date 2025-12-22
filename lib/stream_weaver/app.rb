@@ -3,7 +3,10 @@
 module StreamWeaver
   # Main app class that holds the DSL block and manages the component tree
   class App
-    VALID_THEMES = [:default, :dashboard, :document].freeze
+    # Built-in themes (custom themes checked via StreamWeaver.theme_exists?)
+    BUILT_IN_THEMES = [:default, :dashboard, :document].freeze
+    # For backwards compatibility
+    VALID_THEMES = BUILT_IN_THEMES
 
     attr_reader :title, :components, :block, :layout, :theme, :theme_overrides
 
@@ -24,7 +27,9 @@ module StreamWeaver
     private
 
     def validate_theme(theme)
-      return theme if VALID_THEMES.include?(theme)
+      theme = theme.to_sym
+      # Accept built-in themes or custom registered themes
+      return theme if BUILT_IN_THEMES.include?(theme) || StreamWeaver.theme_exists?(theme)
       warn "StreamWeaver: Unknown theme '#{theme}', falling back to :default"
       :default
     end

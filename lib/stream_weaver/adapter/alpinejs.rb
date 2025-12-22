@@ -1296,7 +1296,7 @@ module StreamWeaver
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_theme_switcher(view, component, state)
-        themes = Components::ThemeSwitcher::THEMES
+        themes = component.themes
         position_class = component.position == :fixed_top_right ? "sw-theme-switcher-fixed" : ""
 
         view.div(

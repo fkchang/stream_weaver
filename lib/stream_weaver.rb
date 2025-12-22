@@ -3,6 +3,7 @@
 require_relative "stream_weaver/version"
 require_relative "stream_weaver/adapter/base"
 require_relative "stream_weaver/adapter/alpinejs"
+require_relative "stream_weaver/theme"
 require_relative "stream_weaver/app"
 require_relative "stream_weaver/components"
 require_relative "stream_weaver/views"

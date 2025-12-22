@@ -308,9 +308,9 @@ module StreamWeaver
       # Theme switching endpoint (for runtime theme changes)
       post '/theme/:theme_name' do
         theme = params[:theme_name].to_sym
-        valid_themes = StreamWeaver::App::VALID_THEMES
 
-        if valid_themes.include?(theme)
+        # Accept built-in themes or custom registered themes
+        if StreamWeaver.theme_exists?(theme)
           session[:theme_override] = theme
           status 200
           content_type 'text/plain'
@@ -319,7 +319,7 @@ module StreamWeaver
         else
           status 400
           content_type 'text/plain'
-          "Invalid theme: #{theme}. Valid themes: #{valid_themes.join(', ')}"
+          "Invalid theme: #{theme}. Available themes: #{StreamWeaver.available_themes.join(', ')}"
         end
       end
 

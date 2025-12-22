@@ -901,6 +901,7 @@ module StreamWeaver
     class ThemeSwitcher < Base
       attr_reader :position, :show_label
 
+      # Built-in themes (for backwards compatibility)
       THEMES = [
         { id: :default, label: "Default", description: "Warm Industrial" },
         { id: :dashboard, label: "Dashboard", description: "Data Dense" },
@@ -914,6 +915,11 @@ module StreamWeaver
         @position = position
         @show_label = show_label
         @options = options
+      end
+
+      # Get all available themes (built-in + custom registered)
+      def themes
+        StreamWeaver.all_themes_for_switcher
       end
 
       def render(view, state)

@@ -1898,6 +1898,9 @@ module StreamWeaver
             end
           end
           body(class: body_classes) do
+            # Custom theme CSS (for registered themes)
+            render_custom_theme_css
+
             # Theme overrides as inline CSS
             render_theme_overrides if @app.theme_overrides.any?
 
@@ -1958,6 +1961,20 @@ module StreamWeaver
 
         style do
           raw(safe("body { #{css_vars} }"))
+        end
+      end
+
+      # Render CSS for custom registered themes
+      def render_custom_theme_css
+        theme_name = effective_theme
+        # Only render if it's a custom theme (not built-in)
+        return if StreamWeaver::App::BUILT_IN_THEMES.include?(theme_name)
+
+        custom_theme = StreamWeaver.get_theme(theme_name)
+        return unless custom_theme
+
+        style do
+          raw(safe(custom_theme.to_css))
         end
       end
     end
