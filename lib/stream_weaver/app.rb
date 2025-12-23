@@ -259,33 +259,11 @@ module StreamWeaver
     end
     alias_method :markdown, :md
 
-    def header(content)
-      @components << Components::Header.new(content, level: 2)
+    # Header methods via metaprogramming (DRY)
+    (1..6).each do |level|
+      define_method(:"header#{level}") { |content| @components << Components::Header.new(content, level: level) }
     end
-
-    def header1(content)
-      @components << Components::Header.new(content, level: 1)
-    end
-
-    def header2(content)
-      @components << Components::Header.new(content, level: 2)
-    end
-
-    def header3(content)
-      @components << Components::Header.new(content, level: 3)
-    end
-
-    def header4(content)
-      @components << Components::Header.new(content, level: 4)
-    end
-
-    def header5(content)
-      @components << Components::Header.new(content, level: 5)
-    end
-
-    def header6(content)
-      @components << Components::Header.new(content, level: 6)
-    end
+    alias_method :header, :header2
 
     def phrase(content)
       @components << Components::Phrase.new(content)

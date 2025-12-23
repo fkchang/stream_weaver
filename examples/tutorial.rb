@@ -8,12 +8,17 @@
 
 require_relative "../lib/stream_weaver"
 
+# Section data object (DHH-style: prefer objects over hashes)
+Section = Data.define(:id, :nav_title, :title, :content, :code) do
+  def state_key = :"#{id}_edited_code"
+end
+
 # =============================================================================
 # SECTIONS - Each section is self-contained for easy editing
 # =============================================================================
 
 module Sections
-  PHILOSOPHY = {
+  PHILOSOPHY = Section.new(
     id: :philosophy,
     nav_title: "Philosophy",
     title: "Why StreamWeaver?",
@@ -55,9 +60,9 @@ module Sections
         text "Type your name above."
       end
     RUBY
-  }
+  )
 
-  HELLO_WORLD = {
+  HELLO_WORLD = Section.new(
     id: :hello_world,
     nav_title: "Hello World",
     title: "Your First App",
@@ -81,9 +86,9 @@ module Sections
         text "Hello, \#{state[:name]}!"
       end
     RUBY
-  }
+  )
 
-  GETTING_INPUT = {
+  GETTING_INPUT = Section.new(
     id: :getting_input,
     nav_title: "Getting Input",
     title: "Text Fields & State",
@@ -115,9 +120,9 @@ module Sections
         alert(variant: :warning) { text "Need @ in email" }
       end
     RUBY
-  }
+  )
 
-  MAKING_CHOICES = {
+  MAKING_CHOICES = Section.new(
     id: :making_choices,
     nav_title: "Making Choices",
     title: "Selection Components",
@@ -139,9 +144,9 @@ module Sections
       text "Priority: \#{state[:priority]}"
       text "Urgent: \#{state[:urgent] ? 'YES!' : 'no'}"
     RUBY
-  }
+  )
 
-  TAKING_ACTION = {
+  TAKING_ACTION = Section.new(
     id: :taking_action,
     nav_title: "Taking Action",
     title: "Buttons & Callbacks",
@@ -178,9 +183,9 @@ module Sections
         end
       end
     RUBY
-  }
+  )
 
-  LAYOUT = {
+  LAYOUT = Section.new(
     id: :layout,
     nav_title: "Layout",
     title: "Cards, Columns & Stacks",
@@ -217,7 +222,7 @@ module Sections
         end
       end
     RUBY
-  }
+  )
 
   ALL_SECTIONS = [
     PHILOSOPHY,
@@ -301,21 +306,10 @@ end
 # =============================================================================
 
 module DemoRenderers
+  # Dynamic dispatch instead of case statement (DRY)
   def render_demo(section_id, state)
-    case section_id
-    when :philosophy
-      render_philosophy_demo(state)
-    when :hello_world
-      render_hello_world_demo(state)
-    when :getting_input
-      render_getting_input_demo(state)
-    when :making_choices
-      render_making_choices_demo(state)
-    when :taking_action
-      render_taking_action_demo(state)
-    when :layout
-      render_layout_demo(state)
-    end
+    method_name = :"render_#{section_id}_demo"
+    send(method_name, state) if respond_to?(method_name, true)
   end
 
   def render_philosophy_demo(_state)
