@@ -1,0 +1,27 @@
+# Railway Deployment Configuration
+#
+# This file configures deployment to Railway
+# Place this file in your repository root as railway.toml
+#
+# Documentation: https://docs.railway.app/deploy/config-as-code
+
+[build]
+builder = "NIXPACKS"
+buildCommand = "bundle install"
+
+[deploy]
+startCommand = "bundle exec ruby app.rb"
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# Environment variables (set in Railway dashboard or railway.json)
+# Required:
+# - DATABASE_URL (automatically set when you add PostgreSQL)
+# - RACK_ENV=production
+# - SESSION_SECRET (generate with: openssl rand -hex 64)
+#
+# Optional:
+# - PORT (automatically set by Railway)
+# - FORCE_SSL=true

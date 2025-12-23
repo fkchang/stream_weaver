@@ -1,0 +1,48 @@
+# StreamWeaver Production Template
+#
+# This is a production-ready starter template for StreamWeaver applications
+# with database persistence, authentication, and deployment configuration.
+
+source "https://rubygems.org"
+
+ruby "~> 3.0"
+
+# StreamWeaver framework
+gem "stream_weaver"
+
+# Database
+gem "sinatra-activerecord"
+gem "rake"
+
+# Use SQLite in development, PostgreSQL in production
+gem "sqlite3", group: :development
+gem "pg", group: :production
+
+# Authentication
+gem "bcrypt"  # Password hashing
+
+# Environment variables
+gem "dotenv", groups: [:development, :test]
+
+# Optional: Security
+# gem "rack-ssl-enforcer"  # Force HTTPS
+# gem "rack-attack"  # Rate limiting
+
+# Optional: Background Jobs
+# gem "sidekiq"
+# gem "redis"
+
+# Optional: Error Tracking
+# gem "sentry-ruby"
+# gem "rollbar"
+
+# Optional: Email
+# gem "mail"
+# gem "pony"
+
+# Development/Test
+group :development, :test do
+  gem "rspec"
+  gem "rack-test"
+  gem "pry"
+end

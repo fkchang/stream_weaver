@@ -1,0 +1,55 @@
+# Fly.io Deployment Configuration
+#
+# This file configures deployment to Fly.io
+# Place this file in your repository root as fly.toml
+#
+# Generate with: fly launch
+# Documentation: https://fly.io/docs/reference/configuration/
+
+app = "streamweaver-app"
+primary_region = "lax"  # Change to your preferred region
+
+# Build configuration
+[build]
+  builder = "paketobuildpacks/builder:base"
+
+# Environment variables
+[env]
+  PORT = "8080"
+  RACK_ENV = "production"
+
+# HTTP service
+[[services]]
+  http_checks = []
+  internal_port = 8080
+  processes = ["app"]
+  protocol = "tcp"
+  script_checks = []
+
+  [services.concurrency]
+    hard_limit = 25
+    soft_limit = 20
+    type = "connections"
+
+  [[services.ports]]
+    force_https = true
+    handlers = ["http"]
+    port = 80
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port = 443
+
+  [[services.tcp_checks]]
+    grace_period = "1s"
+    interval = "15s"
+    restart_limit = 0
+    timeout = "2s"
+
+# Secrets (set with fly secrets set)
+# fly secrets set SESSION_SECRET=$(openssl rand -hex 64)
+# fly secrets set DATABASE_URL=postgres://...
+
+# PostgreSQL database
+# Create with: fly postgres create
+# Attach with: fly postgres attach --app streamweaver-app <postgres-app-name>
