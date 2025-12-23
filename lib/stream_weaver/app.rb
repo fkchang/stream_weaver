@@ -8,9 +8,9 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides
+    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets
 
-    def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], &block)
+    def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], &block)
       @title = title
       @layout = layout
       @theme = validate_theme(theme)
@@ -20,6 +20,8 @@ module StreamWeaver
       @state_key = :streamlit_state
       @_state = {}
       @button_counter = 0
+      @scripts = scripts
+      @stylesheets = stylesheets
 
       components.each { |mod| singleton_class.include(mod) }
     end

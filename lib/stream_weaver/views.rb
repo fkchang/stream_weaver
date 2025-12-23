@@ -20,6 +20,8 @@ module StreamWeaver
         @adapter = adapter
         @is_agentic = is_agentic
         @session_theme = session_theme
+        @scripts = app.scripts
+        @stylesheets = app.stylesheets
       end
 
       def view_template
@@ -29,6 +31,17 @@ module StreamWeaver
             title { @app.title }
             # Inject adapter-specific CDN scripts using Phlex methods
             @adapter.render_cdn_scripts(self)
+
+            # Add custom stylesheets
+            @stylesheets.each do |href|
+              link(rel: "stylesheet", href: href)
+            end
+
+            # Add custom scripts
+            @scripts.each do |src|
+              script(src: src)
+            end
+
             # Google Fonts: Source Sans 3 + Crimson Pro (for document theme)
             link(rel: "preconnect", href: "https://fonts.googleapis.com")
             link(rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "anonymous")
