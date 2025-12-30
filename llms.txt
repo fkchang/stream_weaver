@@ -35,6 +35,19 @@ ruby app_three.rb  # Opens browser at http://localhost:4569 (auto-detected)
 
 No need to specify ports, no conflicts, no manual browser opening. Just run and go.
 
+**For AI agents:** The running URL is printed to stdout, so Claude Code can read the terminal output to know the exact port if needed for testing or automation:
+
+```
+╔═══════════════════════════════════════════════════════════╗
+║              StreamWeaver App Running                    ║
+╚═══════════════════════════════════════════════════════════╝
+
+  🌐  http://localhost:4568
+  📱  My App
+
+  Press Ctrl+C to stop
+```
+
 ## Core Concepts
 
 ### 1. The `app` Block

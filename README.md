@@ -62,7 +62,7 @@ Run with: `ruby my_app.rb`
 
 The browser opens automatically at `http://localhost:4567` (or next available port).
 
-> **Run Multiple Apps Simultaneously** - StreamWeaver automatically finds a free port and opens a browser tab for each app. Run `ruby app1.rb` in one terminal, `ruby app2.rb` in another — no port conflicts, no configuration. Each app gets its own port and browser tab automatically.
+> **Run Multiple Apps Simultaneously** - StreamWeaver automatically finds a free port and opens a browser tab for each app. Run `ruby app1.rb` in one terminal, `ruby app2.rb` in another — no port conflicts, no configuration. Each app gets its own port and browser tab automatically. The URL is printed to stdout so AI agents can read the port for testing.
 
 ## Installation
 
