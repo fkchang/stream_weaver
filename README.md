@@ -62,6 +62,8 @@ Run with: `ruby my_app.rb`
 
 The browser opens automatically at `http://localhost:4567` (or next available port).
 
+> **Run Multiple Apps Simultaneously** - StreamWeaver automatically finds a free port and opens a browser tab for each app. Run `ruby app1.rb` in one terminal, `ruby app2.rb` in another — no port conflicts, no configuration. Each app gets its own port and browser tab automatically.
+
 ## Installation
 
 ```bash
@@ -79,7 +81,7 @@ gem 'stream_weaver'
 - **Agentic Mode** - Built-in `run_once!` for AI agents to collect user input and return structured data
 - **Single-File Apps** - No separate HTML/CSS/JS files, no build step
 - **Automatic State Management** - Session-based state with Alpine.js frontend sync
-- **Zero Configuration** - Auto port detection, browser opening, graceful shutdown
+- **Zero Configuration** - Auto port detection, auto browser opening, run multiple apps simultaneously without conflicts
 - **Layout Modes** - Configurable container widths (`:default`, `:wide`, `:full`, `:fluid`)
 - **Theming** - Built-in themes (`:default`, `:dashboard`, `:document`) + custom theme registration
 - **Token Efficient** - 10-50x fewer tokens than HTML/React for GenAI generation

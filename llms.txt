@@ -16,7 +16,24 @@ app "My App" do
 end.run!
 ```
 
-Run with `ruby my_app.rb` and open `http://localhost:4567`.
+Run with `ruby my_app.rb` — the browser opens automatically.
+
+### Zero-Config Multi-App Development
+
+**Unique perk:** StreamWeaver automatically finds a free port and opens a browser tab for each app. This means you can run multiple StreamWeaver apps simultaneously without port conflicts or manual configuration:
+
+```bash
+# Terminal 1
+ruby app_one.rb    # Opens browser at http://localhost:4567
+
+# Terminal 2
+ruby app_two.rb    # Opens browser at http://localhost:4568 (auto-detected)
+
+# Terminal 3
+ruby app_three.rb  # Opens browser at http://localhost:4569 (auto-detected)
+```
+
+No need to specify ports, no conflicts, no manual browser opening. Just run and go.
 
 ## Core Concepts
 
