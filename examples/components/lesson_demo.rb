@@ -14,7 +14,7 @@ glossary = {
   },
   "Quad 4" => {
     simple: "Economic regime: deflation",
-    detailed: "Quad 4 is one of four economic regimes in Hedgeye's GIP (Growth, Inflation, Policy) model. It occurs when both growth AND inflation are falling - a deflationary environment where bonds typically outperform stocks and cash is king."
+    detailed: "Quad 4 is one of four economic regimes in the Growth-Inflation-Policy (GIP) framework. It occurs when both growth AND inflation are falling - a deflationary environment where bonds typically outperform stocks and cash is king."
   },
   "rally" => {
     simple: "Prices rising quickly",

@@ -115,20 +115,43 @@ app "Todo Manager" do
 end.run!
 ```
 
-See `examples/` directory for more:
-- `hello_world.rb` - Basic form
-- `todo_list.rb` - Full CRUD app
-- `all_components.rb` - Component showcase
-- `checkbox_group_demo.rb` - Batch selection with select all/none
-- `markdown_demo.rb` - Full GFM markdown demo
-- `agentic_form.rb` - Agentic mode demo
-- `theme_demo.rb` - Theme switching demo
-- `theme_tweaker.rb` - Visual theme editor
-- `layout_components_demo.rb` - VStack, HStack, Grid layouts
-- `navigation_demo.rb` - Tabs, Breadcrumbs, Dropdown menus
-- `modal_demo.rb` - Modal dialogs
-- `feedback_demo.rb` - Alerts, Toasts, Progress bars, Spinners
-- `events_demo.rb` - Event callbacks (on_change, on_blur)
+### Interactive Tutorial
+
+**Start here:** `ruby examples/advanced/tutorial.rb` — A self-documenting, interactive tutorial that teaches StreamWeaver using StreamWeaver itself. Features live demos, editable code panels, and "Run Standalone" to launch your experiments.
+
+### Examples by Category
+
+```
+examples/
+├── basic/              # Start here
+│   ├── hello_world.rb    - Minimal form with conditional rendering
+│   └── todo_list.rb      - Full CRUD app with state management
+├── agentic/            # AI agent workflows
+│   ├── agentic_form.rb   - Simple form collection for agents
+│   ├── agentic_form_autoclose.rb - Auto-closing browser variant
+│   └── cultivation_tracker.rb    - Real-world daily check-in form
+├── components/         # Individual component demos
+│   ├── form_demo.rb      - Form blocks with submit/cancel
+│   ├── quiz_demo.rb      - Radio groups and validation
+│   ├── checkbox_group_demo.rb - Batch selection with select all/none
+│   ├── markdown_demo.rb  - GitHub Flavored Markdown
+│   ├── lesson_demo.rb    - Educational content with glossary tooltips
+│   ├── score_and_collapsible_demo.rb - Score tables, collapsibles
+│   └── events_demo.rb    - on_change, on_blur callbacks
+├── layout/             # Layout and navigation
+│   ├── layout_components_demo.rb - Columns, VStack, HStack, Grid
+│   ├── navigation_demo.rb - Tabs, Breadcrumbs, Dropdowns
+│   └── modal_demo.rb     - Modal dialogs
+├── styling/            # Themes and feedback
+│   ├── theme_demo.rb     - Built-in theme switching
+│   ├── style_showcase.rb - Component styling showcase
+│   └── feedback_demo.rb  - Alerts, Toasts, Progress, Spinners
+└── advanced/           # Full applications
+    ├── tutorial.rb       - Interactive tutorial (start here!)
+    ├── all_components.rb - Comprehensive component gallery
+    ├── theme_tweaker.rb  - Visual theme editor with export
+    └── teachables_browser.rb - Educational content browser
+```
 
 ## Agentic Mode
 

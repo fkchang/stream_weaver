@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
   spec.name = "stream_weaver"
   spec.version = StreamWeaver::VERSION
   spec.authors = ["Forrest Chang"]
-  spec.email = ["fchang@hedgeye.com"]
+  spec.email = ["fkc_email-ruby@yahoo.com"]
 
   spec.summary = "Declarative Ruby DSL for building interactive web UIs with minimal token overhead"
   spec.description = "StreamWeaver enables GenAI agents and developers to rapidly build interactive web UIs using a declarative Ruby DSL. Features single-file execution, automatic state management, and agentic mode for AI-driven workflows."
