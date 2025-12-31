@@ -87,8 +87,10 @@ module ExamplesBrowser
     SPAWNED_PIDS.each { |pid| Process.kill('TERM', pid) rescue nil }
     SPAWNED_PIDS.clear
 
-    # Spawn new process
-    pid = spawn("ruby", file_path, [:out, :err] => "/dev/null")
+    # Spawn new process - don't redirect output so browser can open
+    # The spawned app will print its own URL and open browser
+    pid = spawn("ruby", file_path)
+    Process.detach(pid)  # Don't wait for it
     SPAWNED_PIDS << pid
     pid
   end
@@ -162,6 +164,8 @@ app = StreamWeaver::App.new(
                       s[:selected_file] = filename
                       s[:code_content] = read_file(dir[:key], filename)
                       s[:last_run_file] = nil
+                      s[:syntax_ok] = nil
+                      s[:syntax_checked_file] = nil
                     end
                   end
                 end
@@ -183,8 +187,10 @@ app = StreamWeaver::App.new(
                 button "Check Syntax", style: :secondary do |s|
                   result = check_syntax(s[:code_content])
                   if result[:ok]
-                    # Could show a toast here, but for now just don't show modal
+                    s[:syntax_ok] = true
+                    s[:syntax_checked_file] = s[:selected_file]
                   else
+                    s[:syntax_ok] = false
                     s[:error_message] = result[:message]
                     s[:error_modal_open] = true
                   end
@@ -210,7 +216,14 @@ app = StreamWeaver::App.new(
             # Code editor
             code_editor :code_content, language: :ruby, readonly: true, height: "500px"
 
-            # Success message
+            # Syntax check success message
+            if state[:syntax_ok] && state[:syntax_checked_file] == state[:selected_file]
+              alert(variant: :success) do
+                text "✓ Syntax OK"
+              end
+            end
+
+            # Run success message
             if state[:last_run_file] == state[:selected_file]
               alert(variant: :success) do
                 text "Launched! Check for a new browser tab."
