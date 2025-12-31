@@ -61,6 +61,13 @@ module StreamWeaver
           end
         end
 
+        # Filter state for session storage - remove large/transient keys
+        # Session cookies have ~4KB limit, so we can't store file contents, etc.
+        def session_safe_state(state)
+          transient_keys = [:code_content, :current_file_path, :examples]
+          state.reject { |k, _| transient_keys.include?(k) }
+        end
+
         # Set unchecked checkboxes to false (they don't send params)
         def handle_unchecked_checkboxes(state, components)
           self.class.collect_input_keys(components).each do |key|
@@ -99,7 +106,7 @@ module StreamWeaver
           # Completely clear the session to avoid any stale data
           session.clear
           state = {}
-          session[:streamlit_state] = state
+          session[:streamlit_state] = session_safe_state(state)
         else
           state = session[:streamlit_state] ||= {}
         end
@@ -126,7 +133,7 @@ module StreamWeaver
           streamlit_app.rebuild_with_state(state)
           sync_params_to_state(state)
           handle_unchecked_checkboxes(state, streamlit_app.components)
-          session[:streamlit_state] = state
+          session[:streamlit_state] = session_safe_state(state)
 
           streamlit_app.rebuild_with_state(state)
           Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
@@ -152,7 +159,7 @@ module StreamWeaver
           button = self.class.find_button_recursive(streamlit_app.components, button_id)
           if button
             button.execute(state)
-            session[:streamlit_state] = state
+            session[:streamlit_state] = session_safe_state(state)
           end
 
           streamlit_app.rebuild_with_state(state)
@@ -170,7 +177,7 @@ module StreamWeaver
         streamlit_app.rebuild_with_state(state)
         sync_params_to_state(state)
         handle_unchecked_checkboxes(state, streamlit_app.components)
-        session[:streamlit_state] = state
+        session[:streamlit_state] = session_safe_state(state)
 
         # Collect input keys for filtering the result
         input_keys = self.class.collect_input_keys(streamlit_app.components)
@@ -235,7 +242,7 @@ module StreamWeaver
             component.execute_on_blur(state, new_value) if component.respond_to?(:execute_on_blur)
           end
 
-          session[:streamlit_state] = state
+          session[:streamlit_state] = session_safe_state(state)
 
           streamlit_app.rebuild_with_state(state)
           Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
@@ -271,7 +278,7 @@ module StreamWeaver
 
           # Auto-update state with form values (the key behavior we designed)
           state[form_name] = form_values
-          session[:streamlit_state] = state
+          session[:streamlit_state] = session_safe_state(state)
 
           # Rebuild to find the form component
           streamlit_app.rebuild_with_state(state)
@@ -298,7 +305,7 @@ module StreamWeaver
           state[:_toasts].reject! { |t| t[:id] == toast_id }
         end
 
-        session[:streamlit_state] = state
+        session[:streamlit_state] = session_safe_state(state)
 
         # Return empty response (swap: none means no DOM update needed)
         status 204

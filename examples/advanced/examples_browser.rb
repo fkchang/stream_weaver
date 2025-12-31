@@ -103,23 +103,23 @@ app = StreamWeaver::App.new(
   scripts: [CODEMIRROR_JS, CODEMIRROR_RUBY],
   components: [ExamplesBrowser]
 ) do
-  # Initialize state
-  state[:examples] ||= discover_examples
+  # Initialize state - derive examples fresh each time (not stored in session)
+  examples = discover_examples
   state[:expanded_dirs] ||= [:basic]
   state[:selected_dir] ||= :basic
-  state[:selected_file] ||= state[:examples].first&.dig(:files)&.first
+  state[:selected_file] ||= examples.first&.dig(:files)&.first
   state[:error_modal_open] ||= false
   state[:error_message] ||= ""
   state[:last_run_file] ||= nil
 
-  # Initialize file content and path on first load
-  unless state[:current_file_path]
-    if state[:selected_dir] && state[:selected_file]
-      state[:current_file_path] = file_path(state[:selected_dir], state[:selected_file])
-      state[:code_content] = read_file(state[:selected_dir], state[:selected_file])
-    else
-      state[:code_content] ||= ""
-    end
+  # ALWAYS derive current_file_path and code_content from selected_dir/selected_file
+  # This avoids storing large file content in session cookies (4KB limit!)
+  if state[:selected_dir] && state[:selected_file]
+    state[:current_file_path] = file_path(state[:selected_dir], state[:selected_file])
+    state[:code_content] = read_file(state[:selected_dir], state[:selected_file])
+  else
+    state[:current_file_path] = nil
+    state[:code_content] = ""
   end
 
   # Inject custom CSS
@@ -143,7 +143,7 @@ app = StreamWeaver::App.new(
     # Sidebar - file browser
     div style: "width: 220px; flex-shrink: 0; overflow: hidden;" do
       div style: "background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 8px; overflow: hidden;" do
-        state[:examples].each do |dir|
+        examples.each do |dir|
           is_expanded = state[:expanded_dirs].include?(dir[:key])
           folder_icon = is_expanded ? "▼" : "▶"
 
@@ -165,10 +165,9 @@ app = StreamWeaver::App.new(
                 color = is_selected ? "white" : "#0066cc"
 
                 button filename, style: "display: block; padding: 4px 8px; color: #{color}; background: #{bg}; border: none; border-radius: 4px; width: 100%; text-align: left; font-size: 13px; cursor: pointer; margin: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" do |s|
+                  # Only set the selection - code_content is derived on rebuild
                   s[:selected_dir] = dir[:key]
                   s[:selected_file] = filename
-                  s[:current_file_path] = file_path(dir[:key], filename)
-                  s[:code_content] = read_file(dir[:key], filename)
                   s[:last_run_file] = nil
                   s[:syntax_ok] = nil
                 end
@@ -200,7 +199,6 @@ app = StreamWeaver::App.new(
             button "▶ Run" do |s|
               result = check_syntax(s[:code_content])
               if result[:ok]
-                # Use stored path to ensure we run the correct file
                 run_example(s[:current_file_path])
                 s[:last_run_file] = s[:selected_file]
                 s[:syntax_ok] = nil

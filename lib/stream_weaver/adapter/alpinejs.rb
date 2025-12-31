@@ -1430,6 +1430,8 @@ module StreamWeaver
           class: "sw-code-editor-wrapper",
           style: "height: #{component.height};"
         ) do
+          # CSS to hide textarea when CodeMirror is present (can't be overridden by JS)
+          view.style { ".sw-code-editor-wrapper textarea { display: none !important; }" }
           # Textarea with content - CodeMirror will replace this
           view.textarea(
             id: editor_id,
@@ -1446,15 +1448,9 @@ module StreamWeaver
               var wrapperId = editorId + '-wrapper';
 
               function initCodeEditor() {
-                console.log('=== initCodeEditor called ===');
-                console.log('  editorId:', editorId);
                 var textarea = document.getElementById(editorId);
                 var wrapper = document.getElementById(wrapperId);
-                console.log('  textarea found:', !!textarea);
-                console.log('  wrapper found:', !!wrapper);
                 if (!textarea || !wrapper) return;
-                console.log('  textarea.value length:', textarea.value.length);
-                console.log('  textarea.value first 80:', textarea.value.slice(0, 80));
 
                 // Destroy existing editor if present
                 if (wrapper.querySelector('.CodeMirror')) {
@@ -1481,10 +1477,6 @@ module StreamWeaver
                 });
 
                 editor.setSize('100%', '#{component.height}');
-                console.log('  CodeMirror initialized, editor:', !!editor);
-
-                // Explicitly hide the textarea (CodeMirror should do this, but ensure it)
-                textarea.style.display = 'none';
 
                 // Sync changes back to hidden textarea (for form submission)
                 editor.on('change', function(cm) {
@@ -1517,7 +1509,6 @@ module StreamWeaver
                 var wrapper = document.getElementById(wrapperId);
                 // Check if our editor exists and needs initialization
                 if (textarea && wrapper && !wrapper.querySelector('.CodeMirror')) {
-                  console.log('htmx:afterSettle - initializing CodeMirror for', editorId);
                   initCodeEditor();
                 }
               });
