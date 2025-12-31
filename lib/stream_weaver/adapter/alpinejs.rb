@@ -1409,8 +1409,8 @@ module StreamWeaver
 
       # Render a code editor using CodeMirror 5
       #
-      # Uses hx-preserve to keep the editor instance alive across HTMX swaps.
-      # Content updates are handled via JavaScript rather than server re-render.
+      # Reinitializes editor on each HTMX swap to ensure content is fresh.
+      # The editor instance is destroyed and recreated to avoid stale state.
       #
       # @param view [Phlex::HTML] The Phlex view instance
       # @param component [Components::CodeEditor] The code editor component
@@ -1423,57 +1423,38 @@ module StreamWeaver
         editor_id = "sw-code-editor-#{key}"
         readonly_str = component.readonly ? "true" : "false"
 
-        # Container with hx-preserve to survive HTMX swaps
+        # Container - no hx-preserve, editor reinitializes on each swap
         view.div(
           id: "#{editor_id}-wrapper",
           class: "sw-code-editor-wrapper",
-          "hx-preserve" => "true",
           style: "height: #{component.height};"
         ) do
-          # Hidden textarea for form submission and initial content
+          # Textarea with content - CodeMirror will replace this
           view.textarea(
             id: editor_id,
             name: key.to_s,
-            style: "display: none;"
+            style: "width: 100%; height: 100%; font-family: monospace; font-size: 13px; border: none; resize: none;"
           ) { content }
         end
 
-        # Store current content in a data attribute for JS to detect changes
-        view.script(
-          type: "application/json",
-          id: "#{editor_id}-data",
-          "data-sw-code-content" => "true"
-        ) do
-          view.raw(view.safe(JSON.generate({ key: key.to_s, content: content })))
-        end
-
-        # Initialization script - only runs if editor doesn't exist yet
+        # Initialization script
         view.script do
           view.raw(view.safe(<<~JS))
             (function() {
               var editorId = '#{editor_id}';
               var wrapperId = editorId + '-wrapper';
-              var dataId = editorId + '-data';
 
               function initCodeEditor() {
                 var textarea = document.getElementById(editorId);
                 var wrapper = document.getElementById(wrapperId);
                 if (!textarea || !wrapper) return;
 
-                // Check if already initialized
+                // Destroy existing editor if present
                 if (wrapper.querySelector('.CodeMirror')) {
-                  // Editor exists, just update content if changed
-                  var dataEl = document.getElementById(dataId);
-                  if (dataEl && window.swCodeEditors && window.swCodeEditors[editorId]) {
-                    try {
-                      var data = JSON.parse(dataEl.textContent);
-                      var editor = window.swCodeEditors[editorId];
-                      if (editor.getValue() !== data.content) {
-                        editor.setValue(data.content);
-                      }
-                    } catch(e) {}
+                  var existing = wrapper.querySelector('.CodeMirror');
+                  if (existing.CodeMirror) {
+                    existing.CodeMirror.toTextArea();
                   }
-                  return;
                 }
 
                 // Initialize CodeMirror
@@ -1482,7 +1463,6 @@ module StreamWeaver
                   return;
                 }
 
-                window.swCodeEditors = window.swCodeEditors || {};
                 var editor = CodeMirror.fromTextArea(textarea, {
                   mode: '#{lang_config[:mode]}',
                   lineNumbers: true,
@@ -1494,7 +1474,6 @@ module StreamWeaver
                 });
 
                 editor.setSize('100%', '#{component.height}');
-                window.swCodeEditors[editorId] = editor;
 
                 // Sync changes back to hidden textarea (for form submission)
                 editor.on('change', function(cm) {
@@ -1502,18 +1481,12 @@ module StreamWeaver
                 });
               }
 
-              // Initialize on DOMContentLoaded or immediately if already loaded
+              // Initialize immediately or on DOM ready
               if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', initCodeEditor);
               } else {
-                // Small delay to ensure CodeMirror is loaded
                 setTimeout(initCodeEditor, 10);
               }
-
-              // Also reinitialize after HTMX swaps (content update only)
-              document.addEventListener('htmx:afterSettle', function(e) {
-                setTimeout(initCodeEditor, 10);
-              });
             })();
           JS
         end

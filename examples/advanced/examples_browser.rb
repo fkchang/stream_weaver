@@ -95,39 +95,6 @@ CODEMIRROR_CSS = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/code
 CODEMIRROR_JS = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"
 CODEMIRROR_RUBY = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/ruby/ruby.min.js"
 
-# Custom styles for file browser
-CUSTOM_CSS = <<~CSS
-  .file-browser { font-size: 13px; }
-  .folder-row {
-    display: flex;
-    align-items: center;
-    padding: 6px 8px;
-    cursor: pointer;
-    font-weight: 500;
-    color: #333;
-    border-radius: 4px;
-  }
-  .folder-row:hover { background: #f5f5f5; }
-  .folder-icon { margin-right: 6px; }
-  .folder-count { margin-left: auto; color: #999; font-size: 12px; }
-  .file-list { margin-left: 20px; }
-  .file-row {
-    display: block;
-    padding: 4px 8px;
-    color: #0066cc;
-    text-decoration: none;
-    cursor: pointer;
-    border-radius: 4px;
-    border: none;
-    background: none;
-    width: 100%;
-    text-align: left;
-    font-size: 13px;
-  }
-  .file-row:hover { background: #f0f7ff; }
-  .file-row.selected { background: #0066cc; color: white; }
-CSS
-
 app = StreamWeaver::App.new(
   "Examples",
   layout: :fluid,
@@ -141,14 +108,18 @@ app = StreamWeaver::App.new(
   state[:expanded_dirs] ||= [:basic]
   state[:selected_dir] ||= :basic
   state[:selected_file] ||= state[:examples].first&.dig(:files)&.first
-  state[:code_content] ||= ""
   state[:error_modal_open] ||= false
   state[:error_message] ||= ""
   state[:last_run_file] ||= nil
 
-  # Load file content when selection changes
-  if state[:selected_file] && state[:code_content].empty?
-    state[:code_content] = read_file(state[:selected_dir], state[:selected_file])
+  # Initialize file content and path on first load
+  unless state[:current_file_path]
+    if state[:selected_dir] && state[:selected_file]
+      state[:current_file_path] = file_path(state[:selected_dir], state[:selected_file])
+      state[:code_content] = read_file(state[:selected_dir], state[:selected_file])
+    else
+      state[:code_content] ||= ""
+    end
   end
 
   # Inject custom CSS
@@ -170,19 +141,14 @@ app = StreamWeaver::App.new(
   # Main layout
   div style: "display: flex; gap: 16px;" do
     # Sidebar - file browser
-    div style: "width: 200px; flex-shrink: 0;" do
-      div class: "file-browser", style: "background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 8px;" do
-        # Inline the custom CSS
-        div do
-          text ""  # placeholder
-        end
-
+    div style: "width: 220px; flex-shrink: 0; overflow: hidden;" do
+      div style: "background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 8px; overflow: hidden;" do
         state[:examples].each do |dir|
           is_expanded = state[:expanded_dirs].include?(dir[:key])
           folder_icon = is_expanded ? "▼" : "▶"
 
           # Folder row (clickable to expand/collapse)
-          button "#{folder_icon} 📁 #{dir[:label]} (#{dir[:files].length})", style: "display: flex; align-items: center; padding: 6px 8px; cursor: pointer; font-weight: 500; color: #333; border-radius: 4px; border: none; background: none; width: 100%; text-align: left; font-size: 13px;" do |s|
+          button "#{folder_icon} 📁 #{dir[:label]} (#{dir[:files].length})", style: "display: block; padding: 6px 8px; cursor: pointer; font-weight: 500; color: #333; border-radius: 4px; border: none; background: transparent; width: 100%; text-align: left; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" do |s|
             if s[:expanded_dirs].include?(dir[:key])
               s[:expanded_dirs] = s[:expanded_dirs] - [dir[:key]]
             else
@@ -198,9 +164,10 @@ app = StreamWeaver::App.new(
                 bg = is_selected ? "#0066cc" : "transparent"
                 color = is_selected ? "white" : "#0066cc"
 
-                button filename, style: "display: block; padding: 4px 8px; color: #{color}; background: #{bg}; border: none; border-radius: 4px; width: 100%; text-align: left; font-size: 13px; cursor: pointer; margin: 2px 0;" do |s|
+                button filename, style: "display: block; padding: 4px 8px; color: #{color}; background: #{bg}; border: none; border-radius: 4px; width: 100%; text-align: left; font-size: 13px; cursor: pointer; margin: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" do |s|
                   s[:selected_dir] = dir[:key]
                   s[:selected_file] = filename
+                  s[:current_file_path] = file_path(dir[:key], filename)
                   s[:code_content] = read_file(dir[:key], filename)
                   s[:last_run_file] = nil
                   s[:syntax_ok] = nil
@@ -233,8 +200,8 @@ app = StreamWeaver::App.new(
             button "▶ Run" do |s|
               result = check_syntax(s[:code_content])
               if result[:ok]
-                path = file_path(s[:selected_dir], s[:selected_file])
-                run_example(path)
+                # Use stored path to ensure we run the correct file
+                run_example(s[:current_file_path])
                 s[:last_run_file] = s[:selected_file]
                 s[:syntax_ok] = nil
               else
@@ -245,11 +212,8 @@ app = StreamWeaver::App.new(
           end
         end
 
-        # Code display - use text_area with monospace styling
-        text_area :code_content,
-          rows: 28,
-          style: "font-family: Monaco, Menlo, Consolas, monospace; font-size: 13px; width: 100%; background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 12px; line-height: 1.5;",
-          submit: false
+        # Code display with syntax highlighting
+        code_editor :code_content, language: :ruby, readonly: true, height: "500px"
 
         # Status messages
         if state[:syntax_ok] == true
