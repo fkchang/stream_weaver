@@ -4,7 +4,7 @@
 #
 # Run with: ruby examples/form_demo.rb
 
-require_relative '../lib/stream_weaver'
+require_relative '../../lib/stream_weaver'
 
 app = StreamWeaver.app "Form Block Demo" do
   header1 "Form Blocks Demo"

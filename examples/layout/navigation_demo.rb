@@ -5,7 +5,7 @@
 #
 # Run with: ruby -r ./lib/stream_weaver examples/navigation_demo.rb
 
-require_relative "../lib/stream_weaver"
+require_relative '../../lib/stream_weaver'
 
 app "Navigation Components", layout: :wide do
   header "Navigation Components Demo"

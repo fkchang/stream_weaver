@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../lib/stream_weaver"
+require_relative '../../lib/stream_weaver'
 
 # StreamWeaver Theme Tweaker
 # A visual editor for creating and customizing themes

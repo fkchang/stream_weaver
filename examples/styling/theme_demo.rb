@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../lib/stream_weaver"
+require_relative '../../lib/stream_weaver'
 
 # Pass theme as command line argument: ruby theme_demo.rb dashboard
 THEME = (ARGV[0] || 'default').to_sym

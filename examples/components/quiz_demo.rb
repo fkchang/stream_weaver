@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require_relative '../lib/stream_weaver'
+require_relative '../../lib/stream_weaver'
 
 # Demonstrates the new radio_group and card components for quiz-style UIs
 QuizApp = app "Quiz Demo" do

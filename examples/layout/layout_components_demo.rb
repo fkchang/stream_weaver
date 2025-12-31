@@ -7,7 +7,7 @@
 # - VStack and HStack for stacking layouts
 # - Grid for responsive grid layouts
 
-require_relative '../lib/stream_weaver'
+require_relative '../../lib/stream_weaver'
 
 # Custom component module - defines reusable components
 module UserComponents

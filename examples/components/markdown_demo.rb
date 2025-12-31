@@ -4,7 +4,7 @@
 # Demo of GitHub Flavored Markdown support
 # Shows the full power of the md component using Kramdown
 
-require_relative '../lib/stream_weaver'
+require_relative '../../lib/stream_weaver'
 
 app "GitHub Flavored Markdown Demo" do
   header1 "GitHub Flavored Markdown in StreamWeaver"

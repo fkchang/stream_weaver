@@ -12,7 +12,7 @@
 #
 # Usage: ruby examples/style_showcase.rb
 
-require_relative '../lib/stream_weaver'
+require_relative '../../lib/stream_weaver'
 
 LAYOUT = (ARGV[0] || 'wide').to_sym  # Pass layout as argument: ruby style_showcase.rb fluid
 

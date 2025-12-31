@@ -4,7 +4,7 @@
 #
 # Run with: ruby examples/events_demo.rb
 
-require_relative '../lib/stream_weaver'
+require_relative '../../lib/stream_weaver'
 
 app = StreamWeaver.app "Events Demo" do
   header1 "Events & Callbacks Demo"

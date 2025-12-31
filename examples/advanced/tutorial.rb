@@ -6,7 +6,7 @@
 #
 # Run with: ruby examples/tutorial.rb
 
-require_relative "../lib/stream_weaver"
+require_relative '../../lib/stream_weaver'
 
 # Section data object (DHH-style: prefer objects over hashes)
 Section = Data.define(:id, :nav_title, :title, :content, :code) do

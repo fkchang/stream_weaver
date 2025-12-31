@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require_relative '../lib/stream_weaver'
+require_relative '../../lib/stream_weaver'
 
 # Agentic mode example - collect data and return to agent
 App = app "User Survey" do

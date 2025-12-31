@@ -4,7 +4,7 @@
 # Run: ruby examples/score_and_collapsible_demo.rb
 # Open: http://localhost:4567
 
-require_relative '../lib/stream_weaver'
+require_relative '../../lib/stream_weaver'
 
 app "Review Dashboard" do
   header "Teachable Moment Review"

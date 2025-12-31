@@ -4,7 +4,7 @@
 #
 # Run with: ruby examples/modal_demo.rb
 
-require_relative '../lib/stream_weaver'
+require_relative '../../lib/stream_weaver'
 
 app = StreamWeaver.app "Modal Demo" do
   header1 "Modal Dialogs Demo"

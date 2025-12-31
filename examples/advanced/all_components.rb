@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require_relative '../lib/stream_weaver'
+require_relative '../../lib/stream_weaver'
 
 # Demo of all StreamWeaver components
 App = app "Component Showcase" do

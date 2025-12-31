@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../lib/stream_weaver"
+require_relative '../../lib/stream_weaver'
 
 app = StreamWeaver::App.new("Feedback Components Demo") do
   header1 "Feedback Components"

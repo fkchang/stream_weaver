@@ -1,79 +1,69 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require_relative '../lib/stream_weaver'
+require_relative '../../lib/stream_weaver'
 
-# Daily Cultivation Tracking Form
-cultivation_app = app "Daily Cultivation Tracker" do
-  header "🌱 Daily Cultivation Reflection"
-  text "Track your mastery journey with intention and awareness"
+# Daily Cultivation Check-in Form (matches /daily-checkin format)
+# Updated: December 2025
+cultivation_app = app "Daily Cultivation Check-in" do
+  header "🌱 Daily Cultivation Check-in"
+  text "Reflect on today's cultivation journey"
+
+  # Determine checkin date
+  checkin_date = if Time.now.hour < 18
+    (Date.today - 1).strftime("%A, %B %d, %Y")
+  else
+    Date.today.strftime("%A, %B %d, %Y")
+  end
+  header3 "📅 #{checkin_date}"
 
   # Question 1: Energy level today
-  header3 "1. How is your cultivation energy today?"
-  select :energy_today, ["1 - Very Low", "2", "3", "4", "5 - Moderate", "6", "7", "8", "9", "10 - Peak Energy"]
-  text_area :energy_description, placeholder: "Brief description of your energy state...", rows: 2
+  header3 "1. How is your cultivation energy today? (1-10)"
+  select :energy_today, ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"], default: "8"
 
-  # Question 2: Three achievements
-  header3 "2. What are 3 cultivation achievements from today?"
-  text "(Progress of any size counts)"
+  # Question 2: Daily Narrative (what happened)
+  header3 "2. What happened today?"
+  text "Activities, meetings, events, notable moments"
+  text_area :daily_narrative, placeholder: "Describe your day - this becomes your Daily Narrative section...", rows: 6, submit: false
+
+  # Question 3: Achievements (unlimited - 7 slots)
+  header3 "3. Cultivation Achievements"
+  text "List your wins - progress of any size counts! (leave extras blank)"
   text_field :achievement_1, placeholder: "Achievement #1"
   text_field :achievement_2, placeholder: "Achievement #2"
   text_field :achievement_3, placeholder: "Achievement #3"
+  text_field :achievement_4, placeholder: "Achievement #4 (optional)"
+  text_field :achievement_5, placeholder: "Achievement #5 (optional)"
+  text_field :achievement_6, placeholder: "Achievement #6 (optional)"
+  text_field :achievement_7, placeholder: "Achievement #7 (optional)"
 
-  # Question 3: Tomorrow's priority
-  header3 "3. What's your #1 cultivation priority for tomorrow?"
-  text_area :priority_tomorrow, placeholder: "Your top priority...", rows: 2
+  # Question 4: Tomorrow's priority
+  header3 "4. What's your #1 cultivation priority for tomorrow?"
+  text_area :priority_tomorrow, placeholder: "Your top priority for tomorrow...", rows: 2, submit: false
 
-  # Question 4: Tomorrow's energy forecast
-  header3 "4. Energy level for tomorrow's practice:"
-  select :energy_tomorrow, ["1 - Very Low", "2", "3", "4", "5 - Moderate", "6", "7", "8", "9", "10 - Peak Energy"]
+  # Question 5: Tomorrow's energy forecast
+  header3 "5. Energy level for tomorrow's practice? (1-10)"
+  select :energy_tomorrow, ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"], default: "8"
 
-  # Question 5: Obstacles
-  header3 "5. Any cultivation obstacles or resistances you faced?"
-  text_area :obstacles, placeholder: "Describe any challenges or resistances...", rows: 3
+  # Question 6: Obstacles
+  header3 "6. Any obstacles or resistances you faced?"
+  text "(or leave blank if none)"
+  text_area :obstacles, placeholder: "Describe any challenges, blockers, or resistances...", rows: 3, submit: false
 
-  # Question 6: Gratitude
-  header3 "6. What cultivation insights are you grateful for today?"
-  text_area :gratitude, placeholder: "Insights, breakthroughs, or learnings...", rows: 3
-
-  # Question 7: Other reflections
-  header3 "7. Any other reflections on your mastery journey?"
-  text_area :reflections, placeholder: "Additional thoughts, observations, or notes...", rows: 4
+  # Question 7: Learnings & Patterns
+  header3 "7. Any learnings or patterns you noticed?"
+  text "(or leave blank if none)"
+  text_area :learnings, placeholder: "Insights, patterns, things you learned today...", rows: 3, submit: false
 end
 
 # Run in agentic mode - agent collects the reflection data
 puts "\n╔══════════════════════════════════════════════════════════╗"
-puts "║     🌱 Daily Cultivation Tracker (Agentic Mode)        ║"
+puts "║     🌱 Daily Cultivation Check-in (StreamWeaver)        ║"
 puts "╚══════════════════════════════════════════════════════════╝\n"
-puts "Fill out your daily reflection form."
+puts "Fill out your daily reflection form in the browser."
 puts "Click '🤖 Submit to Agent' when complete.\n"
 
-result = cultivation_app.run_once!(timeout: 600)
+result = cultivation_app.run_once!(timeout: 1800)
 
-# Agent processes the cultivation data
-puts "\n╔══════════════════════════════════════════════════════════╗"
-puts "║              ✅ Cultivation Data Received               ║"
-puts "╚══════════════════════════════════════════════════════════╝\n"
-
-puts "📊 Daily Summary:"
-puts "  Energy Today: #{result[:energy_today]}"
-puts "  Energy Tomorrow: #{result[:energy_tomorrow]}"
-puts "\n🎯 Achievements:"
-puts "  1. #{result[:achievement_1]}"
-puts "  2. #{result[:achievement_2]}"
-puts "  3. #{result[:achievement_3]}"
-puts "\n🔮 Tomorrow's Priority:"
-puts "  #{result[:priority_tomorrow]}"
-puts "\n💪 Obstacles Faced:"
-puts "  #{result[:obstacles]}"
-puts "\n🙏 Gratitude:"
-puts "  #{result[:gratitude]}"
-puts "\n💭 Reflections:"
-puts "  #{result[:reflections]}"
-
-puts "\n" + "="*60
-puts "Raw JSON data:"
-puts JSON.pretty_generate(result)
-puts "="*60
-
-puts "\n✨ Cultivation tracking complete. Keep growing! 🌱\n"
+# Output JSON for agent consumption
+puts "\n#{result.to_json}"

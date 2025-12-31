@@ -6,7 +6,7 @@
 # Run: ruby teachables_browser.rb
 # Opens: http://localhost:8080
 
-require_relative '../lib/stream_weaver'
+require_relative '../../lib/stream_weaver'
 require 'json'
 require 'yaml'
 require 'fileutils'
