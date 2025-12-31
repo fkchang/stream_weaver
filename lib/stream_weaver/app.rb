@@ -226,6 +226,11 @@ module StreamWeaver
       @components << Components::TextArea.new(key, **options)
     end
 
+    def code_editor(key, language: :ruby, readonly: true, height: "400px", **options)
+      initialize_form_state(key, options, "")
+      @components << Components::CodeEditor.new(key, language: language, readonly: readonly, height: height, **options)
+    end
+
     def checkbox(key, label, **options)
       initialize_form_state(key, options, false)
       @components << Components::Checkbox.new(key, label, **options)

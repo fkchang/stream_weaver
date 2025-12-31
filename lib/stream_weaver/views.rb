@@ -1891,6 +1891,31 @@ module StreamWeaver
                 }
 
                 /* ===========================================
+                   Code Editor (CodeMirror 5)
+                   =========================================== */
+                .sw-code-editor-wrapper {
+                  border: 1px solid var(--sw-color-border);
+                  border-radius: var(--sw-radius-md);
+                  overflow: hidden;
+                }
+
+                .sw-code-editor-wrapper .CodeMirror {
+                  height: 100%;
+                  font-family: 'Monaco', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
+                  font-size: 14px;
+                  line-height: 1.5;
+                }
+
+                .sw-code-editor-wrapper .CodeMirror-gutters {
+                  background: var(--sw-color-bg);
+                  border-right: 1px solid var(--sw-color-border);
+                }
+
+                .sw-code-editor-wrapper .CodeMirror-linenumber {
+                  color: var(--sw-color-text-muted);
+                }
+
+                /* ===========================================
                    Embedded Mode - Disable standalone styles
                    Add class="sw-embedded" to body to use minimal styles
                    =========================================== */

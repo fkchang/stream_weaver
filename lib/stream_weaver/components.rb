@@ -926,5 +926,42 @@ module StreamWeaver
         view.adapter.render_theme_switcher(view, self, state)
       end
     end
+
+    # CodeEditor component for syntax-highlighted code display/editing
+    # Uses CodeMirror 5 with hx-preserve to survive HTMX swaps
+    class CodeEditor < Base
+      attr_reader :key, :language, :readonly, :height, :options
+
+      # Supported languages (CodeMirror 5 modes)
+      LANGUAGES = {
+        ruby: { mode: 'ruby', mime: 'text/x-ruby' },
+        javascript: { mode: 'javascript', mime: 'text/javascript' },
+        html: { mode: 'htmlmixed', mime: 'text/html' },
+        css: { mode: 'css', mime: 'text/css' },
+        markdown: { mode: 'markdown', mime: 'text/x-markdown' },
+        json: { mode: 'javascript', mime: 'application/json' }
+      }.freeze
+
+      # @param key [Symbol] State key for the editor content
+      # @param language [Symbol] Syntax highlighting language (:ruby, :javascript, etc.)
+      # @param readonly [Boolean] Whether the editor is read-only
+      # @param height [String] CSS height value (default: "400px")
+      # @param options [Hash] Additional options
+      def initialize(key, language: :ruby, readonly: true, height: "400px", **options)
+        @key = key
+        @language = language.to_sym
+        @readonly = readonly
+        @height = height
+        @options = options
+      end
+
+      def language_config
+        LANGUAGES[@language] || LANGUAGES[:ruby]
+      end
+
+      def render(view, state)
+        view.adapter.render_code_editor(view, self, state)
+      end
+    end
   end
 end

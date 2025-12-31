@@ -81,10 +81,12 @@ module StreamWeaver
       # @option options [String] :placeholder Placeholder text
       # @option options [Integer] :rows Number of rows (default: 3)
       # @option options [Hash] :form_context Form context if inside a form block
+      # @option options [Boolean] :submit Whether to auto-submit on change (default: true)
       # @param state [Hash] Current state hash (symbol keys)
       # @return [void] Renders to view
       def render_text_area(view, key, options, state)
         form_context = options[:form_context]
+        should_submit = options.fetch(:submit, true)
 
         if form_context
           # Inside form: use form-scoped x-model, no HTMX
@@ -97,7 +99,7 @@ module StreamWeaver
             rows: options[:rows] || 3,
             "x-model" => "_form.#{key}"  # Form-local Alpine scope
           ) { form_state[key] || "" }
-        else
+        elsif should_submit
           trigger_str, endpoint = build_input_triggers(key, options)
 
           view.textarea(
@@ -111,6 +113,15 @@ module StreamWeaver
             "hx-target" => "#app-container",
             "hx-swap" => "innerHTML scroll:false",
             "hx-trigger" => trigger_str
+          ) { state[key] || "" }
+        else
+          # No auto-submit: just Alpine.js binding, no HTMX
+          view.textarea(
+            id: "input-#{key}",
+            name: key.to_s,
+            placeholder: options[:placeholder] || "",
+            rows: options[:rows] || 3,
+            "x-model" => key.to_s
           ) { state[key] || "" }
         end
       end
@@ -1393,6 +1404,118 @@ module StreamWeaver
               end
             end
           end
+        end
+      end
+
+      # Render a code editor using CodeMirror 5
+      #
+      # Uses hx-preserve to keep the editor instance alive across HTMX swaps.
+      # Content updates are handled via JavaScript rather than server re-render.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::CodeEditor] The code editor component
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      def render_code_editor(view, component, state)
+        key = component.key
+        content = state[key].to_s
+        lang_config = component.language_config
+        editor_id = "sw-code-editor-#{key}"
+        readonly_str = component.readonly ? "true" : "false"
+
+        # Container with hx-preserve to survive HTMX swaps
+        view.div(
+          id: "#{editor_id}-wrapper",
+          class: "sw-code-editor-wrapper",
+          "hx-preserve" => "true",
+          style: "height: #{component.height};"
+        ) do
+          # Hidden textarea for form submission and initial content
+          view.textarea(
+            id: editor_id,
+            name: key.to_s,
+            style: "display: none;"
+          ) { content }
+        end
+
+        # Store current content in a data attribute for JS to detect changes
+        view.script(
+          type: "application/json",
+          id: "#{editor_id}-data",
+          "data-sw-code-content" => "true"
+        ) do
+          view.raw(view.safe(JSON.generate({ key: key.to_s, content: content })))
+        end
+
+        # Initialization script - only runs if editor doesn't exist yet
+        view.script do
+          view.raw(view.safe(<<~JS))
+            (function() {
+              var editorId = '#{editor_id}';
+              var wrapperId = editorId + '-wrapper';
+              var dataId = editorId + '-data';
+
+              function initCodeEditor() {
+                var textarea = document.getElementById(editorId);
+                var wrapper = document.getElementById(wrapperId);
+                if (!textarea || !wrapper) return;
+
+                // Check if already initialized
+                if (wrapper.querySelector('.CodeMirror')) {
+                  // Editor exists, just update content if changed
+                  var dataEl = document.getElementById(dataId);
+                  if (dataEl && window.swCodeEditors && window.swCodeEditors[editorId]) {
+                    try {
+                      var data = JSON.parse(dataEl.textContent);
+                      var editor = window.swCodeEditors[editorId];
+                      if (editor.getValue() !== data.content) {
+                        editor.setValue(data.content);
+                      }
+                    } catch(e) {}
+                  }
+                  return;
+                }
+
+                // Initialize CodeMirror
+                if (typeof CodeMirror === 'undefined') {
+                  console.warn('CodeMirror not loaded. Add CodeMirror 5 to scripts.');
+                  return;
+                }
+
+                window.swCodeEditors = window.swCodeEditors || {};
+                var editor = CodeMirror.fromTextArea(textarea, {
+                  mode: '#{lang_config[:mode]}',
+                  lineNumbers: true,
+                  readOnly: #{readonly_str},
+                  theme: 'default',
+                  tabSize: 2,
+                  indentWithTabs: false,
+                  lineWrapping: false
+                });
+
+                editor.setSize('100%', '#{component.height}');
+                window.swCodeEditors[editorId] = editor;
+
+                // Sync changes back to hidden textarea (for form submission)
+                editor.on('change', function(cm) {
+                  textarea.value = cm.getValue();
+                });
+              }
+
+              // Initialize on DOMContentLoaded or immediately if already loaded
+              if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initCodeEditor);
+              } else {
+                // Small delay to ensure CodeMirror is loaded
+                setTimeout(initCodeEditor, 10);
+              }
+
+              // Also reinitialize after HTMX swaps (content update only)
+              document.addEventListener('htmx:afterSettle', function(e) {
+                setTimeout(initCodeEditor, 10);
+              });
+            })();
+          JS
         end
       end
 
