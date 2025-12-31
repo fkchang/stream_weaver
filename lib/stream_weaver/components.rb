@@ -155,6 +155,26 @@ module StreamWeaver
       end
     end
 
+    # AppHeader component for app header bars (full-width header with brand/actions)
+    class AppHeader < Base
+      attr_accessor :children
+      attr_reader :title, :subtitle, :variant
+
+      # @param title [String] The header title
+      # @param subtitle [String, nil] Optional subtitle
+      # @param variant [Symbol] Style variant (:dark, :light, :primary)
+      def initialize(title, subtitle: nil, variant: :dark)
+        @title = title
+        @subtitle = subtitle
+        @variant = variant
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_app_header(view, self, state)
+      end
+    end
+
     # Div component for layout containers with optional hover support
     class Div < Base
       attr_accessor :children

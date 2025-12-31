@@ -387,35 +387,49 @@ module StreamWeaver
       # @param modal_context [Hash, nil] Modal context if button is inside a modal
       # @return [void] Renders to view
       def render_button(view, button_id, label, options, modal_context = nil)
-        style_class = options[:style] == :secondary ? "secondary" : "primary"
+        # Support :none style for unstyled buttons, or string styles for inline CSS
+        style_option = options[:style]
+        if style_option == :none || style_option.is_a?(String)
+          # Custom/unstyled button - use inline style if provided
+          button_class = options[:class]
+          inline_style = style_option.is_a?(String) ? style_option : nil
+        else
+          style_class = style_option == :secondary ? "secondary" : "primary"
+          button_class = "btn btn-#{style_class}"
+          inline_style = nil
+        end
         should_submit = options.fetch(:submit, true)
 
         if !should_submit
           # Display-only button: no HTMX, just visual
-          view.button(
-            type: "button",
-            class: "btn btn-#{style_class}"
-          ) { label }
+          attrs = { type: "button" }
+          attrs[:class] = button_class if button_class
+          attrs[:style] = inline_style if inline_style
+          view.button(**attrs) { label }
         elsif modal_context
           # Inside a modal: close via Alpine before HTMX request fires
           # hx-on::before-request runs before HTMX sends, allowing Alpine to close modal
-          view.button(
-            class: "btn btn-#{style_class}",
+          attrs = {
             "hx-post" => "/action/#{button_id}",
             "hx-include" => input_selector,
             "hx-target" => "#app-container",
             "hx-swap" => "innerHTML scroll:false",
             "hx-on::before-request" => "open = false"
-          ) { label }
+          }
+          attrs[:class] = button_class if button_class
+          attrs[:style] = inline_style if inline_style
+          view.button(**attrs) { label }
         else
           # Normal button: use standard HTMX
-          view.button(
-            class: "btn btn-#{style_class}",
+          attrs = {
             "hx-post" => "/action/#{button_id}",     # HTMX POST to server
             "hx-include" => input_selector,          # Include all inputs with x-model
             "hx-target" => "#app-container",         # Replace app container
             "hx-swap" => "innerHTML scroll:false"    # Replace inner HTML, preserve scroll
-          ) { label }
+          }
+          attrs[:class] = button_class if button_class
+          attrs[:style] = inline_style if inline_style
+          view.button(**attrs) { label }
         end
       end
 
@@ -433,6 +447,28 @@ module StreamWeaver
         end
 
         { "x-data" => JSON.generate(state_data) }
+      end
+
+      # Render an app header bar
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [AppHeader] The app header component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_app_header(view, component, state)
+        view.div(class: "sw-app-header sw-app-header-#{component.variant}") do
+          view.div(class: "sw-app-header-brand") do
+            view.span(class: "sw-app-header-title") { component.title }
+            if component.subtitle
+              view.span(class: "sw-app-header-subtitle") { component.subtitle }
+            end
+          end
+          if component.children.any?
+            view.div(class: "sw-app-header-actions") do
+              component.children.each { |child| child.render(view, state) }
+            end
+          end
+        end
       end
 
       # Render a div container with optional hover support

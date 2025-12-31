@@ -88,6 +88,18 @@ module ExamplesBrowser
     SPAWNED_PIDS.each { |pid| Process.kill('TERM', pid) rescue nil }
     SPAWNED_PIDS.clear
   end
+
+  def save_file(dir_key, filename, content)
+    path = File.join(EXAMPLES_ROOT, dir_key.to_s, filename)
+    File.write(path, content)
+    { ok: true, message: "Saved #{filename}" }
+  rescue => e
+    { ok: false, message: "Failed to save: #{e.message}" }
+  end
+
+  def all_dir_keys
+    DIRECTORIES.keys
+  end
 end
 
 # CodeMirror 5 CDN URLs
@@ -96,7 +108,7 @@ CODEMIRROR_JS = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codem
 CODEMIRROR_RUBY = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/ruby/ruby.min.js"
 
 app = StreamWeaver::App.new(
-  "Examples",
+  "Example Playground",
   layout: :fluid,
   theme: :default,
   stylesheets: [CODEMIRROR_CSS],
@@ -122,33 +134,30 @@ app = StreamWeaver::App.new(
     state[:code_content] = ""
   end
 
-  # Inject custom CSS
-  div style: "display:none" do
-    # Hack: inject style via a hidden div
-  end
-
-  # Header row
-  div style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;" do
-    header2 "StreamWeaver Examples"
-    if SPAWNED_PIDS.any?
-      button "Kill Server", style: :secondary do |s|
-        kill_servers
-        s[:last_run_file] = nil
-      end
-    end
-  end
-
   # Main layout
-  div style: "display: flex; gap: 16px;" do
-    # Sidebar - file browser
-    div style: "width: 220px; flex-shrink: 0; overflow: hidden;" do
-      div style: "background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 8px; overflow: hidden;" do
+  div style: "display: flex; gap: 20px;" do
+    # Sidebar - file browser (Finder-style)
+    div style: "width: 220px; flex-shrink: 0;" do
+      # Expand/Collapse all buttons
+      div style: "display: flex; gap: 4px; margin-bottom: 8px;" do
+        small_btn = "padding: 4px 8px; font-size: 11px; background: #fff; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; color: #666;"
+        button "Expand All", style: small_btn do |s|
+          s[:expanded_dirs] = all_dir_keys
+        end
+        button "Collapse All", style: small_btn do |s|
+          s[:expanded_dirs] = []
+        end
+      end
+
+      div style: "background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 6px; padding: 8px;" do
         examples.each do |dir|
           is_expanded = state[:expanded_dirs].include?(dir[:key])
-          folder_icon = is_expanded ? "▼" : "▶"
+          disclosure = is_expanded ? "▾" : "▸"
 
           # Folder row (clickable to expand/collapse)
-          button "#{folder_icon} 📁 #{dir[:label]} (#{dir[:files].length})", style: "display: block; padding: 6px 8px; cursor: pointer; font-weight: 500; color: #333; border-radius: 4px; border: none; background: transparent; width: 100%; text-align: left; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" do |s|
+          folder_style = "display: block !important; padding: 6px 8px !important; cursor: pointer !important; border-radius: 4px !important; font-weight: 500 !important; color: #333 !important; font-size: 13px !important; border: none !important; background: transparent !important; width: 100% !important; text-align: left !important;"
+          folder_label = "#{disclosure} 📁 #{dir[:label]} (#{dir[:files].length})"
+          button folder_label, style: folder_style do |s|
             if s[:expanded_dirs].include?(dir[:key])
               s[:expanded_dirs] = s[:expanded_dirs] - [dir[:key]]
             else
@@ -158,14 +167,14 @@ app = StreamWeaver::App.new(
 
           # File list (if expanded)
           if is_expanded
-            div style: "margin-left: 16px;" do
+            div do
               dir[:files].each do |filename|
                 is_selected = state[:selected_dir] == dir[:key] && state[:selected_file] == filename
-                bg = is_selected ? "#0066cc" : "transparent"
-                color = is_selected ? "white" : "#0066cc"
+                bg_color = is_selected ? "#d4e5f7" : "transparent"
+                text_color = is_selected ? "#333" : "#555"
+                file_style = "display: block !important; padding: 5px 8px 5px 28px !important; cursor: pointer !important; border-radius: 4px !important; color: #{text_color} !important; background: #{bg_color} !important; font-size: 13px !important; border: none !important; width: 100% !important; text-align: left !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important;"
 
-                button filename, style: "display: block; padding: 4px 8px; color: #{color}; background: #{bg}; border: none; border-radius: 4px; width: 100%; text-align: left; font-size: 13px; cursor: pointer; margin: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" do |s|
-                  # Only set the selection - code_content is derived on rebuild
+                button filename, style: file_style do |s|
                   s[:selected_dir] = dir[:key]
                   s[:selected_file] = filename
                   s[:last_run_file] = nil
@@ -182,51 +191,80 @@ app = StreamWeaver::App.new(
     div style: "flex: 1; min-width: 0;" do
       if state[:selected_file]
         # Header with file path and buttons
-        div style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;" do
-          text "#{state[:selected_dir]}/#{state[:selected_file]}"
-          hstack spacing: :sm do
-            button "Check", style: :secondary do |s|
+        div style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;" do
+          div style: "font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace; font-size: 13px; color: #666;" do
+            text "#{state[:selected_dir]}/#{state[:selected_file]}"
+          end
+          div style: "display: flex; gap: 8px;" do
+            secondary_btn = "background: white; border: 1px solid #ccc; color: #333; padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer;"
+
+            button "Check", style: secondary_btn do |s|
               result = check_syntax(s[:code_content])
               if result[:ok]
                 s[:syntax_ok] = true
+                s[:save_ok] = nil
               else
                 s[:syntax_ok] = false
+                s[:save_ok] = nil
                 s[:error_message] = result[:message]
                 s[:error_modal_open] = true
               end
             end
 
-            button "▶ Run" do |s|
+            button "Save", style: secondary_btn do |s|
               result = check_syntax(s[:code_content])
               if result[:ok]
-                run_example(s[:current_file_path])
-                s[:last_run_file] = s[:selected_file]
+                save_result = save_file(s[:selected_dir], s[:selected_file], s[:code_content])
+                s[:save_ok] = save_result[:ok]
                 s[:syntax_ok] = nil
               else
                 s[:error_message] = result[:message]
                 s[:error_modal_open] = true
               end
             end
+
+            run_btn_style = "background: #CC342D; border: none; color: white; padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer;"
+            button "▶ Run", style: run_btn_style do |s|
+              result = check_syntax(s[:code_content])
+              if result[:ok]
+                run_example(s[:current_file_path])
+                s[:last_run_file] = s[:selected_file]
+                s[:syntax_ok] = nil
+                s[:save_ok] = nil
+              else
+                s[:error_message] = result[:message]
+                s[:error_modal_open] = true
+              end
+            end
           end
         end
 
-        # Code display with syntax highlighting
-        code_editor :code_content, language: :ruby, readonly: true, height: "500px"
+        # Code editor with syntax highlighting (editable)
+        code_editor :code_content, language: :ruby, readonly: false, height: "500px"
 
         # Status messages
+        status_style = "margin-top: 8px; padding: 8px 12px; background: #d4edda; color: #155724; border-radius: 4px; font-size: 13px;"
         if state[:syntax_ok] == true
-          div style: "margin-top: 8px; padding: 8px 12px; background: #d4edda; color: #155724; border-radius: 4px; font-size: 13px;" do
+          div style: status_style do
             text "✓ Syntax OK"
           end
         end
 
+        if state[:save_ok] == true
+          div style: status_style do
+            text "✓ Saved"
+          end
+        end
+
         if state[:last_run_file] == state[:selected_file]
-          div style: "margin-top: 8px; padding: 8px 12px; background: #d4edda; color: #155724; border-radius: 4px; font-size: 13px;" do
+          div style: status_style do
             text "✓ Launched - check for new browser tab"
           end
         end
       else
-        text "Select an example from the sidebar."
+        div style: "color: #888; padding: 40px; text-align: center;" do
+          text "Select an example from the sidebar to view its code."
+        end
       end
     end
   end

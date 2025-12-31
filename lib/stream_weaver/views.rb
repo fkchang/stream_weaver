@@ -482,6 +482,88 @@ module StreamWeaver
                 }
 
                 /* ===========================================
+                   App Header - Full-width header bar
+                   =========================================== */
+                .sw-app-header {
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  padding: var(--sw-spacing-md) var(--sw-spacing-lg);
+                  margin: calc(-1 * var(--sw-spacing-xl)) calc(-1 * var(--sw-spacing-xl)) var(--sw-spacing-lg) calc(-1 * var(--sw-spacing-xl));
+                  font-family: var(--sw-font-body);
+                }
+
+                .sw-app-header-brand {
+                  display: flex;
+                  align-items: baseline;
+                  gap: var(--sw-spacing-sm);
+                }
+
+                .sw-app-header-title {
+                  font-size: var(--sw-font-size-lg);
+                  font-weight: 600;
+                }
+
+                .sw-app-header-subtitle {
+                  font-size: var(--sw-font-size-sm);
+                  opacity: 0.7;
+                }
+
+                .sw-app-header-actions {
+                  display: flex;
+                  align-items: center;
+                  gap: var(--sw-spacing-sm);
+                }
+
+                /* Header variants */
+                .sw-app-header-dark {
+                  background: #1a1a1a;
+                  color: #ffffff;
+                }
+
+                .sw-app-header-dark .sw-app-header-subtitle {
+                  color: #aaaaaa;
+                }
+
+                .sw-app-header-dark button,
+                .sw-app-header-dark .btn {
+                  background: transparent;
+                  border: 1px solid rgba(255, 255, 255, 0.3);
+                  color: #ffffff;
+                  margin: 0;
+                }
+
+                .sw-app-header-dark button:hover,
+                .sw-app-header-dark .btn:hover {
+                  background: rgba(255, 255, 255, 0.1);
+                  border-color: rgba(255, 255, 255, 0.5);
+                }
+
+                .sw-app-header-light {
+                  background: var(--sw-color-bg-elevated);
+                  color: var(--sw-color-text);
+                  border-bottom: 1px solid var(--sw-color-border);
+                }
+
+                .sw-app-header-primary {
+                  background: var(--sw-color-primary);
+                  color: #ffffff;
+                }
+
+                .sw-app-header-primary button,
+                .sw-app-header-primary .btn {
+                  background: rgba(255, 255, 255, 0.2);
+                  border: none;
+                  color: #ffffff;
+                  margin: 0;
+                }
+
+                .sw-app-header-primary button:hover,
+                .sw-app-header-primary .btn:hover {
+                  background: rgba(255, 255, 255, 0.3);
+                }
+
+                /* ===========================================
                    Buttons - Bold, Confident
                    =========================================== */
                 button, .btn {

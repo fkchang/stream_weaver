@@ -79,6 +79,14 @@ module StreamWeaver
       with_container(Components::Div.new(**options), &block)
     end
 
+    # App header bar - renders a full-width header with title, optional subtitle, and optional right-side content
+    # @param title [String] The header title
+    # @param subtitle [String, nil] Optional subtitle
+    # @param variant [Symbol] Style variant (:dark, :light, :primary)
+    def app_header(title, subtitle: nil, variant: :dark, &block)
+      with_container(Components::AppHeader.new(title, subtitle: subtitle, variant: variant), &block)
+    end
+
     def card(**options, &block)
       with_container(Components::Card.new(**options), &block)
     end

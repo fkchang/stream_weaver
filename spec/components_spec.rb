@@ -835,4 +835,41 @@ RSpec.describe StreamWeaver::Components do
       end
     end
   end
+
+  describe StreamWeaver::Components::AppHeader do
+    describe "initialization" do
+      it "stores the title" do
+        header = described_class.new("My App")
+        expect(header.title).to eq("My App")
+      end
+
+      it "stores optional subtitle" do
+        header = described_class.new("My App", subtitle: "Dashboard")
+        expect(header.subtitle).to eq("Dashboard")
+      end
+
+      it "defaults variant to :dark" do
+        header = described_class.new("My App")
+        expect(header.variant).to eq(:dark)
+      end
+
+      it "allows custom variant" do
+        header = described_class.new("My App", variant: :light)
+        expect(header.variant).to eq(:light)
+      end
+
+      it "initializes with empty children" do
+        header = described_class.new("My App")
+        expect(header.children).to eq([])
+      end
+    end
+
+    describe "rendering" do
+      it "delegates to adapter render_app_header" do
+        header = described_class.new("My App", subtitle: "Test")
+        expect(adapter).to receive(:render_app_header).with(mock_view, header, state)
+        header.render(mock_view, state)
+      end
+    end
+  end
 end

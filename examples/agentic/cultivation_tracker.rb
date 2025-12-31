@@ -29,13 +29,13 @@ cultivation_app = app "Daily Cultivation Check-in" do
   # Question 3: Achievements (unlimited - 7 slots)
   header3 "3. Cultivation Achievements"
   text "List your wins - progress of any size counts! (leave extras blank)"
-  text_field :achievement_1, placeholder: "Achievement #1"
-  text_field :achievement_2, placeholder: "Achievement #2"
-  text_field :achievement_3, placeholder: "Achievement #3"
-  text_field :achievement_4, placeholder: "Achievement #4 (optional)"
-  text_field :achievement_5, placeholder: "Achievement #5 (optional)"
-  text_field :achievement_6, placeholder: "Achievement #6 (optional)"
-  text_field :achievement_7, placeholder: "Achievement #7 (optional)"
+  text_field :achievement_1, placeholder: "Achievement #1", submit: false
+  text_field :achievement_2, placeholder: "Achievement #2", submit: false
+  text_field :achievement_3, placeholder: "Achievement #3", submit: false
+  text_field :achievement_4, placeholder: "Achievement #4 (optional)", submit: false
+  text_field :achievement_5, placeholder: "Achievement #5 (optional)", submit: false
+  text_field :achievement_6, placeholder: "Achievement #6 (optional)", submit: false
+  text_field :achievement_7, placeholder: "Achievement #7 (optional)", submit: false
 
   # Question 4: Tomorrow's priority
   header3 "4. What's your #1 cultivation priority for tomorrow?"
