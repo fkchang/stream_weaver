@@ -181,19 +181,12 @@ app = StreamWeaver::App.new(
           is_expanded = state[:expanded_dirs].include?(dir[:key])
           folder_icon = is_expanded ? "▼" : "▶"
 
-          # Folder row
-          button style: "display: flex; align-items: center; padding: 6px 8px; cursor: pointer; font-weight: 500; color: #333; border-radius: 4px; border: none; background: none; width: 100%; text-align: left; font-size: 13px;" do |s|
+          # Folder row (clickable to expand/collapse)
+          button "#{folder_icon} 📁 #{dir[:label]} (#{dir[:files].length})", style: "display: flex; align-items: center; padding: 6px 8px; cursor: pointer; font-weight: 500; color: #333; border-radius: 4px; border: none; background: none; width: 100%; text-align: left; font-size: 13px;" do |s|
             if s[:expanded_dirs].include?(dir[:key])
               s[:expanded_dirs] = s[:expanded_dirs] - [dir[:key]]
             else
               s[:expanded_dirs] = s[:expanded_dirs] + [dir[:key]]
-            end
-          end
-
-          div style: "display: flex; align-items: center; padding: 6px 8px; font-weight: 500; color: #333; margin: -36px 0 0 0; pointer-events: none;" do
-            text "#{folder_icon} 📁 #{dir[:label]}"
-            div style: "margin-left: auto; color: #999; font-size: 12px;" do
-              text "(#{dir[:files].length})"
             end
           end
 
