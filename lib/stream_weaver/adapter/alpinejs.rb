@@ -1019,10 +1019,11 @@ module StreamWeaver
         view.div(
           id: "tabs-#{key}",
           class: "sw-tabs #{variant_class}",
-          "x-data" => "{ activeTab: #{active_index} }",
-          # Preserve tabs during HTMX swaps to prevent flash when tab state changes
-          "hx-preserve" => "true"
+          "x-data" => "{ activeTab: #{active_index} }"
         ) do
+          # Hidden input syncs tab state with server on other HTMX requests
+          view.input(type: "hidden", name: key.to_s, "x-model" => "activeTab")
+
           # Tab headers
           view.div(class: "sw-tabs-list") do
             component.children.each_with_index do |tab, index|
@@ -1031,13 +1032,13 @@ module StreamWeaver
               tab_classes = ["sw-tab-trigger"]
               tab_classes << "sw-tab-active" if index == active_index
 
+              # Tab buttons: Alpine.js for instant UI + HTMX to sync state
+              # hx-swap="none" means server response is ignored (no DOM changes)
               view.button(
                 type: "button",
                 class: tab_classes.join(" "),
                 ":class" => "{ 'sw-tab-active': activeTab === #{index} }",
                 "@click" => "activeTab = #{index}",
-                # Sync to server without re-rendering (hx-swap="none")
-                # This preserves Alpine state while persisting tab selection
                 "hx-post" => "/update",
                 "hx-vals" => JSON.generate({ key.to_s => index }),
                 "hx-swap" => "none"
@@ -1445,9 +1446,15 @@ module StreamWeaver
               var wrapperId = editorId + '-wrapper';
 
               function initCodeEditor() {
+                console.log('=== initCodeEditor called ===');
+                console.log('  editorId:', editorId);
                 var textarea = document.getElementById(editorId);
                 var wrapper = document.getElementById(wrapperId);
+                console.log('  textarea found:', !!textarea);
+                console.log('  wrapper found:', !!wrapper);
                 if (!textarea || !wrapper) return;
+                console.log('  textarea.value length:', textarea.value.length);
+                console.log('  textarea.value first 80:', textarea.value.slice(0, 80));
 
                 // Destroy existing editor if present
                 if (wrapper.querySelector('.CodeMirror')) {
@@ -1474,6 +1481,10 @@ module StreamWeaver
                 });
 
                 editor.setSize('100%', '#{component.height}');
+                console.log('  CodeMirror initialized, editor:', !!editor);
+
+                // Explicitly hide the textarea (CodeMirror should do this, but ensure it)
+                textarea.style.display = 'none';
 
                 // Sync changes back to hidden textarea (for form submission)
                 editor.on('change', function(cm) {
@@ -1481,12 +1492,35 @@ module StreamWeaver
                 });
               }
 
-              // Initialize immediately or on DOM ready
-              if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', initCodeEditor);
-              } else {
-                setTimeout(initCodeEditor, 10);
+              // Initialize on DOM ready or immediately
+              function tryInit() {
+                // Wait for textarea to exist in DOM
+                var textarea = document.getElementById(editorId);
+                if (textarea) {
+                  initCodeEditor();
+                } else {
+                  // Retry shortly - DOM might not be fully updated yet
+                  setTimeout(tryInit, 50);
+                }
               }
+
+              if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', tryInit);
+              } else {
+                // Use requestAnimationFrame for better timing with DOM updates
+                requestAnimationFrame(tryInit);
+              }
+
+              // Also listen for HTMX settle events (fires after DOM is stable)
+              document.body.addEventListener('htmx:afterSettle', function(evt) {
+                var textarea = document.getElementById(editorId);
+                var wrapper = document.getElementById(wrapperId);
+                // Check if our editor exists and needs initialization
+                if (textarea && wrapper && !wrapper.querySelector('.CodeMirror')) {
+                  console.log('htmx:afterSettle - initializing CodeMirror for', editorId);
+                  initCodeEditor();
+                }
+              });
             })();
           JS
         end
