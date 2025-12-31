@@ -26,16 +26,16 @@ module ExamplesBrowser
 
   # Directory display order and descriptions
   DIRECTORIES = {
-    basic: { label: "Basic", description: "Getting started examples" },
-    agentic: { label: "Agentic", description: "AI agent workflows" },
-    components: { label: "Components", description: "Individual component demos" },
-    layout: { label: "Layout", description: "Layout and navigation" },
-    styling: { label: "Styling", description: "Themes and feedback" },
-    advanced: { label: "Advanced", description: "Full applications" }
+    basic: "Basic",
+    agentic: "Agentic",
+    components: "Components",
+    layout: "Layout",
+    styling: "Styling",
+    advanced: "Advanced"
   }.freeze
 
   def discover_examples
-    DIRECTORIES.map do |dir_key, info|
+    DIRECTORIES.map do |dir_key, label|
       dir_path = File.join(EXAMPLES_ROOT, dir_key.to_s)
       next unless File.directory?(dir_path)
 
@@ -44,13 +44,7 @@ module ExamplesBrowser
         .reject { |f| SKIP_FILES.include?(f) }
         .sort
 
-      {
-        key: dir_key,
-        label: info[:label],
-        description: info[:description],
-        path: dir_path,
-        files: files
-      }
+      { key: dir_key, label: label, files: files }
     end.compact
   end
 
@@ -66,7 +60,6 @@ module ExamplesBrowser
 
   def check_syntax(code)
     require 'open3'
-    # Write to temp file and check syntax
     temp_file = "/tmp/sw_syntax_check_#{Process.pid}.rb"
     File.write(temp_file, code)
 
@@ -76,30 +69,24 @@ module ExamplesBrowser
     if status.success?
       { ok: true, message: "Syntax OK" }
     else
-      # Parse error message to make it more readable
       error = stderr.gsub(temp_file, "example.rb")
       { ok: false, message: error.strip }
     end
   end
 
   def run_example(file_path)
-    # Kill any previous spawned servers
     SPAWNED_PIDS.each { |pid| Process.kill('TERM', pid) rescue nil }
     SPAWNED_PIDS.clear
 
-    # Spawn new process - don't redirect output so browser can open
-    # The spawned app will print its own URL and open browser
     pid = spawn("ruby", file_path)
-    Process.detach(pid)  # Don't wait for it
+    Process.detach(pid)
     SPAWNED_PIDS << pid
     pid
   end
 
   def kill_servers
-    count = SPAWNED_PIDS.length
     SPAWNED_PIDS.each { |pid| Process.kill('TERM', pid) rescue nil }
     SPAWNED_PIDS.clear
-    count
   end
 end
 
@@ -108,9 +95,42 @@ CODEMIRROR_CSS = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/code
 CODEMIRROR_JS = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"
 CODEMIRROR_RUBY = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/ruby/ruby.min.js"
 
+# Custom styles for file browser
+CUSTOM_CSS = <<~CSS
+  .file-browser { font-size: 13px; }
+  .folder-row {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px;
+    cursor: pointer;
+    font-weight: 500;
+    color: #333;
+    border-radius: 4px;
+  }
+  .folder-row:hover { background: #f5f5f5; }
+  .folder-icon { margin-right: 6px; }
+  .folder-count { margin-left: auto; color: #999; font-size: 12px; }
+  .file-list { margin-left: 20px; }
+  .file-row {
+    display: block;
+    padding: 4px 8px;
+    color: #0066cc;
+    text-decoration: none;
+    cursor: pointer;
+    border-radius: 4px;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    font-size: 13px;
+  }
+  .file-row:hover { background: #f0f7ff; }
+  .file-row.selected { background: #0066cc; color: white; }
+CSS
+
 app = StreamWeaver::App.new(
-  "StreamWeaver Examples",
-  layout: :wide,
+  "Examples",
+  layout: :fluid,
   theme: :default,
   stylesheets: [CODEMIRROR_CSS],
   scripts: [CODEMIRROR_JS, CODEMIRROR_RUBY],
@@ -118,6 +138,7 @@ app = StreamWeaver::App.new(
 ) do
   # Initialize state
   state[:examples] ||= discover_examples
+  state[:expanded_dirs] ||= [:basic]
   state[:selected_dir] ||= :basic
   state[:selected_file] ||= state[:examples].first&.dig(:files)&.first
   state[:code_content] ||= ""
@@ -130,44 +151,66 @@ app = StreamWeaver::App.new(
     state[:code_content] = read_file(state[:selected_dir], state[:selected_file])
   end
 
-  # Header
-  hstack justify: :between, align: :center do
-    header1 "StreamWeaver Examples"
-    hstack spacing: :sm do
-      if SPAWNED_PIDS.any?
-        button "Kill #{SPAWNED_PIDS.length} Server(s)", style: :secondary do |s|
-          kill_servers
-          s[:last_run_file] = nil
-        end
+  # Inject custom CSS
+  div style: "display:none" do
+    # Hack: inject style via a hidden div
+  end
+
+  # Header row
+  div style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;" do
+    header2 "StreamWeaver Examples"
+    if SPAWNED_PIDS.any?
+      button "Kill Server", style: :secondary do |s|
+        kill_servers
+        s[:last_run_file] = nil
       end
     end
   end
 
-  # Main layout: sidebar + content
-  columns widths: ['220px', '1fr'] do
-    # Sidebar
-    column do
-      card do
-        card_header "Examples"
-        card_body do
-          vstack spacing: :xs do
-            state[:examples].each do |dir|
-              # Directory header (collapsible)
-              collapsible "#{dir[:label]} (#{dir[:files].length})", expanded: (dir[:key] == state[:selected_dir]) do
-                vstack spacing: :xs do
-                  dir[:files].each do |filename|
-                    is_selected = state[:selected_dir] == dir[:key] && state[:selected_file] == filename
-                    style = is_selected ? :primary : :secondary
+  # Main layout
+  div style: "display: flex; gap: 16px;" do
+    # Sidebar - file browser
+    div style: "width: 200px; flex-shrink: 0;" do
+      div class: "file-browser", style: "background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 8px;" do
+        # Inline the custom CSS
+        div do
+          text ""  # placeholder
+        end
 
-                    button filename.sub('.rb', ''), style: style do |s|
-                      s[:selected_dir] = dir[:key]
-                      s[:selected_file] = filename
-                      s[:code_content] = read_file(dir[:key], filename)
-                      s[:last_run_file] = nil
-                      s[:syntax_ok] = nil
-                      s[:syntax_checked_file] = nil
-                    end
-                  end
+        state[:examples].each do |dir|
+          is_expanded = state[:expanded_dirs].include?(dir[:key])
+          folder_icon = is_expanded ? "▼" : "▶"
+
+          # Folder row
+          button style: "display: flex; align-items: center; padding: 6px 8px; cursor: pointer; font-weight: 500; color: #333; border-radius: 4px; border: none; background: none; width: 100%; text-align: left; font-size: 13px;" do |s|
+            if s[:expanded_dirs].include?(dir[:key])
+              s[:expanded_dirs] = s[:expanded_dirs] - [dir[:key]]
+            else
+              s[:expanded_dirs] = s[:expanded_dirs] + [dir[:key]]
+            end
+          end
+
+          div style: "display: flex; align-items: center; padding: 6px 8px; font-weight: 500; color: #333; margin: -36px 0 0 0; pointer-events: none;" do
+            text "#{folder_icon} 📁 #{dir[:label]}"
+            div style: "margin-left: auto; color: #999; font-size: 12px;" do
+              text "(#{dir[:files].length})"
+            end
+          end
+
+          # File list (if expanded)
+          if is_expanded
+            div style: "margin-left: 16px;" do
+              dir[:files].each do |filename|
+                is_selected = state[:selected_dir] == dir[:key] && state[:selected_file] == filename
+                bg = is_selected ? "#0066cc" : "transparent"
+                color = is_selected ? "white" : "#0066cc"
+
+                button filename, style: "display: block; padding: 4px 8px; color: #{color}; background: #{bg}; border: none; border-radius: 4px; width: 100%; text-align: left; font-size: 13px; cursor: pointer; margin: 2px 0;" do |s|
+                  s[:selected_dir] = dir[:key]
+                  s[:selected_file] = filename
+                  s[:code_content] = read_file(dir[:key], filename)
+                  s[:last_run_file] = nil
+                  s[:syntax_ok] = nil
                 end
               end
             end
@@ -177,73 +220,65 @@ app = StreamWeaver::App.new(
     end
 
     # Main content
-    column do
+    div style: "flex: 1; min-width: 0;" do
       if state[:selected_file]
-        card do
-          card_header do
-            hstack justify: :between, align: :center do
-              text "#{state[:selected_dir]}/#{state[:selected_file]}"
-              hstack spacing: :sm do
-                button "Check Syntax", style: :secondary do |s|
-                  result = check_syntax(s[:code_content])
-                  if result[:ok]
-                    s[:syntax_ok] = true
-                    s[:syntax_checked_file] = s[:selected_file]
-                  else
-                    s[:syntax_ok] = false
-                    s[:error_message] = result[:message]
-                    s[:error_modal_open] = true
-                  end
-                end
+        # Header with file path and buttons
+        div style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;" do
+          text "#{state[:selected_dir]}/#{state[:selected_file]}"
+          hstack spacing: :sm do
+            button "Check", style: :secondary do |s|
+              result = check_syntax(s[:code_content])
+              if result[:ok]
+                s[:syntax_ok] = true
+              else
+                s[:syntax_ok] = false
+                s[:error_message] = result[:message]
+                s[:error_modal_open] = true
+              end
+            end
 
-                button "▶ Run" do |s|
-                  # Check syntax first
-                  result = check_syntax(s[:code_content])
-                  if result[:ok]
-                    path = file_path(s[:selected_dir], s[:selected_file])
-                    run_example(path)
-                    s[:last_run_file] = s[:selected_file]
-                  else
-                    s[:error_message] = result[:message]
-                    s[:error_modal_open] = true
-                  end
-                end
+            button "▶ Run" do |s|
+              result = check_syntax(s[:code_content])
+              if result[:ok]
+                path = file_path(s[:selected_dir], s[:selected_file])
+                run_example(path)
+                s[:last_run_file] = s[:selected_file]
+                s[:syntax_ok] = nil
+              else
+                s[:error_message] = result[:message]
+                s[:error_modal_open] = true
               end
             end
           end
+        end
 
-          card_body do
-            # Code editor
-            code_editor :code_content, language: :ruby, readonly: true, height: "500px"
+        # Code display - use text_area with monospace styling
+        text_area :code_content,
+          rows: 28,
+          style: "font-family: Monaco, Menlo, Consolas, monospace; font-size: 13px; width: 100%; background: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 12px; line-height: 1.5;",
+          submit: false
 
-            # Syntax check success message
-            if state[:syntax_ok] && state[:syntax_checked_file] == state[:selected_file]
-              alert(variant: :success) do
-                text "✓ Syntax OK"
-              end
-            end
+        # Status messages
+        if state[:syntax_ok] == true
+          div style: "margin-top: 8px; padding: 8px 12px; background: #d4edda; color: #155724; border-radius: 4px; font-size: 13px;" do
+            text "✓ Syntax OK"
+          end
+        end
 
-            # Run success message
-            if state[:last_run_file] == state[:selected_file]
-              alert(variant: :success) do
-                text "Launched! Check for a new browser tab."
-              end
-            end
+        if state[:last_run_file] == state[:selected_file]
+          div style: "margin-top: 8px; padding: 8px 12px; background: #d4edda; color: #155724; border-radius: 4px; font-size: 13px;" do
+            text "✓ Launched - check for new browser tab"
           end
         end
       else
-        card do
-          card_body do
-            text "Select an example from the sidebar to view its code."
-          end
-        end
+        text "Select an example from the sidebar."
       end
     end
   end
 
   # Error modal
   modal :error, title: "Syntax Error", size: :md do
-    div style: "font-family: monospace; white-space: pre-wrap; background: #fee; padding: 1rem; border-radius: 4px; color: #c00;" do
+    div style: "font-family: monospace; white-space: pre-wrap; background: #fee; padding: 1rem; border-radius: 4px; color: #c00; font-size: 13px;" do
       text state[:error_message]
     end
 
