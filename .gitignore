@@ -31,3 +31,6 @@ blog_post_streamweaver_vs_react.md
 
 # Claude Code local settings
 .claude/
+
+# Examples playground (editable copies)
+examples_playground/

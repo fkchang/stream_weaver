@@ -1466,12 +1466,14 @@ module StreamWeaver
           class: "sw-code-editor-wrapper",
           style: "height: #{component.height};"
         ) do
-          # CSS to hide textarea when CodeMirror is present (can't be overridden by JS)
-          view.style { ".sw-code-editor-wrapper textarea { display: none !important; }" }
+          # CSS to hide original textarea when CodeMirror is present (use > to avoid hiding CM's internal textarea)
+          view.style { ".sw-code-editor-wrapper > textarea { display: none !important; }" }
           # Textarea with content - CodeMirror will replace this
+          # x-model is required for hx-include="[x-model]" to include this in button submissions
           view.textarea(
             id: editor_id,
             name: key.to_s,
+            "x-model" => key.to_s,
             style: "width: 100%; height: 100%; font-family: monospace; font-size: 13px; border: none; resize: none;"
           ) { content }
         end
@@ -1489,11 +1491,9 @@ module StreamWeaver
                 if (!textarea || !wrapper) return;
 
                 // Destroy existing editor if present
-                if (wrapper.querySelector('.CodeMirror')) {
-                  var existing = wrapper.querySelector('.CodeMirror');
-                  if (existing.CodeMirror) {
-                    existing.CodeMirror.toTextArea();
-                  }
+                var existingCM = wrapper.querySelector('.CodeMirror');
+                if (existingCM && existingCM.CodeMirror) {
+                  existingCM.CodeMirror.toTextArea();
                 }
 
                 // Initialize CodeMirror
@@ -1518,36 +1518,27 @@ module StreamWeaver
                 editor.on('change', function(cm) {
                   textarea.value = cm.getValue();
                 });
+
+                // Store reference on wrapper for debugging
+                wrapper._cmEditor = editor;
               }
 
-              // Initialize on DOM ready or immediately
-              function tryInit() {
-                // Wait for textarea to exist in DOM
-                var textarea = document.getElementById(editorId);
-                if (textarea) {
-                  initCodeEditor();
-                } else {
-                  // Retry shortly - DOM might not be fully updated yet
-                  setTimeout(tryInit, 50);
-                }
-              }
+              // Initialize immediately since script runs after DOM element exists
+              initCodeEditor();
 
-              if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', tryInit);
-              } else {
-                // Use requestAnimationFrame for better timing with DOM updates
-                requestAnimationFrame(tryInit);
+              // Register HTMX listener only once per editor ID (prevent accumulation)
+              var listenerKey = 'sw-cm-' + editorId;
+              if (!window[listenerKey]) {
+                window[listenerKey] = true;
+                document.body.addEventListener('htmx:afterSettle', function(evt) {
+                  // Always reinitialize after HTMX swap (content may have changed)
+                  var textarea = document.getElementById(editorId);
+                  var wrapper = document.getElementById(wrapperId);
+                  if (textarea && wrapper) {
+                    initCodeEditor();
+                  }
+                });
               }
-
-              // Also listen for HTMX settle events (fires after DOM is stable)
-              document.body.addEventListener('htmx:afterSettle', function(evt) {
-                var textarea = document.getElementById(editorId);
-                var wrapper = document.getElementById(wrapperId);
-                // Check if our editor exists and needs initialization
-                if (textarea && wrapper && !wrapper.querySelector('.CodeMirror')) {
-                  initCodeEditor();
-                }
-              });
             })();
           JS
         end

@@ -19,7 +19,10 @@ end
 
 # Helper module for example discovery
 module ExamplesBrowser
+  require 'fileutils'
+
   EXAMPLES_ROOT = File.expand_path("../../", __FILE__)
+  PLAYGROUND_ROOT = File.expand_path("../../../examples_playground", __FILE__)
 
   # Skip the browser itself to avoid inception
   SKIP_FILES = ["examples_browser.rb"].freeze
@@ -33,6 +36,27 @@ module ExamplesBrowser
     styling: "Styling",
     advanced: "Advanced"
   }.freeze
+
+  def ensure_playground_exists
+    return if File.directory?(PLAYGROUND_ROOT)
+    FileUtils.cp_r(EXAMPLES_ROOT, PLAYGROUND_ROOT)
+    # Remove the browser itself from playground
+    FileUtils.rm_f(File.join(PLAYGROUND_ROOT, "advanced/examples_browser.rb"))
+  end
+
+  def playground_path(dir_key, filename)
+    File.join(PLAYGROUND_ROOT, dir_key.to_s, filename)
+  end
+
+  def original_path(dir_key, filename)
+    File.join(EXAMPLES_ROOT, dir_key.to_s, filename)
+  end
+
+  def reset_file(dir_key, filename)
+    src = original_path(dir_key, filename)
+    dst = playground_path(dir_key, filename)
+    FileUtils.cp(src, dst)
+  end
 
   def discover_examples
     DIRECTORIES.map do |dir_key, label|
@@ -49,13 +73,15 @@ module ExamplesBrowser
   end
 
   def read_file(dir_key, filename)
-    path = File.join(EXAMPLES_ROOT, dir_key.to_s, filename)
+    ensure_playground_exists
+    path = playground_path(dir_key, filename)
     return "" unless File.exist?(path)
     File.read(path)
   end
 
   def file_path(dir_key, filename)
-    File.join(EXAMPLES_ROOT, dir_key.to_s, filename)
+    ensure_playground_exists
+    playground_path(dir_key, filename)
   end
 
   def check_syntax(code)
@@ -90,7 +116,8 @@ module ExamplesBrowser
   end
 
   def save_file(dir_key, filename, content)
-    path = File.join(EXAMPLES_ROOT, dir_key.to_s, filename)
+    ensure_playground_exists
+    path = playground_path(dir_key, filename)
     File.write(path, content)
     { ok: true, message: "Saved #{filename}" }
   rescue => e
@@ -124,14 +151,23 @@ app = StreamWeaver::App.new(
   state[:error_message] ||= ""
   state[:last_run_file] ||= nil
 
-  # ALWAYS derive current_file_path and code_content from selected_dir/selected_file
-  # This avoids storing large file content in session cookies (4KB limit!)
+  # Track which file is loaded to detect file changes
+  # Only read from file when selection changes (not on every request!)
+  # This preserves edited content when clicking Save/Run/Check
+  loaded_key = "#{state[:selected_dir]}/#{state[:selected_file]}"
+
   if state[:selected_dir] && state[:selected_file]
     state[:current_file_path] = file_path(state[:selected_dir], state[:selected_file])
-    state[:code_content] = read_file(state[:selected_dir], state[:selected_file])
+
+    # Only read from file when selection changes
+    if state[:loaded_file_key] != loaded_key
+      state[:code_content] = read_file(state[:selected_dir], state[:selected_file])
+      state[:loaded_file_key] = loaded_key
+    end
   else
     state[:current_file_path] = nil
     state[:code_content] = ""
+    state[:loaded_file_key] = nil
   end
 
   # Main layout
@@ -179,6 +215,8 @@ app = StreamWeaver::App.new(
                   s[:selected_file] = filename
                   s[:last_run_file] = nil
                   s[:syntax_ok] = nil
+                  s[:save_ok] = nil
+                  s[:reset_ok] = nil
                 end
               end
             end
@@ -223,6 +261,14 @@ app = StreamWeaver::App.new(
               end
             end
 
+            button "Reset", style: secondary_btn do |s|
+              reset_file(s[:selected_dir], s[:selected_file])
+              s[:loaded_file_key] = nil  # Force re-read on next render
+              s[:reset_ok] = true
+              s[:save_ok] = nil
+              s[:syntax_ok] = nil
+            end
+
             run_btn_style = "background: #CC342D; border: none; color: white; padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer;"
             button "▶ Run", style: run_btn_style do |s|
               result = check_syntax(s[:code_content])
@@ -234,6 +280,15 @@ app = StreamWeaver::App.new(
               else
                 s[:error_message] = result[:message]
                 s[:error_modal_open] = true
+              end
+            end
+
+            # Only show Stop button when servers are running
+            if SPAWNED_PIDS.any?
+              stop_btn_style = "background: #6c757d; border: none; color: white; padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer;"
+              button "■ Stop", style: stop_btn_style do |s|
+                kill_servers
+                s[:last_run_file] = nil
               end
             end
           end
@@ -253,6 +308,12 @@ app = StreamWeaver::App.new(
         if state[:save_ok] == true
           div style: status_style do
             text "✓ Saved"
+          end
+        end
+
+        if state[:reset_ok] == true
+          div style: status_style do
+            text "✓ Reset to original"
           end
         end
 
