@@ -216,7 +216,7 @@ app = StreamWeaver::App.new(
                 button filename, style: file_style do |s|
                   s[:selected_dir] = dir[:key]
                   s[:selected_file] = filename
-                  s[:last_run_file] = nil
+                  # Don't clear last_run_file - keep showing which server is running
                   s[:syntax_ok] = nil
                   s[:save_ok] = nil
                   s[:reset_ok] = nil
@@ -280,6 +280,7 @@ app = StreamWeaver::App.new(
                 save_file(s[:selected_dir], s[:selected_file], s[:code_content])
                 run_example(s[:current_file_path])
                 s[:last_run_file] = s[:selected_file]
+                s[:last_run_dir] = s[:selected_dir]
                 s[:syntax_ok] = nil
                 s[:save_ok] = nil
               else
@@ -294,6 +295,7 @@ app = StreamWeaver::App.new(
               button "■ Stop", style: stop_btn_style do |s|
                 kill_servers
                 s[:last_run_file] = nil
+                s[:last_run_dir] = nil
               end
             end
           end
@@ -322,9 +324,17 @@ app = StreamWeaver::App.new(
           end
         end
 
-        if state[:last_run_file] == state[:selected_file]
-          div style: status_style do
-            text "✓ Launched - check for new browser tab"
+        # Global running indicator - shows which file is running regardless of current view
+        if SPAWNED_PIDS.any? && state[:last_run_file]
+          running_style = "margin-top: 8px; padding: 8px 12px; background: #e8f5e9; border: 1px solid #81c784; border-radius: 4px; font-size: 13px; display: flex; justify-content: space-between; align-items: center;"
+          div style: running_style do
+            text "▶ Running: #{state[:last_run_dir]}/#{state[:last_run_file]}"
+            stop_link_style = "background: transparent; border: none; color: #c62828; cursor: pointer; font-size: 13px; padding: 2px 8px;"
+            button "Stop", style: stop_link_style do |s|
+              kill_servers
+              s[:last_run_file] = nil
+              s[:last_run_dir] = nil
+            end
           end
         end
       else
