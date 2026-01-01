@@ -101,7 +101,9 @@ module ExamplesBrowser
   end
 
   def run_example(file_path)
-    SPAWNED_PIDS.each { |pid| Process.kill('TERM', pid) rescue nil }
+    # Kill any existing servers before starting new one
+    # Use SIGINT for clean Puma shutdown
+    SPAWNED_PIDS.each { |pid| Process.kill('INT', pid) rescue nil }
     SPAWNED_PIDS.clear
 
     pid = spawn("ruby", file_path)
@@ -111,7 +113,8 @@ module ExamplesBrowser
   end
 
   def kill_servers
-    SPAWNED_PIDS.each { |pid| Process.kill('TERM', pid) rescue nil }
+    # Use SIGINT for clean Puma shutdown
+    SPAWNED_PIDS.each { |pid| Process.kill('INT', pid) rescue nil }
     SPAWNED_PIDS.clear
   end
 
@@ -273,6 +276,8 @@ app = StreamWeaver::App.new(
             button "▶ Run", style: run_btn_style do |s|
               result = check_syntax(s[:code_content])
               if result[:ok]
+                # Auto-save before running so edits take effect
+                save_file(s[:selected_dir], s[:selected_file], s[:code_content])
                 run_example(s[:current_file_path])
                 s[:last_run_file] = s[:selected_file]
                 s[:syntax_ok] = nil
