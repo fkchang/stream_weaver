@@ -249,10 +249,25 @@ module StreamWeaver
       exec(RbConfig.ruby, examples_browser)
     end
 
-    # Start tutorial (TODO: implement)
+    # Show interactive tutorial
+    # Runs the tutorial standalone (not in service) so it can use at_exit for cleanup
     def self.tutorial
-      puts "Tutorial not yet implemented"
-      # Could load a tutorial app
+      tutorial_app = File.expand_path('../../../examples/advanced/tutorial.rb', __FILE__)
+
+      unless File.exist?(tutorial_app)
+        puts "Tutorial not found at: #{tutorial_app}"
+        exit 1
+      end
+
+      # Ensure service is running for the playgrounds
+      ensure_service_running
+
+      puts "Starting StreamWeaver Tutorial..."
+      puts "Playgrounds will load into service at http://localhost:#{service_port}"
+      puts "Press Ctrl+C to quit and cleanup\n\n"
+
+      # Run tutorial standalone (exec replaces process, so Ctrl+C triggers at_exit)
+      exec(RbConfig.ruby, tutorial_app)
     end
 
     # Stop the service
