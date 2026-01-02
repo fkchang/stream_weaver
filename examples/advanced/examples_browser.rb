@@ -4,18 +4,12 @@
 # StreamWeaver Examples Browser
 # Browse, view, and run StreamWeaver examples with syntax highlighting.
 #
-# Run with: ruby examples/advanced/examples_browser.rb
+# Run with: streamweaver showcase
+# (Or: ruby examples/advanced/examples_browser.rb)
 
 require_relative "../../lib/stream_weaver"
-
-# Track spawned server PIDs for cleanup
-SPAWNED_PIDS = []
-
-at_exit do
-  SPAWNED_PIDS.each do |pid|
-    Process.kill('TERM', pid) rescue nil
-  end
-end
+require 'net/http'
+require 'json'
 
 # Helper module for example discovery
 module ExamplesBrowser
@@ -100,22 +94,42 @@ module ExamplesBrowser
     end
   end
 
-  def run_example(file_path)
-    # Kill any existing servers before starting new one
-    # Use SIGINT for clean Puma shutdown
-    SPAWNED_PIDS.each { |pid| Process.kill('INT', pid) rescue nil }
-    SPAWNED_PIDS.clear
-
-    pid = spawn("ruby", file_path)
-    Process.detach(pid)
-    SPAWNED_PIDS << pid
-    pid
+  def service_port
+    info = StreamWeaver::Service.read_pid_file
+    info ? info[:port] : StreamWeaver::Service::DEFAULT_PORT
   end
 
-  def kill_servers
-    # Use SIGINT for clean Puma shutdown
-    SPAWNED_PIDS.each { |pid| Process.kill('INT', pid) rescue nil }
-    SPAWNED_PIDS.clear
+  def run_example_via_service(file_path, name: nil)
+    # Load example via service API - returns app info or error
+    uri = URI("http://localhost:#{service_port}/load-app")
+    params = { file_path: File.expand_path(file_path) }
+    params[:name] = name if name
+
+    response = Net::HTTP.post_form(uri, params)
+    result = JSON.parse(response.body)
+
+    if result['success']
+      {
+        ok: true,
+        app_id: result['app_id'],
+        name: result['name'],
+        url: "http://localhost:#{service_port}#{result['url']}"
+      }
+    else
+      { ok: false, error: result['error'] }
+    end
+  rescue Errno::ECONNREFUSED
+    { ok: false, error: "Service not running. Start with: streamweaver showcase" }
+  rescue => e
+    { ok: false, error: e.message }
+  end
+
+  def remove_app_via_service(app_id)
+    uri = URI("http://localhost:#{service_port}/remove-app")
+    response = Net::HTTP.post_form(uri, { app_id: app_id })
+    JSON.parse(response.body)
+  rescue
+    { 'success' => false }
   end
 
   def save_file(dir_key, filename, content)
@@ -137,7 +151,7 @@ CODEMIRROR_CSS = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/code
 CODEMIRROR_JS = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"
 CODEMIRROR_RUBY = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/ruby/ruby.min.js"
 
-app = StreamWeaver::App.new(
+generated_app = app(
   "Example Playground",
   layout: :fluid,
   theme: :default,
@@ -152,7 +166,10 @@ app = StreamWeaver::App.new(
   state[:selected_file] ||= examples.first&.dig(:files)&.first
   state[:error_modal_open] ||= false
   state[:error_message] ||= ""
-  state[:last_run_file] ||= nil
+  # Service mode tracking
+  state[:running_app_id] ||= nil
+  state[:running_app_url] ||= nil
+  state[:running_app_name] ||= nil
 
   # Track which file is loaded to detect file changes
   # Only read from file when selection changes (not on every request!)
@@ -282,24 +299,21 @@ app = StreamWeaver::App.new(
               if result[:ok]
                 # Auto-save before running so edits take effect
                 save_file(s[:selected_dir], s[:selected_file], s[:code_content])
-                run_example(s[:current_file_path])
-                s[:last_run_file] = s[:selected_file]
-                s[:last_run_dir] = s[:selected_dir]
-                s[:syntax_ok] = nil
-                s[:save_ok] = nil
+                # Load via service API
+                app_result = run_example_via_service(s[:current_file_path], name: "#{s[:selected_dir]}/#{s[:selected_file]}")
+                if app_result[:ok]
+                  s[:running_app_id] = app_result[:app_id]
+                  s[:running_app_url] = app_result[:url]
+                  s[:running_app_name] = app_result[:name]
+                  s[:syntax_ok] = nil
+                  s[:save_ok] = nil
+                else
+                  s[:error_message] = app_result[:error]
+                  s[:error_modal_open] = true
+                end
               else
                 s[:error_message] = result[:message]
                 s[:error_modal_open] = true
-              end
-            end
-
-            # Only show Stop button when servers are running
-            if SPAWNED_PIDS.any?
-              stop_btn_style = "background: #6c757d; border: none; color: white; padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer;"
-              button "■ Stop", style: stop_btn_style do |s|
-                kill_servers
-                s[:last_run_file] = nil
-                s[:last_run_dir] = nil
               end
             end
           end
@@ -328,16 +342,22 @@ app = StreamWeaver::App.new(
           end
         end
 
-        # Global running indicator - shows which file is running regardless of current view
-        if SPAWNED_PIDS.any? && state[:last_run_file]
-          running_style = "margin-top: 8px; padding: 8px 12px; background: #e8f5e9; border: 1px solid #81c784; border-radius: 4px; font-size: 13px; display: flex; justify-content: space-between; align-items: center;"
+        # Running app indicator - shows loaded app with Open/Remove actions
+        if state[:running_app_id]
+          running_style = "margin-top: 8px; padding: 8px 12px; background: #e8f5e9; border: 1px solid #81c784; border-radius: 4px; font-size: 13px;"
           div style: running_style do
-            text "▶ Running: #{state[:last_run_dir]}/#{state[:last_run_file]}"
-            stop_link_style = "background: transparent; border: none; color: #c62828; cursor: pointer; font-size: 13px; padding: 2px 8px;"
-            button "Stop", style: stop_link_style do |s|
-              kill_servers
-              s[:last_run_file] = nil
-              s[:last_run_dir] = nil
+            div style: "display: flex; justify-content: space-between; align-items: center;" do
+              text "▶ Loaded: #{state[:running_app_name]}"
+              div style: "display: flex; gap: 8px; align-items: center;" do
+                external_link_button "Open ↗", url: state[:running_app_url]
+                remove_link_style = "background: transparent; border: none; color: #666; cursor: pointer; font-size: 13px; padding: 2px 8px;"
+                button "Remove", style: remove_link_style do |s|
+                  remove_app_via_service(s[:running_app_id])
+                  s[:running_app_id] = nil
+                  s[:running_app_url] = nil
+                  s[:running_app_name] = nil
+                end
+              end
             end
           end
         end
@@ -363,4 +383,5 @@ app = StreamWeaver::App.new(
   end
 end
 
-app.generate.run!
+# Only run directly if executed as main script (not when loaded by service)
+generated_app.run! if __FILE__ == $0
