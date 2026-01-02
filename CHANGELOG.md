@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Service Mode** - Single server renders multiple apps without per-app process management:
+  - `streamweaver <file.rb>` - Run app (auto-starts service if needed)
+  - `streamweaver list` - List all loaded apps with timing info
+  - `streamweaver remove <id>` - Remove a specific app
+  - `streamweaver clear` - Remove all apps
+  - `streamweaver admin` - Open admin dashboard
+  - `streamweaver status` - Show service status
+  - `streamweaver stop` - Stop background service
+  - Named sessions via `--name` flag for easier identification
+- **Admin Dashboard** - StreamWeaver app managing other StreamWeaver apps (meta!)
+  - Shows service stats (apps loaded, PID, port)
+  - Lists all apps with timing (loaded/idle duration)
+  - Open/Remove buttons for each app
+  - Clear All Apps action
+- **Multi-app routing** - Each app gets unique URL (`/apps/:app_id`)
+- **URL prefix support** in adapter for service mode routing
 - **Multi-theme system** with three built-in themes:
   - `:default` - Warm Industrial (Source Sans 3, 17px, generous spacing)
   - `:dashboard` - Data Dense (15px, tighter spacing, minimal accents)

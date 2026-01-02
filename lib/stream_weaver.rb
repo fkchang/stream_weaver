@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "stream_weaver/version"
+require_relative "stream_weaver/utils"
 require_relative "stream_weaver/adapter/base"
 require_relative "stream_weaver/adapter/alpinejs"
 require_relative "stream_weaver/theme"

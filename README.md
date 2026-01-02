@@ -58,11 +58,36 @@ app "Hello World" do
 end.run!
 ```
 
-Run with: `ruby my_app.rb`
+Run with: `ruby my_app.rb` or `streamweaver my_app.rb`
 
-The browser opens automatically at `http://localhost:4567` (or next available port).
+The browser opens automatically at `http://localhost:4567`.
 
-> **Run Multiple Apps Simultaneously** - StreamWeaver automatically finds a free port and opens a browser tab for each app. Run `ruby app1.rb` in one terminal, `ruby app2.rb` in another — no port conflicts, no configuration. Each app gets its own port and browser tab automatically. The URL is printed to stdout so AI agents can read the port for testing.
+## Service Mode (CLI)
+
+StreamWeaver includes a CLI that manages a single background service rendering multiple apps:
+
+```bash
+# Run an app (auto-starts service if needed)
+streamweaver examples/basic/hello_world.rb
+
+# Named sessions for easier identification
+streamweaver run --name "My Survey" examples/basic/form_demo.rb
+
+# List all loaded apps
+streamweaver list
+
+# Manage apps
+streamweaver remove <app_id>  # Remove specific app
+streamweaver clear            # Remove all apps
+streamweaver admin            # Open admin dashboard
+
+# Service management
+streamweaver status           # Show service status
+streamweaver stop             # Stop background service
+streamweaver showcase         # Open examples browser
+```
+
+Each app gets a unique URL (`/apps/:app_id`), allowing side-by-side comparison. The admin dashboard is a StreamWeaver app managing other StreamWeaver apps (meta!).
 
 ## Installation
 

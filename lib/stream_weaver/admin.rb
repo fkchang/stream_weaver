@@ -25,14 +25,13 @@ module StreamWeaver
           }
         end
 
-        # Header
-        hstack spacing: :md, align: :center do
-          header1 "StreamWeaver Admin"
-          div style: "flex: 1;" do end  # Spacer
-          status_badge :success, "Running on port #{Service.settings.port}"
+        # Service status indicator
+        div style: "text-align: right; margin-bottom: 1rem;" do
+          div style: "display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.75rem; background: #e8f5e9; border-radius: 1rem; font-size: 0.9rem;" do
+            div style: "width: 8px; height: 8px; background: #4caf50; border-radius: 50%;" do end
+            text "Running on port #{Service.settings.port}"
+          end
         end
-
-        div style: "margin-top: 1rem;" do end
 
         # Stats row
         hstack spacing: :lg do
@@ -118,10 +117,10 @@ module StreamWeaver
                 # Timing info
                 div style: "text-align: right; min-width: 150px;" do
                   div style: "font-size: 0.85rem; color: #666;" do
-                    text "Loaded #{Admin.format_duration(app[:age_seconds])}"
+                    text "Loaded #{Utils.format_duration(app[:age_seconds])}"
                   end
                   div style: "font-size: 0.85rem; color: #888;" do
-                    text "Idle #{Admin.format_duration(app[:idle_seconds])}"
+                    text "Idle #{Utils.format_duration(app[:idle_seconds])}"
                   end
                 end
 
@@ -147,22 +146,6 @@ module StreamWeaver
             text "💡 Tip: Use streamweaver list to see apps from the command line"
           end
         end
-      end
-    end
-
-    private
-
-    def self.format_duration(seconds)
-      return "just now" if seconds < 5
-
-      if seconds < 60
-        "#{seconds}s ago"
-      elsif seconds < 3600
-        "#{seconds / 60}m ago"
-      elsif seconds < 86400
-        "#{seconds / 3600}h ago"
-      else
-        "#{seconds / 86400}d ago"
       end
     end
   end

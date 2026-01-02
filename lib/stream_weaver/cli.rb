@@ -142,14 +142,14 @@ module StreamWeaver
             puts "  " + "-" * 84
 
             apps.each do |app|
-              loaded_ago = format_duration(app['age_seconds'])
-              idle_ago = format_duration(app['idle_seconds'])
+              loaded_ago = Utils.format_duration(app['age_seconds'])
+              idle_ago = Utils.format_duration(app['idle_seconds'])
               file_name = File.basename(app['path'])
 
               puts format("  %-10s %-20s %-30s %10s %10s",
                 app['id'][0..9],
-                truncate(app['name'], 20),
-                truncate(file_name, 30),
+                Utils.truncate(app['name'], 20),
+                Utils.truncate(file_name, 30),
                 loaded_ago,
                 idle_ago
               )
@@ -274,7 +274,7 @@ module StreamWeaver
             apps = data['apps'] || []
             puts "  Loaded apps: #{apps.length}"
             apps.each do |app|
-              idle = format_duration(app['idle_seconds'])
+              idle = Utils.format_duration(app['idle_seconds'])
               puts "    - #{app['id'][0..7]}  #{app['name']}  (idle #{idle})"
             end
           end
@@ -362,25 +362,5 @@ module StreamWeaver
       end
     end
 
-    # Format seconds as human-readable duration
-    def self.format_duration(seconds)
-      return "just now" if seconds < 5
-
-      if seconds < 60
-        "#{seconds}s ago"
-      elsif seconds < 3600
-        "#{seconds / 60}m ago"
-      elsif seconds < 86400
-        "#{seconds / 3600}h ago"
-      else
-        "#{seconds / 86400}d ago"
-      end
-    end
-
-    # Truncate string with ellipsis
-    def self.truncate(str, max_length)
-      return str if str.length <= max_length
-      str[0..max_length - 4] + "..."
-    end
   end
 end
