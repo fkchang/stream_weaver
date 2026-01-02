@@ -42,6 +42,11 @@ module StreamWeaver
               script(src: src)
             end
 
+            # Chart.js CDN - only load when charts are present
+            if @app.has_charts?
+              script(src: "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js")
+            end
+
             # Google Fonts: Source Sans 3 + Crimson Pro (for document theme)
             link(rel: "preconnect", href: "https://fonts.googleapis.com")
             link(rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "anonymous")

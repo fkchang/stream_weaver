@@ -1459,6 +1459,77 @@ module StreamWeaver
         end
       end
 
+      # =========================================
+      # Chart components rendering
+      # =========================================
+
+      # Render a bar chart using Chart.js
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param chart [Components::BarChart] The bar chart component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_bar_chart(view, chart, state)
+        resolved = chart.resolve_data(state)
+        chart_id = "sw-chart-#{SecureRandom.hex(4)}"
+
+        # Chart.js configuration
+        horizontal = chart.options[:horizontal] || false
+        height = chart.options[:height] || "250px"
+        title = chart.options[:title]
+        show_values = chart.options[:show_values] || false
+        show_legend = chart.options.fetch(:show_legend, false)
+
+        # Colors - default to theme primary color
+        colors = chart.options[:colors] || ["#c2410c"]
+
+        config = {
+          type: 'bar',
+          data: {
+            labels: resolved[:labels],
+            datasets: [{
+              data: resolved[:values],
+              backgroundColor: colors.first,
+              borderColor: colors.first,
+              borderWidth: 0,
+              borderRadius: 4,
+              barPercentage: 0.7
+            }]
+          },
+          options: {
+            indexAxis: horizontal ? 'y' : 'x',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: show_legend },
+              title: title ? { display: true, text: title, font: { size: 14, weight: '600' } } : { display: false },
+              datalabels: show_values ? { display: true, anchor: 'end', align: 'end', font: { size: 11, weight: '500' } } : nil
+            }.compact,
+            scales: {
+              x: {
+                grid: { display: !horizontal, color: 'rgba(0,0,0,0.05)' },
+                ticks: { font: { size: 12 } }
+              },
+              y: {
+                grid: { display: horizontal, color: 'rgba(0,0,0,0.05)' },
+                ticks: { font: { size: 12 } },
+                beginAtZero: true
+              }
+            }
+          }
+        }
+
+        config_json = JSON.generate(config)
+
+        view.div(class: "sw-chart-container", style: "height: #{height}; position: relative;") do
+          view.canvas(
+            id: chart_id,
+            "x-data" => "{}",
+            "x-init" => "if (typeof Chart !== 'undefined') { new Chart(document.getElementById('#{chart_id}'), #{config_json}); } else { console.warn('Chart.js not loaded'); }"
+          )
+        end
+      end
+
       # Render a code editor using CodeMirror 5
       #
       # Reinitializes editor on each HTMX swap to ensure content is fresh.

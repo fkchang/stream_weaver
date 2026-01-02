@@ -947,6 +947,106 @@ module StreamWeaver
       end
     end
 
+    # =========================================
+    # Chart Components
+    # =========================================
+
+    # BarChart component for data visualization
+    # Renders horizontal or vertical bar charts using Chart.js
+    class BarChart < Base
+      attr_reader :options
+
+      # @param data [Hash, Symbol, nil] Inline data hash or state key
+      # @param file [String, nil] Path to YAML/JSON data file
+      # @param path [String, nil] Dot-path to extract from file (e.g., "entries.-1.phases")
+      # @param labels [Array<String>, nil] Explicit labels
+      # @param values [Array<Numeric>, nil] Explicit values
+      # @param options [Hash] Chart options (title, height, horizontal, colors, etc.)
+      # @param block [Proc, nil] Transform block for file data
+      def initialize(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
+        @data = data
+        @file = file
+        @path = path
+        @labels = labels
+        @values = values
+        @transform_block = block
+        @options = options
+      end
+
+      # Resolve data from various input sources
+      # @param state [Hash] Current state
+      # @return [Hash] { labels: [...], values: [...] }
+      def resolve_data(state)
+        if @file
+          raw = load_file(@file)
+          raw = @transform_block ? @transform_block.call(raw) : extract_path(raw, @path)
+          normalize_to_labels_values(raw)
+        elsif @data.is_a?(Symbol)
+          normalize_to_labels_values(state[@data])
+        elsif @data.is_a?(Hash)
+          normalize_to_labels_values(@data)
+        elsif @data.is_a?(Array)
+          { labels: (0...@data.length).to_a, values: @data }
+        else
+          { labels: @labels || [], values: @values || [] }
+        end
+      end
+
+      def render(view, state)
+        view.adapter.render_bar_chart(view, self, state)
+      end
+
+      private
+
+      # Load data from YAML or JSON file
+      def load_file(path)
+        require 'yaml'
+        require 'json'
+        expanded = File.expand_path(path)
+        case File.extname(expanded).downcase
+        when '.yaml', '.yml'
+          YAML.safe_load_file(expanded, symbolize_names: true, permitted_classes: [Symbol, Date, Time])
+        when '.json'
+          JSON.parse(File.read(expanded), symbolize_names: true)
+        else
+          raise ArgumentError, "Unsupported file type: #{path}. Use .yaml, .yml, or .json"
+        end
+      end
+
+      # Extract nested data using dot-path notation
+      # Supports: "entries.-1.phases" where -1 is array index from end
+      def extract_path(data, path)
+        return data unless path
+        path.split('.').reduce(data) do |obj, key|
+          return nil if obj.nil?
+          case key
+          when /^-?\d+$/
+            obj[key.to_i] # Array index (negative supported)
+          else
+            obj[key.to_sym] rescue obj[key] # Hash key (try symbol first)
+          end
+        end
+      end
+
+      # Normalize various data formats to { labels: [], values: [] }
+      def normalize_to_labels_values(data)
+        case data
+        when Hash
+          { labels: data.keys.map(&:to_s), values: data.values }
+        when Array
+          if data.first.is_a?(Hash) && data.first.key?(:label)
+            # Array of {label:, value:} hashes
+            { labels: data.map { |d| d[:label] }, values: data.map { |d| d[:value] } }
+          else
+            # Plain array of values
+            { labels: (0...data.length).to_a.map(&:to_s), values: data }
+          end
+        else
+          { labels: [], values: [] }
+        end
+      end
+    end
+
     # CodeEditor component for syntax-highlighted code display/editing
     # Uses CodeMirror 5 with hx-preserve to survive HTMX swaps
     class CodeEditor < Base
