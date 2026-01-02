@@ -1463,23 +1463,25 @@ module StreamWeaver
       # Chart components rendering
       # =========================================
 
-      def render_bar_chart(view, chart, state)
-        config = BarChartConfig.new(chart, state)
-
+      def render_chart(view, chart, state, config_class:)
+        config = config_class.new(chart, state)
         view.div(class: "sw-chart-container", style: "height: #{config.height}; position: relative;") do
           view.canvas(id: config.id, "x-data" => "{}", "x-init" => config.init_script)
         end
       end
 
-      # Value object encapsulating Chart.js bar chart configuration
-      class BarChartConfig
+      def render_bar_chart(view, chart, state)  = render_chart(view, chart, state, config_class: BarChartConfig)
+      def render_line_chart(view, chart, state) = render_chart(view, chart, state, config_class: LineChartConfig)
+
+      # Base class for Chart.js configuration value objects
+      class ChartConfigBase
         attr_reader :id, :height
 
         def initialize(chart, state)
           @data = chart.resolve_data(state)
           @options = chart.options
           @id = "sw-chart-#{SecureRandom.hex(4)}"
-          @height = @options[:height] || "250px"
+          @height = @options[:height] || default_height
         end
 
         def init_script
@@ -1488,17 +1490,22 @@ module StreamWeaver
 
         private
 
-        def config_json
-          JSON.generate(chart_config)
-        end
+        def config_json     = JSON.generate(chart_config)
+        def chart_config    = { type: chart_type, data: data_config, options: options_config }
+        def data_config     = { labels: @data[:labels], datasets: [dataset] }
+        def primary_color   = (@options[:colors] || ["#c2410c"]).first
+        def default_height  = "250px"
+        def grid_style      = { display: true, color: 'rgba(0,0,0,0.05)' }
+        def tick_style      = { font: { size: 12 } }
 
-        def chart_config
-          { type: 'bar', data: data_config, options: options_config }
+        def title_config
+          return { display: false } unless @options[:title]
+          { display: true, text: @options[:title], font: { size: 14, weight: '600' } }
         end
+      end
 
-        def data_config
-          { labels: @data[:labels], datasets: [dataset] }
-        end
+      class BarChartConfig < ChartConfigBase
+        def chart_type = 'bar'
 
         def dataset
           {
@@ -1511,14 +1518,6 @@ module StreamWeaver
           }
         end
 
-        def primary_color
-          (@options[:colors] || ["#c2410c"]).first
-        end
-
-        def horizontal?
-          @options[:horizontal] || false
-        end
-
         def options_config
           {
             indexAxis: horizontal? ? 'y' : 'x',
@@ -1529,17 +1528,16 @@ module StreamWeaver
           }
         end
 
+        private
+
+        def horizontal? = @options[:horizontal] || false
+
         def plugins_config
           {
             legend: { display: @options.fetch(:show_legend, false) },
             title: title_config,
             datalabels: datalabels_config
           }.compact
-        end
-
-        def title_config
-          return { display: false } unless @options[:title]
-          { display: true, text: @options[:title], font: { size: 14, weight: '600' } }
         end
 
         def datalabels_config
@@ -1549,9 +1547,62 @@ module StreamWeaver
 
         def scales_config
           {
-            x: { grid: { display: !horizontal?, color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 12 } } },
-            y: { grid: { display: horizontal?, color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 12 } }, beginAtZero: true }
+            x: { grid: { display: !horizontal?, color: 'rgba(0,0,0,0.05)' }, ticks: tick_style },
+            y: { grid: { display: horizontal?, color: 'rgba(0,0,0,0.05)' }, ticks: tick_style, beginAtZero: true }
           }
+        end
+      end
+
+      class LineChartConfig < ChartConfigBase
+        def chart_type     = 'line'
+        def default_height = sparkline? ? "60px" : "250px"
+
+        def dataset
+          {
+            data: @data[:values],
+            borderColor: primary_color,
+            backgroundColor: fill? ? "#{primary_color}20" : 'transparent',
+            borderWidth: sparkline? ? 1.5 : 2,
+            fill: fill?,
+            tension: smooth? ? 0.4 : 0,
+            pointRadius: show_points? ? 3 : 0,
+            pointHoverRadius: show_points? ? 5 : 0
+          }
+        end
+
+        def options_config = sparkline? ? sparkline_options : standard_options
+
+        private
+
+        def sparkline?   = @options[:sparkline] || false
+        def fill?        = @options[:fill] || false
+        def smooth?      = @options.fetch(:smooth, true)
+        def show_points? = !sparkline? && @options.fetch(:points, true)
+        def begin_at_zero? = @options.fetch(:begin_at_zero, false)
+
+        def sparkline_options
+          {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            scales: { x: { display: false }, y: { display: false, beginAtZero: begin_at_zero? } }
+          }
+        end
+
+        def standard_options
+          {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: plugins_config,
+            scales: { x: { grid: grid_style, ticks: tick_style }, y: { grid: grid_style, ticks: tick_style, beginAtZero: begin_at_zero? } }
+          }
+        end
+
+        def plugins_config
+          {
+            legend: { display: @options.fetch(:show_legend, false) },
+            title: title_config
+          }.compact
         end
       end
 

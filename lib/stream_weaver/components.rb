@@ -951,7 +951,8 @@ module StreamWeaver
     # Chart Components
     # =========================================
 
-    class BarChart < Base
+    # Shared functionality for all chart types
+    class ChartBase < Base
       attr_reader :options
 
       def initialize(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
@@ -966,10 +967,6 @@ module StreamWeaver
 
       def resolve_data(state)
         normalize(raw_data(state))
-      end
-
-      def render(view, state)
-        view.adapter.render_bar_chart(view, self, state)
       end
 
       private
@@ -1022,6 +1019,18 @@ module StreamWeaver
 
       def labeled_array?(data)
         data.first.is_a?(Hash) && data.first.key?(:label)
+      end
+    end
+
+    class BarChart < ChartBase
+      def render(view, state)
+        view.adapter.render_bar_chart(view, self, state)
+      end
+    end
+
+    class LineChart < ChartBase
+      def render(view, state)
+        view.adapter.render_line_chart(view, self, state)
       end
     end
 

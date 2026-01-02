@@ -72,7 +72,7 @@ module StreamWeaver
     end
 
     def has_charts?
-      components_include?(Components::BarChart)
+      components_include?(Components::ChartBase)
     end
 
     private
@@ -324,9 +324,18 @@ module StreamWeaver
       )
     end
 
-    # Render a horizontal bar chart (shorthand for bar_chart with horizontal: true)
     def hbar_chart(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
       bar_chart(data: data, file: file, path: path, labels: labels, values: values, horizontal: true, **options, &block)
+    end
+
+    def line_chart(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
+      @components << Components::LineChart.new(
+        data: data, file: file, path: path, labels: labels, values: values, **options, &block
+      )
+    end
+
+    def sparkline(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
+      line_chart(data: data, file: file, path: path, labels: labels, values: values, sparkline: true, **options, &block)
     end
 
     def status_badge(status, reasoning)
