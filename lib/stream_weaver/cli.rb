@@ -26,6 +26,8 @@ module StreamWeaver
         remove_app(args.first)
       when 'clear'
         clear_apps
+      when 'admin'
+        admin
       when 'showcase'
         showcase
       when 'tutorial'
@@ -217,6 +219,15 @@ module StreamWeaver
       end
     end
 
+    # Open admin dashboard
+    def self.admin
+      ensure_service_running
+      url = "http://localhost:#{service_port}/admin"
+      puts "Opening admin dashboard..."
+      puts "URL: #{url}"
+      open_browser(url)
+    end
+
     # Show examples browser (showcase)
     def self.showcase
       examples_browser = File.expand_path('../../../examples/advanced/examples_browser.rb', __FILE__)
@@ -288,6 +299,7 @@ module StreamWeaver
           streamweaver list                   List all loaded apps
           streamweaver remove <app_id>        Remove a specific app
           streamweaver clear                  Remove all apps
+          streamweaver admin                  Open admin dashboard
           streamweaver serve                  Start service in foreground
           streamweaver stop                   Stop the background service
           streamweaver status                 Show service status

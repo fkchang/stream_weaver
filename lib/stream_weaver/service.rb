@@ -350,6 +350,52 @@ module StreamWeaver
       { apps: apps_list }.to_json
     end
 
+    # =========================================
+    # Admin Dashboard
+    # =========================================
+
+    # Admin dashboard - StreamWeaver app managing itself
+    get '/admin' do
+      admin_app = Admin.create_app
+      state = app_state('admin')
+      adapter = Adapter::AlpineJS.new(url_prefix: "/admin")
+
+      admin_app.rebuild_with_state(state)
+      set_app_state('admin', state)
+
+      Views::AppView.new(admin_app, state, adapter, false).call
+    end
+
+    post '/admin/update' do
+      admin_app = Admin.create_app
+      state = app_state('admin')
+      adapter = Adapter::AlpineJS.new(url_prefix: "/admin")
+
+      admin_app.rebuild_with_state(state)
+      sync_params_to_state(state)
+      set_app_state('admin', state)
+
+      admin_app.rebuild_with_state(state)
+      Views::AppContentView.new(admin_app, state, adapter, false).call
+    end
+
+    post '/admin/action/:button_id' do
+      button_id = params[:button_id]
+      admin_app = Admin.create_app
+      state = app_state('admin')
+      adapter = Adapter::AlpineJS.new(url_prefix: "/admin")
+
+      admin_app.rebuild_with_state(state)
+      sync_params_to_state(state)
+
+      button = SinatraApp.find_button_recursive(admin_app.components, button_id)
+      button&.execute(state)
+      set_app_state('admin', state)
+
+      admin_app.rebuild_with_state(state)
+      Views::AppContentView.new(admin_app, state, adapter, false).call
+    end
+
     # List all loaded apps
     get '/' do
       content_type 'text/html'
