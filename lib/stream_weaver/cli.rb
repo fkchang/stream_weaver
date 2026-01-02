@@ -229,15 +229,24 @@ module StreamWeaver
     end
 
     # Show examples browser (showcase)
+    # Runs the browser standalone (not in service) so it can use at_exit for cleanup
     def self.showcase
       examples_browser = File.expand_path('../../../examples/advanced/examples_browser.rb', __FILE__)
 
-      if File.exist?(examples_browser)
-        run_app([examples_browser])
-      else
+      unless File.exist?(examples_browser)
         puts "Examples browser not found at: #{examples_browser}"
         exit 1
       end
+
+      # Ensure service is running for the examples
+      ensure_service_running
+
+      puts "Starting Examples Browser..."
+      puts "Examples will load into service at http://localhost:#{service_port}"
+      puts "Press Ctrl+C to quit and cleanup\n\n"
+
+      # Run browser standalone (exec replaces process, so Ctrl+C triggers at_exit)
+      exec(RbConfig.ruby, examples_browser)
     end
 
     # Start tutorial (TODO: implement)

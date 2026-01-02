@@ -10,6 +10,28 @@
 require_relative "../../lib/stream_weaver"
 require 'net/http'
 require 'json'
+require 'rbconfig'
+
+# Source identifier for tracking apps in service
+SOURCE = "examples_browser"
+
+# Track loaded apps: file_path => app_id (for edit-replace and cleanup)
+LOADED_APPS = {}
+
+# Cleanup all loaded apps on exit
+at_exit do
+  next if LOADED_APPS.empty?
+  puts "\nCleaning up #{LOADED_APPS.size} loaded example(s)..."
+  begin
+    info = StreamWeaver::Service.read_pid_file
+    if info
+      uri = URI("http://localhost:#{info[:port]}/clear-source")
+      Net::HTTP.post_form(uri, { source: SOURCE })
+    end
+  rescue => e
+    # Service might be down, that's ok
+  end
+end
 
 # Helper module for example discovery
 module ExamplesBrowser
@@ -100,15 +122,26 @@ module ExamplesBrowser
   end
 
   def run_example_via_service(file_path, name: nil)
-    # Load example via service API - returns app info or error
+    expanded_path = File.expand_path(file_path)
+
+    # Remove old version if same file was already loaded (edit-replace)
+    if LOADED_APPS[expanded_path]
+      remove_app_via_service(LOADED_APPS[expanded_path])
+      LOADED_APPS.delete(expanded_path)
+    end
+
+    # Load example via service API
     uri = URI("http://localhost:#{service_port}/load-app")
-    params = { file_path: File.expand_path(file_path) }
+    params = { file_path: expanded_path, source: SOURCE }
     params[:name] = name if name
 
     response = Net::HTTP.post_form(uri, params)
     result = JSON.parse(response.body)
 
     if result['success']
+      # Track for cleanup and edit-replace
+      LOADED_APPS[expanded_path] = result['app_id']
+
       {
         ok: true,
         app_id: result['app_id'],
@@ -127,9 +160,21 @@ module ExamplesBrowser
   def remove_app_via_service(app_id)
     uri = URI("http://localhost:#{service_port}/remove-app")
     response = Net::HTTP.post_form(uri, { app_id: app_id })
+    LOADED_APPS.delete_if { |_path, id| id == app_id }
     JSON.parse(response.body)
   rescue
     { 'success' => false }
+  end
+
+  def open_in_browser(url)
+    case RbConfig::CONFIG['host_os']
+    when /darwin|mac os/
+      system('open', url)
+    when /linux|bsd/
+      system('xdg-open', url)
+    when /mswin|msys|mingw|cygwin|bccwin|wince|emc/
+      system('start', url)
+    end
   end
 
   def save_file(dir_key, filename, content)
@@ -166,10 +211,6 @@ generated_app = app(
   state[:selected_file] ||= examples.first&.dig(:files)&.first
   state[:error_modal_open] ||= false
   state[:error_message] ||= ""
-  # Service mode tracking
-  state[:running_app_id] ||= nil
-  state[:running_app_url] ||= nil
-  state[:running_app_name] ||= nil
 
   # Track which file is loaded to detect file changes
   # Only read from file when selection changes (not on every request!)
@@ -299,12 +340,11 @@ generated_app = app(
               if result[:ok]
                 # Auto-save before running so edits take effect
                 save_file(s[:selected_dir], s[:selected_file], s[:code_content])
-                # Load via service API
+                # Load via service API (replaces old version if same file)
                 app_result = run_example_via_service(s[:current_file_path], name: "#{s[:selected_dir]}/#{s[:selected_file]}")
                 if app_result[:ok]
-                  s[:running_app_id] = app_result[:app_id]
-                  s[:running_app_url] = app_result[:url]
-                  s[:running_app_name] = app_result[:name]
+                  # Auto-open in browser
+                  open_in_browser(app_result[:url])
                   s[:syntax_ok] = nil
                   s[:save_ok] = nil
                 else
@@ -342,20 +382,22 @@ generated_app = app(
           end
         end
 
-        # Running app indicator - shows loaded app with Open/Remove actions
-        if state[:running_app_id]
+        # Show if current file is loaded in service (can reopen)
+        current_app_id = LOADED_APPS[state[:current_file_path]]
+        if current_app_id
           running_style = "margin-top: 8px; padding: 8px 12px; background: #e8f5e9; border: 1px solid #81c784; border-radius: 4px; font-size: 13px;"
+          app_url = "http://localhost:#{service_port}/apps/#{current_app_id}"
           div style: running_style do
             div style: "display: flex; justify-content: space-between; align-items: center;" do
-              text "▶ Loaded: #{state[:running_app_name]}"
+              text "▶ Running in service"
               div style: "display: flex; gap: 8px; align-items: center;" do
-                external_link_button "Open ↗", url: state[:running_app_url]
+                reopen_style = "background: #4caf50; border: none; color: white; padding: 4px 12px; border-radius: 4px; font-size: 13px; cursor: pointer;"
+                button "Reopen ↗", style: reopen_style do |_s|
+                  open_in_browser(app_url)
+                end
                 remove_link_style = "background: transparent; border: none; color: #666; cursor: pointer; font-size: 13px; padding: 2px 8px;"
-                button "Remove", style: remove_link_style do |s|
-                  remove_app_via_service(s[:running_app_id])
-                  s[:running_app_id] = nil
-                  s[:running_app_url] = nil
-                  s[:running_app_name] = nil
+                button "Unload", style: remove_link_style do |_s|
+                  remove_app_via_service(current_app_id)
                 end
               end
             end
@@ -383,5 +425,5 @@ generated_app = app(
   end
 end
 
-# Only run directly if executed as main script (not when loaded by service)
-generated_app.run! if __FILE__ == $0
+# Always run - showcase command runs this standalone
+generated_app.run!

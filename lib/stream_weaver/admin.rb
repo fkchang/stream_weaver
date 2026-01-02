@@ -18,12 +18,16 @@ module StreamWeaver
             title: entry[:app].title,
             path: entry[:path],
             file: File.basename(entry[:path]),
+            source: entry[:source],
             loaded_at: entry[:loaded_at],
             last_accessed: entry[:last_accessed],
             age_seconds: (Time.now - entry[:loaded_at]).to_i,
             idle_seconds: (Time.now - entry[:last_accessed]).to_i
           }
         end
+
+        # Get unique sources for bulk actions
+        sources = apps_data.map { |a| a[:source] }.compact.uniq
 
         # Service status indicator
         div style: "text-align: right; margin-bottom: 1rem;" do
@@ -77,6 +81,15 @@ module StreamWeaver
             Service.clear_apps
             s[:_refresh] = Time.now.to_i
           end
+
+          # Per-source clear buttons
+          sources.each do |source|
+            count = apps_data.count { |a| a[:source] == source }
+            button "Clear #{source} (#{count})", style: :secondary do |s|
+              Service.remove_apps_by_source(source)
+              s[:_refresh] = Time.now.to_i
+            end
+          end
         end
 
         div style: "margin-top: 1.5rem;" do end
@@ -108,7 +121,8 @@ module StreamWeaver
                         text app[:name]
                       end
                       div style: "font-size: 0.85rem; color: #666; font-family: monospace;" do
-                        text "#{app[:file]} • #{app[:id]}"
+                        source_tag = app[:source] ? " • #{app[:source]}" : ""
+                        text "#{app[:file]} • #{app[:id]}#{source_tag}"
                       end
                     end
                   end

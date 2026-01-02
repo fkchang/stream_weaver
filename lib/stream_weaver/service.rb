@@ -41,8 +41,9 @@ module StreamWeaver
       #
       # @param file_path [String] Path to the Ruby file
       # @param name [String, nil] Optional custom name for the app
+      # @param source [String, nil] Optional source identifier (e.g., "examples_browser", "tutorial")
       # @return [String] The app_id
-      def load_app(file_path, name: nil)
+      def load_app(file_path, name: nil, source: nil)
         app_id = SecureRandom.hex(4)
         expanded_path = File.expand_path(file_path)
 
@@ -68,6 +69,7 @@ module StreamWeaver
           app: streamlit_app,
           path: expanded_path,
           name: app_name,
+          source: source,
           loaded_at: Time.now,
           last_accessed: Time.now
         }
@@ -90,6 +92,16 @@ module StreamWeaver
         count = apps.size
         @apps = {}
         count
+      end
+
+      # Remove all apps from a specific source
+      # @param source [String] The source identifier
+      # @return [Integer] Number of apps removed
+      def remove_apps_by_source(source)
+        return 0 if source.nil? || source.empty?
+        ids_to_remove = apps.select { |_id, entry| entry[:source] == source }.keys
+        ids_to_remove.each { |id| apps.delete(id) }
+        ids_to_remove.size
       end
 
       # PID file management
@@ -282,15 +294,17 @@ module StreamWeaver
     post '/load-app' do
       content_type :json
       file_path = params[:file_path]
-      name = params[:name]  # Optional custom name
+      name = params[:name]    # Optional custom name
+      source = params[:source]  # Optional source identifier (e.g., "examples_browser")
 
       begin
-        app_id = self.class.load_app(file_path, name: name)
+        app_id = self.class.load_app(file_path, name: name, source: source)
         app_entry = self.class.apps[app_id]
         {
           success: true,
           app_id: app_id,
           name: app_entry[:name],
+          source: app_entry[:source],
           url: "/apps/#{app_id}"
         }.to_json
       rescue => e
@@ -332,6 +346,14 @@ module StreamWeaver
       { success: true, message: "Removed #{count} app(s)" }.to_json
     end
 
+    # Remove all apps from a specific source
+    post '/clear-source' do
+      content_type :json
+      source = params[:source]
+      count = self.class.remove_apps_by_source(source)
+      { success: true, message: "Removed #{count} app(s) from #{source}", count: count }.to_json
+    end
+
     # List apps with details (JSON API)
     get '/api/apps' do
       content_type :json
@@ -340,6 +362,7 @@ module StreamWeaver
           id: id,
           name: entry[:name],
           path: entry[:path],
+          source: entry[:source],
           title: entry[:app].title,
           loaded_at: entry[:loaded_at].iso8601,
           last_accessed: entry[:last_accessed].iso8601,
