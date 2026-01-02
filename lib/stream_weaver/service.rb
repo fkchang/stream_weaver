@@ -104,6 +104,27 @@ module StreamWeaver
         ids_to_remove.size
       end
 
+      # Find app by source and name (for aliased routes)
+      # @param source [String] The source identifier
+      # @param name [String] The app name (partial match OK)
+      # @return [Array<String, Hash>] [app_id, entry] or [nil, nil]
+      def find_app_by_source_and_name(source, name)
+        apps.find do |_id, entry|
+          entry[:source] == source && entry[:name]&.include?(name)
+        end || [nil, nil]
+      end
+
+      # Generate aliased route path for an app
+      # @param app_id [String] The app ID
+      # @return [String, nil] The aliased path or nil if no source
+      def aliased_path_for(app_id)
+        entry = apps[app_id]
+        return nil unless entry && entry[:source]
+        # Use filename without extension as the name part
+        name_part = File.basename(entry[:path], '.rb')
+        "/#{entry[:source]}/#{name_part}"
+      end
+
       # PID file management
       def pid_file_path
         File.expand_path('~/.streamweaver/server.pid')
@@ -300,12 +321,14 @@ module StreamWeaver
       begin
         app_id = self.class.load_app(file_path, name: name, source: source)
         app_entry = self.class.apps[app_id]
+        aliased = self.class.aliased_path_for(app_id)
         {
           success: true,
           app_id: app_id,
           name: app_entry[:name],
           source: app_entry[:source],
-          url: "/apps/#{app_id}"
+          url: "/apps/#{app_id}",
+          aliased_url: aliased
         }.to_json
       rescue => e
         status 400
@@ -364,6 +387,8 @@ module StreamWeaver
           path: entry[:path],
           source: entry[:source],
           title: entry[:app].title,
+          url: "/apps/#{id}",
+          aliased_url: self.class.aliased_path_for(id),
           loaded_at: entry[:loaded_at].iso8601,
           last_accessed: entry[:last_accessed].iso8601,
           age_seconds: (Time.now - entry[:loaded_at]).to_i,
@@ -417,6 +442,21 @@ module StreamWeaver
 
       admin_app.rebuild_with_state(state)
       Views::AppContentView.new(admin_app, state, adapter, false).call
+    end
+
+    # Aliased route: /:source/:name -> /apps/:app_id
+    # Allows memorable URLs like /examples_browser/hello_world
+    get '/:source/:name' do
+      source = params[:source]
+      name = params[:name]
+
+      # Skip if this looks like a system route
+      pass if %w[apps api admin].include?(source)
+
+      app_id, _entry = self.class.find_app_by_source_and_name(source, name)
+      halt 404, "App not found: #{source}/#{name}" unless app_id
+
+      redirect "/apps/#{app_id}"
     end
 
     # List all loaded apps

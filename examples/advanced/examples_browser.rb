@@ -126,7 +126,7 @@ module ExamplesBrowser
 
     # Remove old version if same file was already loaded (edit-replace)
     if LOADED_APPS[expanded_path]
-      remove_app_via_service(LOADED_APPS[expanded_path])
+      remove_app_via_service(LOADED_APPS[expanded_path][:app_id])
       LOADED_APPS.delete(expanded_path)
     end
 
@@ -140,13 +140,17 @@ module ExamplesBrowser
 
     if result['success']
       # Track for cleanup and edit-replace
-      LOADED_APPS[expanded_path] = result['app_id']
+      LOADED_APPS[expanded_path] = {
+        app_id: result['app_id'],
+        aliased_url: result['aliased_url']
+      }
 
       {
         ok: true,
         app_id: result['app_id'],
         name: result['name'],
-        url: "http://localhost:#{service_port}#{result['url']}"
+        url: "http://localhost:#{service_port}#{result['url']}",
+        aliased_url: result['aliased_url'] ? "http://localhost:#{service_port}#{result['aliased_url']}" : nil
       }
     else
       { ok: false, error: result['error'] }
@@ -160,7 +164,7 @@ module ExamplesBrowser
   def remove_app_via_service(app_id)
     uri = URI("http://localhost:#{service_port}/remove-app")
     response = Net::HTTP.post_form(uri, { app_id: app_id })
-    LOADED_APPS.delete_if { |_path, id| id == app_id }
+    LOADED_APPS.delete_if { |_path, info| info[:app_id] == app_id }
     JSON.parse(response.body)
   rescue
     { 'success' => false }
@@ -383,13 +387,23 @@ generated_app = app(
         end
 
         # Show if current file is loaded in service (can reopen)
-        current_app_id = LOADED_APPS[state[:current_file_path]]
-        if current_app_id
+        current_app_info = LOADED_APPS[state[:current_file_path]]
+        if current_app_info
           running_style = "margin-top: 8px; padding: 8px 12px; background: #e8f5e9; border: 1px solid #81c784; border-radius: 4px; font-size: 13px;"
-          app_url = "http://localhost:#{service_port}/apps/#{current_app_id}"
+          current_app_id = current_app_info[:app_id]
+          aliased_url = current_app_info[:aliased_url]
+          app_url = aliased_url ? "http://localhost:#{service_port}#{aliased_url}" : "http://localhost:#{service_port}/apps/#{current_app_id}"
+
           div style: running_style do
             div style: "display: flex; justify-content: space-between; align-items: center;" do
-              text "▶ Running in service"
+              div do
+                text "▶ Running in service"
+                if aliased_url
+                  div style: "font-size: 0.85rem; color: #666; font-family: monospace; margin-top: 2px;" do
+                    text aliased_url
+                  end
+                end
+              end
               div style: "display: flex; gap: 8px; align-items: center;" do
                 reopen_style = "background: #4caf50; border: none; color: white; padding: 4px 12px; border-radius: 4px; font-size: 13px; cursor: pointer;"
                 button "Reopen ↗", style: reopen_style do |_s|

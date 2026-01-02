@@ -19,6 +19,8 @@ module StreamWeaver
             path: entry[:path],
             file: File.basename(entry[:path]),
             source: entry[:source],
+            url: "/apps/#{id}",
+            aliased_url: Service.aliased_path_for(id),
             loaded_at: entry[:loaded_at],
             last_accessed: entry[:last_accessed],
             age_seconds: (Time.now - entry[:loaded_at]).to_i,
@@ -139,9 +141,17 @@ module StreamWeaver
                 end
 
                 # Actions
-                div style: "display: flex; gap: 0.5rem;" do
-                  # Open button - link to app
-                  external_link_button "Open", url: "/apps/#{app[:id]}"
+                div style: "display: flex; gap: 0.5rem; align-items: center;" do
+                  # Show aliased URL if available (more memorable)
+                  if app[:aliased_url]
+                    div style: "font-size: 0.8rem; color: #666; font-family: monospace; margin-right: 0.5rem;" do
+                      text app[:aliased_url]
+                    end
+                  end
+
+                  # Open button - use aliased URL if available
+                  open_url = app[:aliased_url] || app[:url]
+                  external_link_button "Open", url: open_url
 
                   # Remove button
                   button "Remove", style: :secondary do |s|
