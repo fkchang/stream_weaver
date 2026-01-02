@@ -112,7 +112,7 @@ module StreamWeaver
 
     # Stop the service
     def self.stop_service
-      if Service.running?
+      if Service.service_running?
         Service.stop
         puts "StreamWeaver service stopped"
       else
@@ -122,7 +122,7 @@ module StreamWeaver
 
     # Show service status
     def self.status
-      if Service.running?
+      if Service.service_running?
         info = Service.read_pid_file
         puts "StreamWeaver service is running"
         puts "  PID: #{info[:pid]}"
@@ -178,11 +178,25 @@ module StreamWeaver
     private
 
     def self.ensure_service_running
-      return if Service.running?
+      return if Service.service_running?
 
       puts "Starting StreamWeaver service..."
       result = Service.launch_background
       puts "Service started on port #{result[:port]}"
+
+      # Wait for service to be ready (up to 10 seconds)
+      10.times do
+        begin
+          uri = URI("http://localhost:#{result[:port]}/api/status")
+          response = Net::HTTP.get_response(uri)
+          return if response.is_a?(Net::HTTPSuccess)
+        rescue Errno::ECONNREFUSED
+          # Not ready yet
+        end
+        sleep 1
+      end
+
+      puts "Warning: Service may not be ready yet"
     end
 
     def self.service_port

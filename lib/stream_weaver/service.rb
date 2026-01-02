@@ -88,8 +88,8 @@ module StreamWeaver
         { port: port, pid: pid }
       end
 
-      # Check if a service is already running
-      def running?
+      # Check if a service is already running (named to avoid shadowing Sinatra's running?)
+      def service_running?
         info = read_pid_file
         return false unless info && info[:pid]
 
@@ -116,32 +116,64 @@ module StreamWeaver
         end
       end
 
-      # Launch service in background (like markymark pattern)
+      # Launch service in background using spawn
       def launch_background(port: nil)
         port ||= find_available_port
 
-        pid = fork do
-          # Detach from terminal
-          Process.setsid
+        # Ensure directory exists
+        FileUtils.mkdir_p(File.dirname(pid_file_path))
 
-          # Redirect output
-          $stdout.reopen('/dev/null', 'w')
-          $stderr.reopen('/dev/null', 'w')
+        # Log file for debugging
+        log_file = File.join(File.dirname(pid_file_path), 'server.log')
+
+        # Get the lib path for stream_weaver
+        lib_path = File.expand_path('../..', __FILE__)
+
+        # Create a simple server script
+        server_script = <<~RUBY
+          $stdout.sync = true
+          $stderr.sync = true
+          puts "Starting StreamWeaver service..."
+
+          $LOAD_PATH.unshift('#{lib_path}')
+          require 'stream_weaver'
+
+          puts "Setting port to #{port}..."
+          StreamWeaver::Service.set :port, #{port}
+          StreamWeaver::Service.set :bind, '127.0.0.1'
 
           # Write PID file
-          write_pid_file(port)
+          puts "Writing PID file..."
+          File.write('#{pid_file_path}', "port=#{port}\\npid=\#{Process.pid}\\n")
 
           # Clean up on exit
-          at_exit { delete_pid_file }
+          at_exit { File.delete('#{pid_file_path}') rescue nil }
 
-          # Start server
-          set :port, port
-          set :bind, '127.0.0.1'
-          run!
-        end
+          puts "Calling run!..."
+          StreamWeaver::Service.run!
+        RUBY
 
+        # Write script to temp file
+        script_file = File.join(File.dirname(pid_file_path), 'server_start.rb')
+        File.write(script_file, server_script)
+
+        # Spawn the server process
+        pid = spawn(
+          RbConfig.ruby, script_file,
+          out: [log_file, 'a'],
+          err: [log_file, 'a'],
+          pgroup: true  # New process group
+        )
         Process.detach(pid)
-        sleep 1  # Give server time to start
+
+        # Wait for PID file to be written (server started)
+        10.times do
+          if File.exist?(pid_file_path)
+            sleep 0.5  # Extra time for server to be ready
+            return { port: port, pid: pid }
+          end
+          sleep 0.5
+        end
 
         { port: port, pid: pid }
       end
