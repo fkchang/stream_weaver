@@ -1472,6 +1472,7 @@ module StreamWeaver
 
       def render_bar_chart(view, chart, state)         = render_chart(view, chart, state, config_class: BarChartConfig)
       def render_line_chart(view, chart, state)        = render_chart(view, chart, state, config_class: LineChartConfig)
+      def render_pie_chart(view, chart, state)         = render_chart(view, chart, state, config_class: PieChartConfig)
       def render_stacked_bar_chart(view, chart, state) = render_chart(view, chart, state, config_class: StackedBarChartConfig)
 
       # Base class for Chart.js configuration value objects
@@ -1604,6 +1605,48 @@ module StreamWeaver
             legend: { display: @options.fetch(:show_legend, false) },
             title: title_config
           }.compact
+        end
+      end
+
+      class PieChartConfig < ChartConfigBase
+        COLORS = %w[#c2410c #4a90d9 #10b981 #f59e0b #8b5cf6 #ec4899 #06b6d4 #84cc16].freeze
+
+        def chart_type = doughnut? ? 'doughnut' : 'pie'
+
+        def dataset
+          colors = @options[:colors] || COLORS
+          {
+            data: @data[:values],
+            backgroundColor: @data[:values].each_index.map { |i| colors[i % colors.length] },
+            borderColor: '#ffffff',
+            borderWidth: 2
+          }
+        end
+
+        def options_config
+          {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: cutout_value,
+            plugins: plugins_config
+          }
+        end
+
+        private
+
+        def doughnut?    = @options[:doughnut] || false
+        def cutout_value = doughnut? ? (@options[:cutout] || '50%') : 0
+
+        def plugins_config
+          {
+            legend: legend_config,
+            title: title_config
+          }.compact
+        end
+
+        def legend_config
+          position = @options[:legend_position] || 'right'
+          { display: @options.fetch(:show_legend, true), position: position }
         end
       end
 

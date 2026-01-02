@@ -1034,6 +1034,12 @@ module StreamWeaver
       end
     end
 
+    class PieChart < ChartBase
+      def render(view, state)
+        view.adapter.render_pie_chart(view, self, state)
+      end
+    end
+
     class StackedBarChart < ChartBase
       def render(view, state)
         view.adapter.render_stacked_bar_chart(view, self, state)

@@ -41,8 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Charts** via Chart.js (CDN-loaded only when charts present):
     - `BarChart` / `bar_chart` / `hbar_chart` - Bar charts (vertical/horizontal)
     - `LineChart` / `line_chart` - Line charts with fill, smooth, points options
+    - `PieChart` / `pie_chart` / `doughnut_chart` - Pie and doughnut charts
     - `StackedBarChart` / `stacked_bar_chart` - Multi-series stacked/grouped bars
     - `sparkline` - Compact inline trends (no axes/labels)
+    - `area_chart` - Line chart with fill (shorthand)
     - Multiple data input modes: inline hash, file+path, explicit labels/values, state-bound
     - File loading with dot-path extraction (e.g., `"entries.-1.phases"`)
   - `Markdown` / `md` - Full GitHub Flavored Markdown via Kramdown

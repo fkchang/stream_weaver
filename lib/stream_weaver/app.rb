@@ -338,6 +338,20 @@ module StreamWeaver
       line_chart(data: data, file: file, path: path, labels: labels, values: values, sparkline: true, **options, &block)
     end
 
+    def area_chart(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
+      line_chart(data: data, file: file, path: path, labels: labels, values: values, fill: true, **options, &block)
+    end
+
+    def pie_chart(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
+      @components << Components::PieChart.new(
+        data: data, file: file, path: path, labels: labels, values: values, **options, &block
+      )
+    end
+
+    def doughnut_chart(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
+      pie_chart(data: data, file: file, path: path, labels: labels, values: values, doughnut: true, **options, &block)
+    end
+
     def stacked_bar_chart(data: nil, file: nil, path: nil, **options, &block)
       @components << Components::StackedBarChart.new(data: data, file: file, path: path, **options, &block)
     end

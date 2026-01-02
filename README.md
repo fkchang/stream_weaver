@@ -426,6 +426,13 @@ line_chart data: { Mon: 5, Tue: 12, Wed: 8 }, fill: true, smooth: false
 # Sparklines (compact inline trends)
 sparkline data: [45, 52, 48, 61, 55, 67, 72]
 
+# Area charts (line with fill)
+area_chart data: [45, 52, 48, 61, 55, 67, 72]
+
+# Pie and doughnut charts
+pie_chart data: { sales: 100, costs: 60, profit: 40 }
+doughnut_chart data: { frontend: 40, backend: 35, devops: 25 }
+
 # Stacked bar charts (multi-series)
 stacked_bar_chart data: [
   { label: "Mon", sales: 100, costs: 60 },
