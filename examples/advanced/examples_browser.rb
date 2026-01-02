@@ -162,10 +162,14 @@ app = StreamWeaver::App.new(
   if state[:selected_dir] && state[:selected_file]
     state[:current_file_path] = file_path(state[:selected_dir], state[:selected_file])
 
-    # Only read from file when selection changes
-    if state[:loaded_file_key] != loaded_key
+    # Only read from file when selection changes OR content is empty (recovery from bad session state)
+    if state[:loaded_file_key] != loaded_key || state[:code_content].to_s.strip.empty?
       state[:code_content] = read_file(state[:selected_dir], state[:selected_file])
       state[:loaded_file_key] = loaded_key
+      # Clear stale status from previous session
+      state[:save_ok] = nil
+      state[:syntax_ok] = nil
+      state[:reset_ok] = nil
     end
   else
     state[:current_file_path] = nil
