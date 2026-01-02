@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `button "Label", submit: false` (display-only button)
 - **Adapter pattern** for rendering - `StreamWeaver::Adapter::AlpineJS` handles all framework-specific rendering
 - **New components**:
+  - `BarChart` / `bar_chart` / `hbar_chart` - Data visualization via Chart.js:
+    - Multiple data input modes: inline hash, file+path, explicit labels/values, state-bound
+    - File loading with dot-path extraction (e.g., `"entries.-1.phases"`)
+    - Chart.js CDN loaded conditionally (only when charts present)
+    - Options: title, height, horizontal, colors, show_values, show_legend
   - `Markdown` / `md` - Full GitHub Flavored Markdown via Kramdown
   - `Header` with `header1`-`header6` helpers for semantic headers
   - `TextArea` for multi-line text input

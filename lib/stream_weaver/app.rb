@@ -71,27 +71,19 @@ module StreamWeaver
       SinatraApp.create(self)
     end
 
-    # Check if any chart components are present
-    # Used for conditional loading of Chart.js CDN
-    # @return [Boolean]
     def has_charts?
-      find_charts(@components)
+      components_include?(Components::BarChart)
     end
 
-    private def find_charts(components_list)
-      components_list.any? do |component|
-        case component
-        when Components::BarChart
-          true
-        else
-          # Check children if component has them
-          if component.respond_to?(:children) && component.children
-            find_charts(component.children)
-          else
-            false
-          end
-        end
-      end
+    private
+
+    def components_include?(klass)
+      @components.any? { |c| c.is_a?(klass) || nested_include?(c, klass) }
+    end
+
+    def nested_include?(component, klass)
+      return false unless component.respond_to?(:children) && component.children
+      component.children.any? { |c| c.is_a?(klass) || nested_include?(c, klass) }
     end
 
     public
@@ -326,19 +318,6 @@ module StreamWeaver
     # Chart DSL methods
     # =========================================
 
-    # Render a bar chart (vertical by default)
-    # @param data [Hash, Symbol, nil] Inline data hash or state key
-    # @param file [String, nil] Path to YAML/JSON data file
-    # @param path [String, nil] Dot-path to extract from file
-    # @param labels [Array<String>, nil] Explicit labels
-    # @param values [Array<Numeric>, nil] Explicit values
-    # @param options [Hash] Chart options
-    # @option options [String] :title Chart title
-    # @option options [String] :height CSS height (default: "250px")
-    # @option options [Boolean] :horizontal Horizontal bars (default: false)
-    # @option options [Array<String>] :colors Bar colors
-    # @option options [Boolean] :show_values Display values on bars
-    # @option options [Boolean] :show_legend Show legend
     def bar_chart(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
       @components << Components::BarChart.new(
         data: data, file: file, path: path, labels: labels, values: values, **options, &block

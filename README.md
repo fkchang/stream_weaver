@@ -410,6 +410,27 @@ external_link_button "View on Amazon", url: "https://amazon.com/dp/B0XXX"
 external_link_button "Select & Open", url: "https://example.com", submit: true
 ```
 
+### Charts
+
+Data visualization via Chart.js (CDN-loaded only when charts are present):
+
+```ruby
+# Hash data (simplest)
+bar_chart data: { calendar: 45, news: 120, tasks: 30 }
+
+# Horizontal bars
+hbar_chart data: { "Phase A" => 25, "Phase B" => 45 }, colors: ["#4a90d9"]
+
+# File-based data with dot-path extraction
+bar_chart file: "~/metrics/timing.yaml", path: "entries.-1.phases"
+
+# With options
+bar_chart data: { a: 100, b: 80, c: 60 },
+          title: "Scores",
+          height: "200px",
+          show_values: true
+```
+
 ## API Reference
 
 ### `app(title, layout:, &block)`

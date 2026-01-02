@@ -951,18 +951,9 @@ module StreamWeaver
     # Chart Components
     # =========================================
 
-    # BarChart component for data visualization
-    # Renders horizontal or vertical bar charts using Chart.js
     class BarChart < Base
       attr_reader :options
 
-      # @param data [Hash, Symbol, nil] Inline data hash or state key
-      # @param file [String, nil] Path to YAML/JSON data file
-      # @param path [String, nil] Dot-path to extract from file (e.g., "entries.-1.phases")
-      # @param labels [Array<String>, nil] Explicit labels
-      # @param values [Array<Numeric>, nil] Explicit values
-      # @param options [Hash] Chart options (title, height, horizontal, colors, etc.)
-      # @param block [Proc, nil] Transform block for file data
       def initialize(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
         @data = data
         @file = file
@@ -973,23 +964,8 @@ module StreamWeaver
         @options = options
       end
 
-      # Resolve data from various input sources
-      # @param state [Hash] Current state
-      # @return [Hash] { labels: [...], values: [...] }
       def resolve_data(state)
-        if @file
-          raw = load_file(@file)
-          raw = @transform_block ? @transform_block.call(raw) : extract_path(raw, @path)
-          normalize_to_labels_values(raw)
-        elsif @data.is_a?(Symbol)
-          normalize_to_labels_values(state[@data])
-        elsif @data.is_a?(Hash)
-          normalize_to_labels_values(@data)
-        elsif @data.is_a?(Array)
-          { labels: (0...@data.length).to_a, values: @data }
-        else
-          { labels: @labels || [], values: @values || [] }
-        end
+        normalize(raw_data(state))
       end
 
       def render(view, state)
@@ -998,52 +974,54 @@ module StreamWeaver
 
       private
 
-      # Load data from YAML or JSON file
+      def raw_data(state)
+        return file_data if @file
+        return state[@data] if @data.is_a?(Symbol)
+        return @data if @data
+        { labels: @labels || [], values: @values || [] }
+      end
+
+      def file_data
+        raw = load_file(@file)
+        @transform_block ? @transform_block.call(raw) : extract_path(raw, @path)
+      end
+
       def load_file(path)
         require 'yaml'
         require 'json'
         expanded = File.expand_path(path)
+
         case File.extname(expanded).downcase
-        when '.yaml', '.yml'
-          YAML.safe_load_file(expanded, symbolize_names: true, permitted_classes: [Symbol, Date, Time])
-        when '.json'
-          JSON.parse(File.read(expanded), symbolize_names: true)
-        else
-          raise ArgumentError, "Unsupported file type: #{path}. Use .yaml, .yml, or .json"
+        when '.yaml', '.yml' then YAML.safe_load_file(expanded, symbolize_names: true, permitted_classes: [Symbol, Date, Time])
+        when '.json'         then JSON.parse(File.read(expanded), symbolize_names: true)
+        else raise ArgumentError, "Unsupported file type: #{path}. Use .yaml, .yml, or .json"
         end
       end
 
-      # Extract nested data using dot-path notation
-      # Supports: "entries.-1.phases" where -1 is array index from end
       def extract_path(data, path)
         return data unless path
+
         path.split('.').reduce(data) do |obj, key|
-          return nil if obj.nil?
-          case key
-          when /^-?\d+$/
-            obj[key.to_i] # Array index (negative supported)
-          else
-            obj[key.to_sym] rescue obj[key] # Hash key (try symbol first)
-          end
+          break if obj.nil?
+          key.match?(/\A-?\d+\z/) ? obj[key.to_i] : obj.fetch(key.to_sym) { obj[key] }
         end
       end
 
-      # Normalize various data formats to { labels: [], values: [] }
-      def normalize_to_labels_values(data)
+      def normalize(data)
         case data
-        when Hash
-          { labels: data.keys.map(&:to_s), values: data.values }
-        when Array
-          if data.first.is_a?(Hash) && data.first.key?(:label)
-            # Array of {label:, value:} hashes
-            { labels: data.map { |d| d[:label] }, values: data.map { |d| d[:value] } }
-          else
-            # Plain array of values
-            { labels: (0...data.length).to_a.map(&:to_s), values: data }
-          end
-        else
-          { labels: [], values: [] }
+        when Hash  then { labels: data.keys.map(&:to_s), values: data.values }
+        when Array then normalize_array(data)
+        else { labels: [], values: [] }
         end
+      end
+
+      def normalize_array(data)
+        return { labels: data.map { _1[:label] }, values: data.map { _1[:value] } } if labeled_array?(data)
+        { labels: data.each_index.map(&:to_s), values: data }
+      end
+
+      def labeled_array?(data)
+        data.first.is_a?(Hash) && data.first.key?(:label)
       end
     end
 

@@ -1463,70 +1463,95 @@ module StreamWeaver
       # Chart components rendering
       # =========================================
 
-      # Render a bar chart using Chart.js
-      #
-      # @param view [Phlex::HTML] The Phlex view instance
-      # @param chart [Components::BarChart] The bar chart component
-      # @param state [Hash] Current state hash
-      # @return [void] Renders to view
       def render_bar_chart(view, chart, state)
-        resolved = chart.resolve_data(state)
-        chart_id = "sw-chart-#{SecureRandom.hex(4)}"
+        config = BarChartConfig.new(chart, state)
 
-        # Chart.js configuration
-        horizontal = chart.options[:horizontal] || false
-        height = chart.options[:height] || "250px"
-        title = chart.options[:title]
-        show_values = chart.options[:show_values] || false
-        show_legend = chart.options.fetch(:show_legend, false)
+        view.div(class: "sw-chart-container", style: "height: #{config.height}; position: relative;") do
+          view.canvas(id: config.id, "x-data" => "{}", "x-init" => config.init_script)
+        end
+      end
 
-        # Colors - default to theme primary color
-        colors = chart.options[:colors] || ["#c2410c"]
+      # Value object encapsulating Chart.js bar chart configuration
+      class BarChartConfig
+        attr_reader :id, :height
 
-        config = {
-          type: 'bar',
-          data: {
-            labels: resolved[:labels],
-            datasets: [{
-              data: resolved[:values],
-              backgroundColor: colors.first,
-              borderColor: colors.first,
-              borderWidth: 0,
-              borderRadius: 4,
-              barPercentage: 0.7
-            }]
-          },
-          options: {
-            indexAxis: horizontal ? 'y' : 'x',
+        def initialize(chart, state)
+          @data = chart.resolve_data(state)
+          @options = chart.options
+          @id = "sw-chart-#{SecureRandom.hex(4)}"
+          @height = @options[:height] || "250px"
+        end
+
+        def init_script
+          "if (typeof Chart !== 'undefined') { new Chart(document.getElementById('#{@id}'), #{config_json}); }"
+        end
+
+        private
+
+        def config_json
+          JSON.generate(chart_config)
+        end
+
+        def chart_config
+          { type: 'bar', data: data_config, options: options_config }
+        end
+
+        def data_config
+          { labels: @data[:labels], datasets: [dataset] }
+        end
+
+        def dataset
+          {
+            data: @data[:values],
+            backgroundColor: primary_color,
+            borderColor: primary_color,
+            borderWidth: 0,
+            borderRadius: 4,
+            barPercentage: 0.7
+          }
+        end
+
+        def primary_color
+          (@options[:colors] || ["#c2410c"]).first
+        end
+
+        def horizontal?
+          @options[:horizontal] || false
+        end
+
+        def options_config
+          {
+            indexAxis: horizontal? ? 'y' : 'x',
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-              legend: { display: show_legend },
-              title: title ? { display: true, text: title, font: { size: 14, weight: '600' } } : { display: false },
-              datalabels: show_values ? { display: true, anchor: 'end', align: 'end', font: { size: 11, weight: '500' } } : nil
-            }.compact,
-            scales: {
-              x: {
-                grid: { display: !horizontal, color: 'rgba(0,0,0,0.05)' },
-                ticks: { font: { size: 12 } }
-              },
-              y: {
-                grid: { display: horizontal, color: 'rgba(0,0,0,0.05)' },
-                ticks: { font: { size: 12 } },
-                beginAtZero: true
-              }
-            }
+            plugins: plugins_config,
+            scales: scales_config
           }
-        }
+        end
 
-        config_json = JSON.generate(config)
+        def plugins_config
+          {
+            legend: { display: @options.fetch(:show_legend, false) },
+            title: title_config,
+            datalabels: datalabels_config
+          }.compact
+        end
 
-        view.div(class: "sw-chart-container", style: "height: #{height}; position: relative;") do
-          view.canvas(
-            id: chart_id,
-            "x-data" => "{}",
-            "x-init" => "if (typeof Chart !== 'undefined') { new Chart(document.getElementById('#{chart_id}'), #{config_json}); } else { console.warn('Chart.js not loaded'); }"
-          )
+        def title_config
+          return { display: false } unless @options[:title]
+          { display: true, text: @options[:title], font: { size: 14, weight: '600' } }
+        end
+
+        def datalabels_config
+          return nil unless @options[:show_values]
+          { display: true, anchor: 'end', align: 'end', font: { size: 11, weight: '500' } }
+        end
+
+        def scales_config
+          {
+            x: { grid: { display: !horizontal?, color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 12 } } },
+            y: { grid: { display: horizontal?, color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 12 } }, beginAtZero: true }
+          }
         end
       end
 
