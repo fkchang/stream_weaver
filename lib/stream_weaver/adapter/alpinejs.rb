@@ -1470,8 +1470,9 @@ module StreamWeaver
         end
       end
 
-      def render_bar_chart(view, chart, state)  = render_chart(view, chart, state, config_class: BarChartConfig)
-      def render_line_chart(view, chart, state) = render_chart(view, chart, state, config_class: LineChartConfig)
+      def render_bar_chart(view, chart, state)         = render_chart(view, chart, state, config_class: BarChartConfig)
+      def render_line_chart(view, chart, state)        = render_chart(view, chart, state, config_class: LineChartConfig)
+      def render_stacked_bar_chart(view, chart, state) = render_chart(view, chart, state, config_class: StackedBarChartConfig)
 
       # Base class for Chart.js configuration value objects
       class ChartConfigBase
@@ -1603,6 +1604,60 @@ module StreamWeaver
             legend: { display: @options.fetch(:show_legend, false) },
             title: title_config
           }.compact
+        end
+      end
+
+      class StackedBarChartConfig < ChartConfigBase
+        COLORS = %w[#c2410c #4a90d9 #10b981 #f59e0b #8b5cf6 #ec4899 #06b6d4 #84cc16].freeze
+
+        def chart_type = 'bar'
+
+        def data_config
+          { labels: @data[:labels], datasets: datasets }
+        end
+
+        def datasets
+          colors = @options[:colors] || COLORS
+          @data[:series].each_with_index.map do |(name, values), i|
+            {
+              label: name,
+              data: values,
+              backgroundColor: colors[i % colors.length],
+              borderColor: colors[i % colors.length],
+              borderWidth: 0,
+              borderRadius: 2
+            }
+          end
+        end
+
+        def options_config
+          {
+            indexAxis: horizontal? ? 'y' : 'x',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: plugins_config,
+            scales: scales_config
+          }
+        end
+
+        private
+
+        def horizontal?  = @options[:horizontal] || false
+        def stacked?     = @options.fetch(:stack, true)
+        def normalized?  = @options[:normalize] || false
+
+        def plugins_config
+          {
+            legend: { display: @options.fetch(:show_legend, true), position: 'top' },
+            title: title_config
+          }.compact
+        end
+
+        def scales_config
+          {
+            x: { stacked: stacked?, grid: grid_style, ticks: tick_style },
+            y: { stacked: stacked?, grid: grid_style, ticks: tick_style, beginAtZero: true, max: normalized? ? 100 : nil }.compact
+          }
         end
       end
 

@@ -1034,6 +1034,56 @@ module StreamWeaver
       end
     end
 
+    class StackedBarChart < ChartBase
+      def render(view, state)
+        view.adapter.render_stacked_bar_chart(view, self, state)
+      end
+
+      def resolve_data(state)
+        normalize_stacked(raw_data(state))
+      end
+
+      private
+
+      def normalize_stacked(data)
+        case data
+        when Array then normalize_array_to_stacked(data)
+        when Hash  then normalize_hash_to_stacked(data)
+        else { labels: [], series: {} }
+        end
+      end
+
+      def normalize_hash_to_stacked(data)
+        return normalize_series_hash(data) if data.values.first.is_a?(Array)
+        normalize_single_hash(data)
+      end
+
+      def normalize_series_hash(data)
+        labels = (0...data.values.first.length).map(&:to_s)
+        { labels: labels, series: data.transform_keys(&:to_s) }
+      end
+
+      def normalize_single_hash(data)
+        { labels: data.keys.map(&:to_s), series: { "Value" => data.values } }
+      end
+
+      def normalize_array_to_stacked(data)
+        return { labels: [], series: {} } if data.empty?
+
+        first = data.first
+        return normalize_labeled_records(data) if first.is_a?(Hash) && first.key?(:label)
+
+        { labels: data.each_index.map(&:to_s), series: { "Value" => data } }
+      end
+
+      def normalize_labeled_records(data)
+        labels = data.map { _1[:label].to_s }
+        series_keys = data.first.keys.reject { _1 == :label }.map(&:to_s)
+        series = series_keys.to_h { |key| [key, data.map { _1[key.to_sym] || _1[key] || 0 }] }
+        { labels: labels, series: series }
+      end
+    end
+
     # CodeEditor component for syntax-highlighted code display/editing
     # Uses CodeMirror 5 with hx-preserve to survive HTMX swaps
     class CodeEditor < Base

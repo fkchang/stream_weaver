@@ -426,6 +426,12 @@ line_chart data: { Mon: 5, Tue: 12, Wed: 8 }, fill: true, smooth: false
 # Sparklines (compact inline trends)
 sparkline data: [45, 52, 48, 61, 55, 67, 72]
 
+# Stacked bar charts (multi-series)
+stacked_bar_chart data: [
+  { label: "Mon", sales: 100, costs: 60 },
+  { label: "Tue", sales: 120, costs: 70 }
+]
+
 # File-based data
 bar_chart file: "~/metrics/timing.yaml", path: "entries.-1.phases"
 ```

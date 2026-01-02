@@ -338,6 +338,10 @@ module StreamWeaver
       line_chart(data: data, file: file, path: path, labels: labels, values: values, sparkline: true, **options, &block)
     end
 
+    def stacked_bar_chart(data: nil, file: nil, path: nil, **options, &block)
+      @components << Components::StackedBarChart.new(data: data, file: file, path: path, **options, &block)
+    end
+
     def status_badge(status, reasoning)
       @components << Components::StatusBadge.new(status, reasoning)
     end
