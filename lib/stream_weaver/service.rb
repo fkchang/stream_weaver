@@ -38,7 +38,11 @@ module StreamWeaver
       #
       # When loaded from service, __FILE__ != $0 so run! is skipped,
       # and we capture the SinatraApp from StreamWeaver.last_generated_app
-      def load_app(file_path)
+      #
+      # @param file_path [String] Path to the Ruby file
+      # @param name [String, nil] Optional custom name for the app
+      # @return [String] The app_id
+      def load_app(file_path, name: nil)
         app_id = SecureRandom.hex(4)
         expanded_path = File.expand_path(file_path)
 
@@ -57,13 +61,35 @@ module StreamWeaver
         # Extract the StreamWeaver::App from the SinatraApp
         streamlit_app = sinatra_app.settings.streamlit_app
 
+        # Derive name from: explicit name > app title > filename
+        app_name = name || streamlit_app.title || File.basename(expanded_path, '.rb')
+
         apps[app_id] = {
           app: streamlit_app,
           path: expanded_path,
-          loaded_at: Time.now
+          name: app_name,
+          loaded_at: Time.now,
+          last_accessed: Time.now
         }
 
         app_id
+      end
+
+      # Remove an app by ID
+      # @param app_id [String] The app ID to remove
+      # @return [Boolean] true if removed, false if not found
+      def remove_app(app_id)
+        return false unless apps.key?(app_id)
+        apps.delete(app_id)
+        true
+      end
+
+      # Remove all apps
+      # @return [Integer] Number of apps removed
+      def clear_apps
+        count = apps.size
+        @apps = {}
+        count
       end
 
       # PID file management
@@ -256,14 +282,72 @@ module StreamWeaver
     post '/load-app' do
       content_type :json
       file_path = params[:file_path]
+      name = params[:name]  # Optional custom name
 
       begin
-        app_id = self.class.load_app(file_path)
-        { success: true, app_id: app_id, url: "/apps/#{app_id}" }.to_json
+        app_id = self.class.load_app(file_path, name: name)
+        app_entry = self.class.apps[app_id]
+        {
+          success: true,
+          app_id: app_id,
+          name: app_entry[:name],
+          url: "/apps/#{app_id}"
+        }.to_json
       rescue => e
         status 400
         { success: false, error: e.message }.to_json
       end
+    end
+
+    # Remove a specific app
+    delete '/apps/:app_id' do
+      content_type :json
+      app_id = params[:app_id]
+
+      if self.class.remove_app(app_id)
+        { success: true, message: "App #{app_id} removed" }.to_json
+      else
+        status 404
+        { success: false, error: "App not found: #{app_id}" }.to_json
+      end
+    end
+
+    # Also support POST for clients that don't support DELETE
+    post '/remove-app' do
+      content_type :json
+      app_id = params[:app_id]
+
+      if self.class.remove_app(app_id)
+        { success: true, message: "App #{app_id} removed" }.to_json
+      else
+        status 404
+        { success: false, error: "App not found: #{app_id}" }.to_json
+      end
+    end
+
+    # Clear all apps
+    post '/clear-apps' do
+      content_type :json
+      count = self.class.clear_apps
+      { success: true, message: "Removed #{count} app(s)" }.to_json
+    end
+
+    # List apps with details (JSON API)
+    get '/api/apps' do
+      content_type :json
+      apps_list = self.class.apps.map do |id, entry|
+        {
+          id: id,
+          name: entry[:name],
+          path: entry[:path],
+          title: entry[:app].title,
+          loaded_at: entry[:loaded_at].iso8601,
+          last_accessed: entry[:last_accessed].iso8601,
+          age_seconds: (Time.now - entry[:loaded_at]).to_i,
+          idle_seconds: (Time.now - entry[:last_accessed]).to_i
+        }
+      end
+      { apps: apps_list }.to_json
     end
 
     # List all loaded apps
@@ -311,6 +395,9 @@ module StreamWeaver
       app_id = params[:app_id]
       app_entry = self.class.apps[app_id]
       halt 404, "App not found: #{app_id}" unless app_entry
+
+      # Track last access time
+      app_entry[:last_accessed] = Time.now
 
       streamlit_app = app_entry[:app]
       state = app_state(app_id)

@@ -19,7 +19,13 @@ module StreamWeaver
       when 'serve'
         serve(args)
       when 'run'
-        run_app(args.first)
+        run_app(args)
+      when 'list'
+        list_apps
+      when 'remove'
+        remove_app(args.first)
+      when 'clear'
+        clear_apps
       when 'showcase'
         showcase
       when 'tutorial'
@@ -34,8 +40,9 @@ module StreamWeaver
         puts "StreamWeaver #{StreamWeaver::VERSION}"
       else
         # Bare file path: streamweaver examples/basic/hello_world.rb
-        if command&.end_with?('.rb')
-          run_app(command)
+        # Or with options: streamweaver --name "My App" file.rb
+        if command&.start_with?('-') || command&.end_with?('.rb')
+          run_app([command] + args)
         else
           puts "Unknown command: #{command}"
           help
@@ -59,9 +66,25 @@ module StreamWeaver
     end
 
     # Run an app file
-    def self.run_app(file_path)
+    def self.run_app(args)
+      name = nil
+      file_path = nil
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver run [options] <file.rb>"
+        opts.on('-n', '--name NAME', 'Custom name for this app session') { |n| name = n }
+      end
+
+      begin
+        remaining = parser.parse(args)
+        file_path = remaining.first
+      rescue OptionParser::InvalidOption => e
+        # Might be a bare file path
+        file_path = args.find { |a| a.end_with?('.rb') }
+      end
+
       unless file_path
-        puts "Usage: streamweaver run <file.rb>"
+        puts "Usage: streamweaver run [--name NAME] <file.rb>"
         exit 1
       end
 
@@ -74,13 +97,15 @@ module StreamWeaver
 
       # POST to service to load the app
       uri = URI("http://localhost:#{service_port}/load-app")
-      response = Net::HTTP.post_form(uri, { file_path: File.expand_path(file_path) })
+      params = { file_path: File.expand_path(file_path) }
+      params[:name] = name if name
 
+      response = Net::HTTP.post_form(uri, params)
       result = JSON.parse(response.body)
 
       if result['success']
         url = "http://localhost:#{service_port}#{result['url']}"
-        puts "Loaded: #{File.basename(file_path)}"
+        puts "Loaded: #{result['name']} (#{File.basename(file_path)})"
         puts "URL: #{url}"
         open_browser(url)
       else
@@ -92,12 +117,112 @@ module StreamWeaver
       exit 1
     end
 
+    # List all loaded apps with details
+    def self.list_apps
+      unless Service.service_running?
+        puts "StreamWeaver service is not running"
+        exit 1
+      end
+
+      begin
+        uri = URI("http://localhost:#{service_port}/api/apps")
+        response = Net::HTTP.get_response(uri)
+
+        if response.is_a?(Net::HTTPSuccess)
+          data = JSON.parse(response.body)
+          apps = data['apps'] || []
+
+          if apps.empty?
+            puts "No apps loaded"
+          else
+            puts "Loaded apps (#{apps.length}):\n\n"
+            puts format("  %-10s %-20s %-30s %10s %10s", "ID", "NAME", "FILE", "LOADED", "IDLE")
+            puts "  " + "-" * 84
+
+            apps.each do |app|
+              loaded_ago = format_duration(app['age_seconds'])
+              idle_ago = format_duration(app['idle_seconds'])
+              file_name = File.basename(app['path'])
+
+              puts format("  %-10s %-20s %-30s %10s %10s",
+                app['id'][0..9],
+                truncate(app['name'], 20),
+                truncate(file_name, 30),
+                loaded_ago,
+                idle_ago
+              )
+            end
+          end
+        else
+          puts "Error getting app list"
+          exit 1
+        end
+      rescue Errno::ECONNREFUSED
+        puts "Error: Could not connect to StreamWeaver service"
+        exit 1
+      end
+    end
+
+    # Remove a specific app
+    def self.remove_app(app_id)
+      unless app_id
+        puts "Usage: streamweaver remove <app_id>"
+        puts "Use 'streamweaver list' to see app IDs"
+        exit 1
+      end
+
+      unless Service.service_running?
+        puts "StreamWeaver service is not running"
+        exit 1
+      end
+
+      begin
+        uri = URI("http://localhost:#{service_port}/remove-app")
+        response = Net::HTTP.post_form(uri, { app_id: app_id })
+        result = JSON.parse(response.body)
+
+        if result['success']
+          puts result['message']
+        else
+          puts "Error: #{result['error']}"
+          exit 1
+        end
+      rescue Errno::ECONNREFUSED
+        puts "Error: Could not connect to StreamWeaver service"
+        exit 1
+      end
+    end
+
+    # Clear all apps
+    def self.clear_apps
+      unless Service.service_running?
+        puts "StreamWeaver service is not running"
+        exit 1
+      end
+
+      begin
+        uri = URI("http://localhost:#{service_port}/clear-apps")
+        response = Net::HTTP.post_form(uri, {})
+        result = JSON.parse(response.body)
+
+        if result['success']
+          puts result['message']
+        else
+          puts "Error: #{result['error']}"
+          exit 1
+        end
+      rescue Errno::ECONNREFUSED
+        puts "Error: Could not connect to StreamWeaver service"
+        exit 1
+      end
+    end
+
     # Show examples browser (showcase)
     def self.showcase
       examples_browser = File.expand_path('../../../examples/advanced/examples_browser.rb', __FILE__)
 
       if File.exist?(examples_browser)
-        run_app(examples_browser)
+        run_app([examples_browser])
       else
         puts "Examples browser not found at: #{examples_browser}"
         exit 1
@@ -129,15 +254,18 @@ module StreamWeaver
         puts "  Port: #{info[:port]}"
         puts "  URL: http://localhost:#{info[:port]}"
 
-        # Try to get app list
+        # Try to get detailed app list
         begin
-          uri = URI("http://localhost:#{info[:port]}/api/status")
+          uri = URI("http://localhost:#{info[:port]}/api/apps")
           response = Net::HTTP.get_response(uri)
           if response.is_a?(Net::HTTPSuccess)
             data = JSON.parse(response.body)
             apps = data['apps'] || []
             puts "  Loaded apps: #{apps.length}"
-            apps.each { |id| puts "    - #{id}" }
+            apps.each do |app|
+              idle = format_duration(app['idle_seconds'])
+              puts "    - #{app['id'][0..7]}  #{app['name']}  (idle #{idle})"
+            end
           end
         rescue
           # Ignore errors getting status
@@ -155,22 +283,29 @@ module StreamWeaver
         StreamWeaver - Ruby DSL for reactive UIs
 
         Usage:
-          streamweaver <file.rb>        Run an app file
-          streamweaver run <file.rb>    Run an app file (explicit)
-          streamweaver serve            Start service in foreground
-          streamweaver stop             Stop the background service
-          streamweaver status           Show service status
-          streamweaver showcase         Open examples browser
-          streamweaver tutorial         Start interactive tutorial
-          streamweaver --help           Show this help
-          streamweaver --version        Show version
+          streamweaver <file.rb>              Run an app file
+          streamweaver run [options] <file>   Run with options
+          streamweaver list                   List all loaded apps
+          streamweaver remove <app_id>        Remove a specific app
+          streamweaver clear                  Remove all apps
+          streamweaver serve                  Start service in foreground
+          streamweaver stop                   Stop the background service
+          streamweaver status                 Show service status
+          streamweaver showcase               Open examples browser
+          streamweaver --help                 Show this help
+          streamweaver --version              Show version
+
+        Run Options:
+          -n, --name NAME                     Custom name for this app session
 
         The service auto-starts when you run an app. Each app gets a unique URL,
         allowing multiple apps to run side-by-side.
 
         Examples:
           streamweaver examples/basic/hello_world.rb
-          streamweaver showcase
+          streamweaver run --name "My Survey" examples/basic/form_demo.rb
+          streamweaver list
+          streamweaver remove a1b2c3d4
           streamweaver status
       HELP
     end
@@ -213,6 +348,27 @@ module StreamWeaver
       when /mswin|msys|mingw|cygwin|bccwin|wince|emc/
         system('start', url)
       end
+    end
+
+    # Format seconds as human-readable duration
+    def self.format_duration(seconds)
+      return "just now" if seconds < 5
+
+      if seconds < 60
+        "#{seconds}s ago"
+      elsif seconds < 3600
+        "#{seconds / 60}m ago"
+      elsif seconds < 86400
+        "#{seconds / 3600}h ago"
+      else
+        "#{seconds / 86400}d ago"
+      end
+    end
+
+    # Truncate string with ellipsis
+    def self.truncate(str, max_length)
+      return str if str.length <= max_length
+      str[0..max_length - 4] + "..."
     end
   end
 end
