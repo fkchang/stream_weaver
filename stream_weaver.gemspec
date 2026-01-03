@@ -38,6 +38,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "rackup", "~> 2.1"
   spec.add_dependency "kramdown", "~> 2.4"
   spec.add_dependency "kramdown-parser-gfm", "~> 1.1"
+  spec.add_dependency "ostruct"  # Explicit dep for Ruby 3.5+ compatibility
 
   # Development dependencies
   spec.add_development_dependency "rack-test", "~> 2.1"
