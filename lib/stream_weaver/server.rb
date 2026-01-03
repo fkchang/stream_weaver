@@ -65,7 +65,9 @@ module StreamWeaver
         # Session cookies have ~4KB limit, so we can't store file contents, etc.
         def session_safe_state(state)
           transient_keys = [:code_content, :current_file_path, :examples]
-          state.reject { |k, _| transient_keys.include?(k) }
+          state.reject do |k, _|
+            transient_keys.include?(k) || k.to_s.end_with?('_edited_code')
+          end
         end
 
         # Set unchecked checkboxes to false (they don't send params)

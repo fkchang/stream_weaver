@@ -113,16 +113,16 @@ module StreamWeaver
       attr_reader :id, :modal_context
 
       # @param label [String] Button label
-      # @param counter [Integer] Button counter for unique ID
+      # @param stable_id [String] Stable ID suffix (hash of source location or counter)
       # @param options [Hash] Options (e.g., style: :primary or :secondary, modal_context: {key: :name})
       # @param block [Proc] Action block to execute
-      def initialize(label, counter, **options, &block)
+      def initialize(label, stable_id, **options, &block)
         @label = label
         @action = block
         @modal_context = options.delete(:modal_context)
         @options = options
-        # Use counter for deterministic IDs that remain consistent across rebuilds
-        @button_id = "btn_#{label.downcase.gsub(/\s+/, '_')}_#{counter}"
+        # stable_id is derived from source location (for buttons with blocks) or counter (for blockless)
+        @button_id = "btn_#{label.downcase.gsub(/\s+/, '_')}_#{stable_id}"
       end
 
       def render(view, state)

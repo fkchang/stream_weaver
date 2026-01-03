@@ -10,6 +10,7 @@ require_relative "stream_weaver/components"
 require_relative "stream_weaver/views"
 require_relative "stream_weaver/server"
 require_relative "stream_weaver/service"
+require_relative "stream_weaver/service_client"
 require_relative "stream_weaver/admin"
 require_relative "stream_weaver/cli"
 

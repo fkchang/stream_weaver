@@ -4,6 +4,7 @@ PATH
     stream_weaver (0.1.0)
       kramdown (~> 2.4)
       kramdown-parser-gfm (~> 1.1)
+      ostruct
       phlex (~> 2.0)
       puma (~> 6.4)
       rackup (~> 2.1)
@@ -23,6 +24,7 @@ GEM
     mustermann (3.0.4)
       ruby2_keywords (~> 0.0.1)
     nio4r (2.7.5)
+    ostruct (0.6.3)
     phlex (2.3.1)
       zeitwerk (~> 2.7)
     puma (6.6.1)

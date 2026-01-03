@@ -84,18 +84,19 @@ RSpec.describe StreamWeaver::App do
         expect(app.components.first).to be_a(StreamWeaver::Components::Button)
       end
 
-      it "increments button counter" do
+      it "uses counter for blockless buttons" do
         expect {
-          app.button("First") {}
+          app.button("First", submit: false)
         }.to change { app.instance_variable_get(:@button_counter) }.from(0).to(1)
       end
 
-      it "passes counter to button for deterministic ID" do
+      it "generates stable hash ID for buttons with blocks" do
         app.button("First") {}
         app.button("Second") {}
 
-        expect(app.components[0].id).to eq("btn_first_1")
-        expect(app.components[1].id).to eq("btn_second_2")
+        # Buttons with blocks get stable hash IDs from source location
+        expect(app.components[0].id).to match(/^btn_first_[a-f0-9]{8}$/)
+        expect(app.components[1].id).to match(/^btn_second_[a-f0-9]{8}$/)
       end
 
       it "stores action block" do
@@ -410,7 +411,7 @@ RSpec.describe StreamWeaver::App do
       expect(first_component_id).not_to eq(second_component_id)
     end
 
-    it "resets button counter for deterministic IDs" do
+    it "generates stable IDs across rebuilds" do
       app = described_class.new("Test") do
         button("First") {}
         button("Second") {}
@@ -422,8 +423,10 @@ RSpec.describe StreamWeaver::App do
       app.rebuild_with_state({})
       second_ids = app.components.map(&:id)
 
+      # Stable hash IDs should be identical across rebuilds
       expect(first_ids).to eq(second_ids)
-      expect(first_ids).to eq(["btn_first_1", "btn_second_2"])
+      expect(first_ids[0]).to match(/^btn_first_[a-f0-9]{8}$/)
+      expect(first_ids[1]).to match(/^btn_second_[a-f0-9]{8}$/)
     end
 
     it "makes state available during rebuild" do

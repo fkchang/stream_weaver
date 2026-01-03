@@ -120,8 +120,10 @@ module StreamWeaver
       def aliased_path_for(app_id)
         entry = apps[app_id]
         return nil unless entry && entry[:source]
-        # Use filename without extension as the name part
-        name_part = File.basename(entry[:path], '.rb')
+        # Use custom name if provided, otherwise fall back to filename
+        name_part = entry[:name] || File.basename(entry[:path], '.rb')
+        # Handle names that might include source prefix (e.g., "tutorial/philosophy")
+        name_part = name_part.sub(%r{^#{entry[:source]}/}, '')
         "/#{entry[:source]}/#{name_part}"
       end
 
@@ -294,6 +296,7 @@ module StreamWeaver
           </div>
         HTML
       end
+
     end
 
     # =========================================

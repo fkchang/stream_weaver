@@ -5,6 +5,13 @@ require 'rack/test'
 RSpec.describe "StreamWeaver Server" do
   include Rack::Test::Methods
 
+  # Helper to extract button ID from HTML (buttons with blocks get stable hash IDs)
+  def extract_button_id(html, label)
+    # Match hx-post="/action/btn_label_xxxxx" pattern
+    match = html.match(/hx-post="\/action\/(btn_#{label.downcase}_[a-f0-9]+)"/)
+    match ? match[1] : "btn_#{label.downcase}_1"
+  end
+
   let(:stream_weaver_app) do
     StreamWeaver::App.new("Test App") do
       header1 "Welcome"
@@ -118,7 +125,11 @@ RSpec.describe "StreamWeaver Server" do
     it "updates session state" do
       env 'rack.session', { streamlit_state: { name: "Bob" } }
 
-      post '/action/btn_greet_1', { name: "Bob" }
+      # Get button ID from rendered HTML
+      get '/'
+      button_id = extract_button_id(last_response.body, "greet")
+
+      post "/action/#{button_id}", { name: "Bob" }
 
       session_state = last_request.session[:streamlit_state]
       expect(session_state[:greeted]).to be true
@@ -128,7 +139,11 @@ RSpec.describe "StreamWeaver Server" do
     it "returns updated HTML" do
       env 'rack.session', { streamlit_state: { name: "Charlie" } }
 
-      post '/action/btn_greet_1', { name: "Charlie" }
+      # Get button ID from rendered HTML
+      get '/'
+      button_id = extract_button_id(last_response.body, "greet")
+
+      post "/action/#{button_id}", { name: "Charlie" }
 
       expect(last_response.body).to include("Hello, Charlie!")
     end
@@ -418,7 +433,11 @@ RSpec.describe "StreamWeaver Server" do
     it "handles todo addition" do
       env 'rack.session', { streamlit_state: { todos: [] } }
 
-      post '/action/btn_add_1', { new_todo: "Buy milk" }
+      # Get button ID from rendered HTML
+      get '/'
+      button_id = extract_button_id(last_response.body, "add")
+
+      post "/action/#{button_id}", { new_todo: "Buy milk" }
 
       session_state = last_request.session[:streamlit_state]
       expect(session_state[:todos]).to include("Buy milk")

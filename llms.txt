@@ -35,6 +35,32 @@ ruby app_three.rb  # Opens browser at http://localhost:4569 (auto-detected)
 
 No need to specify ports, no conflicts, no manual browser opening. Just run and go.
 
+### Service Mode (CLI)
+
+**Alternative to direct Ruby execution:** StreamWeaver includes a CLI that manages a single background service rendering multiple apps. This is ideal for tutorials, showcases, and side-by-side comparisons:
+
+```bash
+# Run an app (auto-starts service if needed)
+streamweaver examples/basic/hello_world.rb
+
+# Named sessions for easier identification
+streamweaver run --name "My Survey" form_demo.rb
+
+# List all loaded apps
+streamweaver list
+
+# Manage apps
+streamweaver remove <app_id>  # Remove specific app
+streamweaver clear            # Remove all apps
+streamweaver admin            # Open admin dashboard
+
+# Service management
+streamweaver status           # Show service status
+streamweaver stop             # Stop background service
+```
+
+Each app gets a unique URL (`/apps/:app_id`), allowing multiple apps to run side-by-side. The admin dashboard is itself a StreamWeaver app managing other StreamWeaver apps.
+
 **For AI agents:** The running URL is printed to stdout, so Claude Code can read the terminal output to know the exact port if needed for testing or automation:
 
 ```
@@ -617,6 +643,89 @@ Renders a table with Metric | Score | Meaning columns:
 - **Red** (score-low): ratio < 40%
 
 Interpretations: Excellent (>=80%), Strong (>=70%), Moderate (>=50%), Weak (<50%)
+
+### Charts
+
+Data visualization using Chart.js (loaded via CDN only when charts are present):
+
+```ruby
+# Bar charts
+bar_chart data: { calendar: 45, news: 120, tasks: 30 }
+hbar_chart data: { "Phase A" => 25, "Phase B" => 45 }  # horizontal
+
+# Line charts
+line_chart data: [12, 19, 8, 15, 22]  # array = sequential x-axis
+line_chart data: { Mon: 5, Tue: 12, Wed: 8 }, fill: true
+
+# Sparklines (minimal, inline trend indicators)
+sparkline data: [45, 52, 48, 61, 55, 67, 72]
+
+# File-based data with dot-path extraction
+bar_chart file: "~/metrics/timing.yaml", path: "entries.-1.phases"
+
+# File with transform block
+line_chart file: "timing.yaml" do |data|
+  data[:entries].last(14).map { |e| e[:wall_clock_seconds] }
+end
+
+# State-bound (reads from state[:metrics])
+bar_chart data: :metrics
+```
+
+**Bar chart options:**
+- `horizontal:` — Horizontal bars (default: false)
+- `show_values:` — Display values on bars
+
+**Line chart options:**
+- `fill:` — Area fill under line (default: false)
+- `smooth:` — Curved lines (default: true)
+- `points:` — Show data points (default: true)
+- `begin_at_zero:` — Y-axis starts at 0 (default: false)
+
+**Sparkline:** Line chart with `sparkline: true` — no axes, labels, or tooltips. Height defaults to 60px.
+
+**Area chart:** Line chart with `fill: true`, or use `area_chart` shorthand.
+
+**Pie/Doughnut chart options:**
+- `doughnut:` — Hole in center (default: false)
+- `cutout:` — Hole size for doughnut (default: '50%')
+- `legend_position:` — 'right', 'left', 'top', 'bottom' (default: 'right')
+- `show_legend:` — Show legend (default: true)
+
+```ruby
+pie_chart data: { sales: 100, costs: 60, profit: 40 }
+doughnut_chart data: { frontend: 40, backend: 35, devops: 25 }
+doughnut_chart data: phases, cutout: '75%'  # thin doughnut
+```
+
+**Stacked bar chart options:**
+- `stack:` — Stack bars (default: true); false for grouped
+- `horizontal:` — Horizontal orientation
+- `normalize:` — Percentage mode (100% bars)
+
+**Stacked bar data formats:**
+```ruby
+# Array of labeled records (most common)
+stacked_bar_chart data: [
+  { label: "Mon", sales: 100, costs: 60 },
+  { label: "Tue", sales: 120, costs: 70 }
+]
+
+# Hash of series
+stacked_bar_chart data: {
+  "Sales" => [100, 120, 140],
+  "Costs" => [60, 70, 80]
+}
+```
+
+**Common options (all chart types):**
+- `data:` — Hash, Array, or Symbol (state key)
+- `file:` — Path to YAML/JSON file (~ expanded)
+- `path:` — Dot notation to extract data (e.g., "entries.-1.phases")
+- `title:` — Chart title
+- `height:` — CSS height (default: "250px", sparkline: "60px")
+- `colors:` — Array of colors
+- `show_legend:` — Show legend (default: false)
 
 ### Educational Content (Glossary/Tooltips)
 

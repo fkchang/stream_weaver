@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'digest'
+
 module StreamWeaver
   # Main app class that holds the DSL block and manages the component tree
   class App
@@ -304,10 +306,18 @@ module StreamWeaver
     end
 
     def button(label, **options, &block)
-      @button_counter += 1
+      # Generate stable ID: use source location for buttons with blocks,
+      # fallback to counter for blockless buttons (submit: false)
+      if block
+        source_loc = block.source_location.join(':')
+        stable_id = Digest::MD5.hexdigest("#{label}:#{source_loc}")[0..7]
+      else
+        @button_counter += 1
+        stable_id = @button_counter.to_s
+      end
       # Pass modal context to button so it can close the modal via Alpine
       options[:modal_context] = @modal_context if @modal_context
-      @components << Components::Button.new(label, @button_counter, **options, &block)
+      @components << Components::Button.new(label, stable_id, **options, &block)
     end
 
     def score_table(scores:, **options)

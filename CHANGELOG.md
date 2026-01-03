@@ -98,6 +98,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Checkbox state properly handles unchecked values
 - Agentic mode correctly outputs JSON to STDOUT after form submission
 - Select `default:` now properly initializes Alpine.js state
+- **Tutorial session overflow** (2026-01-02) - Session cookie was exceeding 4KB limit due to `*_edited_code` keys; now filtered from session storage
+- **Tutorial button ID mismatch** (2026-01-02) - Button IDs now use stable hash from `block.source_location` instead of render-order counter, preventing action failures when conditional content changes component tree
+- **Tutorial Reset button** (2026-01-02) - Reset always renders with block for stable ID; uses flag pattern to survive session filtering
 
 ## [0.1.0] - 2025-11-08
 

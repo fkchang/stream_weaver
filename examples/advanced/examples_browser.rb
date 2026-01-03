@@ -8,9 +8,6 @@
 # (Or: ruby examples/advanced/examples_browser.rb)
 
 require_relative "../../lib/stream_weaver"
-require 'net/http'
-require 'json'
-require 'rbconfig'
 
 # Source identifier for tracking apps in service
 SOURCE = "examples_browser"
@@ -22,19 +19,12 @@ LOADED_APPS = {}
 at_exit do
   next if LOADED_APPS.empty?
   puts "\nCleaning up #{LOADED_APPS.size} loaded example(s)..."
-  begin
-    info = StreamWeaver::Service.read_pid_file
-    if info
-      uri = URI("http://localhost:#{info[:port]}/clear-source")
-      Net::HTTP.post_form(uri, { source: SOURCE })
-    end
-  rescue => e
-    # Service might be down, that's ok
-  end
+  Object.new.extend(StreamWeaver::ServiceClient).clear_source_via_service(SOURCE)
 end
 
 # Helper module for example discovery
 module ExamplesBrowser
+  include StreamWeaver::ServiceClient
   require 'fileutils'
 
   EXAMPLES_ROOT = File.expand_path("../../", __FILE__)
@@ -116,10 +106,7 @@ module ExamplesBrowser
     end
   end
 
-  def service_port
-    info = StreamWeaver::Service.read_pid_file
-    info ? info[:port] : StreamWeaver::Service::DEFAULT_PORT
-  end
+  # Uses ServiceClient for: service_port, open_in_browser, remove_app_via_service
 
   def run_example_via_service(file_path, name: nil)
     expanded_path = File.expand_path(file_path)
@@ -130,55 +117,18 @@ module ExamplesBrowser
       LOADED_APPS.delete(expanded_path)
     end
 
-    # Load example via service API
-    uri = URI("http://localhost:#{service_port}/load-app")
-    params = { file_path: expanded_path, source: SOURCE }
-    params[:name] = name if name
+    # Load via ServiceClient
+    result = load_app_via_service(expanded_path, source: SOURCE, name: name)
 
-    response = Net::HTTP.post_form(uri, params)
-    result = JSON.parse(response.body)
-
-    if result['success']
+    if result[:ok]
       # Track for cleanup and edit-replace
       LOADED_APPS[expanded_path] = {
-        app_id: result['app_id'],
-        aliased_url: result['aliased_url']
+        app_id: result[:app_id],
+        aliased_url: result[:aliased_url]
       }
-
-      {
-        ok: true,
-        app_id: result['app_id'],
-        name: result['name'],
-        url: "http://localhost:#{service_port}#{result['url']}",
-        aliased_url: result['aliased_url'] ? "http://localhost:#{service_port}#{result['aliased_url']}" : nil
-      }
-    else
-      { ok: false, error: result['error'] }
     end
-  rescue Errno::ECONNREFUSED
-    { ok: false, error: "Service not running. Start with: streamweaver showcase" }
-  rescue => e
-    { ok: false, error: e.message }
-  end
 
-  def remove_app_via_service(app_id)
-    uri = URI("http://localhost:#{service_port}/remove-app")
-    response = Net::HTTP.post_form(uri, { app_id: app_id })
-    LOADED_APPS.delete_if { |_path, info| info[:app_id] == app_id }
-    JSON.parse(response.body)
-  rescue
-    { 'success' => false }
-  end
-
-  def open_in_browser(url)
-    case RbConfig::CONFIG['host_os']
-    when /darwin|mac os/
-      system('open', url)
-    when /linux|bsd/
-      system('xdg-open', url)
-    when /mswin|msys|mingw|cygwin|bccwin|wince|emc/
-      system('start', url)
-    end
+    result
   end
 
   def save_file(dir_key, filename, content)
@@ -392,7 +342,8 @@ generated_app = app(
           running_style = "margin-top: 8px; padding: 8px 12px; background: #e8f5e9; border: 1px solid #81c784; border-radius: 4px; font-size: 13px;"
           current_app_id = current_app_info[:app_id]
           aliased_url = current_app_info[:aliased_url]
-          app_url = aliased_url ? "http://localhost:#{service_port}#{aliased_url}" : "http://localhost:#{service_port}/apps/#{current_app_id}"
+          # aliased_url from ServiceClient is already a full URL
+          app_url = aliased_url || "http://localhost:#{service_port}/apps/#{current_app_id}"
 
           div style: running_style do
             div style: "display: flex; justify-content: space-between; align-items: center;" do
