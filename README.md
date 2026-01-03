@@ -62,9 +62,21 @@ Run with: `ruby my_app.rb` or `streamweaver my_app.rb`
 
 The browser opens automatically at `http://localhost:4567`.
 
+## Getting Started
+
+```bash
+gem install stream_weaver
+
+# Interactive tutorial - learn by doing
+streamweaver tutorial
+
+# Browse and run all examples
+streamweaver showcase
+```
+
 ## Service Mode (CLI)
 
-StreamWeaver includes a CLI that manages a single background service rendering multiple apps:
+StreamWeaver includes a CLI that manages a single background service rendering multiple apps. See [docs/SERVICE_MODE.md](docs/SERVICE_MODE.md) for full details.
 
 ```bash
 # Run an app (auto-starts service if needed)
@@ -81,11 +93,18 @@ streamweaver remove <app_id>  # Remove specific app
 streamweaver clear            # Remove all apps
 streamweaver admin            # Open admin dashboard
 
+# Learning
+streamweaver tutorial         # Interactive tutorial
+streamweaver showcase         # Browse all examples
+
 # Service management
 streamweaver status           # Show service status
 streamweaver stop             # Stop background service
-streamweaver showcase         # Open examples browser
 ```
+
+**When to use which mode:**
+- **`ruby app.rb`** - Quick one-off scripts, prototyping, learning
+- **`streamweaver app.rb`** - Multiple apps side-by-side, development sessions, tutorials
 
 Each app gets a unique URL (`/apps/:app_id`), allowing side-by-side comparison. The admin dashboard is a StreamWeaver app managing other StreamWeaver apps (meta!).
 

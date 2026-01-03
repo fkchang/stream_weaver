@@ -37,29 +37,37 @@ No need to specify ports, no conflicts, no manual browser opening. Just run and 
 
 ### Service Mode (CLI)
 
-**Alternative to direct Ruby execution:** StreamWeaver includes a CLI that manages a single background service rendering multiple apps. This is ideal for tutorials, showcases, and side-by-side comparisons:
+StreamWeaver has two execution modes:
+
+**1. Standalone (`ruby app.rb`)** - Each script runs its own server
+- Use for: Quick utilities, prototyping, learning, agentic `run_once!`
+- Auto-detects free port (4567, 4568, etc.)
+
+**2. Service Mode (`streamweaver app.rb`)** - Single background service, multiple apps
+- Use for: Multiple apps side-by-side, tutorials, examples browser, development sessions
+- All apps on port 4575 at unique URLs
 
 ```bash
-# Run an app (auto-starts service if needed)
-streamweaver examples/basic/hello_world.rb
+# Learning StreamWeaver
+streamweaver tutorial         # Interactive tutorial
+streamweaver showcase         # Browse all examples
 
-# Named sessions for easier identification
+# Run apps via service
+streamweaver examples/basic/hello_world.rb
 streamweaver run --name "My Survey" form_demo.rb
 
-# List all loaded apps
-streamweaver list
-
 # Manage apps
+streamweaver list             # List loaded apps
 streamweaver remove <app_id>  # Remove specific app
 streamweaver clear            # Remove all apps
-streamweaver admin            # Open admin dashboard
+streamweaver admin            # Admin dashboard
 
 # Service management
 streamweaver status           # Show service status
 streamweaver stop             # Stop background service
 ```
 
-Each app gets a unique URL (`/apps/:app_id`), allowing multiple apps to run side-by-side. The admin dashboard is itself a StreamWeaver app managing other StreamWeaver apps.
+Each app gets a unique URL (`/apps/:app_id`). The tutorial and examples browser use service mode internally - clicking "Run" loads your code into the service for live testing.
 
 **For AI agents:** The running URL is printed to stdout, so Claude Code can read the terminal output to know the exact port if needed for testing or automation:
 
