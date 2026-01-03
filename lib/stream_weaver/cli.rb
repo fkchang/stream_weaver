@@ -383,6 +383,7 @@ module StreamWeaver
         # Execute and capture output (run_once! outputs JSON to stdout)
         result = `#{RbConfig.ruby} #{temp_file.path}`
         puts result
+        focus_terminal if auto_close || dsl_code.include?('auto_close')
       ensure
         temp_file.unlink
       end
@@ -393,7 +394,7 @@ module StreamWeaver
     def self.prompt_ui(args)
       title = args.shift || "Prompt"
       components = []
-      auto_close = false
+      auto_close = true  # Default to auto-close for better UX
       description = nil
 
       i = 0
@@ -431,8 +432,8 @@ module StreamWeaver
         when '--md', '--description'
           i += 1
           description = args[i]
-        when '-c', '--auto-close'
-          auto_close = true
+        when '--keep-open'
+          auto_close = false
         end
         i += 1
       end
@@ -448,7 +449,7 @@ module StreamWeaver
         $stderr.puts "  --checkbox KEY:LABEL         Checkbox"
         $stderr.puts "  --confirm KEY:LABEL          Confirmation checkbox"
         $stderr.puts "  --md TEXT                    Markdown description"
-        $stderr.puts "  -c, --auto-close             Close browser after submit"
+        $stderr.puts "  --keep-open                  Keep browser open after submit"
         exit 1
       end
 
@@ -472,6 +473,7 @@ module StreamWeaver
       begin
         result = `#{RbConfig.ruby} #{temp_file.path}`
         puts result
+        focus_terminal if auto_close
       ensure
         temp_file.unlink
       end
@@ -574,6 +576,33 @@ module StreamWeaver
       when /mswin|msys|mingw|cygwin|bccwin|wince|emc/
         system('start', url)
       end
+    end
+
+    # Bring terminal back to front after browser auto-closes
+    def self.focus_terminal
+      case RbConfig::CONFIG['host_os']
+      when /darwin|mac os/
+        # Try iTerm2 first, fall back to Terminal.app
+        script = <<~APPLESCRIPT
+          tell application "System Events"
+            set frontApp to name of first application process whose frontmost is true
+          end tell
+          if frontApp contains "iTerm" then
+            tell application "iTerm2" to activate
+          else if frontApp contains "Terminal" then
+            tell application "Terminal" to activate
+          else
+            -- Try to activate iTerm2 if installed, otherwise Terminal
+            try
+              tell application "iTerm2" to activate
+            on error
+              tell application "Terminal" to activate
+            end try
+          end if
+        APPLESCRIPT
+        system('osascript', '-e', script)
+      end
+      # Linux/Windows: terminal typically stays focused or user can alt-tab
     end
 
   end
