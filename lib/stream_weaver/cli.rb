@@ -38,6 +38,10 @@ module StreamWeaver
         status
       when 'llm'
         llm_docs
+      when 'eval'
+        eval_dsl(args)
+      when 'prompt'
+        prompt_ui(args)
       when '--help', '-h', 'help'
         help
       when '--version', '-v'
@@ -324,6 +328,163 @@ module StreamWeaver
       end
     end
 
+    # Evaluate StreamWeaver DSL from stdin and return JSON result
+    # Usage: streamweaver eval <<'RUBY'
+    #   app "Question" do
+    #     radio_group :choice, ["A", "B", "C"]
+    #   end.run_once!
+    # RUBY
+    def self.eval_dsl(args)
+      title = "StreamWeaver Prompt"
+      auto_close = false
+
+      OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver eval [options] < script.rb"
+        opts.on('-t', '--title TITLE', 'Window title') { |t| title = t }
+        opts.on('-c', '--auto-close', 'Close browser after submit') { auto_close = true }
+      end.parse!(args)
+
+      # Read DSL from stdin
+      if $stdin.tty?
+        $stderr.puts "Usage: streamweaver eval <<'RUBY'"
+        $stderr.puts "  app \"Title\" do"
+        $stderr.puts "    text_field :name"
+        $stderr.puts "  end.run_once!"
+        $stderr.puts "RUBY"
+        exit 1
+      end
+
+      dsl_code = $stdin.read.strip
+
+      # Check if code already has run_once! or run!
+      unless dsl_code.include?('run_once!') || dsl_code.include?('.run!')
+        # Wrap in app block with run_once! if not present
+        if dsl_code.include?('app ')
+          # Has app block but no run - add run_once!
+          dsl_code = dsl_code.sub(/end\s*\z/, "end.run_once!#{auto_close ? '(auto_close_window: true)' : ''}")
+        else
+          # No app block - wrap everything
+          auto_close_opt = auto_close ? 'auto_close_window: true' : ''
+          dsl_code = <<~RUBY
+            app "#{title}" do
+              #{dsl_code}
+            end.run_once!(#{auto_close_opt})
+          RUBY
+        end
+      end
+
+      # Create temp file
+      require 'tempfile'
+      temp_file = Tempfile.new(['streamweaver_eval', '.rb'])
+      temp_file.write("require 'stream_weaver'\n\n#{dsl_code}")
+      temp_file.close
+
+      begin
+        # Execute and capture output (run_once! outputs JSON to stdout)
+        result = `#{RbConfig.ruby} #{temp_file.path}`
+        puts result
+      ensure
+        temp_file.unlink
+      end
+    end
+
+    # Quick prompt UI from command-line flags
+    # Usage: streamweaver prompt "Title" --radio "choice:A,B,C" --text "notes:Any notes?"
+    def self.prompt_ui(args)
+      title = args.shift || "Prompt"
+      components = []
+      auto_close = false
+      description = nil
+
+      i = 0
+      while i < args.length
+        arg = args[i]
+        case arg
+        when '--radio'
+          i += 1
+          key, options = parse_component_arg(args[i])
+          components << "radio_group :#{key}, #{options.inspect}"
+        when '--select'
+          i += 1
+          key, options = parse_component_arg(args[i])
+          components << "select :#{key}, #{options.inspect}"
+        when '--text'
+          i += 1
+          key, placeholder = parse_component_arg(args[i])
+          placeholder_opt = placeholder ? ", placeholder: #{placeholder.first.inspect}" : ""
+          components << "text_field :#{key}#{placeholder_opt}"
+        when '--textarea'
+          i += 1
+          key, placeholder = parse_component_arg(args[i])
+          placeholder_opt = placeholder ? ", placeholder: #{placeholder.first.inspect}" : ""
+          components << "text_area :#{key}#{placeholder_opt}"
+        when '--checkbox'
+          i += 1
+          key, label = parse_component_arg(args[i])
+          label_str = label&.first || key.to_s.capitalize
+          components << "checkbox :#{key}, #{label_str.inspect}"
+        when '--confirm'
+          i += 1
+          key, label = parse_component_arg(args[i])
+          label_str = label&.first || "Confirm"
+          components << "checkbox :#{key}, #{label_str.inspect}"
+        when '--md', '--description'
+          i += 1
+          description = args[i]
+        when '-c', '--auto-close'
+          auto_close = true
+        end
+        i += 1
+      end
+
+      if components.empty?
+        $stderr.puts "Usage: streamweaver prompt \"Title\" --radio \"key:opt1,opt2\" --text \"key:placeholder\""
+        $stderr.puts ""
+        $stderr.puts "Options:"
+        $stderr.puts "  --radio KEY:OPT1,OPT2,...    Radio button group"
+        $stderr.puts "  --select KEY:OPT1,OPT2,...   Dropdown select"
+        $stderr.puts "  --text KEY:PLACEHOLDER       Text input"
+        $stderr.puts "  --textarea KEY:PLACEHOLDER   Multi-line text"
+        $stderr.puts "  --checkbox KEY:LABEL         Checkbox"
+        $stderr.puts "  --confirm KEY:LABEL          Confirmation checkbox"
+        $stderr.puts "  --md TEXT                    Markdown description"
+        $stderr.puts "  -c, --auto-close             Close browser after submit"
+        exit 1
+      end
+
+      # Build DSL
+      auto_close_opt = auto_close ? 'auto_close_window: true' : ''
+      md_line = description ? "md #{description.inspect}\n  " : ""
+      dsl = <<~RUBY
+        require 'stream_weaver'
+
+        app "#{title}" do
+          #{md_line}#{components.join("\n  ")}
+        end.run_once!(#{auto_close_opt})
+      RUBY
+
+      # Create temp file and execute
+      require 'tempfile'
+      temp_file = Tempfile.new(['streamweaver_prompt', '.rb'])
+      temp_file.write(dsl)
+      temp_file.close
+
+      begin
+        result = `#{RbConfig.ruby} #{temp_file.path}`
+        puts result
+      ensure
+        temp_file.unlink
+      end
+    end
+
+    # Parse "key:value1,value2" into [key, [value1, value2]]
+    def self.parse_component_arg(arg)
+      return [arg, nil] unless arg&.include?(':')
+      key, rest = arg.split(':', 2)
+      values = rest.include?(',') ? rest.split(',').map(&:strip) : [rest]
+      [key, values]
+    end
+
     # Show help
     def self.help
       puts <<~HELP
@@ -332,14 +493,17 @@ module StreamWeaver
         Usage:
           streamweaver <file.rb>              Run an app file
           streamweaver run [options] <file>   Run with options
+          streamweaver eval                   Evaluate DSL from stdin, return JSON
+          streamweaver prompt "Title" [opts]  Quick UI from flags, return JSON
           streamweaver list                   List all loaded apps
           streamweaver remove <app_id>        Remove a specific app
           streamweaver clear                  Remove all apps
           streamweaver admin                  Open admin dashboard
+          streamweaver tutorial               Interactive tutorial
+          streamweaver showcase               Browse all examples
           streamweaver serve                  Start service in foreground
           streamweaver stop                   Stop the background service
           streamweaver status                 Show service status
-          streamweaver showcase               Open examples browser
           streamweaver llm                    Output LLM documentation
           streamweaver --help                 Show this help
           streamweaver --version              Show version
@@ -347,15 +511,28 @@ module StreamWeaver
         Run Options:
           -n, --name NAME                     Custom name for this app session
 
-        The service auto-starts when you run an app. Each app gets a unique URL,
-        allowing multiple apps to run side-by-side.
+        Prompt Options (for Claude Code integration):
+          --radio KEY:OPT1,OPT2,...           Radio button group
+          --select KEY:OPT1,OPT2,...          Dropdown select
+          --text KEY:PLACEHOLDER              Text input
+          --textarea KEY:PLACEHOLDER          Multi-line text
+          --checkbox KEY:LABEL                Checkbox
+          -c, --auto-close                    Close browser after submit
 
         Examples:
+          # Run an app
           streamweaver examples/basic/hello_world.rb
-          streamweaver run --name "My Survey" examples/basic/form_demo.rb
-          streamweaver list
-          streamweaver remove a1b2c3d4
-          streamweaver status
+
+          # Quick prompt (for Claude Code)
+          streamweaver prompt "Pick approach" --radio "choice:Refactor,Adapter,Patch"
+
+          # Eval DSL from stdin
+          streamweaver eval <<'RUBY'
+            app "Survey" do
+              text_field :name
+              select :priority, ["Low", "Medium", "High"]
+            end.run_once!
+          RUBY
       HELP
     end
 
