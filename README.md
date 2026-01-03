@@ -535,6 +535,28 @@ result = App.run_once!(timeout: 120)
 result = App.run_once!(auto_close_window: true)
 ```
 
+## Deployment & Production
+
+StreamWeaver apps can be deployed to production with database persistence and authentication.
+
+**Quick Deploy** (5 minutes):
+- Deploy to Render, Railway, or Fly.io
+- Add PostgreSQL database
+- Set `SESSION_SECRET` environment variable
+- See [Quick Start Deployment Guide](docs/QUICK_START_DEPLOYMENT.md)
+
+**Full Production Setup**:
+- Complete authentication with BCrypt
+- Database integration (PostgreSQL, SQLite)
+- Deployment templates for all major platforms
+- See [Deployment Guide](docs/DEPLOYMENT.md)
+
+**Resources**:
+- [Deployment Guide](docs/DEPLOYMENT.md) - Complete deployment documentation
+- [Quick Start](docs/QUICK_START_DEPLOYMENT.md) - Get deployed in 5 minutes
+- [Templates](docs/deployment-templates/) - Ready-to-use config files
+- [Examples](examples/) - `database_todo.rb`, `session_auth_demo.rb`, `basic_auth_demo.rb`
+
 ## Contributing
 
 Contributions welcome! See [GitHub repository](https://github.com/fkchang/stream_weaver).

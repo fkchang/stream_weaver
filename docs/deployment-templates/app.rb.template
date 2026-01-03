@@ -1,0 +1,274 @@
+# Production App Template
+# 
+# A complete production-ready StreamWeaver application with:
+# - Database persistence (PostgreSQL/SQLite)
+# - Session-based authentication
+# - Environment configuration
+# - Ready for deployment
+
+require "stream_weaver"
+require "sinatra/activerecord"
+require "bcrypt"
+
+# Load environment variables in development
+require "dotenv/load" if ENV["RACK_ENV"] == "development"
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+configure do
+  # Session secret (REQUIRED for production)
+  set :session_secret, ENV.fetch("SESSION_SECRET") {
+    if ENV["RACK_ENV"] == "production"
+      raise "SESSION_SECRET environment variable required in production"
+    else
+      "development-secret-key-at-least-64-characters-for-security-change-in-prod"
+    end
+  }
+end
+
+configure :development do
+  set :database, {adapter: "sqlite3", database: "db/development.sqlite3"}
+  set :show_exceptions, true
+end
+
+configure :production do
+  # Use DATABASE_URL from environment (set by hosting platform)
+  set :database, ENV["DATABASE_URL"]
+  set :show_exceptions, false
+  
+  # Force HTTPS (optional)
+  use Rack::SslEnforcer if ENV["FORCE_SSL"] == "true"
+end
+
+configure :test do
+  set :database, {adapter: "sqlite3", database: "db/test.sqlite3"}
+end
+
+# =============================================================================
+# MODELS
+# =============================================================================
+
+class User < ActiveRecord::Base
+  include BCrypt
+  
+  validates :username, presence: true, uniqueness: true, length: {minimum: 3}
+  validates :email, presence: true, uniqueness: true, format: {with: URI::MailTo::EMAIL_REGEXP}
+  validates :password, presence: true, length: {minimum: 6}, if: :password_required?
+  
+  def password
+    @password ||= Password.new(password_hash) if password_hash
+  end
+  
+  def password=(new_password)
+    @password = new_password
+    self.password_hash = Password.create(new_password) if new_password.present?
+  end
+  
+  def authenticate(password)
+    self.password == password
+  end
+  
+  def self.authenticate(username_or_email, password)
+    user = find_by(username: username_or_email) || find_by(email: username_or_email)
+    user if user&.authenticate(password)
+  end
+  
+  private
+  
+  def password_required?
+    password_hash.blank? || @password.present?
+  end
+end
+
+# =============================================================================
+# HELPERS
+# =============================================================================
+
+helpers do
+  def current_user
+    @current_user ||= User.find_by(id: session[:user_id]) if session[:user_id]
+  end
+  
+  def logged_in?
+    !!current_user
+  end
+  
+  def require_login
+    redirect "/login" unless logged_in?
+  end
+  
+  def flash_message(type, message)
+    session[:flash] = {type: type, message: message}
+  end
+  
+  def get_flash
+    flash = session.delete(:flash)
+    flash if flash
+  end
+end
+
+# =============================================================================
+# ROUTES
+# =============================================================================
+
+# Authentication routes
+get "/login" do
+  redirect "/" if logged_in?
+  LoginApp.generate.call(env)
+end
+
+post "/login" do
+  user = User.authenticate(params[:username], params[:password])
+  if user
+    session[:user_id] = user.id
+    flash_message(:success, "Welcome back, #{user.username}!")
+    redirect "/"
+  else
+    flash_message(:error, "Invalid username or password")
+    redirect "/login"
+  end
+end
+
+get "/register" do
+  redirect "/" if logged_in?
+  RegisterApp.generate.call(env)
+end
+
+post "/register" do
+  user = User.new(
+    username: params[:username],
+    email: params[:email],
+    password: params[:password]
+  )
+  
+  if user.save
+    session[:user_id] = user.id
+    flash_message(:success, "Account created! Welcome, #{user.username}!")
+    redirect "/"
+  else
+    flash_message(:error, user.errors.full_messages.join(", "))
+    redirect "/register"
+  end
+end
+
+post "/logout" do
+  session.clear
+  flash_message(:info, "You've been logged out")
+  redirect "/login"
+end
+
+# Main app
+get "/" do
+  require_login
+  MainApp.generate.call(env)
+end
+
+# =============================================================================
+# STREAMWEAVER APPS
+# =============================================================================
+
+LoginApp = app "Login", theme: :default do
+  header1 "Login"
+  
+  if flash = get_flash
+    alert(variant: flash[:type]) do
+      text flash[:message]
+    end
+  end
+  
+  card do
+    form :login do
+      text_field :username, placeholder: "Username or Email"
+      text_field :password, placeholder: "Password"
+      
+      hstack justify: :between do
+        submit "Login"
+        cancel "Register"
+      end
+    end
+  end
+end
+
+RegisterApp = app "Register", theme: :default do
+  header1 "Create Account"
+  
+  if flash = get_flash
+    alert(variant: flash[:type]) do
+      text flash[:message]
+    end
+  end
+  
+  card do
+    form :register do
+      text_field :username, placeholder: "Username (min 3 characters)"
+      text_field :email, placeholder: "Email"
+      text_field :password, placeholder: "Password (min 6 characters)"
+      
+      hstack justify: :between do
+        submit "Create Account"
+        cancel "Back to Login"
+      end
+    end
+  end
+end
+
+MainApp = app "My App", theme: :dashboard do
+  if flash = get_flash
+    alert(variant: flash[:type]) do
+      text flash[:message]
+    end
+  end
+  
+  header1 "Welcome, #{current_user.username}!"
+  
+  card do
+    header3 "User Info"
+    vstack spacing: :sm do
+      text "Email: #{current_user.email}"
+      text "Member since: #{current_user.created_at.strftime('%B %d, %Y')}"
+    end
+  end
+  
+  card do
+    header3 "Your Content"
+    text "Add your application content here..."
+    
+    # Example: Simple note-taking
+    text_field :note, placeholder: "Write a note..."
+    
+    button "Save Note" do |state|
+      if state[:note] && !state[:note].strip.empty?
+        state[:notes] ||= []
+        state[:notes] << {
+          text: state[:note],
+          time: Time.now.strftime("%I:%M %p")
+        }
+        state[:note] = ""
+      end
+    end
+    
+    if state[:notes] && !state[:notes].empty?
+      vstack spacing: :sm do
+        state[:notes].each do |note|
+          text "📝 #{note[:time]}: #{note[:text]}"
+        end
+      end
+    end
+  end
+  
+  card do
+    form :logout do
+      submit "Logout", style: :secondary
+    end
+  end
+end
+
+# =============================================================================
+# START SERVER
+# =============================================================================
+
+if __FILE__ == $0
+  MainApp.run!
+end
