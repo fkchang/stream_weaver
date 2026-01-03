@@ -36,6 +36,8 @@ module StreamWeaver
         stop_service
       when 'status'
         status
+      when 'llm'
+        llm_docs
       when '--help', '-h', 'help'
         help
       when '--version', '-v'
@@ -312,6 +314,16 @@ module StreamWeaver
       end
     end
 
+    def self.llm_docs
+      llms_path = File.expand_path('../../../llms.txt', __FILE__)
+      if File.exist?(llms_path)
+        puts File.read(llms_path)
+      else
+        $stderr.puts "Error: llms.txt not found at #{llms_path}"
+        exit 1
+      end
+    end
+
     # Show help
     def self.help
       puts <<~HELP
@@ -328,6 +340,7 @@ module StreamWeaver
           streamweaver stop                   Stop the background service
           streamweaver status                 Show service status
           streamweaver showcase               Open examples browser
+          streamweaver llm                    Output LLM documentation
           streamweaver --help                 Show this help
           streamweaver --version              Show version
 
