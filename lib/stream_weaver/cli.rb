@@ -65,6 +65,11 @@ module StreamWeaver
         canvas_list
       when 'canvas-stop'
         canvas_stop
+      # High-level canvas helpers
+      when 'pick'
+        canvas_pick(args)
+      when 'confirm'
+        canvas_confirm(args)
       when '--help', '-h', 'help'
         help
       when '--version', '-v'
@@ -1106,6 +1111,146 @@ module StreamWeaver
       else
         puts "Canvas bridge is not running"
       end
+    end
+
+    # =========================================
+    # High-level Canvas Helpers
+    # =========================================
+
+    # Quick pick from a list of choices
+    # Usage: streamweaver pick "Title" "Choice1" "Choice2" "Choice3"
+    def self.canvas_pick(args)
+      if args.length < 2
+        $stderr.puts "Usage: streamweaver pick \"Title\" \"Choice1\" \"Choice2\" ..."
+        exit 1
+      end
+
+      title = args.shift
+      choices = args
+
+      require_relative 'canvas/client'
+      require_relative 'canvas/helpers'
+
+      # Generate session name
+      session_name = "pick_#{Time.now.to_i}"
+
+      # Ensure bridge is running
+      Canvas::Client.ensure_bridge_running
+
+      # Create session
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.create(session_name)
+      )
+
+      if response && response[:type] == 'ready'
+        # Open browser
+        open_browser(response[:url])
+
+        # Push the pick UI
+        dsl = Canvas::Helpers.pick_dsl(title, choices)
+        Canvas::Client.send_message(
+          Canvas::Protocol::Messages.push(session_name, dsl)
+        )
+
+        # Wait for response
+        result = Canvas::Client.send_and_wait(
+          { type: 'subscribe', name: session_name },
+          event_type: 'event',
+          timeout: 300
+        )
+
+        # Close session
+        Canvas::Client.send_message(
+          Canvas::Protocol::Messages.close(session_name)
+        )
+
+        if result && result[:data]
+          choice = Canvas::Helpers.parse_pick_result(result[:data])
+          puts JSON.generate({ choice: choice })
+        else
+          $stderr.puts "Timeout or cancelled"
+          exit 1
+        end
+      else
+        $stderr.puts "Failed to create canvas session"
+        exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
+    # Quick confirmation dialog
+    # Usage: streamweaver confirm "Are you sure?"
+    def self.canvas_confirm(args)
+      message = args.first
+      yes_label = "Confirm"
+      no_label = "Cancel"
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver confirm \"Message\" [options]"
+        opts.on('--yes LABEL', 'Yes button label') { |l| yes_label = l }
+        opts.on('--no LABEL', 'No button label') { |l| no_label = l }
+      end
+
+      remaining = parser.parse(args)
+      message = remaining.first
+
+      unless message
+        $stderr.puts "Usage: streamweaver confirm \"Are you sure?\" [--yes LABEL] [--no LABEL]"
+        exit 1
+      end
+
+      require_relative 'canvas/client'
+      require_relative 'canvas/helpers'
+
+      # Generate session name
+      session_name = "confirm_#{Time.now.to_i}"
+
+      # Ensure bridge is running
+      Canvas::Client.ensure_bridge_running
+
+      # Create session
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.create(session_name)
+      )
+
+      if response && response[:type] == 'ready'
+        # Open browser
+        open_browser(response[:url])
+
+        # Push the confirm UI
+        dsl = Canvas::Helpers.confirm_dsl(message, yes_label: yes_label, no_label: no_label)
+        Canvas::Client.send_message(
+          Canvas::Protocol::Messages.push(session_name, dsl)
+        )
+
+        # Wait for response
+        result = Canvas::Client.send_and_wait(
+          { type: 'subscribe', name: session_name },
+          event_type: 'event',
+          timeout: 300
+        )
+
+        # Close session
+        Canvas::Client.send_message(
+          Canvas::Protocol::Messages.close(session_name)
+        )
+
+        if result && result[:data]
+          confirmed = Canvas::Helpers.parse_confirm_result(result[:data])
+          puts JSON.generate({ confirmed: confirmed })
+        else
+          $stderr.puts "Timeout or cancelled"
+          exit 1
+        end
+      else
+        $stderr.puts "Failed to create canvas session"
+        exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
     end
 
     # Bring terminal back to front after browser auto-closes
