@@ -52,6 +52,19 @@ module StreamWeaver
         close_live_session(args.first)
       when 'wait'
         wait_for_submission(args)
+      # Canvas commands (two-way IPC with Claude Code)
+      when 'canvas'
+        canvas_session(args)
+      when 'canvas-push'
+        canvas_push(args)
+      when 'canvas-wait'
+        canvas_wait(args)
+      when 'canvas-close'
+        canvas_close(args)
+      when 'canvas-list'
+        canvas_list
+      when 'canvas-stop'
+        canvas_stop
       when '--help', '-h', 'help'
         help
       when '--version', '-v'
@@ -567,6 +580,29 @@ module StreamWeaver
           echo "<h1>Hello!</h1>" | streamweaver push adventure
           streamweaver push adventure --html "<p>New paragraph</p>" --action append
           streamweaver push adventure --file scene.html --target "#story"
+
+        Canvas (Two-way IPC with Claude Code):
+          streamweaver canvas <name>              Create/connect to canvas session
+          streamweaver canvas-push <name>         Push DSL content (from stdin)
+          streamweaver canvas-wait <name>         Wait for user interaction
+          streamweaver canvas-close <name>        Close a canvas session
+          streamweaver canvas-list                List canvas sessions
+          streamweaver canvas-stop                Stop the canvas bridge
+
+        Canvas Examples:
+          # Create session and open browser
+          streamweaver canvas survey
+
+          # Push UI content
+          streamweaver canvas-push survey <<'RUBY'
+            header1 "Quick Survey"
+            radio_group :choice, ["A", "B", "C"]
+            button "Submit"
+          RUBY
+
+          # Wait for user input (returns JSON)
+          streamweaver canvas-wait survey
+          # => {"choice":"B"}
       HELP
     end
 
@@ -881,6 +917,195 @@ module StreamWeaver
       end
 
       view.new(mini_app.components, state, adapter).call
+    end
+
+    # =========================================
+    # Canvas Commands (Two-way IPC)
+    # =========================================
+
+    # Create or connect to a canvas session
+    def self.canvas_session(args)
+      session_name = args.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver canvas <session-name>"
+        exit 1
+      end
+
+      require_relative 'canvas/client'
+
+      # Ensure bridge is running
+      info = Canvas::Client.ensure_bridge_running
+      port = info[:port] || Canvas::Bridge::DEFAULT_PORT
+
+      # Create session
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.create(session_name)
+      )
+
+      if response && response[:type] == 'ready'
+        puts "Canvas session: #{session_name}"
+        puts "URL: #{response[:url]}"
+        puts ""
+        puts "Push content with:"
+        puts "  streamweaver canvas-push #{session_name} <<'RUBY'"
+        puts "    header1 'Hello'"
+        puts "    radio_group :choice, ['A', 'B', 'C']"
+        puts "    button 'Submit'"
+        puts "  RUBY"
+        puts ""
+        puts "Wait for user input:"
+        puts "  streamweaver canvas-wait #{session_name}"
+
+        open_browser(response[:url])
+      else
+        $stderr.puts "Error creating canvas session"
+        exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      $stderr.puts "Try: streamweaver canvas #{session_name}"
+      exit 1
+    end
+
+    # Push DSL content to a canvas session
+    def self.canvas_push(args)
+      session_name = args.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver canvas-push <session-name> < dsl.rb"
+        exit 1
+      end
+
+      # Read DSL from stdin
+      if $stdin.tty?
+        $stderr.puts "Usage: streamweaver canvas-push #{session_name} <<'RUBY'"
+        $stderr.puts "  header1 'Title'"
+        $stderr.puts "  text_field :name"
+        $stderr.puts "RUBY"
+        exit 1
+      end
+
+      dsl = $stdin.read.strip
+
+      require_relative 'canvas/client'
+
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.push(session_name, dsl)
+      )
+
+      # Push doesn't return a response, just succeeds
+      puts "Pushed to #{session_name}"
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    rescue Canvas::Client::ConnectionError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
+    # Wait for user interaction on a canvas session
+    def self.canvas_wait(args)
+      session_name = args.first
+      timeout = 300 # 5 minute default
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver canvas-wait <session-name> [options]"
+        opts.on('-t', '--timeout SECONDS', Integer, 'Timeout in seconds (default: 300)') { |t| timeout = t }
+      end
+
+      remaining = parser.parse(args)
+      session_name = remaining.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver canvas-wait <session-name> [--timeout SECONDS]"
+        exit 1
+      end
+
+      require_relative 'canvas/client'
+
+      # Wait for an event
+      result = Canvas::Client.send_and_wait(
+        { type: 'subscribe', name: session_name },
+        event_type: 'event',
+        timeout: timeout
+      )
+
+      if result
+        # Output the event data as JSON
+        puts JSON.generate(result[:data])
+      else
+        $stderr.puts "Timeout waiting for user interaction"
+        exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
+    # Close a canvas session
+    def self.canvas_close(args)
+      session_name = args.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver canvas-close <session-name>"
+        exit 1
+      end
+
+      require_relative 'canvas/client'
+
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.close(session_name)
+      )
+
+      if response && response[:type] == 'closed'
+        puts "Closed canvas session: #{session_name}"
+      else
+        $stderr.puts "Session not found: #{session_name}"
+        exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
+    # List all canvas sessions
+    def self.canvas_list
+      require_relative 'canvas/client'
+
+      unless Canvas::Client.bridge_running?
+        puts "Canvas bridge is not running"
+        return
+      end
+
+      response = Canvas::Client.send_message({ type: 'list' })
+
+      if response && response[:sessions]
+        sessions = response[:sessions]
+        if sessions.empty?
+          puts "No canvas sessions"
+        else
+          puts "Canvas sessions:"
+          sessions.each do |s|
+            puts "  #{s[:name]} - #{s[:websocket_count]} connections"
+          end
+        end
+      else
+        puts "No canvas sessions"
+      end
+    rescue Canvas::Client::NotRunningError
+      puts "Canvas bridge is not running"
+    end
+
+    # Stop the canvas bridge
+    def self.canvas_stop
+      require_relative 'canvas/client'
+
+      if Canvas::Client.stop_bridge
+        puts "Canvas bridge stopped"
+      else
+        puts "Canvas bridge is not running"
+      end
     end
 
     # Bring terminal back to front after browser auto-closes
