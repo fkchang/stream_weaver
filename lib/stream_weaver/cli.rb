@@ -42,6 +42,16 @@ module StreamWeaver
         eval_dsl(args)
       when 'prompt'
         prompt_ui(args)
+      when 'live'
+        live_session(args)
+      when 'push'
+        push_content(args)
+      when 'live-list'
+        list_live_sessions
+      when 'live-close'
+        close_live_session(args.first)
+      when 'wait'
+        wait_for_submission(args)
       when '--help', '-h', 'help'
         help
       when '--version', '-v'
@@ -535,7 +545,268 @@ module StreamWeaver
               select :priority, ["Low", "Medium", "High"]
             end.run_once!
           RUBY
+
+        Live Sessions (update-in-place via SSE):
+          streamweaver live <name>              Open a persistent live session
+          streamweaver push <name> [options]    Push content to a live session
+          streamweaver live-list                List all live sessions
+          streamweaver live-close <name>        Close a live session
+
+        Push Options:
+          --target SELECTOR                     CSS selector (default: #main)
+          --action ACTION                       replace, append, prepend (default: replace)
+          --file FILE                           Read content from file
+          --html HTML                           HTML content directly
+          (or pipe content via stdin)
+
+        Live Session Examples:
+          # Open a persistent session
+          streamweaver live adventure
+
+          # Push content to it
+          echo "<h1>Hello!</h1>" | streamweaver push adventure
+          streamweaver push adventure --html "<p>New paragraph</p>" --action append
+          streamweaver push adventure --file scene.html --target "#story"
       HELP
+    end
+
+    # =========================================
+    # Live Session Commands
+    # =========================================
+
+    # Open a live session in browser
+    def self.live_session(args)
+      session_name = args.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver live <session-name>"
+        exit 1
+      end
+
+      ensure_service_running
+      port = service_port
+
+      # Create session via API (will be created on first connection anyway)
+      url = "http://localhost:#{port}/live/#{URI.encode_www_form_component(session_name)}"
+
+      puts "Opening live session: #{session_name}"
+      puts "URL: #{url}"
+      puts ""
+      puts "Push content with:"
+      puts "  echo '<h1>Hello</h1>' | streamweaver push #{session_name}"
+      puts "  streamweaver push #{session_name} --html '<p>Content</p>'"
+      puts ""
+
+      open_browser(url)
+    end
+
+    # Push content to a live session
+    def self.push_content(args)
+      session_name = nil
+      target = '#main'
+      action = 'replace'
+      content = nil
+      is_dsl = false
+
+      stdin_dsl = false
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver push <session-name> [options]"
+        opts.on('-t', '--target SELECTOR', 'CSS selector (default: #main)') { |t| target = t }
+        opts.on('-a', '--action ACTION', 'replace, append, prepend (default: replace)') { |a| action = a }
+        opts.on('-f', '--file FILE', 'Read content from file') { |f| content = File.read(f) }
+        opts.on('-h', '--html HTML', 'HTML content directly') { |h| content = h }
+        opts.on('-d', '--dsl DSL', 'StreamWeaver DSL to render') { |d| content = d; is_dsl = true }
+        opts.on('--dsl-file FILE', 'StreamWeaver DSL from file') { |f| content = File.read(f); is_dsl = true }
+        opts.on('--stdin-dsl', 'Read DSL from stdin') { stdin_dsl = true; is_dsl = true }
+      end
+
+      remaining = parser.parse(args)
+      session_name = remaining.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver push <session-name> [options]"
+        $stderr.puts ""
+        $stderr.puts "Options:"
+        $stderr.puts "  -t, --target SELECTOR   CSS selector (default: #main)"
+        $stderr.puts "  -a, --action ACTION     replace, append, prepend (default: replace)"
+        $stderr.puts "  -f, --file FILE         Read content from file"
+        $stderr.puts "  -h, --html HTML         HTML content directly"
+        $stderr.puts "  -d, --dsl DSL           StreamWeaver DSL to render"
+        $stderr.puts "  --dsl-file FILE         StreamWeaver DSL from file"
+        $stderr.puts "  --stdin-dsl             Read DSL from stdin"
+        $stderr.puts ""
+        $stderr.puts "Examples:"
+        $stderr.puts "  echo '<h1>Hello</h1>' | streamweaver push my-session"
+        $stderr.puts "  streamweaver push my-session --dsl 'header1 \"Title\"; text \"Hello\"'"
+        $stderr.puts "  cat scene.rb | streamweaver push my-session --stdin-dsl"
+        exit 1
+      end
+
+      # Read from stdin if no content provided or if --stdin-dsl
+      if content.nil? || stdin_dsl
+        if $stdin.tty? && content.nil?
+          $stderr.puts "Error: No content provided. Use --html, --dsl, --file, --stdin-dsl, or pipe via stdin."
+          exit 1
+        end
+        content = $stdin.read if content.nil? || stdin_dsl
+      end
+
+      # Render DSL to HTML if needed
+      if is_dsl
+        content = render_dsl_to_html(content, session_name: session_name)
+      end
+
+      # Ensure service is running
+      unless Service.service_running?
+        $stderr.puts "Error: StreamWeaver service not running. Start with: streamweaver live #{session_name}"
+        exit 1
+      end
+
+      port = service_port
+
+      # POST to the push endpoint
+      uri = URI("http://localhost:#{port}/live/#{URI.encode_www_form_component(session_name)}/push")
+      req = Net::HTTP::Post.new(uri)
+      req.set_form_data(
+        'target' => target,
+        'action' => action,
+        'content' => content
+      )
+
+      begin
+        response = Net::HTTP.start(uri.hostname, uri.port, open_timeout: 5, read_timeout: 10) { |http| http.request(req) }
+
+        if response.is_a?(Net::HTTPSuccess)
+          result = JSON.parse(response.body)
+          puts "Pushed to #{result['session']} #{result['target']} (#{result['action']})"
+        else
+          $stderr.puts "Error: #{response.body}"
+          exit 1
+        end
+      rescue => e
+        $stderr.puts "Error: #{e.message}"
+        exit 1
+      end
+    end
+
+    # List all live sessions
+    def self.list_live_sessions
+      unless Service.service_running?
+        puts "StreamWeaver service is not running"
+        return
+      end
+
+      port = service_port
+      uri = URI("http://localhost:#{port}/api/live")
+
+      begin
+        response = Net::HTTP.get_response(uri)
+        if response.is_a?(Net::HTTPSuccess)
+          data = JSON.parse(response.body)
+          sessions = data['sessions'] || []
+
+          if sessions.empty?
+            puts "No live sessions"
+          else
+            puts "Live Sessions:"
+            sessions.each do |s|
+              age = Utils.format_duration((Time.now - Time.parse(s['created_at'])).to_i) rescue 'unknown'
+              last_push = s['last_push'] ? Utils.format_duration((Time.now - Time.parse(s['last_push'])).to_i) + ' ago' : 'never'
+              puts "  #{s['name']} - created #{age} ago, last push: #{last_push}"
+            end
+          end
+        else
+          puts "Error: #{response.body}"
+        end
+      rescue => e
+        puts "Error: #{e.message}"
+      end
+    end
+
+    # Close a live session
+    def self.close_live_session(session_name)
+      unless session_name
+        $stderr.puts "Usage: streamweaver live-close <session-name>"
+        exit 1
+      end
+
+      unless Service.service_running?
+        puts "StreamWeaver service is not running"
+        return
+      end
+
+      port = service_port
+      uri = URI("http://localhost:#{port}/live/#{URI.encode_www_form_component(session_name)}")
+      req = Net::HTTP::Delete.new(uri)
+
+      begin
+        response = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(req) }
+        result = JSON.parse(response.body)
+
+        if result['success']
+          puts result['message']
+        else
+          puts "Error: #{result['error']}"
+        end
+      rescue => e
+        puts "Error: #{e.message}"
+      end
+    end
+
+    # Wait for a submission from a live session
+    def self.wait_for_submission(args)
+      session_name = args.first
+      timeout = 300  # 5 minute default timeout
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver wait <session-name> [options]"
+        opts.on('-t', '--timeout SECONDS', Integer, 'Timeout in seconds (default: 300)') { |t| timeout = t }
+      end
+
+      remaining = parser.parse(args)
+      session_name = remaining.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver wait <session-name> [--timeout SECONDS]"
+        exit 1
+      end
+
+      unless Service.service_running?
+        $stderr.puts "Error: StreamWeaver service not running"
+        exit 1
+      end
+
+      port = service_port
+      start_time = Time.now
+
+      # Poll for submissions
+      loop do
+        if Time.now - start_time > timeout
+          $stderr.puts "Timeout waiting for submission"
+          exit 1
+        end
+
+        uri = URI("http://localhost:#{port}/live/#{URI.encode_www_form_component(session_name)}/submissions")
+
+        begin
+          response = Net::HTTP.get_response(uri)
+          if response.is_a?(Net::HTTPSuccess)
+            data = JSON.parse(response.body)
+            submissions = data['submissions'] || []
+
+            if submissions.any?
+              # Return the first submission as JSON
+              puts JSON.generate(submissions.first['data'])
+              return
+            end
+          end
+        rescue => e
+          $stderr.puts "Poll error: #{e.message}"
+        end
+
+        sleep 0.5  # Poll every 500ms
+      end
     end
 
     private
@@ -576,6 +847,40 @@ module StreamWeaver
       when /mswin|msys|mingw|cygwin|bccwin|wince|emc/
         system('start', url)
       end
+    end
+
+    # Render StreamWeaver DSL to HTML
+    # @param dsl_code [String] StreamWeaver DSL code (e.g., "header1 'Title'; text 'Hello'")
+    # @param session_name [String] Live session name for URL routing
+    # @return [String] Rendered HTML
+    def self.render_dsl_to_html(dsl_code, session_name: nil)
+      # Create a mini app to evaluate the DSL
+      mini_app = StreamWeaver::App.new("Live Push")
+
+      # Evaluate the DSL in the context of the app
+      mini_app.instance_eval(dsl_code)
+
+      # Create adapter with URL prefix for live session submit
+      url_prefix = session_name ? "/live/#{session_name}" : "/live"
+      adapter = StreamWeaver::Adapter::AlpineJS.new(url_prefix: url_prefix)
+
+      # Render components to HTML using a Phlex view with adapter
+      state = {}
+      view = Class.new(Phlex::HTML) do
+        attr_reader :adapter
+
+        define_method(:initialize) do |components, st, adp|
+          @components = components
+          @state = st
+          @adapter = adp
+        end
+
+        define_method(:view_template) do
+          @components.each { |c| c.render(self, @state) }
+        end
+      end
+
+      view.new(mini_app.components, state, adapter).call
     end
 
     # Bring terminal back to front after browser auto-closes

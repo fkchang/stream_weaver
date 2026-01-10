@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'sinatra/base'
+require 'sinatra/streaming'
 require 'securerandom'
 require 'json'
 require 'socket'
@@ -10,6 +11,8 @@ module StreamWeaver
   # Multi-app service that renders StreamWeaver apps without per-app process management.
   # CLI spawns this service if needed, then sends commands to load apps.
   class Service < Sinatra::Base
+    helpers Sinatra::Streaming
+
     enable :sessions
     set :session_secret, ENV.fetch('SESSION_SECRET') {
       'stream-weaver-service-development-secret-key-minimum-64-characters-for-security'
@@ -27,6 +30,70 @@ module StreamWeaver
 
       def apps
         @apps ||= {}
+      end
+
+      # =========================================
+      # Live Sessions (polling-based update-in-place)
+      # =========================================
+
+      def live_sessions
+        @live_sessions ||= {}
+      end
+
+      def get_or_create_live_session(name)
+        live_sessions[name] ||= {
+          content: {},  # { target => { html:, action:, timestamp: } }
+          submissions: [],  # Array of form submissions waiting for Claude to read
+          created_at: Time.now,
+          last_push: nil
+        }
+      end
+
+      # Store a form submission for Claude to retrieve
+      def add_live_submission(name, data)
+        session = live_sessions[name]
+        return false unless session
+        session[:submissions] << {
+          data: data,
+          timestamp: (Time.now.to_f * 1000).to_i
+        }
+        true
+      end
+
+      # Get pending submissions (Claude polls this)
+      def get_live_submissions(name, clear: true)
+        session = live_sessions[name]
+        return [] unless session
+        submissions = session[:submissions].dup
+        session[:submissions].clear if clear
+        submissions
+      end
+
+      def push_to_live_session(name, target:, content:, action: :replace)
+        session = live_sessions[name]
+        return false unless session
+
+        session[:content][target] = {
+          html: content,
+          action: action,
+          timestamp: (Time.now.to_f * 1000).to_i
+        }
+        session[:last_push] = Time.now
+        true
+      end
+
+      def remove_live_session(name)
+        live_sessions.delete(name) ? true : false
+      end
+
+      def list_live_sessions
+        live_sessions.map do |name, session|
+          {
+            name: name,
+            created_at: session[:created_at],
+            last_push: session[:last_push]
+          }
+        end
       end
 
       # Load an app from a file path and register it
@@ -202,6 +269,11 @@ module StreamWeaver
           puts "Setting port to #{port}..."
           StreamWeaver::Service.set :port, #{port}
           StreamWeaver::Service.set :bind, '127.0.0.1'
+
+          # Configure Puma for SSE (more threads to handle long-lived connections)
+          StreamWeaver::Service.set :server_settings, {
+            :Threads => '5:20'  # Min 5, max 20 threads for SSE support
+          }
 
           # Write PID file
           puts "Writing PID file..."
@@ -399,6 +471,273 @@ module StreamWeaver
         }
       end
       { apps: apps_list }.to_json
+    end
+
+    # =========================================
+    # Live Sessions (SSE-based update-in-place)
+    # =========================================
+
+    # Create or get a live session and serve the live page
+    get '/live/:session_name' do
+      session_name = params[:session_name]
+      self.class.get_or_create_live_session(session_name)
+
+      content_type 'text/html'
+      <<~HTML
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>StreamWeaver Live: #{Rack::Utils.escape_html(session_name)}</title>
+          <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+          <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap">
+          <style>
+            :root {
+              --color-bg: #1a1a1a;
+              --color-text: #e0e0e0;
+              --color-accent: #c2410c;
+              --color-muted: #666;
+              --font-family: 'Source Sans 3', system-ui, sans-serif;
+            }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            body {
+              font-family: var(--font-family);
+              background: var(--color-bg);
+              color: var(--color-text);
+              min-height: 100vh;
+              padding: 1rem;
+            }
+            .sw-live-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              padding: 0.5rem 1rem;
+              background: rgba(255,255,255,0.05);
+              border-radius: 8px;
+              margin-bottom: 1rem;
+              font-size: 0.875rem;
+            }
+            .sw-live-status {
+              display: flex;
+              align-items: center;
+              gap: 0.5rem;
+            }
+            .sw-live-dot {
+              width: 8px;
+              height: 8px;
+              border-radius: 50%;
+              background: var(--color-accent);
+              animation: pulse 2s infinite;
+            }
+            @keyframes pulse {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0.4; }
+            }
+            .sw-live-content {
+              min-height: calc(100vh - 6rem);
+            }
+            #main {
+              /* Default main content area */
+            }
+            /* Basic StreamWeaver component styles */
+            .btn { padding: 0.6rem 1.2rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
+            .btn-primary { background: var(--color-accent); color: white; }
+            .btn-primary:hover { background: #a63609; }
+            .btn-secondary { background: rgba(255,255,255,0.1); color: var(--color-text); }
+            input[type="text"], textarea, select {
+              background: rgba(255,255,255,0.05);
+              border: 1px solid rgba(255,255,255,0.1);
+              color: var(--color-text);
+              padding: 0.5rem;
+              border-radius: 4px;
+              width: 100%;
+              margin: 0.25rem 0;
+            }
+            input[type="text"]:focus, textarea:focus { border-color: var(--color-accent); outline: none; }
+            h1, h2, h3, h4 { margin: 0.5rem 0; }
+            p { margin: 0.25rem 0; }
+            .sw-radio-group { margin: 0.5rem 0; }
+            .sw-radio-option { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0; cursor: pointer; }
+            .sw-radio-option input { cursor: pointer; }
+          </style>
+        </head>
+        <body>
+          <div class="sw-live-header">
+            <div class="sw-live-status">
+              <span class="sw-live-dot"></span>
+              <span>Live: #{Rack::Utils.escape_html(session_name)}</span>
+            </div>
+            <span id="sw-connection-status">Connecting...</span>
+          </div>
+          <div class="sw-live-content">
+            <div id="app-container">
+              <div id="main">
+                <p style="color: var(--color-muted);">Waiting for content...</p>
+              </div>
+            </div>
+          </div>
+
+          <script>
+            (function() {
+              const sessionName = #{session_name.to_json};
+              const statusEl = document.getElementById('sw-connection-status');
+              let lastTs = 0;
+
+              async function poll() {
+                try {
+                  const r = await fetch('/live/' + encodeURIComponent(sessionName) + '/poll?since=' + lastTs);
+                  const d = await r.json();
+                  statusEl.textContent = 'Connected';
+                  statusEl.style.color = '#22c55e';
+                  d.updates.forEach(u => {
+                    const el = document.querySelector(u.target);
+                    if (el) {
+                      if (u.action === 'replace') el.innerHTML = u.html;
+                      else if (u.action === 'append') el.insertAdjacentHTML('beforeend', u.html);
+                      else if (u.action === 'prepend') el.insertAdjacentHTML('afterbegin', u.html);
+                    }
+                  });
+                  lastTs = d.timestamp;
+                } catch(e) {
+                  statusEl.textContent = 'Reconnecting...';
+                  statusEl.style.color = '#eab308';
+                }
+                setTimeout(poll, 300);
+              }
+              poll();
+            })();
+          </script>
+        </body>
+        </html>
+      HTML
+    end
+
+    # Polling endpoint for live session updates
+    get '/live/:session_name/poll' do
+      content_type :json
+      session_name = params[:session_name]
+      since = params[:since]&.to_i || 0
+
+      session = self.class.get_or_create_live_session(session_name)
+
+      updates = []
+      session[:content].each do |target, data|
+        updates << { target: target, action: data[:action], html: data[:html] } if data[:timestamp] > since
+      end
+
+      { updates: updates, timestamp: (Time.now.to_f * 1000).to_i }.to_json
+    end
+
+    # Push content to a live session
+    post '/live/:session_name/push' do
+      content_type :json
+      session_name = params[:session_name]
+      target = params[:target] || '#main'
+      action = (params[:action] || 'replace').to_sym
+      html_content = params[:content] || request.body.read
+
+      # Ensure session exists
+      self.class.get_or_create_live_session(session_name)
+
+      if self.class.push_to_live_session(session_name, target: target, content: html_content, action: action)
+        { success: true, session: session_name, target: target, action: action }.to_json
+      else
+        status 404
+        { success: false, error: "Session not found: #{session_name}" }.to_json
+      end
+    end
+
+    # List live sessions
+    get '/api/live' do
+      content_type :json
+      { sessions: self.class.list_live_sessions }.to_json
+    end
+
+    # Update from live session (text field changes, etc.)
+    post '/live/:session_name/update' do
+      # For live sessions, just acknowledge the update - no re-render needed
+      # The polling will pick up any content changes
+      content_type 'text/html'
+      ''  # Return empty - HTMX will do nothing with empty response
+    end
+
+    # Button action from live session
+    post '/live/:session_name/action/:button_id' do
+      content_type 'text/html'
+      session_name = params[:session_name]
+      button_id = params[:button_id]
+
+      # Collect all form data
+      excluded = %w[splat captures session_name button_id]
+      form_data = { _button: button_id }
+      params.each do |key, value|
+        next if excluded.include?(key)
+        form_data[key.to_sym] = case value
+        when "on", "true" then true
+        when "false" then false
+        else value
+        end
+      end
+
+      self.class.add_live_submission(session_name, form_data)
+
+      # Return HTML confirmation (HTMX will swap this into #app-container)
+      '<div id="main"><p style="color: #22c55e; padding: 1rem; text-align: center;">Submitted! Waiting for response...</p></div>'
+    end
+
+    # Submit form data from live session (user interactions)
+    post '/live/:session_name/submit' do
+      content_type :json
+      session_name = params[:session_name]
+
+      # Collect all form data
+      excluded = %w[splat captures session_name]
+      form_data = {}
+      params.each do |key, value|
+        next if excluded.include?(key)
+        form_data[key.to_sym] = case value
+        when "on", "true" then true
+        when "false" then false
+        else value
+        end
+      end
+
+      self.class.add_live_submission(session_name, form_data)
+
+      # Return confirmation and push a "submitted" message
+      self.class.push_to_live_session(
+        session_name,
+        target: '#main',
+        content: '<p style="color: #22c55e; padding: 1rem;">Submitted! Waiting for response...</p>',
+        action: :replace
+      )
+
+      { success: true, data: form_data }.to_json
+    end
+
+    # Get pending submissions (Claude polls this)
+    get '/live/:session_name/submissions' do
+      content_type :json
+      session_name = params[:session_name]
+      clear = params[:clear] != 'false'
+
+      submissions = self.class.get_live_submissions(session_name, clear: clear)
+      { submissions: submissions }.to_json
+    end
+
+    # Remove a live session
+    delete '/live/:session_name' do
+      content_type :json
+      session_name = params[:session_name]
+
+      if self.class.remove_live_session(session_name)
+        { success: true, message: "Session '#{session_name}' removed" }.to_json
+      else
+        status 404
+        { success: false, error: "Session not found: #{session_name}" }.to_json
+      end
     end
 
     # =========================================
