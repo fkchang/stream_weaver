@@ -18,12 +18,20 @@ module StreamWeaver
     #     button "Submit" { |state| puts state[:name] }
     #   end
     class AlpineJS < Base
-      attr_reader :url_prefix
+      attr_reader :url_prefix, :mode
 
       # Initialize with optional URL prefix for service mode
       # @param url_prefix [String] URL prefix for all endpoints (e.g., "/apps/abc123")
-      def initialize(url_prefix: "")
+      # @param mode [Symbol] :http (default) for HTMX, :websocket for WebSocket canvas mode
+      def initialize(url_prefix: "", mode: :http)
         @url_prefix = url_prefix
+        @mode = mode
+      end
+
+      # Check if adapter is in WebSocket mode
+      # @return [Boolean]
+      def websocket_mode?
+        @mode == :websocket
       end
 
       # Generate URL with prefix
@@ -306,6 +314,25 @@ module StreamWeaver
               end
             end
           end
+        elsif websocket_mode?
+          # WebSocket mode: use @change to send via WebSocket
+          current_value = state[key]
+
+          view.div(class: "radio-group") do
+            choices.each do |choice|
+              view.label(class: "radio-option") do
+                view.input(
+                  type: "radio",
+                  name: key.to_s,
+                  value: choice,
+                  checked: current_value == choice,
+                  "x-model" => key.to_s,
+                  "@change" => "sendEvent('change', {field: '#{key}', value: '#{choice}', state: getFormState()})"
+                )
+                view.span { choice }
+              end
+            end
+          end
         else
           # Standalone: immediate HTMX sync on change
           current_value = state[key]
@@ -421,6 +448,14 @@ module StreamWeaver
           attrs[:class] = button_class if button_class
           attrs[:style] = inline_style if inline_style
           view.button(**attrs) { label }
+        elsif websocket_mode?
+          # WebSocket mode: use Alpine.js @click to send via WebSocket
+          attrs = {
+            "@click" => "sendEvent('action', {button: '#{button_id}', state: getFormState()})"
+          }
+          attrs[:class] = button_class if button_class
+          attrs[:style] = inline_style if inline_style
+          view.button(**attrs) { label }
         elsif modal_context
           # Inside a modal: close via Alpine before HTMX request fires
           # hx-on::before-request runs before HTMX sends, allowing Alpine to close modal
@@ -459,6 +494,12 @@ module StreamWeaver
 
         state.each do |key, value|
           state_data[key.to_s] = value
+        end
+
+        if websocket_mode?
+          # Add WebSocket-related data for canvas mode
+          state_data['wsConnected'] = false
+          state_data['wsReconnecting'] = false
         end
 
         { "x-data" => JSON.generate(state_data) }
@@ -521,10 +562,106 @@ module StreamWeaver
       #
       # @return [Array<String>] Array of HTML script tags
       def cdn_scripts
-        [
+        scripts = [
           '<script src="https://unpkg.com/htmx.org@2.0.4"></script>',
           '<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>'
         ]
+
+        if websocket_mode?
+          scripts << websocket_init_script
+        end
+
+        scripts
+      end
+
+      # Generate WebSocket initialization script for canvas mode
+      # @return [String] Script tag with WebSocket setup
+      def websocket_init_script
+        <<~HTML
+          <script>
+            // StreamWeaver Canvas WebSocket
+            (function() {
+              let ws = null;
+              let reconnectAttempts = 0;
+              const maxReconnectAttempts = 5;
+
+              function connect() {
+                const wsUrl = 'ws://' + window.location.host + '#{@url_prefix}/ws';
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = function() {
+                  console.log('StreamWeaver Canvas connected');
+                  reconnectAttempts = 0;
+                  if (typeof Alpine !== 'undefined') {
+                    const container = document.getElementById('app-container');
+                    if (container) {
+                      const data = Alpine.$data(container);
+                      if (data) {
+                        data.wsConnected = true;
+                        data.wsReconnecting = false;
+                      }
+                    }
+                  }
+                };
+
+                ws.onmessage = function(event) {
+                  const msg = JSON.parse(event.data);
+                  if (msg.type === 'update' && msg.html) {
+                    const container = document.getElementById('app-container');
+                    if (container) container.innerHTML = msg.html;
+                  } else if (msg.type === 'closed') {
+                    ws.close();
+                  }
+                };
+
+                ws.onclose = function() {
+                  console.log('StreamWeaver Canvas disconnected');
+                  if (typeof Alpine !== 'undefined') {
+                    const container = document.getElementById('app-container');
+                    if (container) {
+                      const data = Alpine.$data(container);
+                      if (data) data.wsConnected = false;
+                    }
+                  }
+                  // Attempt reconnect
+                  if (reconnectAttempts < maxReconnectAttempts) {
+                    reconnectAttempts++;
+                    setTimeout(connect, 1000 * reconnectAttempts);
+                  }
+                };
+              }
+
+              // Global functions for components
+              window.sendEvent = function(type, data) {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: type, ...data }));
+                }
+              };
+
+              window.getFormState = function() {
+                const state = {};
+                document.querySelectorAll('[x-model]').forEach(el => {
+                  const key = el.getAttribute('x-model');
+                  if (el.type === 'checkbox') {
+                    state[key] = el.checked;
+                  } else if (el.type === 'radio') {
+                    if (el.checked) state[key] = el.value;
+                  } else {
+                    state[key] = el.value;
+                  }
+                });
+                return state;
+              };
+
+              // Connect when DOM is ready
+              if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', connect);
+              } else {
+                connect();
+              }
+            })();
+          </script>
+        HTML
       end
 
       # Render CDN scripts for Alpine.js and HTMX using Phlex methods
