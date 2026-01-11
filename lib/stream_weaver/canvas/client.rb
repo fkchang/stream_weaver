@@ -31,7 +31,9 @@ module StreamWeaver
         def bridge_running?
           return false unless File.exist?(pid_file_path)
 
-          pid = File.read(pid_file_path).strip.to_i
+          content = File.read(pid_file_path)
+          # Parse pid=VALUE format
+          pid = content[/pid=(\d+)/, 1]&.to_i || content.strip.to_i
           return false if pid.zero?
 
           # Check if process exists
