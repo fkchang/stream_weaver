@@ -1,1184 +1,276 @@
-# StreamWeaver - LLM Reference Guide
+# StreamWeaver - LLM Quick Reference
 
-StreamWeaver is a Ruby DSL for building reactive web UIs with minimal code. Think "Streamlit for Ruby" - declarative, state-driven, and instantly runnable.
+StreamWeaver is a Ruby DSL for building reactive web UIs with minimal code. Think "Streamlit for Ruby".
 
-## Quick Start
+## CRITICAL: Auto-Port and Auto-Browser
 
-```ruby
-require 'stream_weaver'
+**StreamWeaver automatically:**
+1. **Finds a free port** - Does NOT use a fixed port. Scans from 4567 upward.
+2. **Opens the browser** - You do NOT need to open it manually.
+3. **Prints the URL to stdout** - Read terminal output to get the actual port.
 
-app "My App" do
-  text_field :name, placeholder: "Your name"
-
-  if state[:name] && !state[:name].empty?
-    text "Hello, #{state[:name]}!"
-  end
-end.run!
+**NEVER assume port 4567.** The actual port is printed to stdout:
 ```
+╔═══════════════════════════════════════════════════════════════╗
+║              StreamWeaver App Running                          ║
+╚═══════════════════════════════════════════════════════════════╝
 
-Run with `ruby my_app.rb` — the browser opens automatically.
-
-### Zero-Config Multi-App Development
-
-**Unique perk:** StreamWeaver automatically finds a free port and opens a browser tab for each app. This means you can run multiple StreamWeaver apps simultaneously without port conflicts or manual configuration:
-
-```bash
-# Terminal 1
-ruby app_one.rb    # Opens browser at http://localhost:4567
-
-# Terminal 2
-ruby app_two.rb    # Opens browser at http://localhost:4568 (auto-detected)
-
-# Terminal 3
-ruby app_three.rb  # Opens browser at http://localhost:4569 (auto-detected)
-```
-
-No need to specify ports, no conflicts, no manual browser opening. Just run and go.
-
-### Service Mode (CLI)
-
-StreamWeaver has two execution modes:
-
-**1. Standalone (`ruby app.rb`)** - Each script runs its own server
-- Use for: Quick utilities, prototyping, learning, agentic `run_once!`
-- Auto-detects free port (4567, 4568, etc.)
-
-**2. Service Mode (`streamweaver app.rb`)** - Single background service, multiple apps
-- Use for: Multiple apps side-by-side, tutorials, examples browser, development sessions
-- All apps on port 4575 at unique URLs
-
-```bash
-# Learning StreamWeaver
-streamweaver tutorial         # Interactive tutorial
-streamweaver showcase         # Browse all examples
-
-# Run apps via service
-streamweaver examples/basic/hello_world.rb
-streamweaver run --name "My Survey" form_demo.rb
-
-# Manage apps
-streamweaver list             # List loaded apps
-streamweaver remove <app_id>  # Remove specific app
-streamweaver clear            # Remove all apps
-streamweaver admin            # Admin dashboard
-
-# Service management
-streamweaver status           # Show service status
-streamweaver stop             # Stop background service
-```
-
-Each app gets a unique URL (`/apps/:app_id`). The tutorial and examples browser use service mode internally - clicking "Run" loads your code into the service for live testing.
-
-**For AI agents:** The running URL is printed to stdout, so Claude Code can read the terminal output to know the exact port if needed for testing or automation:
-
-```
-╔═══════════════════════════════════════════════════════════╗
-║              StreamWeaver App Running                    ║
-╚═══════════════════════════════════════════════════════════╝
-
-  🌐  http://localhost:4568
+  🌐  http://localhost:4572    ← READ THIS, don't assume 4567!
   📱  My App
 
   Press Ctrl+C to stop
 ```
 
-## Core Concepts
+**For AI agents:** Parse the terminal output after `ruby app.rb` to find the actual URL.
 
-### 1. The `app` Block
-Everything lives inside an `app` block. The block is re-evaluated on every state change, enabling reactive UI.
+## THE KEY INSIGHT
 
-```ruby
-app "Title" do
-  # Components go here
-  # Access state via state[:key]
-end
-```
+**Your Ruby DSL block RE-EXECUTES on every user interaction.**
 
-#### Layout Modes
-Control container width with the `layout:` parameter:
-
-```ruby
-app "Wide App", layout: :wide do
-  # Content in wider container
-end
-```
-
-Available modes:
-- `:default` — 900px container (mobile-friendly default)
-- `:wide` — 1100px container (more breathing room)
-- `:full` — 1400px container (desktop displays)
-- `:fluid` — 100% width (full browser width with padding)
-
-#### Theming
-
-Control visual density and styling with the `theme:` parameter:
-
-```ruby
-app "Dashboard", theme: :dashboard do
-  # Data-dense UI with tighter spacing
-end
-
-app "Article", theme: :document do
-  # Reading-optimized with serif font
-end
-```
-
-Built-in themes:
-- `:default` — Warm Industrial (Source Sans 3, 17px, generous spacing)
-- `:dashboard` — Data Dense (15px, tighter spacing, minimal card accents)
-- `:document` — Reading Mode (Crimson Pro serif, 19px, paper background)
-
-Custom themes:
-
-```ruby
-# Register before creating app
-StreamWeaver.register_theme :corporate, {
-  color_primary: "#0066cc",
-  font_family: "'Inter', system-ui, sans-serif",
-  spacing_md: "1rem"
-}, base: :dashboard, label: "Corporate", description: "Brand theme"
-
-app "My App", theme: :corporate do
-  # Uses custom theme
-end
-```
-
-Runtime theme switching:
-
-```ruby
-app "App" do
-  theme_switcher  # Dropdown to switch themes live
-end
-```
-
-### 2. State
-State is a hash accessed via `state[:key]`. Components automatically bind to state keys. State persists across re-renders.
+- User types in a field → entire block runs again with updated `state[:field]`
+- User clicks a button → callback runs, then entire block runs again
+- This creates reactive UI without you writing any event handling code
 
 ```ruby
 app "Counter" do
-  button "Increment" do |state|
-    state[:count] ||= 0
-    state[:count] += 1
-  end
+  # This ENTIRE block runs on EVERY interaction
+  state[:count] ||= 0
 
-  text "Count: #{state[:count] || 0}"
+  text "Count: #{state[:count]}"
+
+  button "+" do |s|
+    s[:count] += 1   # Modifies state, triggers re-run
+  end
+end.run!
+```
+
+## Minimal Example
+
+```ruby
+require 'stream_weaver'
+
+app "Hello" do
+  text_field :name, placeholder: "Your name"
+
+  if state[:name].to_s.strip != ""
+    text "Hello, #{state[:name]}!"
+  end
+end.run!
+```
+
+Run: `ruby hello.rb` → browser opens automatically.
+
+## State
+
+State is a hash. Access with `state[:key]`. Components auto-bind to keys.
+
+```ruby
+text_field :email           # state[:email] = user input
+checkbox :agree, "I agree"  # state[:agree] = true/false
+select :color, ["Red", "Blue"]  # state[:color] = selected value
+
+# Read state anywhere
+if state[:agree]
+  text "You agreed!"
 end
 ```
 
-### 3. Conditional Rendering
-Since the block re-evaluates on state change, use normal Ruby conditionals:
+## Essential Components
 
+### Input
 ```ruby
-app "Login" do
-  if state[:logged_in]
-    text "Welcome back!"
-    button "Logout" { |s| s[:logged_in] = false }
-  else
-    text_field :username
-    button "Login" { |s| s[:logged_in] = true }
-  end
-end
+text_field :name, placeholder: "Name"
+text_area :bio, rows: 5
+checkbox :active, "Is active"
+select :role, ["Admin", "User"], default: "User"
+radio_group :choice, ["A", "B", "C"]
 ```
 
-## Components Reference
-
-### Text Display
-
+### Display
 ```ruby
-text "Plain paragraph"           # Literal text - what you type is what you get
-text "Value: #{state[:value]}"   # String interpolation works
-```
-
-### Headers
-
-```ruby
-header "Section Title"    # <h2> - default header level
-header1 "Page Title"      # <h1>
-header2 "Section"         # <h2>
-header3 "Subsection"      # <h3>
-header4 "Minor Section"   # <h4>
-header5 "Sub-subsection"  # <h5>
-header6 "Smallest"        # <h6>
-```
-
-### Markdown Content
-
-```ruby
-md "**Bold**, *italic*, and `code`"    # Full markdown parsing
-md "## Headers work too"               # Headers within markdown blocks
-markdown "Same as md"                  # Alias for md
-
-# Supported markdown:
-# - **bold** → <strong>
-# - *italic* → <em>
-# - `code` → <code>
-# - [link](url) → <a href="url">link</a>
-# - ## headers → <h2>
-```
-
-### Text Input
-
-```ruby
-text_field :key, placeholder: "Hint text"
-text_area :key, placeholder: "Multi-line", rows: 5
-
-# Disable auto-submit (for display-only or manual submission)
-text_field :key, placeholder: "Edit me", submit: false
-```
-
-### Selection
-
-```ruby
-# Dropdown
-select :color, ["Red", "Green", "Blue"]
-
-# Dropdown with default value
-select :priority, ["Low", "Medium", "High"], default: "Medium"
-
-# Radio buttons (all options visible)
-radio_group :answer, ["Option A", "Option B", "Option C"]
-
-# Disable auto-submit
-select :role, ["Admin", "User"], submit: false
-```
-
-### Boolean
-
-```ruby
-checkbox :agree, "I accept the terms"
-# state[:agree] will be true/false
-
-# Disable auto-submit
-checkbox :preview_flag, "Show preview", submit: false
-```
-
-### Checkbox Group (Multi-Select with Select All/None)
-
-```ruby
-# For batch selection (e.g., emails, files, items)
-checkbox_group :selected_items, select_all: "Select All", select_none: "Clear" do
-  items.each do |item|
-    item item.id do
-      text item.name
-      # Any components can be nested here
-    end
-  end
-end
-# state[:selected_items] = ["id1", "id3", ...] (array of selected values)
+text "Plain text with #{state[:value]}"
+md "**Bold** and *italic* markdown"
+header "Section Title"        # h2
+header1 "Page Title"          # h1
+header3 "Subsection"          # h3
 ```
 
 ### Buttons
-
 ```ruby
-button "Primary" do |state|
-  # Action when clicked
-  state[:clicked] = true
+button "Click Me" do |s|
+  s[:clicked] = true
+  s[:count] = (s[:count] || 0) + 1
 end
 
-button "Secondary", style: :secondary do |state|
-  # Secondary styling
+button "Secondary", style: :secondary do |s|
+  # ...
 end
-
-# Display-only button (no server request, for previews)
-button "Preview Button", submit: false
-button "Cancel", style: :secondary, submit: false
 ```
 
-### Layout Containers
-
+### Layout
 ```ruby
-# Generic div
-div class: "my-class" do
-  text "Nested content"
-  text_field :nested_field
-end
-
-# Card (styled container)
 card do
   header3 "Card Title"
-  text "Card content here"
+  text "Content"
 end
 
-# Structured card with header, body, footer
-card do
-  card_header "Card Title"
-  card_body do
-    text "Main content goes here"
-    text_field :field
-  end
-  card_footer do
-    button "Cancel", style: :secondary
-    button "Save"
-  end
-end
-```
-
-### Stacking Layouts (VStack / HStack)
-
-```ruby
-# Vertical stack with spacing
-vstack spacing: :lg do
-  text "Item 1"
-  text "Item 2"
-  text "Item 3"
+vstack spacing: :md do
+  text "Vertical"
+  text "Stack"
 end
 
-# VStack with dividers between items
-vstack spacing: :md, divider: true do
-  text "Item with divider below"
-  text "Another item"
+hstack spacing: :sm do
+  button "Left"
+  button "Right"
 end
 
-# Horizontal stack
-hstack spacing: :md, align: :center do
-  button "Action 1"
-  button "Action 2", style: :secondary
-end
-
-# HStack with justify (spread content)
-hstack justify: :between do
-  text "Left"
-  text "Right"
-end
-```
-
-Spacing options: `:xs`, `:sm`, `:md`, `:lg`, `:xl`
-Align options: `:start`, `:center`, `:end`
-Justify options (hstack only): `:start`, `:center`, `:end`, `:between`, `:around`
-
-### Grid Layouts
-
-```ruby
-# Fixed 3-column grid
-grid columns: 3, gap: :md do
-  card { text "Item 1" }
-  card { text "Item 2" }
-  card { text "Item 3" }
-end
-
-# Responsive grid: 1 col mobile, 2 tablet, 3 desktop
-grid columns: [1, 2, 3], gap: :lg do
-  items.each do |item|
-    card { text item.name }
-  end
-end
-```
-
-### Columns (Multi-Column Layout)
-
-Create multi-column layouts like Monica CRM's contact page with sidebar:
-
-```ruby
-# Equal-width columns (default)
-columns do
-  column do
-    text "Left column"
-  end
-  column do
-    text "Right column"
-  end
-end
-
-# Custom widths (Monica-style sidebar + main content)
 columns widths: ['30%', '70%'] do
-  column do
-    # Narrow sidebar with quick facts
-    header4 "Work"
-    text "Software Engineer at Company"
-
-    header4 "Location"
-    text "San Francisco, CA"
-
-    header4 "Contact"
-    text "email@example.com"
-  end
-
-  column do
-    # Wide main content area
-    collapsible "Context", expanded: true do
-      md "Background information here..."
-    end
-
-    collapsible "Key Facts" do
-      md "- Fact 1\n- Fact 2"
-    end
-  end
-end
-
-# Three equal columns
-columns do
-  column { card { text "Col 1" } }
-  column { card { text "Col 2" } }
-  column { card { text "Col 3" } }
-end
-
-# Custom gap between columns
-columns gap: "2rem" do
-  column { text "More space" }
-  column { text "Between columns" }
+  column { text "Sidebar" }
+  column { text "Main" }
 end
 ```
 
-Columns stack vertically on mobile (< 768px) for responsive design.
-
-### Collapsible Sections
-
-Expandable/collapsible content sections with click-to-toggle:
-
+### Modal
 ```ruby
-# Collapsed by default
-collapsible "Show Details" do
-  text "Hidden content revealed on click"
-  text "Can contain any components"
+button "Open" do |s|
+  s[:my_modal_open] = true
 end
 
-# Start expanded
-collapsible "View Context (127 words)", expanded: true do
-  text "This content is visible initially"
-end
-```
-
-### Form Blocks (Deferred Submission)
-
-Group multiple form elements for batch editing. Fields use client-side only state until submit - no server round-trips on each keystroke.
-
-```ruby
-form :edit_person do
-  text_field :name, placeholder: 'Name'
-  select :status, %w[active paused archived]
-  text_area :notes, placeholder: 'Notes...', rows: 3
-
-  submit 'Save' do |form_values|
-    # form_values = { name: "...", status: "...", notes: "..." }
-    # state[:edit_person] already updated at this point
-    api.save_person(form_values)  # optional side effects
-  end
-
-  cancel 'Cancel'  # resets to original values, no server request
-end
-```
-
-**Key behaviors:**
-- State stored as nested hash: `state[:edit_person][:name]` (Rails-style)
-- Form reads initial values from `state[:form_name]` - your app populates this before rendering
-- On submit: state auto-updates with form values, THEN submit block runs
-- On cancel: Alpine.js resets to original values (pure client-side, no server request)
-- Same DSL methods (`text_field`, `select`, etc.) work inside/outside forms - context determines behavior
-
-**Important:** Submit block is for side effects (API calls, logging), not state management. State is already updated when your block runs.
-
-```ruby
-# Typical pattern: load data into state, then render form
-if state[:selected_person_id]
-  person = Person.find(state[:selected_person_id])
-  state[:edit_person] = { name: person.name, status: person.status }
-end
-
-form :edit_person do
-  text_field :name
-  select :status, %w[active paused archived]
-  submit 'Save' do |form_values|
-    Person.update(state[:selected_person_id], form_values)
-  end
-end
-```
-
-### Tabs
-
-Tabbed navigation with persistent state:
-
-```ruby
-tabs :settings_tabs do
-  tab "General" do
-    text_field :app_name
-    checkbox :dark_mode, "Enable dark mode"
-  end
-
-  tab "Notifications" do
-    checkbox :email_notifications, "Email notifications"
-    checkbox :push_notifications, "Push notifications"
-  end
-
-  tab "Security" do
-    text "Security settings..."
-  end
-end
-# state[:settings_tabs] = 0 (active tab index, persisted)
-```
-
-Tab variants for different visual styles:
-
-```ruby
-tabs :demo, variant: :line do ... end        # Underline (default)
-tabs :demo, variant: :enclosed do ... end    # Boxed tabs
-tabs :demo, variant: :"soft-rounded" do ... end  # Pill-style tabs
-```
-
-### Breadcrumbs
-
-Navigation trails for hierarchical content:
-
-```ruby
-breadcrumbs do
-  crumb "Home", href: "/"
-  crumb "Products", href: "/products"
-  crumb "Electronics", href: "/products/electronics"
-  crumb "Laptops"  # Current page - no href
-end
-
-# Custom separator
-breadcrumbs separator: ">" do
-  crumb "Dashboard", href: "/dashboard"
-  crumb "Settings"
-end
-```
-
-### Dropdown Menu
-
-Click-triggered dropdown menus:
-
-```ruby
-dropdown do
-  trigger do
-    button "Actions"
-  end
-
-  menu do
-    menu_item "Edit" do |s|
-      s[:editing] = true
-    end
-    menu_item "Duplicate" do |s|
-      s[:items] << s[:items].last.dup
-    end
-    menu_divider
-    menu_item "Delete", style: :destructive do |s|
-      s[:items].pop
-    end
-  end
-end
-```
-
-### Modal Dialogs
-
-Overlay dialogs for confirmations, forms, and detailed content:
-
-```ruby
-# Open modal via button
-button "Open Settings" do |s|
-  s[:settings_open] = true
-end
-
-# Define modal (state key is :{name}_open)
-modal :settings, title: "Settings", size: :md do
-  text_field :setting_value
-  text "Configure your preferences here."
-
+modal :my_modal, title: "Dialog", size: :md do
+  text "Modal content"
   modal_footer do
-    button "Cancel", style: :secondary do |s|
-      s[:settings_open] = false
-    end
-    button "Save" do |s|
-      # save logic
-      s[:settings_open] = false
+    button "Close" do |s|
+      s[:my_modal_open] = false
     end
   end
 end
 ```
 
-Modal sizes: `:sm` (400px), `:md` (560px default), `:lg` (800px), `:xl` (1140px)
-
-Close methods: click backdrop, press Escape, or button action setting `s[:modal_key_open] = false`
-
-### Status Badge
-
-Display match indicators with reasoning:
-
+### Feedback
 ```ruby
-status_badge :strong, "Perfect tone match, Lovecraftian themes"
-status_badge :maybe, "Good genre fit, but reviews mention dark themes"
-status_badge :skip, "Heavy psychological suspense - not your preference"
+alert(variant: :success) { text "Saved!" }
+alert(variant: :error) { text "Failed!" }
+# variants: :info, :success, :warning, :error
 ```
-
-Renders visual indicators:
-- 🟢 **Strong** — reasoning text (green background)
-- 🟡 **Maybe** — reasoning text (yellow background)
-- 🔴 **Skip** — reasoning text (red background)
-
-### Tag Buttons
-
-Quick-select tags for categorization or elimination:
-
-```ruby
-# Default style
-tag_buttons :category, ["Fiction", "Non-fiction", "Mystery"]
-
-# Destructive style (for elimination actions)
-tag_buttons :eliminate_reason, ["Too dark", "Wrong genre", "Bad reviews"], style: :destructive
-# state[:eliminate_reason] = "too_dark" (normalized to lowercase with underscores)
-```
-
-Single-select: clicking a tag selects it and deselects others. Values are normalized (lowercase, spaces become underscores).
-
-### External Link Button
-
-Button that opens URL in new tab, optionally submitting form first:
-
-```ruby
-# Just open link (renders as styled <a> tag)
-external_link_button "View on Amazon", url: "https://amazon.com/dp/B0XXX"
-
-# Submit form AND open link (for agentic mode)
-external_link_button "Get it!", url: book[:amazon_url], submit: true
-```
-
-The `submit: true` option is useful in agentic mode where you want to record the user's selection before opening the external link.
-
-### Score Table
-
-Display metrics with color-coded scores and interpretations:
-
-```ruby
-score_table scores: [
-  { label: "Novelty", value: 8, max: 10 },
-  { label: "Quality", value: 5, max: 10 },
-  { label: "Impact", value: 3, max: 10 }
-]
-```
-
-Renders a table with Metric | Score | Meaning columns:
-- **Green** (score-high): ratio >= 70%
-- **Yellow** (score-medium): ratio 40-69%
-- **Red** (score-low): ratio < 40%
-
-Interpretations: Excellent (>=80%), Strong (>=70%), Moderate (>=50%), Weak (<50%)
-
-### Charts
-
-Data visualization using Chart.js (loaded via CDN only when charts are present):
-
-```ruby
-# Bar charts
-bar_chart data: { calendar: 45, news: 120, tasks: 30 }
-hbar_chart data: { "Phase A" => 25, "Phase B" => 45 }  # horizontal
-
-# Line charts
-line_chart data: [12, 19, 8, 15, 22]  # array = sequential x-axis
-line_chart data: { Mon: 5, Tue: 12, Wed: 8 }, fill: true
-
-# Sparklines (minimal, inline trend indicators)
-sparkline data: [45, 52, 48, 61, 55, 67, 72]
-
-# File-based data with dot-path extraction
-bar_chart file: "~/metrics/timing.yaml", path: "entries.-1.phases"
-
-# File with transform block
-line_chart file: "timing.yaml" do |data|
-  data[:entries].last(14).map { |e| e[:wall_clock_seconds] }
-end
-
-# State-bound (reads from state[:metrics])
-bar_chart data: :metrics
-```
-
-**Bar chart options:**
-- `horizontal:` — Horizontal bars (default: false)
-- `show_values:` — Display values on bars
-
-**Line chart options:**
-- `fill:` — Area fill under line (default: false)
-- `smooth:` — Curved lines (default: true)
-- `points:` — Show data points (default: true)
-- `begin_at_zero:` — Y-axis starts at 0 (default: false)
-
-**Sparkline:** Line chart with `sparkline: true` — no axes, labels, or tooltips. Height defaults to 60px.
-
-**Area chart:** Line chart with `fill: true`, or use `area_chart` shorthand.
-
-**Pie/Doughnut chart options:**
-- `doughnut:` — Hole in center (default: false)
-- `cutout:` — Hole size for doughnut (default: '50%')
-- `legend_position:` — 'right', 'left', 'top', 'bottom' (default: 'right')
-- `show_legend:` — Show legend (default: true)
-
-```ruby
-pie_chart data: { sales: 100, costs: 60, profit: 40 }
-doughnut_chart data: { frontend: 40, backend: 35, devops: 25 }
-doughnut_chart data: phases, cutout: '75%'  # thin doughnut
-```
-
-**Stacked bar chart options:**
-- `stack:` — Stack bars (default: true); false for grouped
-- `horizontal:` — Horizontal orientation
-- `normalize:` — Percentage mode (100% bars)
-
-**Stacked bar data formats:**
-```ruby
-# Array of labeled records (most common)
-stacked_bar_chart data: [
-  { label: "Mon", sales: 100, costs: 60 },
-  { label: "Tue", sales: 120, costs: 70 }
-]
-
-# Hash of series
-stacked_bar_chart data: {
-  "Sales" => [100, 120, 140],
-  "Costs" => [60, 70, 80]
-}
-```
-
-**Common options (all chart types):**
-- `data:` — Hash, Array, or Symbol (state key)
-- `file:` — Path to YAML/JSON file (~ expanded)
-- `path:` — Dot notation to extract data (e.g., "entries.-1.phases")
-- `title:` — Chart title
-- `height:` — CSS height (default: "250px", sparkline: "60px")
-- `colors:` — Array of colors
-- `show_legend:` — Show legend (default: false)
-
-### Educational Content (Glossary/Tooltips)
-
-For interactive educational content with hoverable term definitions:
-
-```ruby
-glossary = {
-  "term" => {
-    simple: "Short definition shown on hover",
-    detailed: "Longer explanation shown on tap/click"
-  },
-  "another term" => { simple: "...", detailed: "..." }
-}
-
-# Block syntax - explicit phrase/term
-lesson_text glossary: glossary do
-  phrase "This sentence has a "
-  term "term"
-  phrase " that users can hover."
-end
-
-# String syntax - terms in {braces}
-lesson_text "This has a {term} and {another term}.", glossary: glossary
-```
-
-### Alerts
-
-Static feedback messages with variants:
-
-```ruby
-alert(variant: :info) do
-  text "This is an informational message."
-end
-
-alert(variant: :success, title: "Success!") do
-  text "Your changes have been saved."
-end
-
-alert(variant: :warning, title: "Warning") do
-  text "Your session will expire soon."
-end
-
-alert(variant: :error, title: "Error") do
-  text "Unable to connect to server."
-end
-
-# Dismissible alert (client-side X button)
-alert(variant: :info, dismissible: true) do
-  text "Click X to dismiss this alert."
-end
-```
-
-Variants: `:info`, `:success`, `:warning`, `:error`
-
-### Toast Notifications
-
-Temporary stacked notifications with auto-dismiss:
-
-```ruby
-# Add toast container (renders in corner)
-toast_container position: :top_right, duration: 5000
-
-# Trigger toasts from button actions
-button "Save" do |s|
-  # ... save logic
-  show_toast("Saved successfully!", variant: :success)
-end
-
-button "Delete" do |s|
-  show_toast("Item deleted", variant: :warning)
-end
-
-# Clear all toasts
-button "Clear" do |s|
-  clear_toasts
-end
-```
-
-Positions: `:top_right`, `:top_left`, `:bottom_right`, `:bottom_left`
-Variants: `:info`, `:success`, `:warning`, `:error`
-Duration: milliseconds (0 = no auto-dismiss)
-
-### Progress Bar
-
-Visual progress indicators:
-
-```ruby
-# Static progress
-progress_bar value: 75
-
-# With label showing percentage
-progress_bar value: 65, show_label: true
-
-# Variants for different contexts
-progress_bar value: 100, variant: :success
-progress_bar value: 50, variant: :warning
-progress_bar value: 25, variant: :error
-
-# Animated striped bar
-progress_bar value: 80, animated: true
-
-# Dynamic progress bound to state
-progress_bar value: :upload_progress, show_label: true
-button "+ 10" do |s|
-  s[:upload_progress] = [100, (s[:upload_progress] || 0) + 10].min
-end
-```
-
-Variants: `:default`, `:success`, `:warning`, `:error`
-
-### Spinner
-
-Loading indicators:
-
-```ruby
-# Basic spinner
-spinner
-
-# With size
-spinner size: :sm
-spinner size: :md  # default
-spinner size: :lg
-
-# With loading text
-spinner size: :md, label: "Loading data..."
-```
-
-Sizes: `:sm`, `:md`, `:lg`
 
 ## Running Modes
 
-### Interactive Mode (Default)
-Server runs continuously, UI updates reactively:
-
+### Interactive (default)
 ```ruby
 app "My App" do
   # ...
 end.run!
-
-# With layout mode:
-app "Dashboard", layout: :wide do
-  # ...
-end.run!
 ```
+Server runs until Ctrl+C. State persists in session.
 
-### Agentic Mode
-For AI agents - collect form data and return as JSON:
-
+### Agentic (one-shot)
 ```ruby
 result = app "Survey" do
   text_field :name
-  select :priority, ["Low", "Medium", "High"]
-end.run_once!
-
-# Blocks until user submits, then returns hash:
-# { "name" => "Alice", "priority" => "High" }
-puts result.inspect
-```
-
-With auto-close (browser tab closes after submit):
-
-```ruby
-result = app "Quick Form" do
-  text_field :data
+  select :priority, ["Low", "High"]
 end.run_once!(auto_close_window: true)
+
+puts result  # => { "name" => "Alice", "priority" => "High" }
 ```
+Blocks until user submits, returns form data as hash, exits.
 
-### Agentic Mode Button Behavior
+**Important for agentic mode:** Only input component values are returned. State set by button callbacks is NOT included.
 
-In agentic mode, regular buttons execute their actions but do NOT submit the form.
-Only the built-in "Submit to Agent" button (or `external_link_button` with `submit: true`) triggers form submission.
+## Common Patterns
 
-**Important:** Only input component values (text_field, select, checkbox, etc.) are returned.
-State set by button actions (`s[:flag] = true`) is NOT included in the returned result.
-
+### Conditional Display
 ```ruby
-# WRONG - button sets state but it won't be in result
-result = app "Setup" do
-  select :preset, ["ruby", "node"]
-  button "Install" do |s|
-    s[:ready] = true  # This won't be in result!
-  end
-end.run_once!
-# result = { "preset" => "ruby" }  # No :ready key!
-
-# RIGHT - use input components for all data, let Submit button handle submission
-result = app "Setup" do
-  select :preset, ["ruby", "node"]
-  # StreamWeaver adds "Submit to Agent" button automatically
-end.run_once!
-# result = { "preset" => "ruby" }  # Process this directly
-```
-
-Pattern for agentic wizards:
-- Use input components for data collection
-- Let the built-in Submit button handle form submission
-- Don't add custom "Submit" or "Install" buttons that set state flags
-
-## CSS Customization
-
-### Built-in Themes
-StreamWeaver includes three themes (see Theming section above):
-- `:default` — Warm Industrial (Source Sans 3, 17px, generous spacing)
-- `:dashboard` — Data Dense (15px, tighter spacing)
-- `:document` — Reading Mode (Crimson Pro serif, 19px)
-
-### CSS Variables
-Override any theme via CSS custom properties or `theme_overrides:`:
-
-```css
-:root {
-  --sw-color-primary: #2563eb;       /* Override terracotta with blue */
-  --sw-font-family: "My Font";       /* Change font */
-  --sw-font-size-base: 16px;         /* Smaller text */
-  --sw-radius-md: 4px;               /* Less rounded corners */
-}
-```
-
-Key variables:
-- `--sw-color-primary`, `--sw-color-secondary` - Button/accent colors
-- `--sw-color-text`, `--sw-color-text-muted` - Text colors
-- `--sw-color-bg`, `--sw-color-bg-card` - Backgrounds
-- `--sw-font-family`, `--sw-font-size-base` - Typography
-- `--sw-spacing-sm/md/lg/xl` - Spacing scale
-- `--sw-radius-sm/md/lg` - Border radius
-
-### Embedded Mode
-When embedding in existing app (Rails, Sinatra), add `sw-embedded` class to body to disable container styling.
-
-## Patterns
-
-### Form with Validation
-
-```ruby
-app "Contact Form" do
-  text_field :email, placeholder: "Email"
-  text_area :message, placeholder: "Your message"
-
-  # Simple validation
-  valid = state[:email]&.include?("@") && state[:message]&.length.to_i > 10
-
-  if valid
-    button "Send" do |s|
-      # Send the message
-      s[:sent] = true
-    end
+app "Login" do
+  if state[:logged_in]
+    text "Welcome!"
+    button "Logout" do |s| s[:logged_in] = false end
   else
-    text "Please enter valid email and message (10+ chars)"
-  end
-
-  text "Message sent!" if state[:sent]
-end
-```
-
-### Quiz/Assessment
-
-```ruby
-app "Quiz" do
-  card do
-    header3 "Question 1"
-    radio_group :q1, ["Answer A", "Answer B", "Answer C"]
-  end
-
-  card do
-    header3 "Question 2"
-    radio_group :q2, ["True", "False"]
-  end
-
-  if state[:q1] && state[:q2]
-    button "Submit" do |s|
-      s[:score] = calculate_score(s)
-    end
-
-    text "Score: #{state[:score]}" if state[:score]
+    text_field :username
+    button "Login" do |s| s[:logged_in] = true end
   end
 end
 ```
 
-### Dynamic Lists
-
+### List with Add/Remove
 ```ruby
-app "Todo List" do
-  text_field :new_item, placeholder: "New todo"
+app "Todo" do
+  text_field :new_item
 
   button "Add" do |s|
-    s[:todos] ||= []
-    s[:todos] << s[:new_item] if s[:new_item]&.strip != ""
+    s[:items] ||= []
+    s[:items] << s[:new_item] if s[:new_item].to_s.strip != ""
     s[:new_item] = ""
   end
 
-  state[:todos]&.each_with_index do |todo, i|
-    div class: "todo-item" do
-      text todo
-      button "Delete", style: :secondary do |s|
-        s[:todos].delete_at(i)
-      end
+  state[:items]&.each_with_index do |item, i|
+    hstack do
+      text item
+      button "X" do |s| s[:items].delete_at(i) end
     end
   end
 end
 ```
 
-## Architecture Notes
-
-- **Backend**: Sinatra server, Phlex for HTML generation
-- **Frontend**: Alpine.js for reactivity, HTMX for server communication
-- **State**: Server-side, persisted in session
-- **Updates**: HTMX swaps `#app-container` innerHTML on state changes
-
-### Session Persistence
-
-**Important:** State persists across server restarts via browser cookies. The session cookie survives even when you stop and restart the server. This means:
-- Users see their previous state when revisiting
-- Developers may see stale state during development
-
-To reset state during development, either:
-1. Clear browser cookies for localhost
-2. Add a "Reset" button to clear state:
+### Multi-Step Wizard
 ```ruby
-button "Reset Demo", style: :secondary do |s|
-  s.clear
+app "Wizard" do
+  state[:step] ||= 1
+
+  case state[:step]
+  when 1
+    text_field :name
+    button "Next" do |s| s[:step] = 2 end
+  when 2
+    select :plan, ["Free", "Pro"]
+    button "Back" do |s| s[:step] = 1 end
+    button "Submit" do |s| s[:done] = true end
+  end
+
+  text "Done!" if state[:done]
 end
 ```
-3. Use browser incognito mode for fresh sessions
 
-## File Structure
+## App Options
 
+```ruby
+app "Title",
+  layout: :wide,        # :default, :wide, :full, :fluid
+  theme: :dashboard     # :default, :dashboard, :document
+do
+  # ...
+end
 ```
-my_app.rb           # Your app code
-lib/stream_weaver/
-  app.rb            # DSL methods (text_field, button, etc.)
-  components.rb     # Component classes
-  adapter/
-    alpinejs.rb     # Alpine.js/HTMX rendering
-  views.rb          # Phlex views + CSS
-  server.rb         # Sinatra routes
-```
+
+## Session Persistence
+
+State persists in browser cookies across server restarts. To reset:
+- Clear browser cookies
+- Use incognito mode
+- Add: `button "Reset" do |s| s.clear end`
+
+---
+
+## Detailed Documentation
+
+For comprehensive reference, see these docs:
+
+| Document | Contents |
+|----------|----------|
+| `docs/components_reference.md` | Full component API (all options, variants) |
+| `docs/SERVICE_MODE.md` | Multi-app service mode, CLI commands |
+| `docs/testing.md` | Unit and integration testing |
+| `docs/architecture/how_streamweaver_works.md` | Internal architecture, event flow |
+
+## Architecture Summary
+
+- **Backend**: Sinatra server, Phlex for HTML
+- **Frontend**: Alpine.js (reactivity) + HTMX (server communication)
+- **State**: Server-side, persisted in session cookies
+- **Updates**: HTMX swaps `#app-container` innerHTML on state changes
 
 ## Common Mistakes
 
-1. **Forgetting state is a hash** - Access with `state[:key]`, not `state.key`
-2. **Mutating state outside button blocks** - State changes should happen in button actions
-3. **Missing run!** - App won't start without `.run!` or `.run_once!`
-4. **Glossary key mismatch** - Term keys must match glossary keys exactly (case-sensitive)
-
-## Testing StreamWeaver Apps
-
-### Unit Testing with `rebuild_with_state`
-
-Test component logic without running a server:
-
-```ruby
-require 'spec_helper'
-
-RSpec.describe "My App" do
-  let(:my_app) do
-    StreamWeaver::App.new("Test") do
-      text_field :name
-      if state[:name] == "Alice"
-        text "Hello Alice!"
-      end
-    end
-  end
-
-  it "shows greeting when name is Alice" do
-    my_app.rebuild_with_state({ name: "Alice" })
-    expect(my_app.components.length).to eq(2)  # text_field + text
-  end
-
-  it "hides greeting when name is empty" do
-    my_app.rebuild_with_state({ name: "" })
-    expect(my_app.components.length).to eq(1)  # just text_field
-  end
-end
-```
-
-### Integration Testing with Rack::Test
-
-Test HTTP endpoints and button actions without opening a browser:
-
-```ruby
-require 'spec_helper'
-require 'rack/test'
-
-RSpec.describe "My App Integration" do
-  include Rack::Test::Methods
-
-  let(:stream_app) do
-    StreamWeaver.app "Test" do
-      text_field :name
-      button "Greet" do |s|
-        s[:greeted] = true
-        s[:greeting] = "Hello, #{s[:name]}!"
-      end
-    end
-  end
-  let(:app) { stream_app.generate }  # Get Sinatra app for Rack::Test
-
-  it "renders initial form" do
-    get '/'
-    expect(last_response).to be_ok
-    expect(last_response.body).to include('name')
-  end
-
-  it "handles button click with session state" do
-    # Inject state before request
-    env 'rack.session', { streamlit_state: { name: "Alice" } }
-
-    # Simulate button click (button names normalized: lowercase, underscores)
-    post '/action/btn_greet_1', { name: "Alice" }
-
-    # Verify state was updated
-    state = last_request.session[:streamlit_state]
-    expect(state[:greeted]).to be true
-    expect(state[:greeting]).to eq("Hello, Alice!")
-  end
-
-  it "handles form field update" do
-    env 'rack.session', { streamlit_state: { name: "" } }
-    post '/update', { name: "Bob" }
-
-    state = last_request.session[:streamlit_state]
-    expect(state[:name]).to eq("Bob")
-  end
-end
-```
-
-### Key Testing Patterns
-
-1. **`rebuild_with_state(hash)`** - Re-evaluates DSL block with given state, for testing conditional rendering
-2. **`app.generate`** - Returns the Sinatra app for Rack::Test
-3. **`env 'rack.session', { streamlit_state: {...} }`** - Inject state before requests
-4. **`last_request.session[:streamlit_state]`** - Read state after requests
-5. **Button actions** - POST to `/action/btn_<name>_<id>` (names normalized: lowercase, underscores)
-6. **Form updates** - POST to `/update` with field values
-
-### Testing Agentic Mode (`run_once!`)
-
-The `/submit` endpoint can be tested directly:
-
-```ruby
-it "handles form submission" do
-  env 'rack.session', { streamlit_state: { name: "Test", priority: "High" } }
-  post '/submit', { name: "Test", priority: "High" }
-  expect(last_response).to be_ok
-end
-```
-
-Note: Testing the full `run_once!` flow (with browser wait loop) requires manual testing or browser automation.
+1. **Forgetting state is a hash** - Use `state[:key]`, not `state.key`
+2. **Assuming port 4567** - Read stdout for actual port
+3. **Missing `.run!`** - App won't start without it
+4. **Agentic mode button state** - Only input values returned, not button-set state
