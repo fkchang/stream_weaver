@@ -900,9 +900,21 @@ module StreamWeaver
         require_relative 'templates/info'
         result = Templates::Info.run(session: session_name, config: config)
         puts JSON.generate(result)
+      when 'table'
+        require_relative 'templates/table'
+        result = Templates::Table.run(session: session_name, config: config)
+        puts JSON.generate(result)
+      when 'code'
+        require_relative 'templates/code'
+        result = Templates::Code.run(session: session_name, config: config)
+        puts JSON.generate(result)
+      when 'diff'
+        require_relative 'templates/diff'
+        result = Templates::Diff.run(session: session_name, config: config)
+        puts JSON.generate(result)
       else
         $stderr.puts "Unknown template: #{template_name}"
-        $stderr.puts "Available: wizard, choices, confirm, info"
+        $stderr.puts "Available: wizard, choices, confirm, info, table, code, diff"
         exit 1
       end
     rescue JSON::ParserError => e
