@@ -52,6 +52,8 @@ module StreamWeaver
         close_live_session(args.first)
       when 'wait'
         wait_for_submission(args)
+      when 'template'
+        run_template(args)
       # Canvas commands (two-way IPC with Claude Code)
       when 'canvas'
         canvas_session(args)
@@ -850,6 +852,56 @@ module StreamWeaver
       end
     end
 
+    # Run a pre-built template with JSON configuration
+    # Usage: streamweaver template wizard SESSION '{"title":"Setup","steps":[...]}'
+    def self.run_template(args)
+      template_name = args.shift
+      session_name = args.shift
+      json_data = args.shift
+
+      unless template_name && session_name
+        $stderr.puts "Usage: streamweaver template <template-name> <session-name> '<json-config>'"
+        $stderr.puts ""
+        $stderr.puts "Available templates:"
+        $stderr.puts "  wizard  - Multi-step form wizard"
+        $stderr.puts ""
+        $stderr.puts "Example:"
+        $stderr.puts '  streamweaver template wizard test \'{"title":"Setup","steps":[{"title":"Info","fields":[{"type":"text","key":"name","label":"Name"}]}]}\''
+        exit 1
+      end
+
+      unless Service.service_running?
+        ensure_service_running
+      end
+
+      # Parse JSON config
+      config = if json_data
+        JSON.parse(json_data)
+      else
+        # Read from stdin if no JSON provided
+        JSON.parse($stdin.read)
+      end
+
+      # Load and run the template
+      case template_name
+      when 'wizard'
+        require_relative 'templates/wizard'
+        result = Templates::Wizard.run(session: session_name, config: config)
+        puts JSON.generate(result)
+      else
+        $stderr.puts "Unknown template: #{template_name}"
+        $stderr.puts "Available: wizard"
+        exit 1
+      end
+    rescue JSON::ParserError => e
+      $stderr.puts "Invalid JSON: #{e.message}"
+      exit 1
+    rescue => e
+      $stderr.puts "Template error: #{e.message}"
+      $stderr.puts e.backtrace.first(5).join("\n") if ENV['DEBUG']
+      exit 1
+    end
+
     private
 
     def self.ensure_service_running
@@ -895,6 +947,8 @@ module StreamWeaver
     # @param session_name [String] Live session name for URL routing
     # @return [String] Rendered HTML
     def self.render_dsl_to_html(dsl_code, session_name: nil)
+      require 'json'
+
       # Create a mini app to evaluate the DSL
       mini_app = StreamWeaver::App.new("Live Push")
 
@@ -906,6 +960,7 @@ module StreamWeaver
       adapter = StreamWeaver::Adapter::AlpineJS.new(url_prefix: url_prefix)
 
       # Render components to HTML using a Phlex view with adapter
+      # Wrap in x-data container for Alpine.js binding (required for hx-include="[x-model]")
       state = {}
       view = Class.new(Phlex::HTML) do
         attr_reader :adapter
@@ -917,7 +972,10 @@ module StreamWeaver
         end
 
         define_method(:view_template) do
-          @components.each { |c| c.render(self, @state) }
+          # Wrap in div with x-data for Alpine.js form binding
+          div(id: "main", "x-data": JSON.generate(@state)) do
+            @components.each { |c| c.render(self, @state) }
+          end
         end
       end
 

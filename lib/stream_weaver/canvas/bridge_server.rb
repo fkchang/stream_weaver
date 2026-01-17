@@ -91,9 +91,8 @@ module StreamWeaver
         render_canvas_page(session_name, session)
       end
 
-      # WebSocket endpoint for browser connections
-      # Note: This requires faye-websocket or similar middleware
-      # For now, we'll use polling as a fallback
+      # Poll endpoint for browsers without WebSocket
+      # Returns HTML content and version for incremental updates
       get '/canvas/:name/poll' do
         session_name = params[:name]
         session = self.class.bridge.get_session(session_name)
@@ -101,7 +100,11 @@ module StreamWeaver
         halt 404, { error: 'Session not found' }.to_json unless session
 
         content_type :json
-        { state: session.state }.to_json
+        {
+          state: session.state,
+          html: session.html,
+          version: session.html_version
+        }.to_json
       end
 
       # Receive events from browser (fallback for WebSocket)
@@ -136,6 +139,22 @@ module StreamWeaver
           mode: :websocket
         )
 
+        # If session already has HTML, show it; otherwise show waiting message
+        initial_content = if session.html
+          session.html
+        else
+          <<~WAITING
+            <div class="sw-canvas-waiting">
+              <h2>Canvas: #{session_name}</h2>
+              <p>Waiting for content from Claude Code...</p>
+              <p class="sw-canvas-hint">
+                Push content with:<br>
+                <code>streamweaver canvas-push #{session_name} &lt;&lt;'RUBY'</code>
+              </p>
+            </div>
+          WAITING
+        end
+
         <<~HTML
           <!DOCTYPE html>
           <html>
@@ -150,18 +169,53 @@ module StreamWeaver
           </head>
           <body class="sw-theme-default">
             <div id="app-container" #{container_attrs(session.state, adapter)}>
-              <div class="sw-canvas-waiting">
-                <h2>Canvas: #{session_name}</h2>
-                <p>Waiting for content from Claude Code...</p>
-                <p class="sw-canvas-hint">
-                  Push content with:<br>
-                  <code>streamweaver canvas-push #{session_name} &lt;&lt;'RUBY'</code>
-                </p>
-              </div>
+              #{initial_content}
             </div>
+            <script>
+              #{polling_script(session_name, session.html_version)}
+            </script>
           </body>
           </html>
         HTML
+      end
+
+      def polling_script(session_name, current_version)
+        <<~JS
+          (function() {
+            let currentVersion = #{current_version};
+            const pollUrl = '/canvas/#{session_name}/poll';
+            const container = document.getElementById('app-container');
+
+            async function poll() {
+              try {
+                const resp = await fetch(pollUrl);
+                if (!resp.ok) return;
+
+                const data = await resp.json();
+
+                // Update if version changed and there's HTML
+                if (data.version > currentVersion && data.html) {
+                  currentVersion = data.version;
+                  container.innerHTML = data.html;
+
+                  // Re-initialize Alpine.js on the new content
+                  if (window.Alpine) {
+                    // Alpine 3.x re-initialization
+                    Alpine.initTree(container);
+                  }
+                }
+              } catch (e) {
+                console.error('Poll error:', e);
+              }
+            }
+
+            // Poll every 500ms
+            setInterval(poll, 500);
+
+            // Also poll immediately
+            poll();
+          })();
+        JS
       end
 
       def canvas_styles
@@ -244,12 +298,21 @@ module StreamWeaver
           event
         )
 
+        connections = self.class.claude_connections || []
+        puts "[DEBUG] forward_to_claude: #{connections.size} connections, message=#{message.inspect}"
+        STDOUT.flush
+
         # Send to all connected Claude clients
-        self.class.claude_connections.each do |conn|
+        connections.each do |conn|
           begin
+            puts "[DEBUG] Writing to connection: #{conn.inspect}"
+            STDOUT.flush
             conn.write(Protocol.encode(message))
+            puts "[DEBUG] Write successful"
+            STDOUT.flush
           rescue => e
-            # Connection closed, will be cleaned up
+            puts "[DEBUG] Write error: #{e.message}"
+            STDOUT.flush
           end
         end
       end

@@ -7,6 +7,7 @@ module StreamWeaver
     # Represents a single canvas session with its state and WebSocket connections.
     class Session
       attr_reader :name, :state, :websockets, :created_at
+      attr_accessor :html, :html_version
 
       # @param name [String] Session name
       def initialize(name)
@@ -14,6 +15,15 @@ module StreamWeaver
         @state = {}
         @websockets = []
         @created_at = Time.now
+        @html = nil
+        @html_version = 0
+      end
+
+      # Set the rendered HTML content and increment version
+      # @param content [String] HTML content
+      def set_html(content)
+        @html = content
+        @html_version += 1
       end
 
       # Update session state

@@ -75,15 +75,19 @@ module StreamWeaver
       # @param event_data [Hash] Event data from browser
       # @return [String, nil] Selected choice
       def parse_pick_result(event_data)
-        event_data[:choice] || event_data["choice"]
+        # Choice is nested in state from the browser event
+        state = event_data[:state] || event_data["state"] || {}
+        state[:choice] || state["choice"] || event_data[:choice] || event_data["choice"]
       end
 
       # Parse confirm result from event data
       # @param event_data [Hash] Event data from browser
       # @return [Boolean] true if confirmed, false if cancelled
       def parse_confirm_result(event_data)
-        button = event_data[:_button] || event_data["_button"] || ""
-        button.include?("confirm")
+        # Button ID is in :button from the browser event
+        button = event_data[:button] || event_data["button"] ||
+                 event_data[:_button] || event_data["_button"] || ""
+        button.to_s.include?("confirm")
       end
 
       # Parse form result from event data
@@ -91,10 +95,12 @@ module StreamWeaver
       # @param field_names [Array<Symbol>] Expected field names
       # @return [Hash] Form field values
       def parse_form_result(event_data, field_names)
+        # Form values are in state from the browser event
+        state = event_data[:state] || event_data["state"] || event_data
         result = {}
         field_names.each do |name|
           key = name.to_sym
-          result[key] = event_data[key] || event_data[name.to_s]
+          result[key] = state[key] || state[name.to_s]
         end
         result
       end

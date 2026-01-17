@@ -633,8 +633,26 @@ module StreamWeaver
 
               // Global functions for components
               window.sendEvent = function(type, data) {
+                const payload = JSON.stringify({ type: type, ...data });
+
+                function showFeedback() {
+                  const container = document.getElementById('app-container');
+                  if (container) {
+                    container.innerHTML = '<div style="text-align:center;padding:40px;"><h2 style="color:#10b981;">✓ Submitted</h2><p style="color:#666;">You can close this window.</p></div>';
+                  }
+                }
+
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({ type: type, ...data }));
+                  ws.send(payload);
+                  showFeedback();
+                } else {
+                  // Fallback to HTTP POST when WebSocket not connected
+                  fetch('#{@url_prefix}/event', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: payload
+                  }).then(() => showFeedback())
+                    .catch(err => console.error('HTTP event error:', err));
                 }
               };
 

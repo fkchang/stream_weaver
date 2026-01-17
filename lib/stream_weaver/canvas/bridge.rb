@@ -105,7 +105,10 @@ module StreamWeaver
         # Render DSL to HTML
         html = render_dsl(dsl, session_name: name)
 
-        # Broadcast to all websockets
+        # Store in session for polling clients
+        session.set_html(html)
+
+        # Broadcast to all websockets (if any connected)
         session.broadcast({ type: 'update', html: html })
 
         nil # No response to Claude for push

@@ -6,6 +6,7 @@ require 'securerandom'
 require 'json'
 require 'socket'
 require 'fileutils'
+require_relative 'css'
 
 module StreamWeaver
   # Multi-app service that renders StreamWeaver apps without per-app process management.
@@ -480,7 +481,13 @@ module StreamWeaver
     # Create or get a live session and serve the live page
     get '/live/:session_name' do
       session_name = params[:session_name]
+      theme = (params[:theme] || 'default').to_s
+      layout = (params[:layout] || 'default').to_s
       self.class.get_or_create_live_session(session_name)
+
+      # Validate theme
+      valid_themes = %w[default dashboard document]
+      theme = 'default' unless valid_themes.include?(theme)
 
       content_type 'text/html'
       <<~HTML
@@ -488,36 +495,28 @@ module StreamWeaver
         <html>
         <head>
           <title>StreamWeaver Live: #{Rack::Utils.escape_html(session_name)}</title>
-          <script src="https://unpkg.com/htmx.org@2.0.4"></script>
-          <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-          <link rel="preconnect" href="https://fonts.googleapis.com">
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap">
+          #{StreamWeaver::CSS.cdn_scripts_html}
+          #{StreamWeaver::CSS.google_fonts_html}
           <style>
-            :root {
-              --color-bg: #1a1a1a;
-              --color-text: #e0e0e0;
-              --color-accent: #c2410c;
-              --color-muted: #666;
-              --font-family: 'Source Sans 3', system-ui, sans-serif;
-            }
-            * { box-sizing: border-box; margin: 0; padding: 0; }
-            body {
-              font-family: var(--font-family);
-              background: var(--color-bg);
-              color: var(--color-text);
-              min-height: 100vh;
-              padding: 1rem;
-            }
+            #{StreamWeaver::CSS.full_stylesheet}
+            #{StreamWeaver::CSS.animation_css}
+
+            /* Live session header overlay */
             .sw-live-header {
+              position: fixed;
+              top: 0;
+              left: 0;
+              right: 0;
               display: flex;
               justify-content: space-between;
               align-items: center;
               padding: 0.5rem 1rem;
-              background: rgba(255,255,255,0.05);
-              border-radius: 8px;
-              margin-bottom: 1rem;
-              font-size: 0.875rem;
+              background: rgba(0, 0, 0, 0.85);
+              backdrop-filter: blur(8px);
+              color: #ffffff;
+              font-size: 0.75rem;
+              z-index: 9999;
+              font-family: var(--sw-font-body);
             }
             .sw-live-status {
               display: flex;
@@ -528,58 +527,66 @@ module StreamWeaver
               width: 8px;
               height: 8px;
               border-radius: 50%;
-              background: var(--color-accent);
-              animation: pulse 2s infinite;
+              background: var(--sw-color-primary);
+              animation: sw-pulse 2s infinite;
             }
-            @keyframes pulse {
+            @keyframes sw-pulse {
               0%, 100% { opacity: 1; }
               50% { opacity: 0.4; }
             }
             .sw-live-content {
-              min-height: calc(100vh - 6rem);
+              padding-top: 2.5rem; /* Space for fixed header */
             }
-            #main {
-              /* Default main content area */
-            }
-            /* Basic StreamWeaver component styles */
-            .btn { padding: 0.6rem 1.2rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
-            .btn-primary { background: var(--color-accent); color: white; }
-            .btn-primary:hover { background: #a63609; }
-            .btn-secondary { background: rgba(255,255,255,0.1); color: var(--color-text); }
-            input[type="text"], textarea, select {
-              background: rgba(255,255,255,0.05);
-              border: 1px solid rgba(255,255,255,0.1);
-              color: var(--color-text);
-              padding: 0.5rem;
+            /* Theme selector in header */
+            .sw-live-theme-select {
+              background: rgba(255,255,255,0.1);
+              border: 1px solid rgba(255,255,255,0.2);
+              color: #ffffff;
+              padding: 0.25rem 0.5rem;
               border-radius: 4px;
-              width: 100%;
-              margin: 0.25rem 0;
+              font-size: 0.75rem;
+              cursor: pointer;
             }
-            input[type="text"]:focus, textarea:focus { border-color: var(--color-accent); outline: none; }
-            h1, h2, h3, h4 { margin: 0.5rem 0; }
-            p { margin: 0.25rem 0; }
-            .sw-radio-group { margin: 0.5rem 0; }
-            .sw-radio-option { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0; cursor: pointer; }
-            .sw-radio-option input { cursor: pointer; }
+            .sw-live-theme-select:hover {
+              background: rgba(255,255,255,0.2);
+            }
           </style>
         </head>
-        <body>
+        <body class="sw-theme-#{Rack::Utils.escape_html(theme)} sw-layout-#{Rack::Utils.escape_html(layout)}">
           <div class="sw-live-header">
             <div class="sw-live-status">
               <span class="sw-live-dot"></span>
               <span>Live: #{Rack::Utils.escape_html(session_name)}</span>
             </div>
-            <span id="sw-connection-status">Connecting...</span>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <select class="sw-live-theme-select" onchange="switchTheme(this.value)">
+                <option value="default" #{theme == 'default' ? 'selected' : ''}>Default</option>
+                <option value="dashboard" #{theme == 'dashboard' ? 'selected' : ''}>Dashboard</option>
+                <option value="document" #{theme == 'document' ? 'selected' : ''}>Document</option>
+              </select>
+              <span id="sw-connection-status">Connecting...</span>
+            </div>
           </div>
           <div class="sw-live-content">
             <div id="app-container">
               <div id="main">
-                <p style="color: var(--color-muted);">Waiting for content...</p>
+                <p style="color: var(--sw-color-text-muted);">Waiting for content...</p>
               </div>
             </div>
           </div>
 
           <script>
+            // Theme switching
+            function switchTheme(theme) {
+              const body = document.body;
+              body.className = body.className.replace(/sw-theme-\\w+/, 'sw-theme-' + theme);
+              // Update URL without reload
+              const url = new URL(window.location);
+              url.searchParams.set('theme', theme);
+              window.history.replaceState({}, '', url);
+            }
+
+            // Polling for updates
             (function() {
               const sessionName = #{session_name.to_json};
               const statusEl = document.getElementById('sw-connection-status');
@@ -594,9 +601,16 @@ module StreamWeaver
                   d.updates.forEach(u => {
                     const el = document.querySelector(u.target);
                     if (el) {
+                      // Add animation class
+                      el.classList.remove('sw-fade-in');
+                      void el.offsetWidth; // Trigger reflow
+                      el.classList.add('sw-fade-in');
+
                       if (u.action === 'replace') el.innerHTML = u.html;
                       else if (u.action === 'append') el.insertAdjacentHTML('beforeend', u.html);
                       else if (u.action === 'prepend') el.insertAdjacentHTML('afterbegin', u.html);
+                      // Tell HTMX to process new content
+                      if (typeof htmx !== 'undefined') htmx.process(el);
                     }
                   });
                   lastTs = d.timestamp;
@@ -657,10 +671,9 @@ module StreamWeaver
 
     # Update from live session (text field changes, etc.)
     post '/live/:session_name/update' do
-      # For live sessions, just acknowledge the update - no re-render needed
-      # The polling will pick up any content changes
-      content_type 'text/html'
-      ''  # Return empty - HTMX will do nothing with empty response
+      # Return 204 No Content - tells HTMX to not swap anything
+      status 204
+      ''
     end
 
     # Button action from live session
@@ -683,8 +696,14 @@ module StreamWeaver
 
       self.class.add_live_submission(session_name, form_data)
 
-      # Return HTML confirmation (HTMX will swap this into #app-container)
-      '<div id="main"><p style="color: #22c55e; padding: 1rem; text-align: center;">Submitted! Waiting for response...</p></div>'
+      # Return HTML with "thinking" indicator - Claude will push real content when ready
+      <<~HTML
+        <div id="main" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; gap: 1rem;">
+          <div class="sw-spinner" style="width: 40px; height: 40px; border: 3px solid var(--sw-color-border, #e0e0e0); border-top-color: var(--sw-color-primary, #c2410c); border-radius: 50%; animation: sw-spin 0.8s linear infinite;"></div>
+          <p style="color: var(--sw-color-text-muted, #666); font-size: 1rem;">Claude is processing your response...</p>
+          <style>@keyframes sw-spin { to { transform: rotate(360deg); } }</style>
+        </div>
+      HTML
     end
 
     # Submit form data from live session (user interactions)
