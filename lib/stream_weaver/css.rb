@@ -71,17 +71,17 @@ module StreamWeaver
         <<~CSS
           /* Content update animations */
           .sw-fade-in {
-            animation: sw-fade-in 200ms ease-out;
+            animation: sw-fade-in 350ms ease-out;
           }
-          
+
           @keyframes sw-fade-in {
             from {
               opacity: 0;
-              transform: translateY(-4px);
+              transform: translateY(-12px) scale(0.98);
             }
             to {
               opacity: 1;
-              transform: translateY(0);
+              transform: translateY(0) scale(1);
             }
           }
           
