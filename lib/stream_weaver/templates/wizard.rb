@@ -7,20 +7,28 @@ require_relative '../cli'
 
 module StreamWeaver
   module Templates
-    # Multi-step wizard template
+    # Multi-step wizard template with branching support
     # Takes JSON config, handles full flow, returns collected data
     #
-    # Usage:
+    # Linear usage (steps run in order):
     #   StreamWeaver::Templates::Wizard.run(session: "test", config: {
     #     "title" => "Project Setup",
     #     "steps" => [
-    #       { "title" => "Info", "fields" => [
-    #         { "type" => "text", "key" => "name", "label" => "Name" },
-    #         { "type" => "select", "key" => "type", "options" => ["A", "B"] }
-    #       ]},
-    #       { "title" => "Features", "fields" => [
-    #         { "type" => "checkbox", "key" => "tests", "label" => "Tests" }
-    #       ]}
+    #       { "title" => "Info", "fields" => [...] },
+    #       { "title" => "Features", "fields" => [...] }
+    #     ]
+    #   })
+    #
+    # Branching usage (steps have ids and next conditions):
+    #   StreamWeaver::Templates::Wizard.run(session: "test", config: {
+    #     "title" => "Project Setup",
+    #     "steps" => [
+    #       { "id" => "type", "title" => "Type", "fields" => [
+    #         { "type" => "select", "key" => "project_type", "options" => ["Web", "CLI"] }
+    #       ], "next" => { "branch_on" => "project_type", "Web" => "web_opts", "CLI" => "cli_opts" }},
+    #       { "id" => "web_opts", "title" => "Web Options", "fields" => [...], "next" => "done" },
+    #       { "id" => "cli_opts", "title" => "CLI Options", "fields" => [...], "next" => "done" },
+    #       { "id" => "done", "title" => "Confirm", "fields" => [] }
     #     ]
     #   })
     #
@@ -34,18 +42,28 @@ module StreamWeaver
         @title = config['title'] || 'Wizard'
         # Unique run ID to prevent browser autocomplete from previous runs
         @run_id = Time.now.to_i.to_s(36)
+        # Build step lookup by id
+        @steps_by_id = @steps.each_with_object({}) do |step, hash|
+          hash[step['id']] = step if step['id']
+        end
+        # Track visited steps for "step X of Y" display
+        @visited_steps = []
       end
 
       def run
         # Clear any stale submissions before starting
         clear_submissions
 
-        @steps.each_with_index do |step, index|
-          step_num = index + 1
-          total = @steps.length
+        # Start with first step
+        current_step = @steps.first
+        step_num = 0
+
+        while current_step
+          step_num += 1
+          @visited_steps << current_step
 
           # Render step UI
-          push_step(step, step_num, total)
+          push_step(current_step, step_num)
 
           # Wait for submission
           data = wait_for_submission
@@ -57,6 +75,9 @@ module StreamWeaver
             original_key = key.to_s.sub(/_#{@run_id}$/, '')
             @collected[original_key] = value
           end
+
+          # Determine next step
+          current_step = resolve_next_step(current_step)
         end
 
         # Return collected data as JSON
@@ -64,6 +85,36 @@ module StreamWeaver
       end
 
       private
+
+      def resolve_next_step(current_step)
+        next_config = current_step['next']
+
+        # No next config - try next step in array (linear mode)
+        if next_config.nil?
+          current_index = @steps.index(current_step)
+          return @steps[current_index + 1] if current_index && current_index < @steps.length - 1
+          return nil
+        end
+
+        # String - go to step by id
+        if next_config.is_a?(String)
+          return nil if next_config == 'done' || next_config == 'end'
+          return @steps_by_id[next_config]
+        end
+
+        # Hash - branch based on collected value
+        if next_config.is_a?(Hash)
+          branch_key = next_config['branch_on']
+          if branch_key
+            value = @collected[branch_key]
+            next_id = next_config[value] || next_config['_default']
+            return nil if next_id.nil? || next_id == 'done' || next_id == 'end'
+            return @steps_by_id[next_id]
+          end
+        end
+
+        nil
+      end
 
       def detect_port
         pid_file = File.expand_path('~/.streamweaver/service.pid')
@@ -75,20 +126,27 @@ module StreamWeaver
         4576
       end
 
-      def push_step(step, step_num, total)
-        dsl = build_step_dsl(step, step_num, total)
+      def push_step(step, step_num)
+        dsl = build_step_dsl(step, step_num)
         push_dsl(dsl)
       end
 
-      def build_step_dsl(step, step_num, total)
+      def build_step_dsl(step, step_num)
         title = step['title'] || "Step #{step_num}"
         description = step['description']
         fields = step['fields'] || []
+        # Check if this step has a next (not final)
+        has_next = step['next'] != 'done' && step['next'] != 'end' && step['next'] != nil
+        # Also check if linear mode and not last step
+        if step['next'].nil?
+          current_index = @steps.index(step)
+          has_next = current_index && current_index < @steps.length - 1
+        end
 
         lines = []
         # Show wizard title at top
         lines << "header2 \"#{@title}\""
-        lines << "card title: \"#{title} (#{step_num}/#{total})\" do"
+        lines << "card title: \"Step #{step_num}: #{title}\" do"
         lines << "  text \"#{description}\"" if description
 
         fields.each do |field|
@@ -98,14 +156,14 @@ module StreamWeaver
         # Show collected data so far if not first step
         if step_num > 1 && @collected.any?
           lines << "  text \"\""
-          lines << "  text \"Collected so far:\""
+          lines << "  text \"Your selections:\""
           @collected.each do |key, value|
             display_value = value.is_a?(Array) ? value.join(', ') : value.to_s
             lines << "  text \"  #{key}: #{display_value}\""
           end
         end
 
-        lines << "  button \"#{step_num < total ? 'Next' : 'Finish'}\""
+        lines << "  button \"#{has_next ? 'Next' : 'Finish'}\""
         lines << "end"
 
         lines.join("\n")
