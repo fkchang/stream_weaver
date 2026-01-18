@@ -36,7 +36,50 @@ Enter number:
 
 It pushes a visual choice UI, user clicks, Claude receives JSON response.
 
-### Other Potential Uses
+### StreamWeaver Modes: When to Use What
+
+StreamWeaver has multiple modes. Canvas (live sessions) is one of them:
+
+| Mode | Command | Use When |
+|------|---------|----------|
+| **Standalone** | `streamweaver run app.rb` | Building a complete web app with predefined UI |
+| **Server** | `streamweaver serve` | Hosting multiple apps, production deployment |
+| **Agentic** | `streamweaver llm` | AI generates UI on-the-fly during conversation |
+| **Canvas** | `streamweaver live SESSION` | AI pushes UI during external workflow (e.g., Claude Code) |
+
+**Standalone** - You write the app, user interacts with fixed UI
+```ruby
+# my_app.rb - predefined screens and flow
+text_field :name
+button "Submit" do |state|
+  # handle submission
+end
+```
+
+**Agentic** - AI writes the app dynamically based on conversation
+```bash
+streamweaver llm  # AI generates UI based on chat
+```
+
+**Canvas** - External AI agent pushes UI as needed during its workflow
+```bash
+# Claude Code (or other agent) runs separately
+# Pushes to canvas when it needs rich interaction
+./exe/streamweaver template wizard mysession '{"steps":[...]}'
+```
+
+### When to Use Canvas vs Other Modes
+
+| Scenario | Best Mode | Why |
+|----------|-----------|-----|
+| Building a dashboard app | Standalone | Fixed UI, known requirements |
+| Deploying apps for team | Server | Multi-app hosting, production-ready |
+| Chatbot builds custom UI | Agentic | AI controls the whole experience |
+| Claude Code needs user input | **Canvas** | AI is running elsewhere, pushes when needed |
+| CI/CD wants to show results | **Canvas** | External process pushes status |
+| Debug session visualization | **Canvas** | Debugger pushes state as it runs |
+
+### Canvas-Specific Use Cases
 
 | Use Case | Description |
 |----------|-------------|
