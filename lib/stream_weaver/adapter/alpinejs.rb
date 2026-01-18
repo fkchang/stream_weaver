@@ -922,6 +922,56 @@ module StreamWeaver
 
       # Render a score table with color-coded metrics
       #
+      # Render a data table with configurable styling
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param headers [Array<String>] Column headers
+      # @param rows [Array<Array>] Row data
+      # @param options [Hash] Styling options (:striped, :bordered, :hoverable, :compact, :caption)
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      def render_table(view, headers, rows, options, state)
+        table_classes = ["sw-table"]
+        table_classes << "sw-table-striped" if options[:striped]
+        table_classes << "sw-table-bordered" if options[:bordered]
+        table_classes << "sw-table-hoverable" if options[:hoverable]
+        table_classes << "sw-table-compact" if options[:compact]
+
+        view.table(class: table_classes.join(" "), style: "width: 100%; border-collapse: collapse;") do
+          if options[:caption]
+            view.caption(style: "caption-side: top; text-align: left; padding: 0.5rem 0; font-weight: 600;") { options[:caption] }
+          end
+
+          if headers.any?
+            view.thead do
+              view.tr do
+                headers.each do |header|
+                  view.th(style: "padding: #{options[:compact] ? '0.5rem' : '0.75rem'} 1rem; text-align: left; border-bottom: 2px solid var(--sw-color-border, #e0e0e0); font-weight: 600;") { header.to_s }
+                end
+              end
+            end
+          end
+
+          view.tbody do
+            rows.each_with_index do |row, idx|
+              row_classes = []
+              row_classes << "sw-row-striped" if options[:striped] && idx.odd?
+              row_classes << "sw-row-hoverable" if options[:hoverable]
+
+              view.tr(class: row_classes.any? ? row_classes.join(" ") : nil) do
+                row.each do |cell|
+                  cell_style = "padding: #{options[:compact] ? '0.5rem' : '0.75rem'} 1rem; border-bottom: 1px solid var(--sw-color-border, #e0e0e0);"
+                  if options[:bordered]
+                    cell_style += " border: 1px solid var(--sw-color-border, #e0e0e0);"
+                  end
+                  view.td(style: cell_style) { cell.to_s }
+                end
+              end
+            end
+          end
+        end
+      end
+
       # @param view [Phlex::HTML] The Phlex view instance
       # @param scores [Array<Hash>] Array of {label:, value:, max:} hashes
       # @param options [Hash] Component options

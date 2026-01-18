@@ -464,6 +464,47 @@ module StreamWeaver
       end
     end
 
+    # Table component for displaying tabular data
+    # @example Basic usage
+    #   table headers: ["Name", "Size"], rows: [["app.rb", "12kb"], ["cli.rb", "8kb"]]
+    # @example With options
+    #   table headers: ["Name", "Size"], rows: data, striped: true, hoverable: true, compact: true
+    class Table < Base
+      # @param headers [Array<String>] Column headers (optional)
+      # @param rows [Array<Array>] Row data
+      # @param striped [Boolean] Alternate row colors (default: false)
+      # @param bordered [Boolean] Show cell borders (default: false)
+      # @param hoverable [Boolean] Highlight rows on hover (default: true)
+      # @param compact [Boolean] Reduced padding (default: false)
+      # @param caption [String] Table caption (optional)
+      def initialize(headers: [], rows: [], striped: false, bordered: false, hoverable: true, compact: false, caption: nil, **options)
+        @headers = headers
+        @rows = rows
+        @striped = striped
+        @bordered = bordered
+        @hoverable = hoverable
+        @compact = compact
+        @caption = caption
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_table(view, @headers, @rows, table_options, state)
+      end
+
+      private
+
+      def table_options
+        @options.merge(
+          striped: @striped,
+          bordered: @bordered,
+          hoverable: @hoverable,
+          compact: @compact,
+          caption: @caption
+        )
+      end
+    end
+
     # Markdown component for rendering markdown-formatted content
     class Markdown < Base
       # @param content [String, Proc] The markdown content (can be a proc for dynamic content)

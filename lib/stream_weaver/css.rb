@@ -88,7 +88,7 @@ module StreamWeaver
           .sw-slide-in {
             animation: sw-slide-in 250ms ease-out;
           }
-          
+
           @keyframes sw-slide-in {
             from {
               opacity: 0;
@@ -98,6 +98,22 @@ module StreamWeaver
               opacity: 1;
               transform: translateX(0);
             }
+          }
+
+          /* Table styles */
+          .sw-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .sw-row-striped {
+            background: var(--sw-color-bg-muted, #f9fafb);
+          }
+          .sw-row-hoverable:hover {
+            background: var(--sw-color-bg-hover, #f0f0f0) !important;
+          }
+          .sw-table-bordered td,
+          .sw-table-bordered th {
+            border: 1px solid var(--sw-color-border, #e0e0e0);
           }
         CSS
       end

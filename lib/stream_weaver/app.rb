@@ -324,6 +324,21 @@ module StreamWeaver
       @components << Components::ScoreTable.new(scores: scores, **options)
     end
 
+    # Table component for displaying tabular data
+    # @param headers [Array<String>] Column headers (optional)
+    # @param rows [Array<Array>] Row data
+    # @param striped [Boolean] Zebra striping (default: false)
+    # @param bordered [Boolean] Show borders (default: false)
+    # @param hoverable [Boolean] Highlight on hover (default: true)
+    # @param compact [Boolean] Reduced padding (default: false)
+    # @param caption [String] Table caption (optional)
+    # @example
+    #   table headers: ["Name", "Size"], rows: [["app.rb", "12kb"]]
+    #   table headers: ["File", "Lines"], rows: data, striped: true, compact: true
+    def table(headers: [], rows: [], **options)
+      @components << Components::Table.new(headers: headers, rows: rows, **options)
+    end
+
     # =========================================
     # Chart DSL methods
     # =========================================

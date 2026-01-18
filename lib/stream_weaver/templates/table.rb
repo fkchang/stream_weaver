@@ -88,7 +88,8 @@ module StreamWeaver
       end
 
       def push_table
-        html = build_html
+        dsl = build_dsl
+        html = StreamWeaver::CLI.render_dsl_to_html(dsl, session_name: @session)
 
         uri = URI("http://localhost:#{@port}/live/#{URI.encode_www_form_component(@session)}/push")
         request = Net::HTTP::Post.new(uri)
@@ -97,54 +98,37 @@ module StreamWeaver
         Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(request) }
       end
 
-      def build_html
-        # Build proper HTML table
-        header_html = if @headers.any?
-          ths = @headers.map { |h| "<th style='padding: 0.75rem 1rem; text-align: left; border-bottom: 2px solid var(--sw-color-border, #e0e0e0);'>#{escape_html(h)}</th>" }.join
-          "<thead><tr>#{ths}</tr></thead>"
-        else
-          ""
-        end
+      def build_dsl
+        lines = []
+        lines << "header2 \"#{@title}\"" if @title
 
-        rows_html = @rows.map.with_index do |row, idx|
-          if @selectable
-            # Clickable row
-            btn_id = "btn_row_#{idx}_1"
-            tds = row.map { |cell| "<td style='padding: 0.75rem 1rem; border-bottom: 1px solid var(--sw-color-border, #e0e0e0);'>#{escape_html(cell.to_s)}</td>" }.join
-            "<tr style='cursor: pointer;' hx-post='/live/#{@session}/action/#{btn_id}' hx-include='[x-model]' hx-target='#main' hx-swap='innerHTML' onmouseover=\"this.style.background='var(--sw-color-bg-hover, #f0f0f0)'\" onmouseout=\"this.style.background=''\">#{tds}</tr>"
-          else
-            tds = row.map { |cell| "<td style='padding: 0.75rem 1rem; border-bottom: 1px solid var(--sw-color-border, #e0e0e0);'>#{escape_html(cell.to_s)}</td>" }.join
-            "<tr>#{tds}</tr>"
+        # Convert rows to Ruby array literal string
+        headers_str = @headers.map { |h| "\"#{h}\"" }.join(", ")
+        rows_str = @rows.map { |row| "[#{row.map { |c| "\"#{c}\"" }.join(", ")}]" }.join(", ")
+
+        if @selectable
+          # For selectable tables, render rows as buttons
+          lines << "card do"
+          @rows.each_with_index do |row, idx|
+            row_text = row.join(" | ")
+            lines << "  button \"#{row_text}\", id: \"row_#{idx}\""
           end
-        end.join
-
-        buttons_html = if @actions.any? && !@selectable
-          btns = @actions.map.with_index do |action, i|
-            variant_class = i == 0 ? 'sw-btn-primary' : 'sw-btn-secondary'
-            btn_id = "btn_#{action.downcase.gsub(/\s+/, '_').gsub(/[^a-z0-9_]/, '')}_#{i + 1}"
-            %(<button id="#{btn_id}" class="sw-btn #{variant_class}" hx-post="/live/#{@session}/action/#{btn_id}" hx-include="[x-model]" hx-target="#main" hx-swap="innerHTML">#{escape_html(action)}</button>)
-          end.join("\n            ")
-          "<div style='margin-top: 1rem; display: flex; gap: 0.5rem;'>#{btns}</div>"
+          lines << "end"
         else
-          ""
+          # Use native table component
+          lines << "table headers: [#{headers_str}], rows: [#{rows_str}], striped: true, hoverable: true"
+
+          # Add action buttons if any
+          if @actions.any?
+            lines << ""
+            @actions.each_with_index do |action, i|
+              variant = i == 0 ? ", variant: :primary" : ""
+              lines << "button \"#{action}\"#{variant}"
+            end
+          end
         end
 
-        <<~HTML
-          <div id="main" x-data="{}">
-            #{@title ? "<h2 style='margin-bottom: 1rem;'>#{escape_html(@title)}</h2>" : ''}
-            <div class="sw-card" style="padding: 0; overflow: hidden;">
-              <table style="width: 100%; border-collapse: collapse; font-size: 0.9375rem;">
-                #{header_html}
-                <tbody>#{rows_html}</tbody>
-              </table>
-            </div>
-            #{buttons_html}
-          </div>
-        HTML
-      end
-
-      def escape_html(text)
-        text.to_s.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;').gsub('"', '&quot;')
+        lines.join("\n")
       end
 
       def clear_submissions
