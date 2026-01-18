@@ -112,6 +112,16 @@ streamweaver llm  # AI generates UI based on chat
 - Theme support (dashboard, minimal, dark)
 - Form submission capture and retrieval
 
+**Key Files:**
+| File | Purpose |
+|------|---------|
+| `lib/stream_weaver/templates/*.rb` | 7 template classes (wizard, choices, confirm, info, table, code, diff) |
+| `lib/stream_weaver/cli.rb` | `template` command dispatch |
+| `lib/stream_weaver/service.rb` | Live session endpoints (`/live/:session`, `/push`, `/submissions`) |
+| `lib/stream_weaver/components.rb` | Native Table component |
+| `lib/stream_weaver/adapter/alpinejs.rb` | `render_table` and component rendering |
+| `lib/stream_weaver/css.rb` | Animations and table CSS classes |
+
 ### Limitations
 - No real-time streaming (polling only)
 - No terminal embedding yet
