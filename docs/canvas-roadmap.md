@@ -1,6 +1,63 @@
 # StreamWeaver Canvas Roadmap
 
-Vision: A persistent canvas where Claude Code can push rich UI for bidirectional interaction.
+## What is Canvas?
+
+**The Problem:** Agentic AI CLIs like Claude Code are powerful but constrained to text-based terminal interaction. Complex choices, data visualization, code review, and multi-step workflows become walls of text that are hard to parse and interact with.
+
+**The Solution:** A persistent browser canvas that AI agents can push rich HTML/CSS/JS UI to, enabling:
+- Visual data display (tables, charts, diffs)
+- Interactive forms and wizards
+- Clickable choices instead of typing responses
+- Real-time progress visualization
+
+**Why Ruby/Phlex?** Token efficiency. Instead of generating verbose HTML, the AI generates concise Ruby DSL:
+```ruby
+# 45 tokens of Ruby
+table headers: ["File", "Size"], rows: data, striped: true
+button "Apply Changes", variant: :primary
+
+# vs 200+ tokens of equivalent HTML/CSS
+```
+
+### Primary Use Case
+
+**Claude Code Companion** - Side-by-side experience:
+- Terminal on left: Claude Code CLI running
+- Canvas on right: Rich UI for interaction
+
+When Claude needs user input, instead of:
+```
+Please choose:
+1. PostgreSQL
+2. SQLite
+3. MySQL
+Enter number:
+```
+
+It pushes a visual choice UI, user clicks, Claude receives JSON response.
+
+### Other Potential Uses
+
+| Use Case | Description |
+|----------|-------------|
+| **Any agentic CLI** | Not Claude-specific - any AI agent can push to canvas |
+| **Build dashboards** | Show test results, coverage, build status visually |
+| **Code review UI** | Rich diff display with inline comments |
+| **Onboarding wizards** | Guide users through project setup |
+| **Debug visualizers** | Display data structures, call stacks graphically |
+| **Documentation preview** | Live preview of generated docs |
+| **Database explorers** | Query results in proper tables |
+| **Log viewers** | Filterable, searchable log display |
+| **Deployment dashboards** | Multi-environment status at a glance |
+| **LLM prompt builders** | Visual prompt construction with previews |
+
+### Design Principles
+
+1. **Token efficient** - Ruby DSL, not verbose HTML
+2. **Bidirectional** - Push UI, receive user actions as JSON
+3. **Stateless templates** - Each interaction is self-contained
+4. **Progressive enhancement** - Works with polling, can upgrade to WebSocket
+5. **Browser-native** - No Electron needed, any browser works
 
 ## Current State (January 2025)
 
