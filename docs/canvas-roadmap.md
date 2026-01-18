@@ -1,0 +1,165 @@
+# StreamWeaver Canvas Roadmap
+
+Vision: A persistent canvas where Claude Code can push rich UI for bidirectional interaction.
+
+## Current State (January 2025)
+
+### Working
+- Live sessions with 300ms polling
+- 7 templates: wizard, choices, confirm, info, table, code, diff
+- Native Phlex table component with styling options
+- Smooth CSS transitions between content updates
+- Theme support (dashboard, minimal, dark)
+- Form submission capture and retrieval
+
+### Limitations
+- No real-time streaming (polling only)
+- No terminal embedding yet
+- Templates require user to have browser open
+- No progress updates during long-running Claude tasks
+
+## Future Directions
+
+### 1. Terminal Integration
+
+**Goal:** Side-by-side terminal + canvas experience
+
+**Options explored:**
+| Approach | Pros | Cons |
+|----------|------|------|
+| xterm.js | Full terminal emulator | Complex PTY setup, WebSocket needed |
+| tmux capture | Simple, read pane buffer | Polling delay, not true integration |
+| ttyd/gotty | Existing tools | External dependency, iframe embed |
+
+**Recommendation:** Start with tmux capture for simplicity, evolve to xterm.js if needed.
+
+### 2. Real-time Progress Updates
+
+**Problem:** Claude can't push updates during thinking/tool execution.
+
+**Explored solutions:**
+| Approach | How | Status |
+|----------|-----|--------|
+| Incremental pushes | Claude pushes between steps | Works, but adds tool calls |
+| Status file | Claude writes file, canvas polls | Not implemented |
+| Hooks | Claude Code hooks for output events | Unknown feasibility |
+
+**Recommendation:** For now, use incremental pushes. Status file approach is cleaner but requires infrastructure.
+
+### 3. New Templates
+
+**High value:**
+- `progress` - Progress bar with status messages (for multi-step tasks)
+- `log` - Scrolling log viewer (for build output, test results)
+- `file-tree` - Interactive file browser
+- `form` - Generic form builder (more flexible than wizard)
+
+**Nice to have:**
+- `chart` - Simple charts (bar, line)
+- `timeline` - Event timeline display
+- `kanban` - Task board view
+
+### 4. WebSocket Support
+
+**Current:** 300ms polling works but isn't true real-time.
+
+**Trade-off:** WebSocket adds complexity (Sinatra needs extra gems like Faye or switching to a different server).
+
+**Recommendation:** Polling is sufficient for current use cases. Revisit if latency becomes an issue.
+
+### 5. Electron/Desktop App
+
+**Idea:** Native app with terminal + canvas side-by-side.
+
+**Benefits:**
+- True terminal integration
+- No browser tab needed
+- Could hook into Claude Code process directly
+
+**Complexity:** High - separate app to maintain.
+
+**Recommendation:** Defer until web-based approach hits limitations.
+
+### 6. VS Code Extension
+
+**Idea:** Webview panel in VS Code alongside terminal.
+
+**Benefits:**
+- Developers already in VS Code
+- Native integration with editor
+- Could leverage VS Code's terminal API
+
+**Complexity:** Medium - VS Code extension API learning curve.
+
+### 7. Better Code Display
+
+**Current:** Basic dark theme code block.
+
+**Improvements:**
+- Syntax highlighting (via Prism.js or highlight.js)
+- Line number linking
+- Diff with inline comments
+- Copy button
+- Expand/collapse for long code
+
+### 8. Session Persistence
+
+**Current:** Sessions are in-memory, lost on restart.
+
+**Improvement:** Store session state to disk for:
+- Resume after service restart
+- History of interactions
+- Audit trail
+
+### 9. Multi-canvas Support
+
+**Idea:** Multiple named canvases for different purposes:
+- `main` - Primary interaction
+- `logs` - Continuous log output
+- `status` - Persistent status bar
+
+**Implementation:** Already supported via session names, just needs patterns/conventions.
+
+## Architecture Notes
+
+### Why Polling vs WebSocket
+
+Polling at 300ms provides:
+- Simpler implementation (plain HTTP)
+- Works through proxies/firewalls
+- No connection management
+- Good enough latency for human interaction
+
+WebSocket would provide:
+- True real-time updates
+- Lower server load for many clients
+- Better for streaming output
+
+### Why Phlex
+
+- Ruby-native templating
+- Type-safe HTML generation
+- Composable components
+- No separate template files
+
+### Template Design Principles
+
+1. **Single command** - Full interaction in one bash call
+2. **JSON in, JSON out** - Easy to parse programmatically
+3. **Clear state** - Each run starts fresh
+4. **Timeout** - Don't hang forever
+5. **Sensible defaults** - Work out of the box
+
+## Next Steps (Prioritized)
+
+1. **Dogfood** - Use templates in real agentic workflows
+2. **Progress template** - Most requested for long tasks
+3. **Syntax highlighting** - Improve code/diff display
+4. **Documentation** - More examples, best practices
+
+## Non-Goals (For Now)
+
+- Full IDE replacement
+- Complex state management
+- Multi-user collaboration
+- Mobile support
