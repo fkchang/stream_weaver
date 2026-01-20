@@ -95,6 +95,32 @@ header1 "Page Title"          # h1
 header3 "Subsection"          # h3
 ```
 
+### Tables
+```ruby
+# Basic - explicit headers/rows
+table headers: ["Name", "Size"], rows: [["app.rb", "12kb"]]
+
+# Array of hashes - auto-infer headers
+table [{ name: "Alice", age: 30 }, { name: "Bob", age: 25 }]
+
+# Column DSL with formatters
+table users do
+  column :name
+  column :balance, format: :currency, align: :right
+  column :joined, format: :date
+  column(:active) { |u| u.active? ? "Yes" : "No" }
+end
+
+# Interactive features
+table data, sortable: true, sticky_header: true, striped: true
+
+# Data sources
+table data: :users           # From state
+table file: "data.yaml"      # From file
+```
+
+Formatters: `:date`, `:datetime`, `:currency`, `:number`, `:percent`
+
 ### Buttons
 ```ruby
 button "Click Me" do |s|

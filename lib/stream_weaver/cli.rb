@@ -42,6 +42,36 @@ module StreamWeaver
         eval_dsl(args)
       when 'prompt'
         prompt_ui(args)
+      when 'live'
+        live_session(args)
+      when 'push'
+        push_content(args)
+      when 'live-list'
+        list_live_sessions
+      when 'live-close'
+        close_live_session(args.first)
+      when 'wait'
+        wait_for_submission(args)
+      when 'template'
+        run_template(args)
+      # Canvas commands (two-way IPC with Claude Code)
+      when 'canvas'
+        canvas_session(args)
+      when 'canvas-push'
+        canvas_push(args)
+      when 'canvas-wait'
+        canvas_wait(args)
+      when 'canvas-close'
+        canvas_close(args)
+      when 'canvas-list'
+        canvas_list
+      when 'canvas-stop'
+        canvas_stop
+      # High-level canvas helpers
+      when 'pick'
+        canvas_pick(args)
+      when 'confirm'
+        canvas_confirm(args)
       when '--help', '-h', 'help'
         help
       when '--version', '-v'
@@ -535,7 +565,365 @@ module StreamWeaver
               select :priority, ["Low", "Medium", "High"]
             end.run_once!
           RUBY
+
+        Live Sessions (update-in-place via SSE):
+          streamweaver live <name>              Open a persistent live session
+          streamweaver push <name> [options]    Push content to a live session
+          streamweaver live-list                List all live sessions
+          streamweaver live-close <name>        Close a live session
+
+        Push Options:
+          --target SELECTOR                     CSS selector (default: #main)
+          --action ACTION                       replace, append, prepend (default: replace)
+          --file FILE                           Read content from file
+          --html HTML                           HTML content directly
+          (or pipe content via stdin)
+
+        Live Session Examples:
+          # Open a persistent session
+          streamweaver live adventure
+
+          # Push content to it
+          echo "<h1>Hello!</h1>" | streamweaver push adventure
+          streamweaver push adventure --html "<p>New paragraph</p>" --action append
+          streamweaver push adventure --file scene.html --target "#story"
+
+        Canvas (Two-way IPC with Claude Code):
+          streamweaver canvas <name>              Create/connect to canvas session
+          streamweaver canvas-push <name>         Push DSL content (from stdin)
+          streamweaver canvas-wait <name>         Wait for user interaction
+          streamweaver canvas-close <name>        Close a canvas session
+          streamweaver canvas-list                List canvas sessions
+          streamweaver canvas-stop                Stop the canvas bridge
+
+        Canvas Examples:
+          # Create session and open browser
+          streamweaver canvas survey
+
+          # Push UI content
+          streamweaver canvas-push survey <<'RUBY'
+            header1 "Quick Survey"
+            radio_group :choice, ["A", "B", "C"]
+            button "Submit"
+          RUBY
+
+          # Wait for user input (returns JSON)
+          streamweaver canvas-wait survey
+          # => {"choice":"B"}
       HELP
+    end
+
+    # =========================================
+    # Live Session Commands
+    # =========================================
+
+    # Open a live session in browser
+    def self.live_session(args)
+      session_name = args.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver live <session-name>"
+        exit 1
+      end
+
+      ensure_service_running
+      port = service_port
+
+      # Create session via API (will be created on first connection anyway)
+      url = "http://localhost:#{port}/live/#{URI.encode_www_form_component(session_name)}"
+
+      puts "Opening live session: #{session_name}"
+      puts "URL: #{url}"
+      puts ""
+      puts "Push content with:"
+      puts "  echo '<h1>Hello</h1>' | streamweaver push #{session_name}"
+      puts "  streamweaver push #{session_name} --html '<p>Content</p>'"
+      puts ""
+
+      open_browser(url)
+    end
+
+    # Push content to a live session
+    def self.push_content(args)
+      session_name = nil
+      target = '#main'
+      action = 'replace'
+      content = nil
+      is_dsl = false
+
+      stdin_dsl = false
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver push <session-name> [options]"
+        opts.on('-t', '--target SELECTOR', 'CSS selector (default: #main)') { |t| target = t }
+        opts.on('-a', '--action ACTION', 'replace, append, prepend (default: replace)') { |a| action = a }
+        opts.on('-f', '--file FILE', 'Read content from file') { |f| content = File.read(f) }
+        opts.on('-h', '--html HTML', 'HTML content directly') { |h| content = h }
+        opts.on('-d', '--dsl DSL', 'StreamWeaver DSL to render') { |d| content = d; is_dsl = true }
+        opts.on('--dsl-file FILE', 'StreamWeaver DSL from file') { |f| content = File.read(f); is_dsl = true }
+        opts.on('--stdin-dsl', 'Read DSL from stdin') { stdin_dsl = true; is_dsl = true }
+      end
+
+      remaining = parser.parse(args)
+      session_name = remaining.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver push <session-name> [options]"
+        $stderr.puts ""
+        $stderr.puts "Options:"
+        $stderr.puts "  -t, --target SELECTOR   CSS selector (default: #main)"
+        $stderr.puts "  -a, --action ACTION     replace, append, prepend (default: replace)"
+        $stderr.puts "  -f, --file FILE         Read content from file"
+        $stderr.puts "  -h, --html HTML         HTML content directly"
+        $stderr.puts "  -d, --dsl DSL           StreamWeaver DSL to render"
+        $stderr.puts "  --dsl-file FILE         StreamWeaver DSL from file"
+        $stderr.puts "  --stdin-dsl             Read DSL from stdin"
+        $stderr.puts ""
+        $stderr.puts "Examples:"
+        $stderr.puts "  echo '<h1>Hello</h1>' | streamweaver push my-session"
+        $stderr.puts "  streamweaver push my-session --dsl 'header1 \"Title\"; text \"Hello\"'"
+        $stderr.puts "  cat scene.rb | streamweaver push my-session --stdin-dsl"
+        exit 1
+      end
+
+      # Read from stdin if no content provided or if --stdin-dsl
+      if content.nil? || stdin_dsl
+        if $stdin.tty? && content.nil?
+          $stderr.puts "Error: No content provided. Use --html, --dsl, --file, --stdin-dsl, or pipe via stdin."
+          exit 1
+        end
+        content = $stdin.read if content.nil? || stdin_dsl
+      end
+
+      # Render DSL to HTML if needed
+      if is_dsl
+        content = render_dsl_to_html(content, session_name: session_name)
+      end
+
+      # Ensure service is running
+      unless Service.service_running?
+        $stderr.puts "Error: StreamWeaver service not running. Start with: streamweaver live #{session_name}"
+        exit 1
+      end
+
+      port = service_port
+
+      # POST to the push endpoint
+      uri = URI("http://localhost:#{port}/live/#{URI.encode_www_form_component(session_name)}/push")
+      req = Net::HTTP::Post.new(uri)
+      req.set_form_data(
+        'target' => target,
+        'action' => action,
+        'content' => content
+      )
+
+      begin
+        response = Net::HTTP.start(uri.hostname, uri.port, open_timeout: 5, read_timeout: 10) { |http| http.request(req) }
+
+        if response.is_a?(Net::HTTPSuccess)
+          result = JSON.parse(response.body)
+          puts "Pushed to #{result['session']} #{result['target']} (#{result['action']})"
+        else
+          $stderr.puts "Error: #{response.body}"
+          exit 1
+        end
+      rescue => e
+        $stderr.puts "Error: #{e.message}"
+        exit 1
+      end
+    end
+
+    # List all live sessions
+    def self.list_live_sessions
+      unless Service.service_running?
+        puts "StreamWeaver service is not running"
+        return
+      end
+
+      port = service_port
+      uri = URI("http://localhost:#{port}/api/live")
+
+      begin
+        response = Net::HTTP.get_response(uri)
+        if response.is_a?(Net::HTTPSuccess)
+          data = JSON.parse(response.body)
+          sessions = data['sessions'] || []
+
+          if sessions.empty?
+            puts "No live sessions"
+          else
+            puts "Live Sessions:"
+            sessions.each do |s|
+              age = Utils.format_duration((Time.now - Time.parse(s['created_at'])).to_i) rescue 'unknown'
+              last_push = s['last_push'] ? Utils.format_duration((Time.now - Time.parse(s['last_push'])).to_i) + ' ago' : 'never'
+              puts "  #{s['name']} - created #{age} ago, last push: #{last_push}"
+            end
+          end
+        else
+          puts "Error: #{response.body}"
+        end
+      rescue => e
+        puts "Error: #{e.message}"
+      end
+    end
+
+    # Close a live session
+    def self.close_live_session(session_name)
+      unless session_name
+        $stderr.puts "Usage: streamweaver live-close <session-name>"
+        exit 1
+      end
+
+      unless Service.service_running?
+        puts "StreamWeaver service is not running"
+        return
+      end
+
+      port = service_port
+      uri = URI("http://localhost:#{port}/live/#{URI.encode_www_form_component(session_name)}")
+      req = Net::HTTP::Delete.new(uri)
+
+      begin
+        response = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(req) }
+        result = JSON.parse(response.body)
+
+        if result['success']
+          puts result['message']
+        else
+          puts "Error: #{result['error']}"
+        end
+      rescue => e
+        puts "Error: #{e.message}"
+      end
+    end
+
+    # Wait for a submission from a live session
+    def self.wait_for_submission(args)
+      session_name = args.first
+      timeout = 300  # 5 minute default timeout
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver wait <session-name> [options]"
+        opts.on('-t', '--timeout SECONDS', Integer, 'Timeout in seconds (default: 300)') { |t| timeout = t }
+      end
+
+      remaining = parser.parse(args)
+      session_name = remaining.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver wait <session-name> [--timeout SECONDS]"
+        exit 1
+      end
+
+      unless Service.service_running?
+        $stderr.puts "Error: StreamWeaver service not running"
+        exit 1
+      end
+
+      port = service_port
+      start_time = Time.now
+
+      # Poll for submissions
+      loop do
+        if Time.now - start_time > timeout
+          $stderr.puts "Timeout waiting for submission"
+          exit 1
+        end
+
+        uri = URI("http://localhost:#{port}/live/#{URI.encode_www_form_component(session_name)}/submissions")
+
+        begin
+          response = Net::HTTP.get_response(uri)
+          if response.is_a?(Net::HTTPSuccess)
+            data = JSON.parse(response.body)
+            submissions = data['submissions'] || []
+
+            if submissions.any?
+              # Return the first submission as JSON
+              puts JSON.generate(submissions.first['data'])
+              return
+            end
+          end
+        rescue => e
+          $stderr.puts "Poll error: #{e.message}"
+        end
+
+        sleep 0.5  # Poll every 500ms
+      end
+    end
+
+    # Run a pre-built template with JSON configuration
+    # Usage: streamweaver template wizard SESSION '{"title":"Setup","steps":[...]}'
+    def self.run_template(args)
+      template_name = args.shift
+      session_name = args.shift
+      json_data = args.shift
+
+      unless template_name && session_name
+        $stderr.puts "Usage: streamweaver template <template-name> <session-name> '<json-config>'"
+        $stderr.puts ""
+        $stderr.puts "Available templates:"
+        $stderr.puts "  wizard  - Multi-step form wizard"
+        $stderr.puts ""
+        $stderr.puts "Example:"
+        $stderr.puts '  streamweaver template wizard test \'{"title":"Setup","steps":[{"title":"Info","fields":[{"type":"text","key":"name","label":"Name"}]}]}\''
+        exit 1
+      end
+
+      unless Service.service_running?
+        ensure_service_running
+      end
+
+      # Parse JSON config
+      config = if json_data
+        JSON.parse(json_data)
+      else
+        # Read from stdin if no JSON provided
+        JSON.parse($stdin.read)
+      end
+
+      # Load and run the template
+      case template_name
+      when 'wizard'
+        require_relative 'templates/wizard'
+        result = Templates::Wizard.run(session: session_name, config: config)
+        puts JSON.generate(result)
+      when 'choices'
+        require_relative 'templates/choices'
+        result = Templates::Choices.run(session: session_name, config: config)
+        puts JSON.generate(result)
+      when 'confirm'
+        require_relative 'templates/confirm'
+        result = Templates::Confirm.run(session: session_name, config: config)
+        puts JSON.generate(result)
+      when 'info'
+        require_relative 'templates/info'
+        result = Templates::Info.run(session: session_name, config: config)
+        puts JSON.generate(result)
+      when 'table'
+        require_relative 'templates/table'
+        result = Templates::Table.run(session: session_name, config: config)
+        puts JSON.generate(result)
+      when 'code'
+        require_relative 'templates/code'
+        result = Templates::Code.run(session: session_name, config: config)
+        puts JSON.generate(result)
+      when 'diff'
+        require_relative 'templates/diff'
+        result = Templates::Diff.run(session: session_name, config: config)
+        puts JSON.generate(result)
+      else
+        $stderr.puts "Unknown template: #{template_name}"
+        $stderr.puts "Available: wizard, choices, confirm, info, table, code, diff"
+        exit 1
+      end
+    rescue JSON::ParserError => e
+      $stderr.puts "Invalid JSON: #{e.message}"
+      exit 1
+    rescue => e
+      $stderr.puts "Template error: #{e.message}"
+      $stderr.puts e.backtrace.first(5).join("\n") if ENV['DEBUG']
+      exit 1
     end
 
     private
@@ -576,6 +964,375 @@ module StreamWeaver
       when /mswin|msys|mingw|cygwin|bccwin|wince|emc/
         system('start', url)
       end
+    end
+
+    # Render StreamWeaver DSL to HTML
+    # @param dsl_code [String] StreamWeaver DSL code (e.g., "header1 'Title'; text 'Hello'")
+    # @param session_name [String] Live session name for URL routing
+    # @return [String] Rendered HTML
+    def self.render_dsl_to_html(dsl_code, session_name: nil)
+      require 'json'
+
+      # Create a mini app to evaluate the DSL
+      mini_app = StreamWeaver::App.new("Live Push")
+
+      # Evaluate the DSL in the context of the app
+      mini_app.instance_eval(dsl_code)
+
+      # Create adapter with URL prefix for live session submit
+      url_prefix = session_name ? "/live/#{session_name}" : "/live"
+      adapter = StreamWeaver::Adapter::AlpineJS.new(url_prefix: url_prefix)
+
+      # Render components to HTML using a Phlex view with adapter
+      # Wrap in x-data container for Alpine.js binding (required for hx-include="[x-model]")
+      state = {}
+      view = Class.new(Phlex::HTML) do
+        attr_reader :adapter
+
+        define_method(:initialize) do |components, st, adp|
+          @components = components
+          @state = st
+          @adapter = adp
+        end
+
+        define_method(:view_template) do
+          # Wrap in div with x-data for Alpine.js form binding
+          div(id: "main", "x-data": JSON.generate(@state)) do
+            @components.each { |c| c.render(self, @state) }
+          end
+        end
+      end
+
+      view.new(mini_app.components, state, adapter).call
+    end
+
+    # =========================================
+    # Canvas Commands (Two-way IPC)
+    # =========================================
+
+    # Create or connect to a canvas session
+    def self.canvas_session(args)
+      session_name = args.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver canvas <session-name>"
+        exit 1
+      end
+
+      require_relative 'canvas/client'
+
+      # Ensure bridge is running
+      info = Canvas::Client.ensure_bridge_running
+      port = info[:port] || Canvas::Bridge::DEFAULT_PORT
+
+      # Create session
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.create(session_name)
+      )
+
+      if response && response[:type] == 'ready'
+        puts "Canvas session: #{session_name}"
+        puts "URL: #{response[:url]}"
+        puts ""
+        puts "Push content with:"
+        puts "  streamweaver canvas-push #{session_name} <<'RUBY'"
+        puts "    header1 'Hello'"
+        puts "    radio_group :choice, ['A', 'B', 'C']"
+        puts "    button 'Submit'"
+        puts "  RUBY"
+        puts ""
+        puts "Wait for user input:"
+        puts "  streamweaver canvas-wait #{session_name}"
+
+        open_browser(response[:url])
+      else
+        $stderr.puts "Error creating canvas session"
+        exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      $stderr.puts "Try: streamweaver canvas #{session_name}"
+      exit 1
+    end
+
+    # Push DSL content to a canvas session
+    def self.canvas_push(args)
+      session_name = args.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver canvas-push <session-name> < dsl.rb"
+        exit 1
+      end
+
+      # Read DSL from stdin
+      if $stdin.tty?
+        $stderr.puts "Usage: streamweaver canvas-push #{session_name} <<'RUBY'"
+        $stderr.puts "  header1 'Title'"
+        $stderr.puts "  text_field :name"
+        $stderr.puts "RUBY"
+        exit 1
+      end
+
+      dsl = $stdin.read.strip
+
+      require_relative 'canvas/client'
+
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.push(session_name, dsl)
+      )
+
+      # Push doesn't return a response, just succeeds
+      puts "Pushed to #{session_name}"
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    rescue Canvas::Client::ConnectionError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
+    # Wait for user interaction on a canvas session
+    def self.canvas_wait(args)
+      session_name = args.first
+      timeout = 300 # 5 minute default
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver canvas-wait <session-name> [options]"
+        opts.on('-t', '--timeout SECONDS', Integer, 'Timeout in seconds (default: 300)') { |t| timeout = t }
+      end
+
+      remaining = parser.parse(args)
+      session_name = remaining.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver canvas-wait <session-name> [--timeout SECONDS]"
+        exit 1
+      end
+
+      require_relative 'canvas/client'
+
+      # Wait for an event
+      result = Canvas::Client.send_and_wait(
+        { type: 'subscribe', name: session_name },
+        event_type: 'event',
+        timeout: timeout
+      )
+
+      if result
+        # Output the event data as JSON
+        puts JSON.generate(result[:data])
+      else
+        $stderr.puts "Timeout waiting for user interaction"
+        exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
+    # Close a canvas session
+    def self.canvas_close(args)
+      session_name = args.first
+
+      unless session_name
+        $stderr.puts "Usage: streamweaver canvas-close <session-name>"
+        exit 1
+      end
+
+      require_relative 'canvas/client'
+
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.close(session_name)
+      )
+
+      if response && response[:type] == 'closed'
+        puts "Closed canvas session: #{session_name}"
+      else
+        $stderr.puts "Session not found: #{session_name}"
+        exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
+    # List all canvas sessions
+    def self.canvas_list
+      require_relative 'canvas/client'
+
+      unless Canvas::Client.bridge_running?
+        puts "Canvas bridge is not running"
+        return
+      end
+
+      response = Canvas::Client.send_message({ type: 'list' })
+
+      if response && response[:sessions]
+        sessions = response[:sessions]
+        if sessions.empty?
+          puts "No canvas sessions"
+        else
+          puts "Canvas sessions:"
+          sessions.each do |s|
+            puts "  #{s[:name]} - #{s[:websocket_count]} connections"
+          end
+        end
+      else
+        puts "No canvas sessions"
+      end
+    rescue Canvas::Client::NotRunningError
+      puts "Canvas bridge is not running"
+    end
+
+    # Stop the canvas bridge
+    def self.canvas_stop
+      require_relative 'canvas/client'
+
+      if Canvas::Client.stop_bridge
+        puts "Canvas bridge stopped"
+      else
+        puts "Canvas bridge is not running"
+      end
+    end
+
+    # =========================================
+    # High-level Canvas Helpers
+    # =========================================
+
+    # Quick pick from a list of choices
+    # Usage: streamweaver pick "Title" "Choice1" "Choice2" "Choice3"
+    def self.canvas_pick(args)
+      if args.length < 2
+        $stderr.puts "Usage: streamweaver pick \"Title\" \"Choice1\" \"Choice2\" ..."
+        exit 1
+      end
+
+      title = args.shift
+      choices = args
+
+      require_relative 'canvas/client'
+      require_relative 'canvas/helpers'
+
+      # Generate session name
+      session_name = "pick_#{Time.now.to_i}"
+
+      # Ensure bridge is running
+      Canvas::Client.ensure_bridge_running
+
+      # Create session
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.create(session_name)
+      )
+
+      if response && response[:type] == 'ready'
+        # Open browser
+        open_browser(response[:url])
+
+        # Push the pick UI
+        dsl = Canvas::Helpers.pick_dsl(title, choices)
+        Canvas::Client.send_message(
+          Canvas::Protocol::Messages.push(session_name, dsl)
+        )
+
+        # Wait for response
+        result = Canvas::Client.send_and_wait(
+          { type: 'subscribe', name: session_name },
+          event_type: 'event',
+          timeout: 300
+        )
+
+        # Close session
+        Canvas::Client.send_message(
+          Canvas::Protocol::Messages.close(session_name)
+        )
+
+        if result && result[:data]
+          choice = Canvas::Helpers.parse_pick_result(result[:data])
+          puts JSON.generate({ choice: choice })
+        else
+          $stderr.puts "Timeout or cancelled"
+          exit 1
+        end
+      else
+        $stderr.puts "Failed to create canvas session"
+        exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
+    # Quick confirmation dialog
+    # Usage: streamweaver confirm "Are you sure?"
+    def self.canvas_confirm(args)
+      message = args.first
+      yes_label = "Confirm"
+      no_label = "Cancel"
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver confirm \"Message\" [options]"
+        opts.on('--yes LABEL', 'Yes button label') { |l| yes_label = l }
+        opts.on('--no LABEL', 'No button label') { |l| no_label = l }
+      end
+
+      remaining = parser.parse(args)
+      message = remaining.first
+
+      unless message
+        $stderr.puts "Usage: streamweaver confirm \"Are you sure?\" [--yes LABEL] [--no LABEL]"
+        exit 1
+      end
+
+      require_relative 'canvas/client'
+      require_relative 'canvas/helpers'
+
+      # Generate session name
+      session_name = "confirm_#{Time.now.to_i}"
+
+      # Ensure bridge is running
+      Canvas::Client.ensure_bridge_running
+
+      # Create session
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.create(session_name)
+      )
+
+      if response && response[:type] == 'ready'
+        # Open browser
+        open_browser(response[:url])
+
+        # Push the confirm UI
+        dsl = Canvas::Helpers.confirm_dsl(message, yes_label: yes_label, no_label: no_label)
+        Canvas::Client.send_message(
+          Canvas::Protocol::Messages.push(session_name, dsl)
+        )
+
+        # Wait for response
+        result = Canvas::Client.send_and_wait(
+          { type: 'subscribe', name: session_name },
+          event_type: 'event',
+          timeout: 300
+        )
+
+        # Close session
+        Canvas::Client.send_message(
+          Canvas::Protocol::Messages.close(session_name)
+        )
+
+        if result && result[:data]
+          confirmed = Canvas::Helpers.parse_confirm_result(result[:data])
+          puts JSON.generate({ confirmed: confirmed })
+        else
+          $stderr.puts "Timeout or cancelled"
+          exit 1
+        end
+      else
+        $stderr.puts "Failed to create canvas session"
+        exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
     end
 
     # Bring terminal back to front after browser auto-closes

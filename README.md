@@ -404,6 +404,22 @@ spinner size: :md, label: "Loading..."
 ### Advanced Components
 
 ```ruby
+# Data table - original API
+table headers: ["Name", "Size"], rows: [["app.rb", "12kb"], ["cli.rb", "8kb"]]
+
+# Array of hashes - auto-infer headers
+table [{ name: "Alice", age: 30 }, { name: "Bob", age: 25 }]
+
+# Column DSL with formatters
+table users do
+  column :name
+  column :balance, format: :currency, align: :right
+  column :joined, format: :date
+end
+
+# Interactive: sortable + sticky header
+table data, sortable: true, sticky_header: true, striped: true
+
 # Score table with color-coded metrics
 score_table scores: [
   { label: "Quality", value: 8, max: 10 },

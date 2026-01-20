@@ -464,6 +464,221 @@ module StreamWeaver
       end
     end
 
+    # Built-in formatters for table cell values
+    module TableFormatters
+      FORMATTERS = {
+        date: ->(v) { v.respond_to?(:strftime) ? v.strftime("%b %d, %Y") : v.to_s },
+        datetime: ->(v) { v.respond_to?(:strftime) ? v.strftime("%b %d, %Y %l:%M %p") : v.to_s },
+        currency: ->(v) { "$#{format_number(v.to_f, 2)}" },
+        number: ->(v) { format_number(v.to_f, 0) },
+        percent: ->(v) { "#{(v.to_f * 100).round}%" }
+      }.freeze
+
+      def self.format_number(num, decimals)
+        parts = format("%.#{decimals}f", num).split(".")
+        parts[0] = parts[0].reverse.gsub(/(\d{3})(?=\d)/, '\\1,').reverse
+        decimals.positive? ? parts.join(".") : parts[0]
+      end
+
+      def self.apply(value, format_spec)
+        return value.to_s if format_spec.nil?
+
+        formatter = format_spec.is_a?(Proc) ? format_spec : FORMATTERS[format_spec]
+        formatter ? formatter.call(value) : value.to_s
+      end
+    end
+
+    # Column definition for table DSL
+    class TableColumn
+      attr_reader :key, :header, :format, :align, :style
+
+      def initialize(key, header: nil, format: nil, align: nil, style: nil, &block)
+        @key = key
+        @header = header || key.to_s.split("_").map(&:capitalize).join(" ")
+        @format = format
+        @align = align
+        @style = style
+        @value_block = block
+      end
+
+      def extract_value(item, index = nil)
+        raw = if @value_block
+                @value_block.arity == 2 ? @value_block.call(item, index) : @value_block.call(item)
+              elsif item.respond_to?(@key)
+                item.send(@key)
+              elsif item.respond_to?(:[])
+                item[@key] || item[@key.to_s]
+              else
+                nil
+              end
+        TableFormatters.apply(raw, @format)
+      end
+    end
+
+    # Table component for displaying tabular data with smart data inference
+    # @example Basic usage (original API)
+    #   table headers: ["Name", "Size"], rows: [["app.rb", "12kb"], ["cli.rb", "8kb"]]
+    # @example Array of hashes (auto-infer headers)
+    #   table data: [{ name: "Alice", age: 30 }, { name: "Bob", age: 25 }]
+    # @example Hash of arrays
+    #   table data: { name: ["Alice", "Bob"], age: [30, 25] }
+    # @example File loading
+    #   table file: "users.yaml", path: "data.users"
+    # @example State binding
+    #   table data: :users
+    # @example Column DSL
+    #   table users do
+    #     column :name
+    #     column :balance, format: :currency, align: :right
+    #   end
+    class Table < Base
+      attr_reader :columns
+
+      def initialize(data = nil, headers: nil, rows: nil, file: nil, path: nil,
+                     striped: false, bordered: false, hoverable: true, compact: false,
+                     sortable: false, sticky_header: false, caption: nil, **options, &block)
+        @data = data
+        @headers = headers
+        @rows = rows
+        @file = file
+        @path = path
+        @striped = striped
+        @bordered = bordered
+        @hoverable = hoverable
+        @compact = compact
+        @sortable = sortable
+        @sticky_header = sticky_header
+        @caption = caption
+        @options = options
+        @columns = []
+        @transform_block = nil
+
+        if block_given?
+          if block.arity == 1
+            # Transform block: table file: "data.yaml" do |data| data.map {...} end
+            @transform_block = block
+          else
+            # Column DSL block
+            instance_eval(&block)
+          end
+        end
+      end
+
+      # Column DSL method
+      def column(key, header: nil, format: nil, align: nil, style: nil, &block)
+        @columns << TableColumn.new(key, header: header, format: format, align: align, style: style, &block)
+      end
+
+      def render(view, state)
+        resolved = resolve_data(state)
+        view.adapter.render_table(view, resolved[:headers], resolved[:rows], table_options, state)
+      end
+
+      private
+
+      def resolve_data(state)
+        raw = raw_data(state)
+        normalize(raw)
+      end
+
+      def raw_data(state)
+        return file_data if @file
+        return state[@data] if @data.is_a?(Symbol)
+        return @data if @data
+        # Original API: headers + rows
+        { headers: @headers || [], rows: @rows || [] }
+      end
+
+      def file_data
+        raw = load_file(@file)
+        @transform_block ? @transform_block.call(raw) : extract_path(raw, @path)
+      end
+
+      def load_file(path)
+        require "yaml"
+        require "json"
+        expanded = File.expand_path(path)
+
+        case File.extname(expanded).downcase
+        when ".yaml", ".yml" then YAML.safe_load_file(expanded, symbolize_names: true, permitted_classes: [Symbol, Date, Time])
+        when ".json" then JSON.parse(File.read(expanded), symbolize_names: true)
+        else raise ArgumentError, "Unsupported file type: #{path}. Use .yaml, .yml, or .json"
+        end
+      end
+
+      def extract_path(data, path)
+        return data unless path
+
+        path.split(".").reduce(data) do |obj, key|
+          break if obj.nil?
+          key.match?(/\A-?\d+\z/) ? obj[key.to_i] : obj.fetch(key.to_sym) { obj[key] }
+        end
+      end
+
+      def normalize(data)
+        return data if data.is_a?(Hash) && data.key?(:headers) && data.key?(:rows)
+
+        case data
+        when Array
+          normalize_array(data)
+        when Hash
+          normalize_hash_of_arrays(data)
+        else
+          { headers: [], rows: [] }
+        end
+      end
+
+      def normalize_array(data)
+        return { headers: [], rows: [] } if data.empty?
+
+        first = data.first
+        if first.is_a?(Hash)
+          # Array of hashes - use column DSL if defined, otherwise infer from keys
+          if @columns.any?
+            headers = @columns.map(&:header)
+            rows = data.each_with_index.map do |item, idx|
+              @columns.map { |col| col.extract_value(item, idx) }
+            end
+          else
+            keys = first.keys
+            headers = keys.map { |k| k.to_s.split("_").map(&:capitalize).join(" ") }
+            rows = data.map { |item| keys.map { |k| (item[k] || item[k.to_s]).to_s } }
+          end
+          { headers: headers, rows: rows }
+        elsif first.is_a?(Array)
+          # Array of arrays - original format, no headers unless provided
+          { headers: @headers || [], rows: data }
+        else
+          # Simple array - single column
+          { headers: @headers || ["Value"], rows: data.map { |v| [v.to_s] } }
+        end
+      end
+
+      def normalize_hash_of_arrays(data)
+        # Hash of arrays: { name: ["Alice", "Bob"], age: [30, 25] }
+        keys = data.keys
+        headers = keys.map { |k| k.to_s.split("_").map(&:capitalize).join(" ") }
+        max_len = data.values.map(&:length).max || 0
+        rows = (0...max_len).map do |i|
+          keys.map { |k| (data[k][i] || "").to_s }
+        end
+        { headers: headers, rows: rows }
+      end
+
+      def table_options
+        @options.merge(
+          striped: @striped,
+          bordered: @bordered,
+          hoverable: @hoverable,
+          compact: @compact,
+          sortable: @sortable,
+          sticky_header: @sticky_header,
+          caption: @caption,
+          columns: @columns
+        )
+      end
+    end
+
     # Markdown component for rendering markdown-formatted content
     class Markdown < Base
       # @param content [String, Proc] The markdown content (can be a proc for dynamic content)
@@ -1087,6 +1302,297 @@ module StreamWeaver
         series_keys = data.first.keys.reject { _1 == :label }.map(&:to_s)
         series = series_keys.to_h { |key| [key, data.map { _1[key.to_sym] || _1[key] || 0 }] }
         { labels: labels, series: series }
+      end
+    end
+
+    # =========================================
+    # Dashboard Components (Cabinet Control style)
+    # =========================================
+
+    # StatusDot component for colored status indicators
+    # Displays a small colored dot with optional glow effect
+    class StatusDot < Base
+      attr_reader :status, :pulse, :size
+
+      # Status colors: red (alert), yellow (warning), green (ok), gray (inactive)
+      STATUSES = %i[red yellow green gray].freeze
+      SIZES = %i[sm md lg].freeze
+
+      # @param status [Symbol] Status color (:red, :yellow, :green, :gray)
+      # @param pulse [Boolean] Whether to animate with pulse effect (default: false)
+      # @param size [Symbol] Size (:sm, :md, :lg) - default :md
+      # @param options [Hash] Additional options
+      def initialize(status: :gray, pulse: false, size: :md, **options)
+        @status = STATUSES.include?(status.to_sym) ? status.to_sym : :gray
+        @pulse = pulse
+        @size = SIZES.include?(size.to_sym) ? size.to_sym : :md
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_status_dot(view, self, state)
+      end
+    end
+
+    # Badge component for small count/label indicators
+    # Displays pill-shaped badges with variant colors
+    class Badge < Base
+      attr_reader :text, :variant, :size
+
+      VARIANTS = %i[default danger warning success info].freeze
+      SIZES = %i[sm md].freeze
+
+      # @param text [String] Badge text/count
+      # @param variant [Symbol] Color variant (:default, :danger, :warning, :success, :info)
+      # @param size [Symbol] Size (:sm, :md) - default :sm
+      # @param options [Hash] Additional options
+      def initialize(text, variant: :default, size: :sm, **options)
+        @text = text.to_s
+        @variant = VARIANTS.include?(variant.to_sym) ? variant.to_sym : :default
+        @size = SIZES.include?(size.to_sym) ? size.to_sym : :sm
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_badge(view, self, state)
+      end
+    end
+
+    # StatDisplay component for large metric numbers with labels
+    # Displays a prominent value with a small label below
+    class StatDisplay < Base
+      attr_reader :value, :label, :color, :size
+
+      COLORS = %i[default blue purple green red yellow].freeze
+      SIZES = %i[sm md lg].freeze
+
+      # @param value [String, Integer] The main value to display
+      # @param label [String] Label text below the value
+      # @param color [Symbol] Value color (:default, :blue, :purple, :green, :red, :yellow)
+      # @param size [Symbol] Size (:sm, :md, :lg) - default :md
+      # @param options [Hash] Additional options
+      def initialize(value:, label:, color: :blue, size: :md, **options)
+        @value = value.to_s
+        @label = label
+        @color = COLORS.include?(color.to_sym) ? color.to_sym : :default
+        @size = SIZES.include?(size.to_sym) ? size.to_sym : :md
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_stat_display(view, self, state)
+      end
+    end
+
+    # TypeTag component for activity type badges
+    # Colored pills showing type like RESEARCH, TASK, ESCALATION
+    class TypeTag < Base
+      attr_reader :type_name, :custom_color
+
+      # Predefined types with colors
+      TYPES = {
+        research: :blue,
+        task: :green,
+        escalation: :red,
+        communication: :purple,
+        warning: :yellow,
+        info: :gray
+      }.freeze
+
+      # @param type_name [Symbol, String] The type (:research, :task, :escalation, etc.) or custom text
+      # @param color [Symbol, nil] Override color for custom types
+      # @param options [Hash] Additional options
+      def initialize(type_name, color: nil, **options)
+        @type_name = type_name.to_s.downcase
+        @custom_color = color
+        @options = options
+      end
+
+      def color
+        return @custom_color if @custom_color
+        TYPES[@type_name.to_sym] || :gray
+      end
+
+      def display_text
+        @type_name.upcase
+      end
+
+      def render(view, state)
+        view.adapter.render_type_tag(view, self, state)
+      end
+    end
+
+    # PulseIndicator component for animated status with label
+    # Shows a pulsing dot with accompanying text
+    class PulseIndicator < Base
+      attr_reader :color, :label
+
+      COLORS = %i[green red yellow blue].freeze
+
+      # @param color [Symbol] Dot color (:green, :red, :yellow, :blue) - default :green
+      # @param label [String] Status text next to the dot
+      # @param options [Hash] Additional options
+      def initialize(color: :green, label: nil, **options)
+        @color = COLORS.include?(color.to_sym) ? color.to_sym : :green
+        @label = label
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_pulse_indicator(view, self, state)
+      end
+    end
+
+    # PriorityItem component for escalation-style items
+    # Items with priority-colored left border
+    class PriorityItem < Base
+      attr_reader :priority, :title, :description, :meta_left, :meta_right
+      attr_accessor :children
+
+      PRIORITIES = %i[critical urgent high normal low].freeze
+
+      # @param priority [Symbol] Priority level (:critical, :urgent, :high, :normal, :low)
+      # @param title [String] Item title
+      # @param description [String, nil] Optional description text
+      # @param meta_left [String, nil] Left-side metadata (e.g., secretary name)
+      # @param meta_right [String, nil] Right-side metadata (e.g., action link)
+      # @param options [Hash] Additional options
+      def initialize(priority: :normal, title:, description: nil, meta_left: nil, meta_right: nil, **options)
+        @priority = PRIORITIES.include?(priority.to_sym) ? priority.to_sym : :normal
+        @title = title
+        @description = description
+        @meta_left = meta_left
+        @meta_right = meta_right
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_priority_item(view, self, state)
+      end
+    end
+
+    # ActivityItem component for activity feed items
+    # Shows time, title, summary, and type badge
+    class ActivityItem < Base
+      attr_reader :time, :title, :summary, :type
+
+      # @param time [String] Time display (e.g., "15:00")
+      # @param title [String] Activity title
+      # @param summary [String, nil] Optional summary text
+      # @param type [Symbol, nil] Activity type for TypeTag (:research, :task, etc.)
+      # @param options [Hash] Additional options
+      def initialize(time:, title:, summary: nil, type: nil, **options)
+        @time = time
+        @title = title
+        @summary = summary
+        @type = type
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_activity_item(view, self, state)
+      end
+    end
+
+    # =========================================
+    # Layout Components (Cabinet Control style)
+    # =========================================
+
+    # AppShell component for two-column app layouts
+    # Provides a main content area with optional fixed sidebar
+    class AppShell < Base
+      attr_reader :sidebar_width, :sidebar_position, :gap
+      attr_accessor :children, :main_children, :sidebar_children
+
+      POSITIONS = %i[left right].freeze
+
+      # @param sidebar_width [String] CSS width for sidebar (default: "320px")
+      # @param sidebar_position [Symbol] Sidebar position (:left, :right) - default :right
+      # @param gap [String] Gap between main and sidebar (default: "1.5rem")
+      # @param options [Hash] Additional options
+      def initialize(sidebar_width: "320px", sidebar_position: :right, gap: "1.5rem", **options)
+        @sidebar_width = sidebar_width
+        @sidebar_position = POSITIONS.include?(sidebar_position.to_sym) ? sidebar_position.to_sym : :right
+        @gap = gap
+        @options = options
+        @children = []
+        @main_children = []
+        @sidebar_children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_app_shell(view, self, state)
+      end
+    end
+
+    # Sidebar component for fixed sidebar content
+    # Used within AppShell to define sidebar content
+    class Sidebar < Base
+      attr_reader :header, :sticky
+      attr_accessor :children
+
+      # @param header [String, nil] Optional header text for sidebar
+      # @param sticky [Boolean] Whether sidebar content is sticky (default: true)
+      # @param options [Hash] Additional options
+      def initialize(header: nil, sticky: true, **options)
+        @header = header
+        @sticky = sticky
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_sidebar(view, self, state)
+      end
+    end
+
+    # MainContent component for main content area in AppShell
+    # Used within AppShell to define main content
+    class MainContent < Base
+      attr_accessor :children
+
+      # @param options [Hash] Additional options
+      def initialize(**options)
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_main_content(view, self, state)
+      end
+    end
+
+    # ExpandableCard component for cards that expand/collapse
+    # Displays header always, body toggles on click
+    class ExpandableCard < Base
+      attr_reader :key, :title, :subtitle, :badge_text, :badge_variant, :status, :initially_expanded
+      attr_accessor :children, :header_children
+
+      # @param key [Symbol] State key for expanded state
+      # @param title [String] Card title (always visible)
+      # @param subtitle [String, nil] Optional subtitle
+      # @param badge_text [String, nil] Optional badge text (e.g., "5 activities")
+      # @param badge_variant [Symbol] Badge color variant
+      # @param status [Symbol, nil] Status indicator color (:red, :yellow, :green, :gray)
+      # @param initially_expanded [Boolean] Whether card starts expanded (default: false)
+      # @param options [Hash] Additional options
+      def initialize(key:, title:, subtitle: nil, badge_text: nil, badge_variant: :default,
+                     status: nil, initially_expanded: false, **options)
+        @key = key
+        @title = title
+        @subtitle = subtitle
+        @badge_text = badge_text
+        @badge_variant = badge_variant
+        @status = status
+        @initially_expanded = initially_expanded
+        @options = options
+        @children = []
+        @header_children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_expandable_card(view, self, state)
       end
     end
 
