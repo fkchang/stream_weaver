@@ -386,6 +386,96 @@ external_link_button "View on Amazon", url: "https://amazon.com/dp/B0XXX"
 external_link_button "Get it!", url: book[:amazon_url], submit: true
 ```
 
+## Table
+
+Display tabular data with smart data inference, formatters, and interactive features.
+
+### Basic Usage
+
+```ruby
+# Original API - explicit headers and rows
+table headers: ["Name", "Size"], rows: [["app.rb", "12kb"], ["cli.rb", "8kb"]]
+
+# Array of hashes - headers auto-inferred from keys
+table [
+  { name: "Alice", age: 30, role: "Engineer" },
+  { name: "Bob", age: 25, role: "Designer" }
+]
+# Headers become: "Name", "Age", "Role" (titleized keys)
+
+# Hash of arrays - keys become columns
+table({ name: ["Alice", "Bob"], age: [30, 25] })
+```
+
+### Data Sources
+
+```ruby
+# State binding - reads from state[:users]
+table data: :users
+
+# File loading (YAML or JSON)
+table file: "data/users.yaml"
+table file: "data.json", path: "results.users"
+
+# Transform block for file data
+table file: "raw.yaml" do |data|
+  data.map { |r| { name: r[:n], value: r[:v] } }
+end
+```
+
+### Column DSL with Formatters
+
+```ruby
+table users do
+  column :name
+  column :email, header: "E-mail"
+  column :balance, format: :currency, align: :right
+  column :joined, format: :date
+  column(:active) { |u| u.active ? "Yes" : "No" }  # Computed column
+end
+```
+
+**Built-in formatters:**
+
+| Format | Example Input | Output |
+|--------|---------------|--------|
+| `:date` | `Date.today` | "Jan 20, 2026" |
+| `:datetime` | `Time.now` | "Jan 20, 2026 3:30 PM" |
+| `:currency` | `1234.56` | "$1,234.56" |
+| `:number` | `1234567` | "1,234,567" |
+| `:percent` | `0.42` | "42%" |
+
+Custom formatter with Proc:
+```ruby
+column :balance, format: ->(v) { v > 1000 ? "#{(v/1000.0).round(1)}k" : v.to_s }
+```
+
+### Interactive Features
+
+```ruby
+# Sortable - click headers to sort (handles text and numbers)
+table data, sortable: true
+
+# Sticky header - header stays visible when scrolling
+table data, sticky_header: true
+
+# Combined
+table data, sortable: true, sticky_header: true, striped: true
+```
+
+### Styling Options
+
+```ruby
+table data,
+      striped: true,        # Alternate row colors
+      bordered: true,       # Cell borders
+      hoverable: true,      # Highlight rows on hover (default: true)
+      compact: true,        # Reduced padding
+      sortable: true,       # Client-side sorting
+      sticky_header: true,  # Header stays visible on scroll
+      caption: "Title"      # Table caption above
+```
+
 ## Score Table
 
 ```ruby

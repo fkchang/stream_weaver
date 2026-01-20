@@ -6,7 +6,7 @@ module StreamWeaver
   # Main app class that holds the DSL block and manages the component tree
   class App
     # Built-in themes (custom themes checked via StreamWeaver.theme_exists?)
-    BUILT_IN_THEMES = [:default, :dashboard, :document].freeze
+    BUILT_IN_THEMES = [:default, :dashboard, :document, :dark].freeze
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
@@ -324,19 +324,39 @@ module StreamWeaver
       @components << Components::ScoreTable.new(scores: scores, **options)
     end
 
-    # Table component for displaying tabular data
-    # @param headers [Array<String>] Column headers (optional)
-    # @param rows [Array<Array>] Row data
+    # Table component for displaying tabular data with smart inference
+    # @param data [Array, Hash, Symbol, nil] Data source (positional or keyword)
+    # @param headers [Array<String>] Column headers (optional, auto-inferred from data)
+    # @param rows [Array<Array>] Row data (original API)
+    # @param file [String] Path to YAML/JSON file
+    # @param path [String] Dot-notation path within file data (e.g., "data.users")
     # @param striped [Boolean] Zebra striping (default: false)
     # @param bordered [Boolean] Show borders (default: false)
     # @param hoverable [Boolean] Highlight on hover (default: true)
     # @param compact [Boolean] Reduced padding (default: false)
+    # @param sortable [Boolean] Enable client-side sorting (default: false)
+    # @param sticky_header [Boolean] Keep header visible on scroll (default: false)
     # @param caption [String] Table caption (optional)
-    # @example
+    # @example Original API
     #   table headers: ["Name", "Size"], rows: [["app.rb", "12kb"]]
-    #   table headers: ["File", "Lines"], rows: data, striped: true, compact: true
-    def table(headers: [], rows: [], **options)
-      @components << Components::Table.new(headers: headers, rows: rows, **options)
+    # @example Array of hashes (auto-infer headers)
+    #   table [{ name: "Alice", age: 30 }, { name: "Bob", age: 25 }]
+    # @example Hash of arrays
+    #   table({ name: ["Alice", "Bob"], age: [30, 25] })
+    # @example From file
+    #   table file: "users.yaml", path: "data.users"
+    # @example State binding
+    #   table data: :users
+    # @example Column DSL with formatters
+    #   table users do
+    #     column :name
+    #     column :balance, format: :currency, align: :right
+    #     column(:active) { |u| u.active ? "Yes" : "No" }
+    #   end
+    def table(data = nil, headers: nil, rows: nil, file: nil, path: nil, **options, &block)
+      @components << Components::Table.new(
+        data, headers: headers, rows: rows, file: file, path: path, **options, &block
+      )
     end
 
     # =========================================
@@ -588,6 +608,186 @@ module StreamWeaver
     # @param show_label [Boolean] Show "Theme:" label (default: true)
     def theme_switcher(position: :inline, show_label: true, **options)
       @components << Components::ThemeSwitcher.new(position: position, show_label: show_label, **options)
+    end
+
+    # =========================================
+    # Dashboard components (Cabinet Control style)
+    # =========================================
+
+    # Colored status indicator dot with optional pulse animation
+    # @param status [Symbol] Status color (:red, :yellow, :green, :gray)
+    # @param pulse [Boolean] Enable pulsing animation (default: false)
+    # @param size [Symbol] Size (:sm, :md, :lg) - default :md
+    # @example
+    #   status_dot status: :green, pulse: true
+    def status_dot(status: :gray, pulse: false, size: :md, **options)
+      @components << Components::StatusDot.new(status: status, pulse: pulse, size: size, **options)
+    end
+
+    # Small count/label badge pill
+    # @param text [String] Badge text/count
+    # @param variant [Symbol] Color variant (:default, :danger, :warning, :success, :info)
+    # @param size [Symbol] Size (:sm, :md) - default :sm
+    # @example
+    #   badge "5", variant: :danger
+    def badge(text, variant: :default, size: :sm, **options)
+      @components << Components::Badge.new(text, variant: variant, size: size, **options)
+    end
+
+    # Large metric number with label
+    # @param value [String, Integer] The main value to display
+    # @param label [String] Label text below the value
+    # @param color [Symbol] Value color (:default, :blue, :purple, :green, :red, :yellow)
+    # @param size [Symbol] Size (:sm, :md, :lg) - default :md
+    # @example
+    #   stat_display value: 42, label: "TASKS", color: :blue
+    def stat_display(value:, label:, color: :blue, size: :md, **options)
+      @components << Components::StatDisplay.new(value: value, label: label, color: color, size: size, **options)
+    end
+
+    # Activity type tag badge
+    # @param type_name [Symbol, String] The type (:research, :task, :escalation, etc.)
+    # @param color [Symbol, nil] Override color for custom types
+    # @example
+    #   type_tag :research
+    #   type_tag "custom", color: :purple
+    def type_tag(type_name, color: nil, **options)
+      @components << Components::TypeTag.new(type_name, color: color, **options)
+    end
+
+    # Animated pulse indicator with label
+    # @param color [Symbol] Dot color (:green, :red, :yellow, :blue) - default :green
+    # @param label [String] Status text next to the dot
+    # @example
+    #   pulse_indicator color: :green, label: "System Active"
+    def pulse_indicator(color: :green, label: nil, **options)
+      @components << Components::PulseIndicator.new(color: color, label: label, **options)
+    end
+
+    # Priority item with colored left border (escalation style)
+    # @param priority [Symbol] Priority level (:critical, :urgent, :high, :normal, :low)
+    # @param title [String] Item title
+    # @param description [String, nil] Optional description text
+    # @param meta_left [String, nil] Left-side metadata (e.g., secretary name)
+    # @param meta_right [String, nil] Right-side metadata (e.g., action link)
+    # @example
+    #   priority_item priority: :critical, title: "Needs attention",
+    #                 description: "Something requires action",
+    #                 meta_left: "scheduler", meta_right: "View details"
+    def priority_item(priority: :normal, title:, description: nil, meta_left: nil, meta_right: nil, **options, &block)
+      component = Components::PriorityItem.new(
+        priority: priority, title: title, description: description,
+        meta_left: meta_left, meta_right: meta_right, **options
+      )
+      with_container(component, &block)
+    end
+
+    # Activity item with time, title, summary, and type tag
+    # @param time [String] Time display (e.g., "15:00")
+    # @param title [String] Activity title
+    # @param summary [String, nil] Optional summary text
+    # @param type [Symbol, nil] Activity type for TypeTag (:research, :task, etc.)
+    # @example
+    #   activity_item time: "14:30", title: "Meeting notes",
+    #                 summary: "Discussed Q4 planning", type: :task
+    def activity_item(time:, title:, summary: nil, type: nil, **options)
+      @components << Components::ActivityItem.new(time: time, title: title, summary: summary, type: type, **options)
+    end
+
+    # =========================================
+    # Layout components (Cabinet Control style)
+    # =========================================
+
+    # Two-column app layout with main content and sidebar
+    # @param sidebar_width [String] CSS width for sidebar (default: "320px")
+    # @param sidebar_position [Symbol] Sidebar position (:left, :right) - default :right
+    # @param gap [String] Gap between main and sidebar (default: "1.5rem")
+    # @yield Define main content with `main do ... end` and sidebar with `sidebar do ... end`
+    # @example
+    #   app_shell sidebar_width: "300px" do
+    #     main do
+    #       header2 "Content"
+    #     end
+    #     sidebar header: "Escalations" do
+    #       priority_item priority: :critical, title: "Urgent"
+    #     end
+    #   end
+    def app_shell(sidebar_width: "320px", sidebar_position: :right, gap: "1.5rem", **options, &block)
+      component = Components::AppShell.new(
+        sidebar_width: sidebar_width,
+        sidebar_position: sidebar_position,
+        gap: gap,
+        **options
+      )
+      @components << component
+
+      return component unless block
+
+      # Capture the app_shell context for main/sidebar helpers
+      @current_app_shell = component
+      instance_eval(&block)
+      @current_app_shell = nil
+
+      component
+    end
+
+    # Main content area within app_shell
+    # @yield Define main content components
+    def main(**options, &block)
+      raise "main can only be used inside an app_shell block" unless @current_app_shell
+
+      parent_components = @components
+      @components = []
+      instance_eval(&block) if block
+      @current_app_shell.main_children = @components
+      @components = parent_components
+    end
+
+    # Sidebar within app_shell
+    # @param header [String, nil] Optional header text for sidebar
+    # @param sticky [Boolean] Whether sidebar content is sticky (default: true)
+    # @yield Define sidebar content components
+    def sidebar(header: nil, sticky: true, **options, &block)
+      raise "sidebar can only be used inside an app_shell block" unless @current_app_shell
+
+      sidebar_component = Components::Sidebar.new(header: header, sticky: sticky, **options)
+
+      parent_components = @components
+      @components = []
+      instance_eval(&block) if block
+      sidebar_component.children = @components
+      @components = parent_components
+
+      @current_app_shell.sidebar_children << sidebar_component
+    end
+
+    # Expandable card that shows/hides content on click
+    # @param key [Symbol] State key for expanded state
+    # @param title [String] Card title (always visible)
+    # @param subtitle [String, nil] Optional subtitle
+    # @param badge_text [String, nil] Optional badge text (e.g., "5 activities")
+    # @param badge_variant [Symbol] Badge color variant
+    # @param status [Symbol, nil] Status indicator color (:red, :yellow, :green, :gray)
+    # @param initially_expanded [Boolean] Whether card starts expanded (default: false)
+    # @yield Define card body content
+    # @example
+    #   expandable_card key: :scheduler_expanded, title: "Scheduler",
+    #                   subtitle: "Time Management", badge_text: "5 activities",
+    #                   status: :red do
+    #     stat_display value: 1, label: "RESEARCH"
+    #     activity_item time: "15:00", title: "Research task", type: :research
+    #   end
+    def expandable_card(key:, title:, subtitle: nil, badge_text: nil, badge_variant: :default,
+                        status: nil, initially_expanded: false, **options, &block)
+      @_state[key] ||= initially_expanded
+
+      component = Components::ExpandableCard.new(
+        key: key, title: title, subtitle: subtitle,
+        badge_text: badge_text, badge_variant: badge_variant,
+        status: status, initially_expanded: initially_expanded,
+        **options
+      )
+      with_container(component, &block)
     end
 
     private

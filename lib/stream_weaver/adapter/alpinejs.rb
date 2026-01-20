@@ -927,7 +927,7 @@ module StreamWeaver
       # @param view [Phlex::HTML] The Phlex view instance
       # @param headers [Array<String>] Column headers
       # @param rows [Array<Array>] Row data
-      # @param options [Hash] Styling options (:striped, :bordered, :hoverable, :compact, :caption)
+      # @param options [Hash] Styling options (:striped, :bordered, :hoverable, :compact, :caption, :sortable, :sticky_header, :columns)
       # @param state [Hash] Current state hash (symbol keys)
       # @return [void] Renders to view
       def render_table(view, headers, rows, options, state)
@@ -936,35 +936,95 @@ module StreamWeaver
         table_classes << "sw-table-bordered" if options[:bordered]
         table_classes << "sw-table-hoverable" if options[:hoverable]
         table_classes << "sw-table-compact" if options[:compact]
+        table_classes << "sw-table-sortable" if options[:sortable]
 
-        view.table(class: table_classes.join(" "), style: "width: 100%; border-collapse: collapse;") do
-          if options[:caption]
-            view.caption(style: "caption-side: top; text-align: left; padding: 0.5rem 0; font-weight: 600;") { options[:caption] }
-          end
+        columns = options[:columns] || []
+        table_id = "table_#{SecureRandom.hex(4)}" if options[:sortable]
 
-          if headers.any?
-            view.thead do
-              view.tr do
-                headers.each do |header|
-                  view.th(style: "padding: #{options[:compact] ? '0.5rem' : '0.75rem'} 1rem; text-align: left; border-bottom: 2px solid var(--sw-color-border, #e0e0e0); font-weight: 600;") { header.to_s }
+        # Wrapper for sticky header
+        wrapper_style = options[:sticky_header] ? "max-height: 400px; overflow-y: auto;" : nil
+
+        view.div(style: wrapper_style) do
+          alpine_data = options[:sortable] ? "{ sortCol: null, sortAsc: true }" : nil
+          table_attrs = { class: table_classes.join(" "), style: "width: 100%; border-collapse: collapse;" }
+          table_attrs["x-data"] = alpine_data if options[:sortable]
+          table_attrs[:id] = table_id if table_id
+
+          view.table(**table_attrs) do
+            if options[:caption]
+              view.caption(style: "caption-side: top; text-align: left; padding: 0.5rem 0; font-weight: 600;") { options[:caption] }
+            end
+
+            if headers.any?
+              thead_style = options[:sticky_header] ? "position: sticky; top: 0; background: var(--sw-color-bg, white); z-index: 1;" : nil
+              view.thead(style: thead_style) do
+                view.tr do
+                  headers.each_with_index do |header, col_idx|
+                    col = columns[col_idx]
+                    align = col&.align || :left
+                    th_style = "padding: #{options[:compact] ? '0.5rem' : '0.75rem'} 1rem; text-align: #{align}; border-bottom: 2px solid var(--sw-color-border, #e0e0e0); font-weight: 600;"
+                    th_style += " cursor: pointer; user-select: none;" if options[:sortable]
+
+                    th_attrs = { style: th_style }
+                    if options[:sortable]
+                      th_attrs["@click"] = "sortCol = #{col_idx}; sortAsc = sortCol === #{col_idx} ? !sortAsc : true; $dispatch('sort-table', { col: #{col_idx}, asc: sortAsc })"
+                    end
+
+                    view.th(**th_attrs) do
+                      view.span { header.to_s }
+                      if options[:sortable]
+                        view.span(
+                          "x-show" => "sortCol === #{col_idx}",
+                          "x-text" => "sortAsc ? ' ▲' : ' ▼'",
+                          style: "font-size: 0.75em; opacity: 0.7;"
+                        )
+                      end
+                    end
+                  end
                 end
               end
             end
-          end
 
-          view.tbody do
-            rows.each_with_index do |row, idx|
-              row_classes = []
-              row_classes << "sw-row-striped" if options[:striped] && idx.odd?
-              row_classes << "sw-row-hoverable" if options[:hoverable]
+            tbody_attrs = {}
+            if options[:sortable]
+              tbody_attrs["x-ref"] = "tbody"
+              tbody_attrs["@sort-table.window"] = <<~JS.gsub("\n", " ").strip
+                const rows = Array.from($refs.tbody.querySelectorAll('tr'));
+                rows.sort((a, b) => {
+                  const aVal = a.children[$event.detail.col]?.textContent || '';
+                  const bVal = b.children[$event.detail.col]?.textContent || '';
+                  const aNum = parseFloat(aVal.replace(/[^0-9.-]/g, ''));
+                  const bNum = parseFloat(bVal.replace(/[^0-9.-]/g, ''));
+                  const cmp = !isNaN(aNum) && !isNaN(bNum) ? aNum - bNum : aVal.localeCompare(bVal);
+                  return $event.detail.asc ? cmp : -cmp;
+                });
+                rows.forEach(r => $refs.tbody.appendChild(r));
+              JS
+            end
 
-              view.tr(class: row_classes.any? ? row_classes.join(" ") : nil) do
-                row.each do |cell|
-                  cell_style = "padding: #{options[:compact] ? '0.5rem' : '0.75rem'} 1rem; border-bottom: 1px solid var(--sw-color-border, #e0e0e0);"
-                  if options[:bordered]
-                    cell_style += " border: 1px solid var(--sw-color-border, #e0e0e0);"
+            view.tbody(**tbody_attrs) do
+              rows.each_with_index do |row, idx|
+                row_classes = []
+                row_classes << "sw-row-striped" if options[:striped] && idx.odd?
+                row_classes << "sw-row-hoverable" if options[:hoverable]
+
+                view.tr(class: row_classes.any? ? row_classes.join(" ") : nil) do
+                  row.each_with_index do |cell, col_idx|
+                    col = columns[col_idx]
+                    align = col&.align || :left
+                    cell_style = "padding: #{options[:compact] ? '0.5rem' : '0.75rem'} 1rem; text-align: #{align}; border-bottom: 1px solid var(--sw-color-border, #e0e0e0);"
+                    if options[:bordered]
+                      cell_style += " border: 1px solid var(--sw-color-border, #e0e0e0);"
+                    end
+
+                    # Apply column style if defined
+                    if col&.style.is_a?(Proc)
+                      # Dynamic style based on cell value - would need to be pre-computed
+                      # For now, skip dynamic styles in adapter
+                    end
+
+                    view.td(style: cell_style) { cell.to_s }
                   end
-                  view.td(style: cell_style) { cell.to_s }
                 end
               end
             end
@@ -2006,6 +2066,253 @@ module StreamWeaver
               }
             })();
           JS
+        end
+      end
+
+      # =========================================
+      # Dashboard components rendering (Cabinet Control style)
+      # =========================================
+
+      # Render a status dot indicator
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::StatusDot] The status dot component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_status_dot(view, component, state)
+        css_classes = ["sw-status-dot", "sw-status-dot-#{component.status}"]
+        css_classes << "sw-status-dot-#{component.size}"
+        css_classes << "sw-status-dot-pulse" if component.pulse
+
+        view.span(class: css_classes.join(" "))
+      end
+
+      # Render a badge/pill component
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::Badge] The badge component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_badge(view, component, state)
+        css_classes = ["sw-badge", "sw-badge-#{component.variant}", "sw-badge-#{component.size}"]
+
+        view.span(class: css_classes.join(" ")) { component.text }
+      end
+
+      # Render a stat display (large number with label)
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::StatDisplay] The stat display component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_stat_display(view, component, state)
+        css_classes = ["sw-stat", "sw-stat-#{component.size}"]
+
+        view.div(class: css_classes.join(" ")) do
+          view.div(class: "sw-stat-value sw-stat-value-#{component.color}") { component.value }
+          view.div(class: "sw-stat-label") { component.label }
+        end
+      end
+
+      # Render a type tag (activity type badge)
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::TypeTag] The type tag component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_type_tag(view, component, state)
+        css_classes = ["sw-type-tag", "sw-type-tag-#{component.color}"]
+
+        view.span(class: css_classes.join(" ")) { component.display_text }
+      end
+
+      # Render a pulse indicator (animated status with label)
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::PulseIndicator] The pulse indicator component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_pulse_indicator(view, component, state)
+        view.div(class: "sw-pulse-indicator") do
+          view.span(class: "sw-pulse-dot sw-pulse-dot-#{component.color}")
+          if component.label
+            view.span(class: "sw-pulse-label") { component.label }
+          end
+        end
+      end
+
+      # Render a priority item (escalation-style with colored border)
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::PriorityItem] The priority item component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_priority_item(view, component, state)
+        css_classes = ["sw-priority-item", "sw-priority-#{component.priority}"]
+
+        view.div(class: css_classes.join(" ")) do
+          view.div(class: "sw-priority-label") { component.priority.to_s.upcase }
+          view.h4(class: "sw-priority-title") { component.title }
+          if component.description
+            view.p(class: "sw-priority-description") { component.description }
+          end
+          if component.meta_left || component.meta_right
+            view.div(class: "sw-priority-meta") do
+              view.span(class: "sw-priority-meta-left") { component.meta_left } if component.meta_left
+              view.span(class: "sw-priority-meta-right") { component.meta_right } if component.meta_right
+            end
+          end
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # Render an activity item (time + title + summary + type)
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::ActivityItem] The activity item component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_activity_item(view, component, state)
+        view.div(class: "sw-activity-item") do
+          view.span(class: "sw-activity-time") { component.time }
+          view.div(class: "sw-activity-content") do
+            view.h4(class: "sw-activity-title") { component.title }
+            if component.summary
+              view.p(class: "sw-activity-summary") { component.summary }
+            end
+          end
+          if component.type
+            type_tag = Components::TypeTag.new(component.type)
+            render_type_tag(view, type_tag, state)
+          end
+        end
+      end
+
+      # =========================================
+      # Layout components rendering (Cabinet Control style)
+      # =========================================
+
+      # Render an app shell with main content and sidebar
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::AppShell] The app shell component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_app_shell(view, component, state)
+        css_classes = ["sw-app-shell"]
+        css_classes << "sw-app-shell-sidebar-#{component.sidebar_position}"
+
+        style = "--sw-shell-sidebar-width: #{component.sidebar_width}; --sw-shell-gap: #{component.gap};"
+
+        view.div(class: css_classes.join(" "), style: style) do
+          # Render main content
+          view.div(class: "sw-app-shell-main") do
+            component.main_children.each { |child| child.render(view, state) }
+          end
+
+          # Render sidebar
+          view.aside(class: "sw-app-shell-sidebar") do
+            component.sidebar_children.each { |child| child.render(view, state) }
+          end
+        end
+      end
+
+      # Render a sidebar component
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::Sidebar] The sidebar component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_sidebar(view, component, state)
+        css_classes = ["sw-sidebar"]
+        css_classes << "sw-sidebar-sticky" if component.sticky
+
+        view.div(class: css_classes.join(" ")) do
+          if component.header
+            view.div(class: "sw-sidebar-header") do
+              view.h3(class: "sw-sidebar-title") { component.header }
+            end
+          end
+          view.div(class: "sw-sidebar-content") do
+            component.children.each { |child| child.render(view, state) }
+          end
+        end
+      end
+
+      # Render a main content component
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::MainContent] The main content component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_main_content(view, component, state)
+        view.div(class: "sw-main-content") do
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # Render an expandable card with Alpine.js toggle
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::ExpandableCard] The expandable card component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_expandable_card(view, component, state)
+        # Initialize state for this card's expanded status
+        expanded = state[component.key] || component.initially_expanded
+
+        css_classes = ["sw-expandable-card"]
+
+        view.div(
+          class: css_classes.join(" "),
+          "x-data" => "{ expanded: #{expanded} }"
+        ) do
+          # Card header (always visible, clickable)
+          view.div(
+            class: "sw-expandable-card-header",
+            "@click" => "expanded = !expanded"
+          ) do
+            # Status dot if provided
+            if component.status
+              status_dot = Components::StatusDot.new(status: component.status)
+              render_status_dot(view, status_dot, state)
+            end
+
+            # Title and subtitle
+            view.div(class: "sw-expandable-card-titles") do
+              view.h3(class: "sw-expandable-card-title") { component.title }
+              if component.subtitle
+                view.p(class: "sw-expandable-card-subtitle") { component.subtitle }
+              end
+            end
+
+            # Badge if provided
+            if component.badge_text
+              badge = Components::Badge.new(component.badge_text, variant: component.badge_variant)
+              render_badge(view, badge, state)
+            end
+
+            # Expand/collapse indicator
+            view.span(class: "sw-expandable-card-chevron", "x-text" => "expanded ? '▼' : '▶'")
+          end
+
+          # Card body (toggles visibility)
+          view.div(
+            class: "sw-expandable-card-body",
+            "x-show" => "expanded",
+            "x-transition:enter" => "sw-transition-enter",
+            "x-transition:enter-start" => "sw-transition-enter-start",
+            "x-transition:enter-end" => "sw-transition-enter-end",
+            "x-transition:leave" => "sw-transition-leave",
+            "x-transition:leave-start" => "sw-transition-leave-start",
+            "x-transition:leave-end" => "sw-transition-leave-end"
+          ) do
+            # Render header children (stats area)
+            component.header_children.each { |child| child.render(view, state) }
+
+            # Render body children
+            component.children.each { |child| child.render(view, state) }
+          end
         end
       end
 
