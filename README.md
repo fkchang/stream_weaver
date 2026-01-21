@@ -190,6 +190,8 @@ examples/
 │   ├── theme_demo.rb     - Built-in theme switching
 │   ├── style_showcase.rb - Component styling showcase
 │   └── feedback_demo.rb  - Alerts, Toasts, Progress, Spinners
+├── dashboard_components.rb  - Dashboard component showcase (dark theme)
+├── operations_dashboard_demo.rb - Full dashboard with sidebar layout
 └── advanced/           # Full applications
     ├── tutorial.rb       - Interactive tutorial (start here!)
     ├── all_components.rb - Comprehensive component gallery
@@ -445,6 +447,39 @@ external_link_button "View on Amazon", url: "https://amazon.com/dp/B0XXX"
 external_link_button "Select & Open", url: "https://example.com", submit: true
 ```
 
+### Dashboard Components
+
+For operations dashboards and control panels (best with `theme: :dark`):
+
+```ruby
+# Status indicators
+status_dot status: :green, pulse: true
+badge "5", variant: :danger
+stat_display value: 42, label: "TASKS", color: :blue
+type_tag :research
+pulse_indicator color: :green, label: "System Active"
+
+# Priority/activity feeds
+priority_item priority: :critical, title: "Database at capacity",
+              description: "Needs immediate attention"
+activity_item time: "15:00", title: "Deploy complete", type: :task
+
+# Dashboard layout with sidebar
+app_shell sidebar_width: "320px" do
+  main do
+    # Main content
+  end
+  sidebar header: "Alerts" do
+    # Sidebar content
+  end
+end
+
+# Expandable cards
+expandable_card key: :details, title: "Engineering", status: :green do
+  stat_display value: 5, label: "TASKS"
+end
+```
+
 ### Charts
 
 Data visualization via Chart.js (CDN-loaded only when charts are present):
@@ -529,6 +564,7 @@ end
 - `:default` - Warm Industrial (Source Sans 3, 17px, generous spacing)
 - `:dashboard` - Data Dense (15px font, tighter spacing, minimal accents)
 - `:document` - Reading Mode (Crimson Pro serif, 19px, paper background)
+- `:dark` - Dark mode with deep backgrounds, glow effects, and dashboard styling
 
 ### `run!(options)`
 

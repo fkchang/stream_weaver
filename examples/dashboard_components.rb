@@ -1,7 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Example: Dashboard Components (Cabinet Control style)
+# Example: Dashboard Components
+# Showcases all dashboard-style components with dark theme
 # Run with: ./exe/streamweaver examples/dashboard_components.rb
 
 app "Dashboard Components Demo", theme: :dark, layout: :wide do
@@ -48,10 +49,10 @@ app "Dashboard Components Demo", theme: :dark, layout: :wide do
   header2 "Stat Displays"
   text "Large metric numbers with labels:"
   hstack spacing: :xl do
-    stat_display value: 24, label: "ACTIVITIES", color: :default
-    stat_display value: 7, label: "RESEARCH", color: :blue
-    stat_display value: 12, label: "TASKS", color: :purple
-    stat_display value: 5, label: "ESCALATIONS", color: :red
+    stat_display value: 24, label: "TOTAL", color: :default
+    stat_display value: 7, label: "PENDING", color: :blue
+    stat_display value: 12, label: "IN PROGRESS", color: :purple
+    stat_display value: 5, label: "BLOCKED", color: :red
   end
 
   header2 "Type Tags"
@@ -66,42 +67,42 @@ app "Dashboard Components Demo", theme: :dark, layout: :wide do
   end
 
   header2 "Priority Items"
-  text "Escalation-style items with colored borders:"
+  text "Items with priority-colored left borders (hover to see slide effect):"
   vstack spacing: :md do
-    priority_item priority: :critical, title: "Needs /covey-interview",
-                  description: "Cannot proceed without roles, values, mission defined. This blocks all habit tracking.",
-                  meta_left: "covey", meta_right: "Run /covey-interview"
+    priority_item priority: :critical, title: "Database migration blocked",
+                  description: "Production schema changes require downtime window approval.",
+                  meta_left: "ops", meta_right: "Schedule window"
 
-    priority_item priority: :urgent, title: "Jira RED Status",
-                  description: "65 rolling issues (71% of sprint). HEDG-2613 rolling 11 sprints.",
-                  meta_left: "scheduler", meta_right: "Triage session"
+    priority_item priority: :urgent, title: "API rate limits exceeded",
+                  description: "Third-party integration hitting 429 errors. Need backoff strategy.",
+                  meta_left: "backend", meta_right: "Implement retry"
 
-    priority_item priority: :high, title: "Platform decision",
-                  description: "Need to choose: Substack vs Medium vs Ghost for blogging.",
-                  meta_left: "creator", meta_right: "Make decision"
+    priority_item priority: :high, title: "Security audit findings",
+                  description: "3 medium-severity items need remediation before release.",
+                  meta_left: "security", meta_right: "Review findings"
 
     priority_item priority: :normal, title: "Documentation update",
-                  description: "Keep README files current.",
-                  meta_left: "cultiv_dev", meta_right: "Update docs"
+                  description: "API docs need refresh for v2 endpoints.",
+                  meta_left: "docs", meta_right: "Update guides"
   end
 
   header2 "Activity Items"
-  text "Activity feed with time, title, summary, and type:"
+  text "Activity feed with time, title, summary, and type (hover to see highlight):"
   vstack spacing: :none do
-    activity_item time: "15:00", title: "BJJ curriculum & recovery research",
-                  summary: "4-6 month cycles, weekly focus subjects, over-35 needs deloads",
+    activity_item time: "15:00", title: "Performance analysis complete",
+                  summary: "Identified 3 slow queries, recommended indexes",
                   type: :research
 
-    activity_item time: "15:05", title: "Need teaching sequence context",
-                  summary: "Curriculum exists but lacks YOUR sequencing for tren lock, standing grappling",
+    activity_item time: "15:05", title: "Deployment approval needed",
+                  summary: "Staging verified, awaiting prod sign-off",
                   type: :escalation
 
-    activity_item time: "14:00", title: "Training log framework established",
-                  summary: "ROUNDS, FOCUS_CHECK, VALIDATIONS, REFINEMENTS, TEACHING",
+    activity_item time: "14:00", title: "Feature branch merged",
+                  summary: "User preferences module integrated",
                   type: :task
 
-    activity_item time: "13:30", title: "Sent weekly progress update",
-                  summary: "Summarized achievements and blockers",
+    activity_item time: "13:30", title: "Standup notes shared",
+                  summary: "Team aligned on sprint priorities",
                   type: :communication
   end
 end

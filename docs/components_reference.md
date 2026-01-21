@@ -628,3 +628,180 @@ spinner size: :md, label: "Loading data..."
 ```
 
 Sizes: `:sm`, `:md`, `:lg`
+
+## Dashboard Components
+
+Dashboard-style components for operations dashboards, control panels, and status displays. Best used with `theme: :dark`.
+
+### Status Dot
+
+Colored indicator dots with optional glow effect and pulse animation:
+
+```ruby
+status_dot status: :red      # Red with glow
+status_dot status: :yellow   # Yellow with glow
+status_dot status: :green    # Green with glow
+status_dot status: :gray     # Gray (inactive)
+
+# Sizes
+status_dot status: :green, size: :sm   # 6px
+status_dot status: :green, size: :md   # 10px (default)
+status_dot status: :green, size: :lg   # 14px
+
+# Pulse animation
+status_dot status: :green, pulse: true
+```
+
+### Badge
+
+Count/label badges in various color variants:
+
+```ruby
+badge "5"                        # Default gray
+badge "3", variant: :danger      # Red
+badge "12", variant: :warning    # Yellow
+badge "OK", variant: :success    # Green
+badge "new", variant: :info      # Blue
+
+# Sizes
+badge "5", size: :sm             # Smaller
+badge "5", size: :md             # Default
+```
+
+### Stat Display
+
+Large metric numbers with labels:
+
+```ruby
+stat_display value: 42, label: "TASKS"
+stat_display value: 7, label: "PENDING", color: :blue
+stat_display value: 5, label: "BLOCKED", color: :red
+stat_display value: 12, label: "DONE", color: :purple
+
+# Sizes
+stat_display value: 99, label: "TOTAL", size: :sm
+stat_display value: 99, label: "TOTAL", size: :md   # Default
+stat_display value: 99, label: "TOTAL", size: :lg
+```
+
+Colors: `:default`, `:blue`, `:purple`, `:red`
+
+### Type Tag
+
+Activity type badges:
+
+```ruby
+type_tag :research       # Blue
+type_tag :task           # Purple
+type_tag :escalation     # Red
+type_tag :communication  # Green
+type_tag :warning        # Yellow
+type_tag :info           # Gray
+```
+
+### Pulse Indicator
+
+Animated status indicator with label (for headers):
+
+```ruby
+pulse_indicator color: :green, label: "System Active"
+pulse_indicator color: :red, label: "Alert"
+pulse_indicator color: :yellow, label: "Degraded"
+```
+
+### Priority Item
+
+Items with priority-colored left border and hover slide effect:
+
+```ruby
+priority_item priority: :critical, title: "Database at capacity",
+              description: "Primary DB at 92% storage. Need immediate action.",
+              meta_left: "ops", meta_right: "Expand storage"
+
+priority_item priority: :urgent, title: "API rate limited",
+              description: "Third-party integration hitting 429 errors."
+
+priority_item priority: :high, title: "Security patch needed"
+priority_item priority: :normal, title: "Documentation update"
+```
+
+Priorities: `:critical` (red), `:urgent` (orange), `:high` (yellow), `:normal` (gray)
+
+### Activity Item
+
+Activity feed items with time, title, summary, and type badge:
+
+```ruby
+activity_item time: "15:00", title: "Performance analysis",
+              summary: "Identified 3 slow queries, recommended indexes",
+              type: :research
+
+activity_item time: "14:30", title: "Deployment complete",
+              summary: "All services updated successfully",
+              type: :task
+```
+
+Types: `:research`, `:task`, `:escalation`, `:communication`
+
+## Dashboard Layouts
+
+### App Shell
+
+Two-column layout with main content and sidebar:
+
+```ruby
+app_shell sidebar_width: "320px" do
+  main do
+    header2 "Dashboard"
+    # Main content here
+  end
+
+  sidebar header: "Alerts" do
+    # Sidebar content here
+  end
+end
+```
+
+The sidebar is sticky and scrolls independently. Layout stacks on mobile.
+
+### Expandable Card
+
+Cards that expand/collapse on click with smooth transitions:
+
+```ruby
+expandable_card key: :team_details,
+                title: "Engineering",
+                subtitle: "Product Development",
+                badge_text: "5 activities",
+                status: :green,
+                initially_expanded: true do
+  # Expanded content here
+  stat_display value: 3, label: "TASKS"
+  activity_item time: "15:00", title: "Code review"
+end
+```
+
+Options:
+- `key:` - State key for expansion state (required)
+- `title:` - Card header title
+- `subtitle:` - Secondary text
+- `badge_text:` - Text in top-right badge
+- `status:` - Status dot color (`:red`, `:yellow`, `:green`)
+- `initially_expanded:` - Start expanded (default: false)
+
+## Dark Theme
+
+Use `theme: :dark` for a dark color scheme optimized for dashboards:
+
+```ruby
+app "Operations Dashboard", theme: :dark do
+  # components...
+end
+```
+
+Dark theme provides:
+- Deep dark backgrounds (`#0a0e14`, `#131820`)
+- Soft borders and elevated surfaces
+- Light text with proper contrast
+- Glow effects on status indicators
+- Hover lift and slide animations

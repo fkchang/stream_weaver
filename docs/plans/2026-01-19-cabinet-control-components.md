@@ -1,12 +1,8 @@
-# Cabinet Control Components Plan
+# Dashboard Components Plan
 
 **Date:** 2026-01-19
 **Status:** PHASE 2 COMPLETE
-**Goal:** Add components and styling to StreamWeaver to enable building Cabinet Control dashboard
-
-## Reference
-- Cabinet Control HTML: `~/work/cultiv-ai/apps/cabinet-dashboard/index.html`
-- Cabinet Control PDF: `~/Downloads/CabinetControl.pdf`
+**Goal:** Add dashboard-style components and styling to StreamWeaver for operations dashboards
 
 ## Missing Components
 
@@ -101,7 +97,7 @@ Each component should be testable via:
 
 ## Success Criteria
 
-Can build a Cabinet Control-like dashboard using only StreamWeaver DSL:
+Can build a operations dashboard-like dashboard using only StreamWeaver DSL:
 ```ruby
 app_shell sidebar_width: 320 do
   main do
@@ -171,7 +167,7 @@ end
 - Dark theme overrides for layout components
 
 ### Example App
-- `examples/cabinet_control_demo.rb` - Full Cabinet Control-style dashboard
+- `examples/cabinet_control_demo.rb` - Full operations dashboard-style dashboard
 
 ## Phase 3 (Future)
 
