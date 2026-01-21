@@ -536,7 +536,7 @@ module StreamWeaver
 
       def initialize(data = nil, headers: nil, rows: nil, file: nil, path: nil,
                      striped: false, bordered: false, hoverable: true, compact: false,
-                     sortable: false, sticky_header: false, caption: nil, **options, &block)
+                     sortable: false, sticky_header: false, markdown: false, caption: nil, **options, &block)
         @data = data
         @headers = headers
         @rows = rows
@@ -548,6 +548,7 @@ module StreamWeaver
         @compact = compact
         @sortable = sortable
         @sticky_header = sticky_header
+        @markdown = markdown
         @caption = caption
         @options = options
         @columns = []
@@ -673,6 +674,7 @@ module StreamWeaver
           compact: @compact,
           sortable: @sortable,
           sticky_header: @sticky_header,
+          markdown: @markdown,
           caption: @caption,
           columns: @columns
         )

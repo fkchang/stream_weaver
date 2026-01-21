@@ -1023,12 +1023,27 @@ module StreamWeaver
                       # For now, skip dynamic styles in adapter
                     end
 
-                    view.td(style: cell_style) { cell.to_s }
+                    cell_content = cell.to_s
+                    if options[:markdown]
+                      cell_content = parse_cell_markdown(cell_content)
+                      view.td(style: cell_style) { view.unsafe_raw(cell_content) }
+                    else
+                      view.td(style: cell_style) { cell_content }
+                    end
                   end
                 end
               end
             end
           end
+        end
+      end
+
+      # Parse markdown links [text](url) in table cell content
+      # @param text [String] Cell content that may contain markdown links
+      # @return [String] HTML with links converted to <a> tags
+      def parse_cell_markdown(text)
+        text.gsub(/\[([^\]]+)\]\(([^)]+)\)/) do
+          %(<a href="#{Regexp.last_match(2)}" style="color: var(--sw-color-link, #0066cc);">#{Regexp.last_match(1)}</a>)
         end
       end
 
