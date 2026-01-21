@@ -353,9 +353,11 @@ module StreamWeaver
     #     column :balance, format: :currency, align: :right
     #     column(:active) { |u| u.active ? "Yes" : "No" }
     #   end
-    def table(data = nil, headers: nil, rows: nil, file: nil, path: nil, **options, &block)
+    def table(positional_data = nil, data: nil, headers: nil, rows: nil, file: nil, path: nil, **options, &block)
+      # Support both: table [data] (positional) and table data: :key (keyword)
+      actual_data = positional_data || data
       @components << Components::Table.new(
-        data, headers: headers, rows: rows, file: file, path: path, **options, &block
+        actual_data, headers: headers, rows: rows, file: file, path: path, **options, &block
       )
     end
 
