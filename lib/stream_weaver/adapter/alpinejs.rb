@@ -1026,7 +1026,7 @@ module StreamWeaver
                     cell_content = cell.to_s
                     if options[:markdown]
                       cell_content = parse_cell_markdown(cell_content)
-                      view.td(style: cell_style) { view.unsafe_raw(cell_content) }
+                      view.td(style: cell_style) { view.raw(view.safe(cell_content)) }
                     else
                       view.td(style: cell_style) { cell_content }
                     end
