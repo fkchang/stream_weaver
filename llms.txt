@@ -114,6 +114,9 @@ end
 # Interactive features
 table data, sortable: true, sticky_header: true, striped: true
 
+# Markdown links in cells
+table [{ issue: "[JIRA-123](https://jira.example.com)" }], markdown: true
+
 # Data sources
 table data: :users           # From state
 table file: "data.yaml"      # From file

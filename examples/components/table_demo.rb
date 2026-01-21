@@ -187,6 +187,19 @@ app "Table Component Demo", layout: :wide do
             ```
           MD
         end
+
+        card do
+          header3 "Markdown Links"
+          text "Enable clickable links in cells with markdown: true:"
+
+          table [
+            { issue: "[PROJ-101](https://example.com/issues/101)", title: "Fix login bug", status: "Open" },
+            { issue: "[PROJ-102](https://example.com/issues/102)", title: "Add dark mode", status: "In Progress" },
+            { issue: "[PROJ-103](https://example.com/issues/103)", title: "Update docs", status: "Closed" }
+          ], markdown: true, striped: true
+
+          text "Without markdown: true, links show as literal text."
+        end
       end
     end
 

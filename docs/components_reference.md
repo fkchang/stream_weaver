@@ -463,6 +463,18 @@ table data, sticky_header: true
 table data, sortable: true, sticky_header: true, striped: true
 ```
 
+### Markdown Links in Cells
+
+```ruby
+# Enable markdown link parsing with markdown: true
+table [
+  { issue: "[JIRA-123](https://jira.example.com/browse/JIRA-123)", status: "Open" },
+  { issue: "[JIRA-456](https://jira.example.com/browse/JIRA-456)", status: "Closed" }
+], markdown: true
+
+# Default (markdown: false) shows literal text: "[text](url)"
+```
+
 ### Styling Options
 
 ```ruby
@@ -473,6 +485,7 @@ table data,
       compact: true,        # Reduced padding
       sortable: true,       # Client-side sorting
       sticky_header: true,  # Header stays visible on scroll
+      markdown: true,       # Parse [text](url) as clickable links
       caption: "Title"      # Table caption above
 ```
 
