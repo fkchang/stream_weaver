@@ -122,12 +122,16 @@ gem 'stream_weaver'
 
 ## Features
 
+- **Canvas Mode** - IPC for external apps (Claude Code, etc.) to push rich UI to a browser canvas
+- **Templates** - Pre-built UI patterns (wizard, choices, confirm, info, table, code, diff)
 - **Agentic Mode** - Built-in `run_once!` for AI agents to collect user input and return structured data
 - **Single-File Apps** - No separate HTML/CSS/JS files, no build step
 - **Automatic State Management** - Session-based state with Alpine.js frontend sync
 - **Zero Configuration** - Auto port detection, auto browser opening, run multiple apps simultaneously without conflicts
 - **Layout Modes** - Configurable container widths (`:default`, `:wide`, `:full`, `:fluid`)
-- **Theming** - Built-in themes (`:default`, `:dashboard`, `:document`) + custom theme registration
+- **Theming** - Built-in themes (`:default`, `:dashboard`, `:document`, `:dark`) + custom theme registration
+- **Dashboard Components** - Status indicators, badges, activity feeds, expandable cards for ops dashboards
+- **Charts** - Bar, line, pie, doughnut, sparklines via Chart.js
 - **Token Efficient** - 10-50x fewer tokens than HTML/React for GenAI generation
 - **Full Markdown Support** - GitHub Flavored Markdown via Kramdown
 - **Cross-Platform** - Works on macOS, Linux, Windows
@@ -199,6 +203,97 @@ examples/
     └── teachables_browser.rb - Educational content browser
 ```
 
+## Canvas Mode (Claude Code Integration)
+
+Canvas Mode enables external apps (like Claude Code) to push rich UI to a persistent browser canvas. Instead of text-based terminal interactions, AI agents can display visual forms, tables, and wizards.
+
+```bash
+# Start a live canvas session
+streamweaver live mysession
+
+# Push DSL content to the canvas
+streamweaver push mysession --dsl 'header "Hello"; text "World"'
+
+# Wait for user submission (returns JSON)
+streamweaver wait mysession --timeout 60
+
+# Or use templates for common patterns (see Templates section)
+streamweaver template choices mysession '{"title": "Pick DB", "options": ["PostgreSQL", "SQLite"]}'
+```
+
+**Use cases:**
+- Claude Code companion (terminal + canvas side-by-side)
+- Build dashboards showing test results, coverage, status
+- Code review UI with rich diffs
+- Onboarding wizards for project setup
+
+See [docs/canvas-roadmap.md](docs/canvas-roadmap.md) for full documentation.
+
+## Templates
+
+Pre-built UI patterns for common interactions. Each template is a single command that returns JSON when the user completes the interaction.
+
+```bash
+# Multi-step wizard with branching
+streamweaver template wizard mysession '{
+  "title": "Project Setup",
+  "steps": [
+    {"title": "Info", "fields": [
+      {"type": "text", "key": "name", "label": "Project name"},
+      {"type": "select", "key": "type", "label": "Type", "options": ["Web", "CLI"]}
+    ]}
+  ]
+}'
+# Returns: {"name": "MyApp", "type": "Web"}
+
+# Quick selection
+streamweaver template choices mysession '{
+  "title": "Select Database",
+  "options": ["PostgreSQL", "SQLite", "MySQL"]
+}'
+# Returns: {"choice": "PostgreSQL"}
+
+# Yes/No confirmation
+streamweaver template confirm mysession '{
+  "title": "Delete files?",
+  "message": "This will permanently remove 3 files."
+}'
+# Returns: {"confirmed": true}
+
+# Info with action buttons
+streamweaver template info mysession '{
+  "title": "Build Complete",
+  "message": "All tests passed",
+  "actions": ["Deploy", "View Report", "Close"]
+}'
+# Returns: {"action": "Deploy"}
+
+# Data table with optional row selection
+streamweaver template table mysession '{
+  "title": "Recent Files",
+  "headers": ["File", "Size"],
+  "rows": [["app.rb", "12kb"], ["cli.rb", "8kb"]],
+  "selectable": true
+}'
+# Returns: {"selected_row": 0, "selected_data": ["app.rb", "12kb"]}
+
+# Code display
+streamweaver template code mysession '{
+  "title": "Generated Code",
+  "filename": "hello.rb",
+  "code": "def hello\n  puts \"Hello\"\nend"
+}'
+
+# Diff display
+streamweaver template diff mysession '{
+  "title": "Proposed Changes",
+  "filename": "app.rb",
+  "diff": "- old line\n+ new line"
+}'
+```
+
+See [docs/templates.md](docs/templates.md) for full documentation.
+
 ## Agentic Mode
 
 For AI agents to collect user input and return structured data:
@@ -248,10 +343,16 @@ header6 "Smallest"        # <h6>
 
 ```ruby
 text_field :name, placeholder: "Enter name"
-text_area :bio, placeholder: "Bio", rows: 5
+text_field :email, placeholder: "Email", default: "user@example.com"
+text_area :bio, placeholder: "Bio", rows: 5, default: "Enter bio here..."
 checkbox :agree, "I accept the terms"
 select :color, ["Red", "Green", "Blue"], default: "Green"
 radio_group :size, ["Small", "Medium", "Large"]
+
+# Event callbacks
+text_field :search, on_change: ->(state) { state[:results] = search(state[:search]) }
+text_field :name, on_blur: ->(state) { validate_name(state) }, debounce: 300
+checkbox :live, "Live preview", on_change: ->(state) { refresh_preview(state) }
 
 # Checkbox group with select all/none (for batch operations)
 checkbox_group :selected, select_all: "Select All", select_none: "Clear" do
@@ -421,6 +522,12 @@ end
 
 # Interactive: sortable + sticky header
 table data, sortable: true, sticky_header: true, striped: true
+
+# Markdown in cells (for clickable links)
+table [
+  { name: "Docs", link: "[View](https://example.com/docs)" },
+  { name: "API", link: "[Reference](https://example.com/api)" }
+], markdown: true
 
 # Score table with color-coded metrics
 score_table scores: [
