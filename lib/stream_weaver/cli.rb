@@ -1385,9 +1385,17 @@ module StreamWeaver
 
         # Try iTerm2 split, fall back to regular browser
         if ITerm.available?
-          if ITerm.split_vertical_with_browser(url)
+          result = ITerm.split_vertical_with_url(url)
+          case result
+          when :browser
             puts "Canvas '#{session_name}' ready"
-            puts "Browser opened in right pane"
+            puts "Browser opened in right pane (iTerm2 browser)"
+          when :external
+            puts "Canvas '#{session_name}' ready"
+            puts "Split pane created, browser opened externally"
+            puts ""
+            puts "Tip: Set up iTerm2 browser profile for embedded browser:"
+            puts "  Preferences > Profiles > + > General > Command: Browser"
           else
             # Fallback if split failed
             open_browser(url)
