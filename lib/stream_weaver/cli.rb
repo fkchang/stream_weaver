@@ -1362,27 +1362,16 @@ module StreamWeaver
     # =========================================
 
     # Open a canvas panel in a split iTerm2 pane
-    # Usage: streamweaver panel [options] [session-name]
+    # Usage: streamweaver panel [session-name]
+    #
+    # Panel never opens an external browser - the point is to have the browser
+    # inline in a split pane. If iTerm2 Web Browser profile isn't available,
+    # we just print the URL for the user to open manually.
     def self.panel(args)
       require_relative 'iterm'
       require_relative 'canvas/client'
 
-      no_browser = false
-      session_name = nil
-
-      parser = OptionParser.new do |opts|
-        opts.banner = "Usage: streamweaver panel [options] [session-name]"
-        opts.on('--no-browser', "Don't open browser (just create session)") { no_browser = true }
-      end
-
-      remaining = parser.parse(args)
-      session_name = remaining.first || "panel-#{SecureRandom.hex(4)}"
-
-      # Check iTerm2 availability
-      unless ITerm.available?
-        $stderr.puts "Note: iTerm2 not detected. Opening canvas in default browser."
-        $stderr.puts ""
-      end
+      session_name = args.first || "panel-#{SecureRandom.hex(4)}"
 
       # Ensure bridge is running
       Canvas::Client.ensure_bridge_running
@@ -1395,25 +1384,22 @@ module StreamWeaver
       if response && response[:type] == 'ready'
         url = response[:url]
 
-        # Try iTerm2 split with browser profile
+        # Try iTerm2 split with browser profile (never open external browser)
         if ITerm.available?
-          result = ITerm.split_vertical_with_url(url, open_browser: !no_browser)
+          result = ITerm.split_vertical_with_url(url, open_browser: false)
           case result
           when :browser
             puts "Canvas '#{session_name}' ready"
             puts "Browser opened in split pane"
           when :terminal
             puts "Canvas '#{session_name}' ready"
-            puts "Split pane created#{no_browser ? '' : ', browser opened externally'}"
+            puts "Split pane created - open #{url} in a browser"
           else
-            open_browser(url) unless no_browser
             puts "Canvas '#{session_name}' ready at #{url}"
           end
-        elsif !no_browser
-          open_browser(url)
-          puts "Canvas '#{session_name}' ready at #{url}"
         else
           puts "Canvas '#{session_name}' ready at #{url}"
+          puts "(iTerm2 not detected - open URL manually for side-by-side workflow)"
         end
 
         puts ""
