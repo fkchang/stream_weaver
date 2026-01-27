@@ -1,112 +1,130 @@
 # StreamWeaver
 
-**Declarative Ruby DSL for building interactive web UIs with minimal token overhead**
-
-StreamWeaver enables GenAI agents (like Claude Code) and developers to rapidly build interactive web UIs using a declarative Ruby DSL. Perfect for agentic workflows, developer utilities, and rapid prototyping.
-
----
-
-## Why StreamWeaver?
-
-**TL;DR:** I want a quick UI. What do I need? Some text, a few inputs, a button. Why isn't *that* the interface? Instead: HTML, CSS, JavaScript, backend wiring... Streamlit showed me the interface *can* just be "text, inputs, button." StreamWeaver brings that to Ruby - and it turns out this minimal approach is perfect for AI agents too.
-
-[Skip to Quick Start →](#quick-start)
-
-<details>
-<summary><b>The Longer Story</b></summary>
-
-### The Interface Should Be What You Need
-
-Think about what a simple UI actually requires: some text, a few inputs, maybe a dropdown, a button. That's it. That's what you're trying to build. But to get there you're dealing with HTML structure, CSS styling, JavaScript (or a backend framework), controllers, state management...
-
-Streamlit's brilliance was recognizing that the DSL *can* just be the interface. You describe what you need - text, inputs, button - and you're done. StreamWeaver brings that philosophy to Ruby.
-
-### Why This Matters for AI Agents
-
-When you're building with Claude Code (or other AI coding assistants), this "what matters" approach pays off even more:
-
-1. **Smaller generation = faster + cheaper** - The LLM generates a concise DSL instead of verbose HTML/React. Fewer tokens means faster responses and lower costs.
-
-2. **Richer interactions** - Instead of walls of terminal text for complex decisions, spin up an actual UI. What would be 5 pages of back-and-forth becomes one well-designed form.
-
-3. **Data-Only Generation** - Even better: pre-build your StreamWeaver app once, then have the LLM just generate the *data* to feed it. Minimal tokens, maximum speed.
+**Rich UI for Claude Code. Express intention, get interface.**
 
 ```ruby
-# Agent generates just this data:
-books = [{ title: "...", author: "...", rating: 5 }, ...]
-
-# Pre-built app renders it:
-BookSelectorApp.new(books: books).run_once!
+app "Meeting Notes" do
+  header "1:1 with #{manager}"
+  md notes_markdown
+end.run!
 ```
 
-</details>
+That's it. No HTML. No CSS. No JavaScript. No webpack. Just Ruby expressing what you want.
 
 ---
 
-## Quick Start
+## The Problem StreamWeaver Solves
+
+> "I would like to give Claude a way of popping up its results on my desktop in rich text. Basically because if I have it generate something like 1:1 meeting notes, I need that to pop up and stay available instead of scrolling out of the current terminal context."
+
+Sound familiar? Claude Code generates great content, but it scrolls away in the terminal. You're left copying text, opening editors, losing context.
+
+**StreamWeaver gives Claude Code a canvas** - a persistent browser display for rich output that doesn't disappear.
+
+---
+
+## Three Ways to Use StreamWeaver
+
+| Mode | Use Case | How It Works |
+|------|----------|--------------|
+| **Canvas** | Claude Code output that persists | Browser tab Claude pushes content to |
+| **Agentic** | Claude needs user input | Popup form → collect answer → return JSON |
+| **Standalone** | Quick Ruby apps | Single file → full UI |
+
+### Canvas Mode: Persistent Rich Output
+
+Keep a browser tab open. Claude Code pushes rich content that *stays*.
+
+```bash
+# Terminal 1: Start canvas
+streamweaver live mynotes
+
+# Terminal 2: Claude Code pushes content
+streamweaver push mynotes --dsl 'md "# Meeting Notes\n\n## Action Items\n- ..."'
+```
+
+The canvas updates. Content persists. No scrolling away.
+
+**Pro tip:** iTerm2 has a [built-in browser](https://iterm2.com/documentation-web.html) that fits into split panes - run Claude Code on the left, canvas on the right, same window.
+
+### Agentic Mode: Rich Input Collection
+
+When Claude Code needs a complex answer, don't suffer through terminal menus:
 
 ```ruby
-require 'stream_weaver'
+result = app "Project Setup" do
+  header "Configure New Project"
+  text_field :name, placeholder: "Project name"
+  select :database, ["PostgreSQL", "SQLite", "MySQL"]
+  select :framework, ["Rails", "Sinatra", "Hanami"]
+  checkbox :docker, "Include Docker setup"
+end.run_once!
 
-app "Hello World" do
-  header1 "Welcome!"
-  text_field :name, placeholder: "Your name"
+# Returns: { "name" => "myapp", "database" => "PostgreSQL", ... }
+```
 
-  button "Submit" do |state|
-    puts "Hello, #{state[:name]}!"
+Browser opens, user fills form, JSON returns to Claude Code. Done.
+
+### Standalone Mode: The Joy of Ruby
+
+Quick utilities without ceremony:
+
+```ruby
+app "Todo List" do
+  text_field :new_todo, placeholder: "What needs doing?"
+
+  button "Add" do |state|
+    state[:todos] ||= []
+    state[:todos] << state[:new_todo]
+    state[:new_todo] = ""
+  end
+
+  state[:todos]&.each do |todo|
+    div { text "• #{todo}" }
   end
 end.run!
 ```
 
-Run with: `ruby my_app.rb` or `streamweaver my_app.rb`
+`ruby todo.rb` → browser opens → working app. That's the joy of Ruby: express intention, get result.
 
-The browser opens automatically at `http://localhost:4567`.
+---
 
-## Getting Started
+## Token Efficiency: Why This Matters for GenAI
 
-```bash
-gem install stream_weaver
+When Claude Code generates UI, tokens = time + money.
 
-# Interactive tutorial - learn by doing
-streamweaver tutorial
-
-# Browse and run all examples
-streamweaver showcase
+```ruby
+# StreamWeaver: ~50 tokens
+table users do
+  column :name
+  column :balance, format: :currency
+end
+button "Export CSV"
 ```
 
-## Service Mode (CLI)
-
-StreamWeaver includes a CLI that manages a single background service rendering multiple apps. See [docs/SERVICE_MODE.md](docs/SERVICE_MODE.md) for full details.
-
-```bash
-# Run an app (auto-starts service if needed)
-streamweaver examples/basic/hello_world.rb
-
-# Named sessions for easier identification
-streamweaver run --name "My Survey" examples/basic/form_demo.rb
-
-# List all loaded apps
-streamweaver list
-
-# Manage apps
-streamweaver remove <app_id>  # Remove specific app
-streamweaver clear            # Remove all apps
-streamweaver admin            # Open admin dashboard
-
-# Learning
-streamweaver tutorial         # Interactive tutorial
-streamweaver showcase         # Browse all examples
-
-# Service management
-streamweaver status           # Show service status
-streamweaver stop             # Stop background service
+```html
+<!-- Equivalent HTML/React: ~300+ tokens -->
+<div className="overflow-x-auto">
+  <table className="min-w-full divide-y divide-gray-200">
+    <thead className="bg-gray-50">
+      <tr>
+        <th scope="col" className="px-6 py-3 text-left text-xs...
+<!-- ... 50 more lines ... -->
 ```
 
-**When to use which mode:**
-- **`ruby app.rb`** - Quick one-off scripts, prototyping, learning
-- **`streamweaver app.rb`** - Multiple apps side-by-side, development sessions, tutorials
+**5-10x fewer tokens** means faster responses and lower costs. For complex UIs, the difference is dramatic.
 
-Each app gets a unique URL (`/apps/:app_id`), allowing side-by-side comparison. The admin dashboard is a StreamWeaver app managing other StreamWeaver apps (meta!).
+Even better: pre-build your StreamWeaver app, have Claude generate just the *data*:
+
+```ruby
+# Claude generates only this (~20 tokens):
+meetings = [{ title: "1:1 with Sarah", notes: "..." }, ...]
+
+# Pre-built app renders it:
+MeetingNotesApp.new(meetings: meetings).run!
+```
+
+---
 
 ## Installation
 
@@ -114,256 +132,86 @@ Each app gets a unique URL (`/apps/:app_id`), allowing side-by-side comparison. 
 gem install stream_weaver
 ```
 
-Or add to your Gemfile:
+Or in your Gemfile:
 
 ```ruby
 gem 'stream_weaver'
 ```
 
-## Features
+---
 
-- **Canvas Mode** - IPC for external apps (Claude Code, etc.) to push rich UI to a browser canvas
-- **Templates** - Pre-built UI patterns (wizard, choices, confirm, info, table, code, diff)
-- **Agentic Mode** - Built-in `run_once!` for AI agents to collect user input and return structured data
-- **Single-File Apps** - No separate HTML/CSS/JS files, no build step
-- **Automatic State Management** - Session-based state with Alpine.js frontend sync
-- **Zero Configuration** - Auto port detection, auto browser opening, run multiple apps simultaneously without conflicts
-- **Layout Modes** - Configurable container widths (`:default`, `:wide`, `:full`, `:fluid`)
-- **Theming** - Built-in themes (`:default`, `:dashboard`, `:document`, `:dark`) + custom theme registration
-- **Dashboard Components** - Status indicators, badges, activity feeds, expandable cards for ops dashboards
-- **Charts** - Bar, line, pie, doughnut, sparklines via Chart.js
-- **Token Efficient** - 10-50x fewer tokens than HTML/React for GenAI generation
-- **Full Markdown Support** - GitHub Flavored Markdown via Kramdown
-- **Cross-Platform** - Works on macOS, Linux, Windows
-
-## Examples
-
-```ruby
-# Todo List App
-app "Todo Manager" do
-  header "My Todos"
-
-  text_field :new_todo, placeholder: "What needs to be done?"
-
-  button "Add" do |state|
-    state[:todos] ||= []
-    state[:todos] << state[:new_todo] if state[:new_todo]
-    state[:new_todo] = ""
-  end
-
-  state[:todos] ||= []
-  state[:todos].each_with_index do |todo, idx|
-    div class: "todo-item" do
-      text todo
-      button "Done", style: :secondary do |state|
-        state[:todos].delete_at(idx)
-      end
-    end
-  end
-end.run!
-```
-
-### Interactive Tutorial
-
-**Start here:** `ruby examples/advanced/tutorial.rb` — A self-documenting, interactive tutorial that teaches StreamWeaver using StreamWeaver itself. Features live demos, editable code panels, and "Run Standalone" to launch your experiments.
-
-### Examples by Category
-
-```
-examples/
-├── basic/              # Start here
-│   ├── hello_world.rb    - Minimal form with conditional rendering
-│   └── todo_list.rb      - Full CRUD app with state management
-├── agentic/            # AI agent workflows
-│   ├── agentic_form.rb   - Simple form collection for agents
-│   ├── agentic_form_autoclose.rb - Auto-closing browser variant
-│   └── cultivation_tracker.rb    - Real-world daily check-in form
-├── components/         # Individual component demos
-│   ├── form_demo.rb      - Form blocks with submit/cancel
-│   ├── quiz_demo.rb      - Radio groups and validation
-│   ├── checkbox_group_demo.rb - Batch selection with select all/none
-│   ├── markdown_demo.rb  - GitHub Flavored Markdown
-│   ├── lesson_demo.rb    - Educational content with glossary tooltips
-│   ├── score_and_collapsible_demo.rb - Score tables, collapsibles
-│   └── events_demo.rb    - on_change, on_blur callbacks
-├── layout/             # Layout and navigation
-│   ├── layout_components_demo.rb - Columns, VStack, HStack, Grid
-│   ├── navigation_demo.rb - Tabs, Breadcrumbs, Dropdowns
-│   └── modal_demo.rb     - Modal dialogs
-├── styling/            # Themes and feedback
-│   ├── theme_demo.rb     - Built-in theme switching
-│   ├── style_showcase.rb - Component styling showcase
-│   └── feedback_demo.rb  - Alerts, Toasts, Progress, Spinners
-├── dashboard_components.rb  - Dashboard component showcase (dark theme)
-├── operations_dashboard_demo.rb - Full dashboard with sidebar layout
-└── advanced/           # Full applications
-    ├── tutorial.rb       - Interactive tutorial (start here!)
-    ├── all_components.rb - Comprehensive component gallery
-    ├── theme_tweaker.rb  - Visual theme editor with export
-    └── teachables_browser.rb - Educational content browser
-```
-
-## Canvas Mode (Claude Code Integration)
-
-Canvas Mode enables external apps (like Claude Code) to push rich UI to a persistent browser canvas. Instead of text-based terminal interactions, AI agents can display visual forms, tables, and wizards.
+## Quick Start
 
 ```bash
-# Start a live canvas session
-streamweaver live mysession
+# Interactive tutorial
+streamweaver tutorial
 
-# Push DSL content to the canvas
-streamweaver push mysession --dsl 'header "Hello"; text "World"'
+# Browse examples
+streamweaver showcase
 
-# Wait for user submission (returns JSON)
-streamweaver wait mysession --timeout 60
-
-# Or use templates for common patterns (see Templates section)
-streamweaver template choices mysession '{"title": "Pick DB", "options": ["PostgreSQL", "SQLite"]}'
+# Run any example
+ruby examples/basic/hello_world.rb
 ```
 
-**Use cases:**
-- Claude Code companion (terminal + canvas side-by-side)
-- Build dashboards showing test results, coverage, status
-- Code review UI with rich diffs
-- Onboarding wizards for project setup
+---
 
-See [docs/canvas-roadmap.md](docs/canvas-roadmap.md) for full documentation.
+## Running Modes Explained
 
-## Templates
+### `ruby app.rb` vs `streamweaver app.rb`
 
-Pre-built UI patterns for common interactions. Each template is a single command that returns JSON when the user completes the interaction.
+| Command | What Happens | When to Use |
+|---------|--------------|-------------|
+| `ruby app.rb` | Standalone server on auto-detected port | Quick scripts, one-off apps |
+| `streamweaver app.rb` | Managed by background service | Multiple apps, development |
+
+The service mode (`streamweaver`) runs one Sinatra server for all apps instead of one per app - cleaner process management.
+
+### Canvas Commands
 
 ```bash
-# Multi-step wizard with branching
-streamweaver template wizard mysession '{
-  "title": "Project Setup",
-  "steps": [
-    {"title": "Info", "fields": [
-      {"type": "text", "key": "name", "label": "Project name"},
-      {"type": "select", "key": "type", "label": "Type", "options": ["Web", "CLI"]}
-    ]}
-  ]
-}'
-# Returns: {"name": "MyApp", "type": "Web"}
+streamweaver live SESSION      # Start persistent canvas
+streamweaver push SESSION      # Push content to canvas
+streamweaver wait SESSION      # Wait for user submission
+streamweaver template TYPE SESSION '{...}'  # Use pre-built template
+```
 
+### Templates for Common Patterns
+
+```bash
 # Quick selection
-streamweaver template choices mysession '{
-  "title": "Select Database",
-  "options": ["PostgreSQL", "SQLite", "MySQL"]
-}'
-# Returns: {"choice": "PostgreSQL"}
+streamweaver template choices mysession '{"title": "Pick DB", "options": ["PostgreSQL", "SQLite"]}'
 
 # Yes/No confirmation
-streamweaver template confirm mysession '{
-  "title": "Delete files?",
-  "message": "This will permanently remove 3 files."
-}'
-# Returns: {"confirmed": true}
+streamweaver template confirm mysession '{"title": "Delete?", "message": "This cannot be undone"}'
 
-# Info with action buttons
-streamweaver template info mysession '{
-  "title": "Build Complete",
-  "message": "All tests passed",
-  "actions": ["Deploy", "View Report", "Close"]
-}'
-# Returns: {"action": "Deploy"}
+# Multi-step wizard
+streamweaver template wizard mysession '{"steps": [...]}'
 
-# Data table with optional row selection
-streamweaver template table mysession '{
-  "title": "Recent Files",
-  "headers": ["File", "Size"],
-  "rows": [["app.rb", "12kb"], ["cli.rb", "8kb"]],
-  "selectable": true
-}'
-# Returns: {"selected_row": 0, "selected_data": ["app.rb", "12kb"]}
-
-# Code display
-streamweaver template code mysession '{
-  "title": "Generated Code",
-  "filename": "hello.rb",
-  "code": "def hello\n  puts \"Hello\"\nend"
-}'
-
-# Diff display
-streamweaver template diff mysession '{
-  "title": "Proposed Changes",
-  "filename": "app.rb",
-  "diff": "- old line\n+ new line"
-}'
+# Data table
+streamweaver template table mysession '{"headers": ["Name", "Size"], "rows": [...]}'
 ```
 
-See [docs/templates.md](docs/templates.md) for full documentation.
-
-## Agentic Mode
-
-For AI agents to collect user input and return structured data:
-
-```ruby
-result = app "Survey" do
-  header "Quick Survey"
-  text_field :name
-  select :priority, ["Low", "Medium", "High"]
-end.run_once!
-
-# Returns: { "name" => "Alice", "priority" => "High" }
-```
-
-With auto-close (browser closes after submit):
-
-```ruby
-result = app "Quick Form" do
-  text_field :data
-end.run_once!(auto_close_window: true)
-```
+---
 
 ## Components
 
-### Text Display
+### The Basics
 
 ```ruby
-text "Literal text - **asterisks** stay as asterisks"
-md "**Bold**, *italic*, `code`, and [links](url) are parsed"
-```
-
-The `md` component supports full GitHub Flavored Markdown: bold, italic, strikethrough, lists, tables, code blocks, blockquotes, and more.
-
-### Headers
-
-```ruby
-header "Section Title"    # <h2> - default
-header1 "Page Title"      # <h1>
-header2 "Section"         # <h2>
-header3 "Subsection"      # <h3>
-header4 "Minor"           # <h4>
-header5 "Small"           # <h5>
-header6 "Smallest"        # <h6>
+text "Plain text"
+md "**Markdown** with *formatting*"
+header "Section Title"
+header1 "H1" # through header6
 ```
 
 ### Form Inputs
 
 ```ruby
-text_field :name, placeholder: "Enter name"
-text_field :email, placeholder: "Email", default: "user@example.com"
-text_area :bio, placeholder: "Bio", rows: 5, default: "Enter bio here..."
-checkbox :agree, "I accept the terms"
+text_field :name, placeholder: "Name", default: "Alice"
+text_area :bio, rows: 5
 select :color, ["Red", "Green", "Blue"], default: "Green"
-radio_group :size, ["Small", "Medium", "Large"]
-
-# Event callbacks
-text_field :search, on_change: ->(state) { state[:results] = search(state[:search]) }
-text_field :name, on_blur: ->(state) { validate_name(state) }, debounce: 300
-checkbox :live, "Live preview", on_change: ->(state) { refresh_preview(state) }
-
-# Checkbox group with select all/none (for batch operations)
-checkbox_group :selected, select_all: "Select All", select_none: "Clear" do
-  item "item_1" do
-    text "First item"
-  end
-  item "item_2" do
-    text "Second item"
-  end
-end
-# state[:selected] = ["item_1", "item_2", ...] (array of selected values)
+checkbox :agree, "I accept"
+radio_group :size, ["S", "M", "L"]
 ```
 
 ### Buttons
@@ -374,325 +222,154 @@ button "Primary" do |state|
 end
 
 button "Secondary", style: :secondary do |state|
-  # secondary styling
+  # ...
 end
 ```
 
 ### Layout
 
 ```ruby
-div class: "my-class" do
-  text "Nested content"
-end
-
-card do
-  header3 "Card Title"
-  text "Styled container"
-end
-
-collapsible "Show Details" do
-  text "Hidden content revealed on click"
-end
-
-# Multi-column layouts
 columns widths: ['30%', '70%'] do
-  column do
-    header4 "Sidebar"
-    text "Narrow column"
-  end
-  column do
-    text "Main content area"
-  end
+  column { text "Sidebar" }
+  column { text "Main content" }
 end
 
-# Vertical/Horizontal stacking
 vstack spacing: :md do
   text "Item 1"
   text "Item 2"
 end
 
-hstack spacing: :sm, justify: :between do
+hstack justify: :between do
   button "Cancel", style: :secondary
   button "Save"
 end
 
-# Responsive grid (1 col mobile, 2 tablet, 3 desktop)
-grid columns: [1, 2, 3], gap: :md do
-  items.each { |item| card { text item.name } }
-end
-
-# Deferred submission forms
-form :edit_user do
-  text_field :name
-  text_field :email
-  submit "Save" do |form_values|
-    save_user(form_values)
-  end
-  cancel "Cancel"
+card do
+  header3 "Card Title"
+  text "Content"
 end
 ```
 
-### Navigation
+### Tables
 
 ```ruby
-# Tabs with persistent state
-tabs :settings do
-  tab "General" do
-    text_field :name
-  end
-  tab "Advanced" do
-    checkbox :debug, "Debug mode"
-  end
-end
+# Simple
+table headers: ["Name", "Age"], rows: [["Alice", 30], ["Bob", 25]]
 
-# Breadcrumbs
-breadcrumbs do
-  crumb "Home", href: "/"
-  crumb "Products", href: "/products"
-  crumb "Details"  # Current page
-end
-
-# Dropdown menu
-dropdown do
-  trigger { button "Actions" }
-  menu do
-    menu_item "Edit" { |s| s[:editing] = true }
-    menu_divider
-    menu_item "Delete", style: :destructive { |s| s[:items].pop }
-  end
-end
-```
-
-### Modals
-
-```ruby
-button "Open Modal" do |s|
-  s[:confirm_open] = true
-end
-
-modal :confirm, title: "Confirm Action", size: :sm do
-  text "Are you sure?"
-  modal_footer do
-    button "Cancel", style: :secondary do |s|
-      s[:confirm_open] = false
-    end
-    button "Confirm" do |s|
-      # action
-      s[:confirm_open] = false
-    end
-  end
-end
-```
-
-### Feedback
-
-```ruby
-# Alerts
-alert(variant: :success, title: "Saved!") { text "Changes saved." }
-alert(variant: :warning, dismissible: true) { text "Session expiring." }
-
-# Toast notifications
-toast_container position: :top_right
-button "Save" do |s|
-  show_toast("Saved!", variant: :success)
-end
-
-# Progress bar
-progress_bar value: 75, show_label: true, variant: :success
-
-# Spinner
-spinner size: :md, label: "Loading..."
-```
-
-### Advanced Components
-
-```ruby
-# Data table - original API
-table headers: ["Name", "Size"], rows: [["app.rb", "12kb"], ["cli.rb", "8kb"]]
-
-# Array of hashes - auto-infer headers
+# From array of hashes (headers inferred)
 table [{ name: "Alice", age: 30 }, { name: "Bob", age: 25 }]
 
-# Column DSL with formatters
+# With formatters
 table users do
   column :name
-  column :balance, format: :currency, align: :right
+  column :balance, format: :currency
   column :joined, format: :date
 end
 
-# Interactive: sortable + sticky header
+# Interactive
 table data, sortable: true, sticky_header: true, striped: true
-
-# Markdown in cells (for clickable links)
-table [
-  { name: "Docs", link: "[View](https://example.com/docs)" },
-  { name: "API", link: "[Reference](https://example.com/api)" }
-], markdown: true
-
-# Score table with color-coded metrics
-score_table scores: [
-  { label: "Quality", value: 8, max: 10 },
-  { label: "Impact", value: 5, max: 10 }
-]
-
-# Educational content with glossary tooltips
-lesson_text "Learn about {terms} here.", glossary: {
-  "terms" => { simple: "Key concepts", detailed: "Longer explanation..." }
-}
-
-# Status badges for match indicators
-status_badge :strong, "Perfect match for your preferences"
-status_badge :maybe, "Good fit, but has some concerns"
-status_badge :skip, "Not recommended"
-
-# Tag buttons for quick selection (single-select)
-tag_buttons :category, ["Fiction", "Non-fiction", "Mystery"]
-tag_buttons :reason, ["Too dark", "Wrong genre"], style: :destructive
-
-# External link button (opens URL, optionally submits form first)
-external_link_button "View on Amazon", url: "https://amazon.com/dp/B0XXX"
-external_link_button "Select & Open", url: "https://example.com", submit: true
-```
-
-### Dashboard Components
-
-For operations dashboards and control panels (best with `theme: :dark`):
-
-```ruby
-# Status indicators
-status_dot status: :green, pulse: true
-badge "5", variant: :danger
-stat_display value: 42, label: "TASKS", color: :blue
-type_tag :research
-pulse_indicator color: :green, label: "System Active"
-
-# Priority/activity feeds
-priority_item priority: :critical, title: "Database at capacity",
-              description: "Needs immediate attention"
-activity_item time: "15:00", title: "Deploy complete", type: :task
-
-# Dashboard layout with sidebar
-app_shell sidebar_width: "320px" do
-  main do
-    # Main content
-  end
-  sidebar header: "Alerts" do
-    # Sidebar content
-  end
-end
-
-# Expandable cards
-expandable_card key: :details, title: "Engineering", status: :green do
-  stat_display value: 5, label: "TASKS"
-end
 ```
 
 ### Charts
 
-Data visualization via Chart.js (CDN-loaded only when charts are present):
-
 ```ruby
-# Bar charts
-bar_chart data: { calendar: 45, news: 120, tasks: 30 }
-hbar_chart data: { "Phase A" => 25, "Phase B" => 45 }
-
-# Line charts
-line_chart data: [12, 19, 8, 15, 22]
-line_chart data: { Mon: 5, Tue: 12, Wed: 8 }, fill: true, smooth: false
-
-# Sparklines (compact inline trends)
-sparkline data: [45, 52, 48, 61, 55, 67, 72]
-
-# Area charts (line with fill)
-area_chart data: [45, 52, 48, 61, 55, 67, 72]
-
-# Pie and doughnut charts
-pie_chart data: { sales: 100, costs: 60, profit: 40 }
-doughnut_chart data: { frontend: 40, backend: 35, devops: 25 }
-
-# Stacked bar charts (multi-series)
-stacked_bar_chart data: [
-  { label: "Mon", sales: 100, costs: 60 },
-  { label: "Tue", sales: 120, costs: 70 }
-]
-
-# File-based data
-bar_chart file: "~/metrics/timing.yaml", path: "entries.-1.phases"
+bar_chart data: { sales: 100, costs: 60, profit: 40 }
+line_chart data: [12, 19, 8, 15, 22], fill: true
+pie_chart data: { frontend: 40, backend: 35, devops: 25 }
+sparkline data: [45, 52, 48, 61, 55, 67, 72]  # Compact inline
 ```
 
-## API Reference
-
-### `app(title, layout:, &block)`
-
-Create an application with optional layout mode:
+### Navigation & Feedback
 
 ```ruby
-app "My App" do                       # Default 900px container
-  # components...
+tabs :settings do
+  tab("General") { text_field :name }
+  tab("Advanced") { checkbox :debug, "Debug mode" }
 end
 
-app "Dashboard", layout: :wide do     # 1100px container
-  # components...
+modal :confirm, title: "Are you sure?" do
+  text "This action cannot be undone."
+  modal_footer do
+    button "Cancel", style: :secondary do |s| s[:confirm_open] = false end
+    button "Delete" do |s| delete_item; s[:confirm_open] = false end
+  end
 end
 
-# Layout options: :default (900px), :wide (1100px), :full (1400px), :fluid (100%)
+alert(variant: :success) { text "Saved!" }
+progress_bar value: 75, variant: :success
+spinner label: "Loading..."
 ```
 
-### Theming
+### Dashboard Components
+
+For operations dashboards (best with `theme: :dark`):
 
 ```ruby
-# Use built-in themes
-app "Dashboard", theme: :dashboard do    # Data-dense theme
-  # components...
-end
+status_dot status: :green, pulse: true
+badge "5", variant: :danger
+stat_display value: 42, label: "TASKS"
+priority_item priority: :critical, title: "Server down"
+activity_item time: "15:00", title: "Deploy complete"
 
-app "Document", theme: :document do      # Reading-optimized theme
-  # components...
-end
-
-# Register custom themes
-StreamWeaver.register_theme :corporate, {
-  color_primary: "#0066cc",
-  font_family: "'Inter', system-ui, sans-serif",
-  spacing_md: "1rem"
-}, base: :dashboard, label: "Corporate", description: "Brand theme"
-
-app "My App", theme: :corporate do
-  # components...
-end
-
-# Runtime theme switching
-app "App" do
-  theme_switcher  # Dropdown to switch themes live
+app_shell sidebar_width: "320px" do
+  main { header "Dashboard" }
+  sidebar(header: "Alerts") { priority_item priority: :high, title: "CPU 90%" }
 end
 ```
 
-**Built-in themes:**
-- `:default` - Warm Industrial (Source Sans 3, 17px, generous spacing)
-- `:dashboard` - Data Dense (15px font, tighter spacing, minimal accents)
-- `:document` - Reading Mode (Crimson Pro serif, 19px, paper background)
-- `:dark` - Dark mode with deep backgrounds, glow effects, and dashboard styling
+---
 
-### `run!(options)`
-
-Start persistent server:
+## Theming
 
 ```ruby
-App.run!                              # Auto port, auto-open browser
-App.run!(port: 8080)                  # Custom port
-App.run!(host: '0.0.0.0')             # Network access
-App.run!(open_browser: false)         # Don't open browser
+app "My App", theme: :dark do      # Dark mode
+  # ...
+end
+
+app "Report", theme: :document do  # Reading-optimized
+  # ...
+end
 ```
 
-### `run_once!(options)`
+**Built-in themes:** `:default`, `:dashboard`, `:document`, `:dark`
 
-Run once, collect data, return and quit:
+---
 
-```ruby
-result = App.run_once!
-result = App.run_once!(timeout: 120)
-result = App.run_once!(auto_close_window: true)
-```
+## Evolution & Philosophy
+
+StreamWeaver evolved through real needs:
+
+1. **Standalone** - "I want a quick UI without HTML/CSS/JS ceremony"
+2. **Agentic** - "Claude Code needs to collect structured input from me"
+3. **Canvas** - "Claude's output needs to persist, not scroll away"
+4. **Service** - "I don't want 30 Sinatra processes for 30 apps"
+
+The constant: **Ruby's joy of expressing intention**. You say what you want, StreamWeaver figures out the how.
+
+---
+
+## iTerm2 + Claude Code Setup
+
+iTerm2's [built-in browser](https://iterm2.com/documentation-web.html) enables a powerful workflow:
+
+1. Split iTerm pane vertically
+2. Left: Claude Code terminal
+3. Right: StreamWeaver canvas (browser tab)
+
+Claude Code generates content → pushes to canvas → you see rich output without leaving your terminal.
+
+*Coming soon: `/streamweaver-pane` command to set this up automatically.*
+
+---
+
+## More Resources
+
+- [Canvas Mode Documentation](docs/canvas-roadmap.md)
+- [Templates Reference](docs/templates.md)
+- [Components Reference](docs/components_reference.md)
+- [Service Mode](docs/SERVICE_MODE.md)
+
+---
 
 ## Contributing
 
@@ -701,3 +378,9 @@ Contributions welcome! See [GitHub repository](https://github.com/fkchang/stream
 ## License
 
 MIT License - see [LICENSE.txt](LICENSE.txt)
+
+---
+
+## Sources
+
+- [iTerm2 Web Browser Documentation](https://iterm2.com/documentation-web.html)
