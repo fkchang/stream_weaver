@@ -8,6 +8,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Canvas Mode** - IPC system for external apps (like Claude Code) to push rich UI:
+  - Persistent browser canvas for agentic CLIs to display interactive UI
+  - WebSocket + HTTP bridge for bidirectional communication
+  - `streamweaver live SESSION` - Start a live canvas session
+  - `streamweaver push SESSION --dsl 'text "Hello"'` - Push DSL content
+  - `streamweaver wait SESSION` - Wait for user submission and return JSON
+  - High-level Ruby helpers: `Canvas.pick(session, options)`, `Canvas.confirm(session, message)`
+  - See [docs/canvas-roadmap.md](docs/canvas-roadmap.md) for full documentation
+- **Templates** - Pre-built UI patterns for common interactions:
+  - `wizard` - Multi-step forms with branching (`next: {branch_on: "field_name"}`)
+  - `choices` - Quick selection from options, returns `{choice: "Selected"}`
+  - `confirm` - Yes/No decisions, returns `{confirmed: true/false}`
+  - `info` - Display messages with action buttons, returns `{action: "Clicked"}`
+  - `table` - Data display with optional row selection
+  - `code` - Code display with syntax highlighting and line numbers
+  - `diff` - Unified diff display with add/remove highlighting
+  - Usage: `streamweaver template <name> <session> '<json-config>'`
+  - See [docs/templates.md](docs/templates.md) for full documentation
+- **Dashboard Components** - Operations dashboard UI elements (best with `theme: :dark`):
+  - `status_dot` - Colored status indicators with optional pulse animation
+  - `badge` - Pill-shaped badges with variant colors (`:default`, `:danger`, `:warning`, `:success`)
+  - `stat_display` - Large value + label statistics (e.g., "42 TASKS")
+  - `type_tag` - Activity type badges (`:research`, `:task`, `:decision`, `:planning`)
+  - `pulse_indicator` - Animated system status indicators
+  - `priority_item` - Priority-colored items (`:critical`, `:high`, `:medium`, `:low`)
+  - `activity_item` - Time-stamped activity feed entries
+  - `app_shell` - Dashboard layout with main area and collapsible sidebar
+  - `expandable_card` - Cards that expand/collapse to show details
+- **Table Component Enhancements**:
+  - `markdown: true` option for clickable links in table cells
+  - Smart header inference from array of hashes (no need to specify headers)
+  - Column DSL with formatters: `column :balance, format: :currency, align: :right`
+  - Built-in formatters: `:currency`, `:date`, `:number`, `:percent`, `:boolean`
+  - Interactive features: `sortable: true`, `sticky_header: true`
+  - Styling options: `striped: true`, `bordered: true`, `hoverable: true`, `compact: true`
+- **Dark Theme** - Full dark mode with deep backgrounds, glow effects, and dashboard styling
+- **`default:` option** for `text_field`, `text_area`, and `code_editor` to set initial values
 - **Service Mode** - Single server renders multiple apps without per-app process management:
   - `streamweaver <file.rb>` - Run app (auto-starts service if needed)
   - `streamweaver list` - List all loaded apps with timing info
@@ -98,6 +135,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Checkbox state properly handles unchecked values
 - Agentic mode correctly outputs JSON to STDOUT after form submission
 - Select `default:` now properly initializes Alpine.js state
+- **Table markdown cells** - Use correct Phlex raw/safe pattern for markdown rendering in table cells
+- **Table data: keyword** - Support `data:` keyword argument in table DSL method for explicit data passing
 - **Tutorial session overflow** (2026-01-02) - Session cookie was exceeding 4KB limit due to `*_edited_code` keys; now filtered from session storage
 - **Tutorial button ID mismatch** (2026-01-02) - Button IDs now use stable hash from `block.source_location` instead of render-order counter, preventing action failures when conditional content changes component tree
 - **Tutorial Reset button** (2026-01-02) - Reset always renders with block for stable ID; uses flag pattern to survive session filtering
