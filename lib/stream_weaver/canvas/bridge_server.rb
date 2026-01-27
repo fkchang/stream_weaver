@@ -145,12 +145,22 @@ module StreamWeaver
         else
           <<~WAITING
             <div class="sw-canvas-waiting">
-              <h2>Canvas: #{session_name}</h2>
-              <p>Waiting for content from Claude Code...</p>
-              <p class="sw-canvas-hint">
-                Push content with:<br>
+              <div class="sw-canvas-logo">
+                <svg viewBox="0 0 24 24" width="48" height="48">
+                  <path fill="currentColor" d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+              </div>
+              <h1>StreamWeaver Canvas</h1>
+              <div class="sw-canvas-spinner"></div>
+              <p class="sw-canvas-status">Waiting for Claude Code...</p>
+              <div class="sw-canvas-info">
+                <p class="sw-canvas-session">Session: <code>#{session_name}</code></p>
+                <p class="sw-canvas-ready">Ready to receive content</p>
+              </div>
+              <div class="sw-canvas-tip">
+                <p>Push content with:</p>
                 <code>streamweaver canvas-push #{session_name} &lt;&lt;'RUBY'</code>
-              </p>
+              </div>
             </div>
           WAITING
         end
@@ -274,14 +284,70 @@ module StreamWeaver
           }
           .sw-canvas-waiting {
             text-align: center;
-            padding: 40px;
+            padding: 60px 40px;
             color: #666;
           }
-          .sw-canvas-hint code {
+          .sw-canvas-logo {
+            color: var(--sw-color-primary);
+            margin-bottom: 16px;
+          }
+          .sw-canvas-waiting h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--sw-color-text);
+            margin-bottom: 24px;
+          }
+          .sw-canvas-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #e0e0e0;
+            border-top-color: var(--sw-color-primary);
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            animation: sw-spin 1s linear infinite;
+          }
+          @keyframes sw-spin {
+            to { transform: rotate(360deg); }
+          }
+          .sw-canvas-status {
+            font-size: 18px;
+            color: #444;
+            margin-bottom: 24px;
+          }
+          .sw-canvas-info {
+            margin-bottom: 32px;
+          }
+          .sw-canvas-session code {
             background: #f0f0f0;
-            padding: 4px 8px;
+            padding: 4px 12px;
             border-radius: 4px;
             font-size: 14px;
+            font-weight: 500;
+          }
+          .sw-canvas-ready {
+            font-size: 14px;
+            color: #888;
+            margin-top: 8px;
+          }
+          .sw-canvas-tip {
+            background: #f8f8f8;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 24px;
+          }
+          .sw-canvas-tip p {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #666;
+          }
+          .sw-canvas-tip code {
+            display: block;
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #333;
           }
         CSS
       end

@@ -4,6 +4,7 @@ require 'optparse'
 require 'net/http'
 require 'json'
 require 'uri'
+require 'fileutils'
 
 module StreamWeaver
   # Command-line interface for StreamWeaver service
@@ -72,6 +73,10 @@ module StreamWeaver
         canvas_pick(args)
       when 'confirm'
         canvas_confirm(args)
+      when 'panel'
+        panel(args)
+      when 'install-skill'
+        install_skill(args)
       when '--help', '-h', 'help'
         help
       when '--version', '-v'
@@ -610,6 +615,20 @@ module StreamWeaver
           # Wait for user input (returns JSON)
           streamweaver canvas-wait survey
           # => {"choice":"B"}
+
+        Panel (iTerm2 Split + Canvas):
+          streamweaver panel [name]               Split iTerm2, open canvas in right pane
+          streamweaver install-skill [--global]   Install Claude Code skill
+
+        Panel Example (iTerm2):
+          # Split terminal, open canvas on right
+          streamweaver panel notes
+
+          # Push content from Claude Code
+          streamweaver canvas-push notes <<'RUBY'
+            header1 "Meeting Notes"
+            md "## Discussion Points\\n- Item 1\\n- Item 2"
+          RUBY
       HELP
     end
 
@@ -1333,6 +1352,181 @@ module StreamWeaver
     rescue Canvas::Client::NotRunningError => e
       $stderr.puts "Error: #{e.message}"
       exit 1
+    end
+
+    # =========================================
+    # Panel Command - iTerm2 split with canvas
+    # =========================================
+
+    # Open a canvas panel in a split iTerm2 pane
+    # Usage: streamweaver panel [session-name]
+    def self.panel(args)
+      require_relative 'iterm'
+      require_relative 'canvas/client'
+
+      session_name = args.first || "panel-#{SecureRandom.hex(4)}"
+
+      # Check iTerm2 availability
+      unless ITerm.available?
+        $stderr.puts "Note: iTerm2 not detected. Opening canvas in default browser."
+        $stderr.puts ""
+      end
+
+      # Ensure bridge is running
+      Canvas::Client.ensure_bridge_running
+
+      # Create session
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.create(session_name)
+      )
+
+      if response && response[:type] == 'ready'
+        url = response[:url]
+
+        # Try iTerm2 split, fall back to regular browser
+        if ITerm.available?
+          if ITerm.split_vertical_with_browser(url)
+            puts "Canvas '#{session_name}' ready"
+            puts "Browser opened in right pane"
+          else
+            # Fallback if split failed
+            open_browser(url)
+            puts "Canvas '#{session_name}' ready at #{url}"
+          end
+        else
+          open_browser(url)
+          puts "Canvas '#{session_name}' ready at #{url}"
+        end
+
+        puts ""
+        puts "Push content with:"
+        puts "  streamweaver canvas-push #{session_name} <<'RUBY'"
+        puts "    header1 'Hello'"
+        puts "    md 'Your content here'"
+        puts "  RUBY"
+      else
+        $stderr.puts "Error: Failed to create canvas session"
+        exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
+    # =========================================
+    # Skill Installation
+    # =========================================
+
+    SKILL_CONTENT = <<~'MARKDOWN'
+      # StreamWeaver Panel Skill
+
+      Use StreamWeaver panels to present information visually, not just collect input.
+
+      ## When to Use Panels
+
+      - **Presenting results**: Tables, formatted reports, summaries
+      - **Status displays**: Progress dashboards, build status
+      - **Rich choices**: When terminal options are too limiting
+      - **Documentation**: Help text, guides with formatting
+      - **Visual content**: Diagrams, charts
+
+      ## How to Use
+
+      1. Open a panel: `streamweaver panel [session-name]`
+      2. Push content: `streamweaver canvas-push <session> <<< 'your DSL'`
+      3. Wait for interaction: `streamweaver canvas-wait <session>`
+
+      ## Example: Present a Report
+
+      ```bash
+      streamweaver panel report
+      streamweaver canvas-push report <<'RUBY'
+        header1 "Analysis Complete"
+        md "## Summary"
+        md "- 47 files analyzed"
+        md "- 3 issues found"
+        table headers: ["File", "Issue", "Severity"], rows: [
+          ["api.rb", "N+1 query", "warning"],
+          ["auth.rb", "Missing validation", "error"],
+          ["user.rb", "Deprecated method", "info"]
+        ]
+        button "Acknowledged"
+      RUBY
+      result=$(streamweaver canvas-wait report)
+      ```
+
+      ## Example: Quick Selection
+
+      ```bash
+      streamweaver panel picker
+      streamweaver canvas-push picker <<'RUBY'
+        header2 "Select Database"
+        radio_group :choice, ["PostgreSQL", "SQLite", "MySQL"]
+        button "Continue"
+      RUBY
+      result=$(streamweaver canvas-wait picker)
+      # result contains JSON with the selection
+      ```
+
+      ## Key Insight
+
+      Panels aren't just for forms - use them whenever visual presentation
+      helps the user understand information better than terminal text.
+
+      ## DSL Quick Reference
+
+      ```ruby
+      # Text
+      text "Plain text"
+      md "**Markdown** with *formatting*"
+      header1 "Title"  # through header6
+
+      # Forms
+      text_field :name, placeholder: "Name"
+      select :option, ["A", "B", "C"]
+      checkbox :agree, "I agree"
+      radio_group :choice, ["Option 1", "Option 2"]
+
+      # Layout
+      card { text "In a card" }
+      columns widths: ['50%', '50%'] do
+        column { text "Left" }
+        column { text "Right" }
+      end
+
+      # Data
+      table headers: ["Col1", "Col2"], rows: [["a", "b"]]
+      bar_chart data: { a: 10, b: 20 }
+
+      # Actions
+      button "Click me"
+      ```
+    MARKDOWN
+
+    # Install the StreamWeaver panel skill for Claude Code
+    # Usage: streamweaver install-skill [--global]
+    def self.install_skill(args)
+      global = args.include?('--global') || args.include?('-g')
+
+      if global
+        skill_dir = File.expand_path('~/.claude/skills')
+      else
+        skill_dir = File.join(Dir.pwd, '.claude', 'skills')
+      end
+
+      skill_path = File.join(skill_dir, 'streamweaver-panel.md')
+
+      # Create directory if needed
+      FileUtils.mkdir_p(skill_dir)
+
+      # Write skill file
+      File.write(skill_path, SKILL_CONTENT)
+
+      location = global ? "global (~/.claude/skills/)" : "project (.claude/skills/)"
+      puts "StreamWeaver panel skill installed to #{location}"
+      puts "Path: #{skill_path}"
+      puts ""
+      puts "Claude Code will now know how to use StreamWeaver panels."
     end
 
     # Bring terminal back to front after browser auto-closes

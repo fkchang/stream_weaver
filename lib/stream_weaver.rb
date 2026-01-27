@@ -12,6 +12,7 @@ require_relative "stream_weaver/server"
 require_relative "stream_weaver/service"
 require_relative "stream_weaver/service_client"
 require_relative "stream_weaver/admin"
+require_relative "stream_weaver/iterm"
 require_relative "stream_weaver/cli"
 
 # StreamWeaver - Declarative Ruby DSL for building interactive web UIs
