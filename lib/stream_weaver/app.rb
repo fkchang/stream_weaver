@@ -244,17 +244,17 @@ module StreamWeaver
     # =========================================
 
     def text_field(key, **options)
-      initialize_form_state(key, options, "")
+      initialize_form_state(key, options, options[:default] || "")
       @components << Components::TextField.new(key, **options)
     end
 
     def text_area(key, **options)
-      initialize_form_state(key, options, "")
+      initialize_form_state(key, options, options[:default] || "")
       @components << Components::TextArea.new(key, **options)
     end
 
     def code_editor(key, language: :ruby, readonly: true, height: "400px", **options)
-      initialize_form_state(key, options, "")
+      initialize_form_state(key, options, options[:default] || "")
       @components << Components::CodeEditor.new(key, language: language, readonly: readonly, height: height, **options)
     end
 
