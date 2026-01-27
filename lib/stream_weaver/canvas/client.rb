@@ -121,9 +121,29 @@ module StreamWeaver
         # Start the bridge process if not running
         # @return [Hash] { pid: Integer, port: Integer }
         def ensure_bridge_running
-          return read_bridge_info if bridge_running?
+          if bridge_running?
+            info = read_bridge_info
+            # Verify HTTP server is actually responding
+            if info && info[:port] && http_healthy?(info[:port])
+              return info
+            end
+            # Bridge process exists but HTTP not responding - restart
+            cleanup_stale_files
+          end
 
           start_bridge
+        end
+
+        # Check if HTTP server is responding on given port
+        def http_healthy?(port)
+          require 'net/http'
+          uri = URI("http://127.0.0.1:#{port}/health")
+          response = Net::HTTP.start(uri.host, uri.port, open_timeout: 1, read_timeout: 1) do |http|
+            http.get(uri.path)
+          end
+          response.is_a?(Net::HTTPSuccess)
+        rescue Errno::ECONNREFUSED, Errno::EADDRNOTAVAIL, Net::OpenTimeout, Net::ReadTimeout
+          false
         end
 
         # Start the bridge process
