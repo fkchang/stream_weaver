@@ -16,82 +16,192 @@ module StreamWeaver
         stdout.strip == "true"
       end
 
-      # Split current iTerm2 pane vertically and open URL in the new pane
-      # Returns: :browser (iTerm browser), :external (system browser), or false (failed)
-      def split_vertical_with_url(url)
+      # Get current session identifier from environment
+      # iTerm2 sets ITERM_SESSION_ID like "w0t0p0:GUID"
+      def current_session_id
+        ENV['ITERM_SESSION_ID']
+      end
+
+      # Split the calling iTerm2 pane vertically and optionally open URL in browser
+      # @param url [String] The URL to display/open
+      # @param open_browser [Boolean] Whether to open the URL in system browser if iTerm browser fails (default: true)
+      # Returns: :browser (iTerm2 browser), :terminal (fallback), or false (failed)
+      def split_vertical_with_url(url, open_browser: true)
         return false unless available?
 
-        # Try iTerm2 browser profile first, fall back to external browser
-        script = <<~APPLESCRIPT
-          tell application "iTerm2"
-            tell current session of current tab of current window
-              -- Try to split with browser profile (iTerm2 3.5+)
-              try
-                set newSession to (split vertically with profile "Browser")
-                tell newSession
-                  write text "#{url}"
-                end tell
-                return "browser"
-              on error errMsg
-                -- No browser profile, split with terminal and open external browser
-                set newSession to (split vertically with default profile)
-                tell newSession
-                  write text "echo ''; echo '  StreamWeaver Canvas'; echo '  #{url}'; echo ''; echo '  (opened in browser)'; echo ''"
-                end tell
-                return "external"
-              end try
-            end tell
-          end tell
-        APPLESCRIPT
+        session_id = current_session_id
+        escaped_url = escape_for_applescript(url)
+
+        # Build AppleScript that targets the specific calling session
+        script = if session_id
+          build_targeted_split_script(session_id, escaped_url)
+        else
+          build_current_split_script(escaped_url)
+        end
 
         stdout, status = Open3.capture2("osascript", stdin_data: script)
         return false unless status.success?
 
         result = stdout.strip
 
-        # If we used external mode, also open the browser
-        if result == "external"
-          system("open", url)
+        case result
+        when "browser"
+          :browser
+        when "terminal"
+          # Open external browser as fallback if requested
+          system("open", url) if open_browser
+          :terminal
+        else
+          false
         end
-
-        result.to_sym
       end
 
       # Just split the pane and run a command (no browser)
       def split_vertical_with_command(command)
         return false unless available?
 
-        script = <<~APPLESCRIPT
-          tell application "iTerm2"
-            tell current session of current tab of current window
-              set newSession to (split vertically with default profile)
-              tell newSession
-                write text "#{command}"
-              end tell
-            end tell
-          end tell
-        APPLESCRIPT
+        session_id = current_session_id
+        escaped_command = escape_for_applescript(command)
+
+        script = if session_id
+          build_targeted_command_script(session_id, escaped_command)
+        else
+          build_current_command_script(escaped_command)
+        end
 
         _stdout, status = Open3.capture2("osascript", stdin_data: script)
         status.success?
       end
 
-      # Open URL in default browser (fallback for non-iTerm2)
-      def open_browser(url)
-        case RbConfig::CONFIG['host_os']
-        when /darwin|mac os/
-          system("open", url)
-        when /linux/
-          system("xdg-open", url)
-        when /mswin|mingw|cygwin/
-          system("start", url)
-        else
-          puts "Please open: #{url}"
-          false
-        end
+      private
+
+      # Escape string for safe embedding in AppleScript
+      def escape_for_applescript(str)
+        str.gsub('\\', '\\\\\\\\').gsub('"', '\\"')
       end
 
-      private
+      # Build AppleScript that targets a specific session by ITERM_SESSION_ID
+      def build_targeted_split_script(session_id, escaped_url)
+        # ITERM_SESSION_ID format: "w0t0p0:GUID" - we need the GUID part
+        guid = session_id.split(':').last
+
+        <<~APPLESCRIPT
+          tell application "iTerm2"
+            -- Find the session with the matching ID
+            repeat with aWindow in windows
+              repeat with aTab in tabs of aWindow
+                repeat with aSession in sessions of aTab
+                  if unique ID of aSession contains "#{guid}" then
+                    tell aSession
+                      -- Try Web Browser profile first
+                      try
+                        set newSession to (split vertically with profile "Web Browser")
+                        -- Select the new session to ensure it has focus
+                        select newSession
+                        delay 0.3
+                        -- Use keyboard to navigate: Cmd+L, type URL, Enter
+                        tell application "System Events"
+                          tell process "iTerm2"
+                            keystroke "l" using command down
+                            delay 0.1
+                            keystroke "#{escaped_url}"
+                            delay 0.1
+                            keystroke return
+                          end tell
+                        end tell
+                        return "browser"
+                      on error errMsg
+                        -- Fall back to terminal with info
+                        set newSession to (split vertically with default profile)
+                        tell newSession
+                          write text "clear; echo ''; echo '  StreamWeaver Canvas'; echo '  #{escaped_url}'; echo ''"
+                        end tell
+                        return "terminal"
+                      end try
+                    end tell
+                  end if
+                end repeat
+              end repeat
+            end repeat
+            return "session_not_found"
+          end tell
+        APPLESCRIPT
+      end
+
+      # Fallback: split current session (when ITERM_SESSION_ID not available)
+      def build_current_split_script(escaped_url)
+        <<~APPLESCRIPT
+          tell application "iTerm2"
+            tell current session of current tab of current window
+              -- Try Web Browser profile first
+              try
+                set newSession to (split vertically with profile "Web Browser")
+                -- Select the new session to ensure it has focus
+                select newSession
+                delay 0.3
+                -- Use keyboard to navigate: Cmd+L, type URL, Enter
+                tell application "System Events"
+                  tell process "iTerm2"
+                    keystroke "l" using command down
+                    delay 0.1
+                    keystroke "#{escaped_url}"
+                    delay 0.1
+                    keystroke return
+                  end tell
+                end tell
+                return "browser"
+              on error errMsg
+                -- Fall back to terminal with info
+                set newSession to (split vertically with default profile)
+                tell newSession
+                  write text "clear; echo ''; echo '  StreamWeaver Canvas'; echo '  #{escaped_url}'; echo ''"
+                end tell
+                return "terminal"
+              end try
+            end tell
+          end tell
+        APPLESCRIPT
+      end
+
+      # Build AppleScript for command execution targeting specific session
+      def build_targeted_command_script(session_id, escaped_command)
+        guid = session_id.split(':').last
+
+        <<~APPLESCRIPT
+          tell application "iTerm2"
+            repeat with aWindow in windows
+              repeat with aTab in tabs of aWindow
+                repeat with aSession in sessions of aTab
+                  if unique ID of aSession contains "#{guid}" then
+                    tell aSession
+                      set newSession to (split vertically with default profile)
+                      tell newSession
+                        write text "#{escaped_command}"
+                      end tell
+                    end tell
+                    return "ok"
+                  end if
+                end repeat
+              end repeat
+            end repeat
+            return "session_not_found"
+          end tell
+        APPLESCRIPT
+      end
+
+      # Fallback: command in current session
+      def build_current_command_script(escaped_command)
+        <<~APPLESCRIPT
+          tell application "iTerm2"
+            tell current session of current tab of current window
+              set newSession to (split vertically with default profile)
+              tell newSession
+                write text "#{escaped_command}"
+              end tell
+            end tell
+          end tell
+        APPLESCRIPT
+      end
 
       def darwin?
         RbConfig::CONFIG['host_os'] =~ /darwin|mac os/

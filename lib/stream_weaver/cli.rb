@@ -1359,12 +1359,21 @@ module StreamWeaver
     # =========================================
 
     # Open a canvas panel in a split iTerm2 pane
-    # Usage: streamweaver panel [session-name]
+    # Usage: streamweaver panel [options] [session-name]
     def self.panel(args)
       require_relative 'iterm'
       require_relative 'canvas/client'
 
-      session_name = args.first || "panel-#{SecureRandom.hex(4)}"
+      no_browser = false
+      session_name = nil
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver panel [options] [session-name]"
+        opts.on('--no-browser', "Don't open browser (just create session)") { no_browser = true }
+      end
+
+      remaining = parser.parse(args)
+      session_name = remaining.first || "panel-#{SecureRandom.hex(4)}"
 
       # Check iTerm2 availability
       unless ITerm.available?
@@ -1383,26 +1392,24 @@ module StreamWeaver
       if response && response[:type] == 'ready'
         url = response[:url]
 
-        # Try iTerm2 split, fall back to regular browser
+        # Try iTerm2 split with browser profile
         if ITerm.available?
-          result = ITerm.split_vertical_with_url(url)
+          result = ITerm.split_vertical_with_url(url, open_browser: !no_browser)
           case result
           when :browser
             puts "Canvas '#{session_name}' ready"
-            puts "Browser opened in right pane (iTerm2 browser)"
-          when :external
+            puts "Browser opened in split pane"
+          when :terminal
             puts "Canvas '#{session_name}' ready"
-            puts "Split pane created, browser opened externally"
-            puts ""
-            puts "Tip: Set up iTerm2 browser profile for embedded browser:"
-            puts "  Preferences > Profiles > + > General > Command: Browser"
+            puts "Split pane created#{no_browser ? '' : ', browser opened externally'}"
           else
-            # Fallback if split failed
-            open_browser(url)
+            open_browser(url) unless no_browser
             puts "Canvas '#{session_name}' ready at #{url}"
           end
-        else
+        elsif !no_browser
           open_browser(url)
+          puts "Canvas '#{session_name}' ready at #{url}"
+        else
           puts "Canvas '#{session_name}' ready at #{url}"
         end
 
