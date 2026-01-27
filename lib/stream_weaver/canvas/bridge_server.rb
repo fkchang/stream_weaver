@@ -31,7 +31,7 @@ module StreamWeaver
       DEFAULT_PORT = 4568
 
       class << self
-        attr_accessor :bridge, :unix_server, :claude_connections
+        attr_accessor :bridge, :unix_server, :claude_connections, :port
 
         def socket_path
           SOCKET_PATH
@@ -46,8 +46,24 @@ module StreamWeaver
         end
 
         def setup!
-          @bridge ||= Bridge.new(port: DEFAULT_PORT)
+          @port ||= DEFAULT_PORT
+          @bridge ||= Bridge.new(port: @port)
           @claude_connections ||= []
+        end
+
+        # Find an available port starting from DEFAULT_PORT
+        def find_available_port(start_port = DEFAULT_PORT)
+          port = start_port
+          loop do
+            begin
+              server = TCPServer.new('127.0.0.1', port)
+              server.close
+              return port
+            rescue Errno::EADDRINUSE
+              port += 1
+              raise "No available ports found for canvas bridge" if port > start_port + 100
+            end
+          end
         end
       end
 
@@ -69,7 +85,7 @@ module StreamWeaver
         {
           status: 'ok',
           sessions: self.class.bridge.sessions.keys,
-          port: DEFAULT_PORT
+          port: self.class.port || DEFAULT_PORT
         }.to_json
       end
 
@@ -453,7 +469,7 @@ module StreamWeaver
       # Write PID file
       def self.write_pid_file
         FileUtils.mkdir_p(File.dirname(PID_FILE_PATH))
-        File.write(PID_FILE_PATH, "pid=#{Process.pid}\nport=#{DEFAULT_PORT}\n")
+        File.write(PID_FILE_PATH, "pid=#{Process.pid}\nport=#{@port || DEFAULT_PORT}\n")
       end
 
       # Cleanup on shutdown
@@ -465,6 +481,10 @@ module StreamWeaver
 
       # Start the full server (Unix socket + HTTP)
       def self.run!
+        # Find available port before setup
+        @port = find_available_port
+        set :port, @port
+
         setup!
         write_pid_file
         start_unix_socket_server
