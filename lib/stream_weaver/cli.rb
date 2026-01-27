@@ -77,6 +77,8 @@ module StreamWeaver
         panel(args)
       when 'install-skill'
         install_skill(args)
+      when 'setup'
+        setup
       when '--help', '-h', 'help'
         help
       when '--version', '-v'
@@ -618,7 +620,8 @@ module StreamWeaver
 
         Panel (iTerm2 Split + Canvas):
           streamweaver panel [name]               Split iTerm2, open canvas in right pane
-          streamweaver install-skill [--global]   Install Claude Code skill
+          streamweaver setup                      Configure Claude Code (permissions + skill)
+          streamweaver install-skill [--global]   Install Claude Code skill only
 
         Panel Example (iTerm2):
           # Split terminal, open canvas on right
@@ -1542,6 +1545,51 @@ module StreamWeaver
       puts "Path: #{skill_path}"
       puts ""
       puts "Claude Code will now know how to use StreamWeaver panels."
+    end
+
+    # One-command setup for Claude Code integration
+    # Adds bash permissions and installs the panel skill globally
+    def self.setup
+      settings_path = File.expand_path('~/.claude/settings.json')
+      skill_dir = File.expand_path('~/.claude/skills')
+      skill_path = File.join(skill_dir, 'streamweaver-panel.md')
+
+      # Step 1: Add bash permissions to settings.json
+      settings = if File.exist?(settings_path)
+        JSON.parse(File.read(settings_path))
+      else
+        {}
+      end
+
+      # Ensure permissions structure exists
+      settings['permissions'] ||= {}
+      settings['permissions']['allow'] ||= []
+
+      # Add streamweaver permission if not present
+      permission = 'Bash(streamweaver *)'
+      unless settings['permissions']['allow'].include?(permission)
+        settings['permissions']['allow'] << permission
+      end
+
+      # Write settings
+      FileUtils.mkdir_p(File.dirname(settings_path))
+      File.write(settings_path, JSON.pretty_generate(settings))
+      puts "Added bash permission: #{permission}"
+      puts "  Path: #{settings_path}"
+
+      # Step 2: Install skill globally
+      FileUtils.mkdir_p(skill_dir)
+      File.write(skill_path, SKILL_CONTENT)
+      puts ""
+      puts "Installed panel skill"
+      puts "  Path: #{skill_path}"
+
+      puts ""
+      puts "StreamWeaver setup complete!"
+      puts ""
+      puts "In Claude Code, you can now:"
+      puts "  - Use /panel skill for panel workflow guidance"
+      puts "  - Run `streamweaver panel` without permission prompts"
     end
 
     # Bring terminal back to front after browser auto-closes
