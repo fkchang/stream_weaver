@@ -161,16 +161,27 @@ module StreamWeaver
           )
           Process.detach(pid)
 
-          # Wait for socket to be created
-          10.times do
-            if File.exist?(socket_path)
-              sleep 0.2
-              return read_bridge_info
+          # Wait for both socket AND HTTP server to be ready
+          30.times do
+            if File.exist?(socket_path) && File.exist?(pid_file_path)
+              info = read_bridge_info
+              if info && info[:port]
+                # Probe HTTP server to confirm it's actually listening
+                begin
+                  require 'net/http'
+                  uri = URI("http://127.0.0.1:#{info[:port]}/health")
+                  response = Net::HTTP.get_response(uri)
+                  return info if response.is_a?(Net::HTTPSuccess)
+                rescue Errno::ECONNREFUSED, Errno::EADDRNOTAVAIL
+                  # Server not ready yet
+                end
+              end
             end
-            sleep 0.3
+            sleep 0.2
           end
 
-          { pid: pid, port: Bridge::DEFAULT_PORT }
+          # Fallback - return what we have
+          read_bridge_info || { pid: pid, port: BridgeServer::DEFAULT_PORT }
         end
 
         # Read bridge info from PID file
