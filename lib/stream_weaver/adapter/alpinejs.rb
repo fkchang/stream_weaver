@@ -2130,7 +2130,14 @@ module StreamWeaver
         css_classes << "sw-status-dot-#{component.size}"
         css_classes << "sw-status-dot-pulse" if component.pulse
 
-        view.span(class: css_classes.join(" "))
+        if component.label
+          view.div(class: "sw-status-dot-wrapper") do
+            view.span(class: css_classes.join(" "))
+            view.span(class: "sw-status-dot-label") { component.label }
+          end
+        else
+          view.span(class: css_classes.join(" "))
+        end
       end
 
       # Render a badge/pill component

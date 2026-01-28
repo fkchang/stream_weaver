@@ -1312,9 +1312,9 @@ module StreamWeaver
     # =========================================
 
     # StatusDot component for colored status indicators
-    # Displays a small colored dot with optional glow effect
+    # Displays a small colored dot with optional glow effect and label
     class StatusDot < Base
-      attr_reader :status, :pulse, :size
+      attr_reader :status, :pulse, :size, :label
 
       # Status colors: red (alert), yellow (warning), green (ok), gray (inactive)
       STATUSES = %i[red yellow green gray].freeze
@@ -1323,11 +1323,13 @@ module StreamWeaver
       # @param status [Symbol] Status color (:red, :yellow, :green, :gray)
       # @param pulse [Boolean] Whether to animate with pulse effect (default: false)
       # @param size [Symbol] Size (:sm, :md, :lg) - default :md
+      # @param label [String, nil] Optional label to display below the dot
       # @param options [Hash] Additional options
-      def initialize(status: :gray, pulse: false, size: :md, **options)
+      def initialize(status: :gray, pulse: false, size: :md, label: nil, **options)
         @status = STATUSES.include?(status.to_sym) ? status.to_sym : :gray
         @pulse = pulse
         @size = SIZES.include?(size.to_sym) ? size.to_sym : :md
+        @label = label
         @options = options
       end
 

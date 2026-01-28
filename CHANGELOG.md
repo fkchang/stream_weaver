@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **StatusDot `label:` option** - Display text labels below status dots:
+  ```ruby
+  status_dot status: :green, pulse: true, label: "billing.rb"
+  ```
+- **Canvas Mode CSS** - Full component styling in canvas/panel mode:
+  - Progress bars with animated stripes
+  - Spinners with rotation animation
+  - Status dots with pulse animation and labels
+  - Badges, alerts, activity items
+  - Tables with striped rows and sortable headers
+  - Collapsible sections, hstack/vstack spacing
+- **Enhanced `panel_demo.sh`** - 4-step workflow showcasing canvas capabilities:
+  - Step 1: Issue selection (cards, badges, checkboxes, radio groups)
+  - Step 2: Diff preview (side-by-side columns, alerts)
+  - Step 3: Progress animation (spinner, progress bar, status dots, activity log)
+  - Step 4: Results summary (badges, alerts, sortable table, collapsibles)
 - **Canvas Mode** - IPC system for external apps to push rich UI:
   - Persistent browser canvas for agentic CLIs to display interactive UI
   - WebSocket + HTTP bridge for bidirectional communication

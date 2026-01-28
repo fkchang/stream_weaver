@@ -644,7 +644,7 @@ Dashboard-style components for operations dashboards, control panels, and status
 
 ### Status Dot
 
-Colored indicator dots with optional glow effect and pulse animation:
+Colored indicator dots with optional glow effect, pulse animation, and labels:
 
 ```ruby
 status_dot status: :red      # Red with glow
@@ -659,6 +659,10 @@ status_dot status: :green, size: :lg   # 14px
 
 # Pulse animation
 status_dot status: :green, pulse: true
+
+# With label (displayed below the dot)
+status_dot status: :green, label: "user.rb"
+status_dot status: :green, pulse: true, label: "processing..."
 ```
 
 ### Badge
