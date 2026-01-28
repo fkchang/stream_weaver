@@ -1117,10 +1117,13 @@ module StreamWeaver
     def self.canvas_wait(args)
       session_name = args.first
       timeout = 300 # 5 minute default
+      event_filter = 'action' # Default to waiting for button clicks only
 
       parser = OptionParser.new do |opts|
         opts.banner = "Usage: streamweaver canvas-wait <session-name> [options]"
         opts.on('-t', '--timeout SECONDS', Integer, 'Timeout in seconds (default: 300)') { |t| timeout = t }
+        opts.on('-e', '--event TYPE', 'Event type to wait for (default: action)') { |e| event_filter = e }
+        opts.on('-a', '--any', 'Wait for any event (not just action)') { event_filter = nil }
       end
 
       remaining = parser.parse(args)
@@ -1133,19 +1136,31 @@ module StreamWeaver
 
       require_relative 'canvas/client'
 
-      # Wait for an event
-      result = Canvas::Client.send_and_wait(
-        { type: 'subscribe', name: session_name },
-        event_type: 'event',
-        timeout: timeout
-      )
+      # Wait for an event, optionally filtering by event type
+      start_time = Time.now
+      loop do
+        remaining_time = timeout - (Time.now - start_time).to_i
+        if remaining_time <= 0
+          $stderr.puts "Timeout waiting for user interaction"
+          exit 1
+        end
 
-      if result
-        # Output the event data as JSON
-        puts JSON.generate(result[:data])
-      else
-        $stderr.puts "Timeout waiting for user interaction"
-        exit 1
+        result = Canvas::Client.send_and_wait(
+          { type: 'subscribe', name: session_name },
+          event_type: 'event',
+          timeout: [remaining_time, 5].min # Check every 5 seconds max
+        )
+
+        if result
+          # Check if event matches filter
+          event_data = result[:data] || {}
+          if event_filter.nil? || event_data[:type] == event_filter
+            # Output the event data as JSON
+            puts JSON.generate(event_data)
+            return
+          end
+          # Event didn't match filter, keep waiting
+        end
       end
     rescue Canvas::Client::NotRunningError => e
       $stderr.puts "Error: #{e.message}"
