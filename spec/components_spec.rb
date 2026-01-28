@@ -442,47 +442,59 @@ RSpec.describe StreamWeaver::Components do
     describe "rendering" do
       let(:checkbox) { described_class.new(:agree, "I agree to terms") }
 
-      it "renders label container" do
-        expect(mock_view).to receive(:label).and_yield
+      it "renders wrapper div with checkbox and label" do
+        expect(mock_view).to receive(:div).with(class: "checkbox-wrapper").and_yield
         expect(mock_view).to receive(:input).with(hash_including(type: "checkbox"))
-        expect(mock_view).to receive(:plain).with(" I agree to terms")
+        expect(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:raw)
+        expect(mock_view).to receive(:safe)
         checkbox.render(mock_view, state)
       end
 
       it "includes name attribute from key" do
-        expect(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:div).and_yield
         expect(mock_view).to receive(:input).with(hash_including(name: "agree"))
-        expect(mock_view).to receive(:plain)
+        expect(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:raw)
+        expect(mock_view).to receive(:safe)
         checkbox.render(mock_view, state)
       end
 
       it "includes x-model binding" do
-        expect(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:div).and_yield
         expect(mock_view).to receive(:input).with(hash_including("x-model" => "agree"))
-        expect(mock_view).to receive(:plain)
+        expect(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:raw)
+        expect(mock_view).to receive(:safe)
         checkbox.render(mock_view, state)
       end
 
       it "sets checked attribute from state (true)" do
         state[:agree] = true
-        expect(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:div).and_yield
         expect(mock_view).to receive(:input).with(hash_including(checked: true))
-        expect(mock_view).to receive(:plain)
+        expect(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:raw)
+        expect(mock_view).to receive(:safe)
         checkbox.render(mock_view, state)
       end
 
       it "sets checked attribute from state (false)" do
         state[:agree] = false
-        expect(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:div).and_yield
         expect(mock_view).to receive(:input).with(hash_including(checked: false))
-        expect(mock_view).to receive(:plain)
+        expect(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:raw)
+        expect(mock_view).to receive(:safe)
         checkbox.render(mock_view, state)
       end
 
       it "handles nil state (unchecked)" do
-        expect(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:div).and_yield
         expect(mock_view).to receive(:input).with(hash_including(checked: nil))
-        expect(mock_view).to receive(:plain)
+        expect(mock_view).to receive(:label).and_yield
+        expect(mock_view).to receive(:raw)
+        expect(mock_view).to receive(:safe)
         checkbox.render(mock_view, state)
       end
     end

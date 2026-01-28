@@ -101,25 +101,30 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
 
   describe "#render_checkbox" do
     it "renders checkbox with x-model attribute" do
-      expect(mock_view).to receive(:label).and_yield
+      expect(mock_view).to receive(:div).with(class: "checkbox-wrapper").and_yield
       expect(mock_view).to receive(:input).with(
         hash_including(
           type: "checkbox",
+          id: "checkbox_agree",
           name: "agree",
           "x-model" => "agree"
         )
       )
-      expect(mock_view).to receive(:plain).with(" I agree")
+      expect(mock_view).to receive(:label).with(for: "checkbox_agree").and_yield
+      expect(mock_view).to receive(:raw)
+      expect(mock_view).to receive(:safe).with("I agree")
 
       adapter.render_checkbox(mock_view, :agree, "I agree", {}, state)
     end
 
     it "uses checked state from state hash" do
-      expect(mock_view).to receive(:label).and_yield
+      expect(mock_view).to receive(:div).with(class: "checkbox-wrapper").and_yield
       expect(mock_view).to receive(:input).with(
         hash_including(checked: true)
       )
-      expect(mock_view).to receive(:plain)
+      expect(mock_view).to receive(:label).and_yield
+      expect(mock_view).to receive(:raw)
+      expect(mock_view).to receive(:safe)
 
       adapter.render_checkbox(mock_view, :agree, "I agree", {}, state)
     end
@@ -127,11 +132,13 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
     it "handles unchecked state" do
       state[:agree] = false
 
-      expect(mock_view).to receive(:label).and_yield
+      expect(mock_view).to receive(:div).with(class: "checkbox-wrapper").and_yield
       expect(mock_view).to receive(:input).with(
         hash_including(checked: false)
       )
-      expect(mock_view).to receive(:plain)
+      expect(mock_view).to receive(:label).and_yield
+      expect(mock_view).to receive(:raw)
+      expect(mock_view).to receive(:safe)
 
       adapter.render_checkbox(mock_view, :agree, "I agree", {}, state)
     end

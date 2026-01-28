@@ -279,6 +279,70 @@ State persists in browser cookies across server restarts. To reset:
 
 ---
 
+## Canvas Mode (Side-by-Side Panels)
+
+Canvas mode lets scripts display rich interactive UI in a browser panel alongside the terminal.
+Useful for presenting forms, selections, or analysis results that are hard to show in terminal.
+
+### Quick Example (Shell Script)
+
+```bash
+#!/bin/bash
+SESSION="my-panel-$$"
+
+# Open panel in iTerm2 split pane
+streamweaver panel "$SESSION"
+
+# Push UI content
+streamweaver canvas-push "$SESSION" <<'RUBY'
+header1 "Select Options"
+checkbox :option_a, "Enable feature A"
+checkbox :option_b, "Enable feature B"
+radio_group :mode, ["Fast", "Safe", "Balanced"]
+button "Apply"
+RUBY
+
+# Wait for button click, get JSON result
+result=$(streamweaver canvas-wait "$SESSION")
+echo "User selected: $result"
+
+# Cleanup
+streamweaver canvas-close "$SESSION"
+```
+
+### Key Commands
+
+| Command | Purpose |
+|---------|---------|
+| `streamweaver panel SESSION` | Open canvas in iTerm2 split pane |
+| `streamweaver canvas-push SESSION` | Push DSL content (stdin or `<<'RUBY'`) |
+| `streamweaver canvas-wait SESSION` | Wait for button click, return JSON |
+| `streamweaver canvas-close SESSION` | Close the canvas session |
+
+### Important Behavior
+
+- **canvas-wait returns on button clicks only** - Radio/checkbox changes do NOT trigger return
+- **Form state is captured** - JSON includes all checkbox, radio, text field values
+- **Use heredoc for DSL** - `<<'RUBY'` prevents shell interpolation issues
+
+### Canvas DSL
+
+Same components as regular StreamWeaver apps:
+```ruby
+header1 "Title"
+md "**Bold** and `code` work"
+card do
+  checkbox :agree, "I agree to **terms**"  # Markdown in labels
+end
+columns widths: ['50%', '50%'] do
+  column { radio_group :choice, ["A", "B"] }
+  column { checkbox :extra, "Extra option" }
+end
+button "Submit"  # Returns JSON when clicked
+```
+
+---
+
 ## Detailed Documentation
 
 For comprehensive reference, see these docs:

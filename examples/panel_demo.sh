@@ -1,15 +1,22 @@
 #!/bin/bash
-# Demo: Code Analysis Report with Rich UI
-# This simulates what Claude Code could do with StreamWeaver panels
+# Demo: Side-by-side panel with rich UI
+#
+# This demonstrates using StreamWeaver panels to present interactive UI
+# alongside a terminal session. Useful for:
+#   - Presenting analysis results with checkboxes for selection
+#   - Collecting structured input via forms
+#   - Showing rich content that's hard to display in terminal
+#
+# The panel opens in a split pane (iTerm2) or separate browser window.
 
 set -e
 
-SESSION="code-analysis-$$"
+SESSION="panel-demo-$$"
 
-echo "=== StreamWeaver Panel Demo: Code Quality Analysis ==="
+echo "=== StreamWeaver Panel Demo ==="
 echo ""
-echo "This demonstrates a rich UI for code analysis results that would be"
-echo "difficult to present well in a terminal-only interface."
+echo "This demonstrates a rich UI for collecting structured user input"
+echo "that would be difficult to present in a terminal-only interface."
 echo ""
 
 # Start the panel
@@ -86,8 +93,10 @@ echo "$result" | python3 -m json.tool 2>/dev/null || echo "$result"
 streamweaver canvas-close "$SESSION" 2>/dev/null
 
 echo ""
-echo "Demo complete! In a real scenario, Claude Code would now:"
-echo "  - Parse the selected issues"
-echo "  - Apply fixes based on the chosen approach"
-echo "  - Run tests if requested"
-echo "  - Commit changes if auto-commit was enabled"
+echo "Demo complete! The script received structured JSON with:"
+echo "  - Selected checkboxes (issues to fix)"
+echo "  - Radio selection (approach)"
+echo "  - Additional options (run_tests, auto_commit)"
+echo ""
+echo "This pattern enables rich interactive forms while keeping"
+echo "the main workflow in the terminal."

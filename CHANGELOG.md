@@ -8,14 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Canvas Mode** - IPC system for external apps (like Claude Code) to push rich UI:
+- **Canvas Mode** - IPC system for external apps to push rich UI:
   - Persistent browser canvas for agentic CLIs to display interactive UI
   - WebSocket + HTTP bridge for bidirectional communication
-  - `streamweaver live SESSION` - Start a live canvas session
-  - `streamweaver push SESSION --dsl 'text "Hello"'` - Push DSL content
-  - `streamweaver wait SESSION` - Wait for user submission and return JSON
+  - `streamweaver panel SESSION` - Open canvas in iTerm2 split pane (side-by-side with terminal)
+  - `streamweaver canvas-push SESSION` - Push DSL content to canvas
+  - `streamweaver canvas-wait SESSION` - Wait for button click, return JSON (ignores radio/checkbox)
+  - `streamweaver setup` - Configure Claude Code with bash permissions and panel skill
   - High-level Ruby helpers: `Canvas.pick(session, options)`, `Canvas.confirm(session, message)`
   - See [docs/canvas-roadmap.md](docs/canvas-roadmap.md) for full documentation
+- **Button `id:` option** - Disambiguate buttons in loops to prevent callback collisions:
+  ```ruby
+  items.each { |i| button "Select", id: i[:name] do |s| ... end }
+  ```
 - **Templates** - Pre-built UI patterns for common interactions:
   - `wizard` - Multi-step forms with branching (`next: {branch_on: "field_name"}`)
   - `choices` - Quick selection from options, returns `{choice: "Selected"}`
@@ -132,6 +137,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **New "Warm Industrial" theme**: Source Sans 3 font, terracotta primary color (#c2410c), 17px base font with 1.7 line-height
 
 ### Fixed
+- **Canvas panel iTerm2 integration** - Panel now opens in split pane beside terminal
+- **Canvas bridge port conflicts** - Auto-finds available port instead of hardcoded 4568
+- **Canvas bridge race condition** - Waits for HTTP server health before returning URL
+- **Canvas bridge reuse** - Verifies HTTP health on existing bridge before reusing
+- **iTerm2 URL navigation** - Adds Escape keys to dismiss autocomplete before typing URL
+- **Canvas-wait event filtering** - Now filters for 'action' events by default (button clicks only), ignoring checkbox/radio changes
+- **Canvas 'Submitted' feedback** - Only shows for button clicks, not radio/checkbox changes
+- **Canvas card styling** - Cards now render with proper borders, backgrounds, and the terracotta left accent
+- **Canvas checkbox rendering** - Checkboxes wrapped in proper div with aligned label, inline markdown parsed
 - Checkbox state properly handles unchecked values
 - Agentic mode correctly outputs JSON to STDOUT after form submission
 - Select `default:` now properly initializes Alpine.js state
