@@ -102,7 +102,16 @@ end
 # Display-only button (no server request, for previews)
 button "Preview Button", submit: false
 button "Cancel", style: :secondary, submit: false
+
+# Unique ID for buttons in loops (prevents callback collisions)
+voices.each do |v|
+  button "Test", id: v[:name] do |state|
+    speak(v[:name])  # Each button triggers its own callback
+  end
+end
 ```
+
+**Note:** When creating buttons inside a loop, use `id:` to give each button a unique identifier. Without this, all buttons share the same internal ID and only the last callback fires.
 
 ## Layout Containers
 

@@ -305,12 +305,14 @@ module StreamWeaver
       @components << Components::Term.new(term_key, **options)
     end
 
-    def button(label, **options, &block)
+    def button(label, id: nil, **options, &block)
       # Generate stable ID: use source location for buttons with blocks,
       # fallback to counter for blockless buttons (submit: false)
+      # If id: is provided, use it to disambiguate buttons in loops
       if block
         source_loc = block.source_location.join(':')
-        stable_id = Digest::MD5.hexdigest("#{label}:#{source_loc}")[0..7]
+        id_input = id ? "#{label}:#{id}" : "#{label}:#{source_loc}"
+        stable_id = Digest::MD5.hexdigest(id_input)[0..7]
       else
         @button_counter += 1
         stable_id = @button_counter.to_s
