@@ -29,8 +29,14 @@ module StreamWeaver
       def split_vertical_with_url(url, open_browser: true)
         return false unless available?
 
+        debug = ENV['DEBUG_PANEL']
+
         session_id = current_session_id
         escaped_url = escape_for_applescript(url)
+
+        $stderr.puts "[DEBUG iTerm] url: #{url.inspect}" if debug
+        $stderr.puts "[DEBUG iTerm] escaped_url: #{escaped_url.inspect}" if debug
+        $stderr.puts "[DEBUG iTerm] session_id: #{session_id.inspect}" if debug
 
         # Build AppleScript that targets the specific calling session
         script = if session_id
@@ -39,7 +45,18 @@ module StreamWeaver
           build_current_split_script(escaped_url)
         end
 
+        $stderr.puts "[DEBUG iTerm] AppleScript length: #{script.length} chars" if debug
+        if debug
+          # Log the actual keystroke line from the script
+          keystroke_line = script.lines.find { |l| l.include?('keystroke "http') }
+          $stderr.puts "[DEBUG iTerm] Keystroke line: #{keystroke_line&.strip.inspect}"
+        end
+
         stdout, status = Open3.capture2("osascript", stdin_data: script)
+
+        $stderr.puts "[DEBUG iTerm] osascript status: #{status.success?}" if debug
+        $stderr.puts "[DEBUG iTerm] osascript stdout: #{stdout.inspect}" if debug
+
         return false unless status.success?
 
         result = stdout.strip
@@ -98,14 +115,19 @@ module StreamWeaver
                         set newSession to (split vertically with profile "Web Browser")
                         -- Select the new session to ensure it has focus
                         select newSession
-                        delay 0.3
-                        -- Use keyboard to navigate: Cmd+L, type URL, Enter
+                        delay 1.0
+                        -- Use keyboard to navigate
+                        -- Press Escape first to dismiss any autocomplete/suggestions
                         tell application "System Events"
                           tell process "iTerm2"
+                            key code 53 -- Escape
+                            delay 0.2
                             keystroke "l" using command down
-                            delay 0.1
+                            delay 0.3
+                            key code 53 -- Escape again to dismiss autocomplete dropdown
+                            delay 0.2
                             keystroke "#{escaped_url}"
-                            delay 0.1
+                            delay 0.3
                             keystroke return
                           end tell
                         end tell
@@ -138,14 +160,19 @@ module StreamWeaver
                 set newSession to (split vertically with profile "Web Browser")
                 -- Select the new session to ensure it has focus
                 select newSession
-                delay 0.3
-                -- Use keyboard to navigate: Cmd+L, type URL, Enter
+                delay 1.0
+                -- Use keyboard to navigate
+                -- Press Escape first to dismiss any autocomplete/suggestions
                 tell application "System Events"
                   tell process "iTerm2"
+                    key code 53 -- Escape
+                    delay 0.2
                     keystroke "l" using command down
-                    delay 0.1
+                    delay 0.3
+                    key code 53 -- Escape again to dismiss autocomplete dropdown
+                    delay 0.2
                     keystroke "#{escaped_url}"
-                    delay 0.1
+                    delay 0.3
                     keystroke return
                   end tell
                 end tell

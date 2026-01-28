@@ -1371,22 +1371,43 @@ module StreamWeaver
       require_relative 'iterm'
       require_relative 'canvas/client'
 
+      debug = ENV['DEBUG_PANEL']
+
       session_name = args.first || "panel-#{SecureRandom.hex(4)}"
+      $stderr.puts "[DEBUG] session_name: #{session_name}" if debug
 
       # Ensure bridge is running
-      Canvas::Client.ensure_bridge_running
+      $stderr.puts "[DEBUG] Calling ensure_bridge_running..." if debug
+      bridge_info = Canvas::Client.ensure_bridge_running
+      $stderr.puts "[DEBUG] Bridge info: #{bridge_info.inspect}" if debug
 
       # Create session
+      $stderr.puts "[DEBUG] Creating session..." if debug
       response = Canvas::Client.send_message(
         Canvas::Protocol::Messages.create(session_name)
       )
+      $stderr.puts "[DEBUG] Response: #{response.inspect}" if debug
 
       if response && response[:type] == 'ready'
         url = response[:url]
+        $stderr.puts "[DEBUG] URL from response: #{url.inspect}" if debug
+
+        # Verify URL is accessible
+        if debug
+          require 'net/http'
+          begin
+            test_response = Net::HTTP.get_response(URI(url))
+            $stderr.puts "[DEBUG] URL test: HTTP #{test_response.code}"
+          rescue => e
+            $stderr.puts "[DEBUG] URL test FAILED: #{e.message}"
+          end
+        end
 
         # Try iTerm2 split with browser profile (never open external browser)
         if ITerm.available?
+          $stderr.puts "[DEBUG] Calling ITerm.split_vertical_with_url..." if debug
           result = ITerm.split_vertical_with_url(url, open_browser: false)
+          $stderr.puts "[DEBUG] iTerm result: #{result.inspect}" if debug
           case result
           when :browser
             puts "Canvas '#{session_name}' ready"
