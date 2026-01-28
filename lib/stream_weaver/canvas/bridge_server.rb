@@ -234,24 +234,28 @@ module StreamWeaver
                     Alpine.initTree(container);
                   }
 
-                  // Apply syntax highlighting to code blocks
-                  if (window.hljs) {
-                    container.querySelectorAll('pre code').forEach((block) => {
-                      hljs.highlightElement(block);
-                    });
-                  }
+                  // Apply syntax highlighting and initialize charts after DOM update
+                  setTimeout(() => {
+                    // Apply syntax highlighting to code blocks
+                    if (window.hljs) {
+                      container.querySelectorAll('pre code:not(.hljs)').forEach((block) => {
+                        hljs.highlightElement(block);
+                      });
+                    }
 
-                  // Initialize Chart.js charts
-                  if (window.Chart) {
-                    container.querySelectorAll('canvas[data-chart-config]').forEach((canvas) => {
-                      try {
-                        const config = JSON.parse(canvas.dataset.chartConfig);
-                        new Chart(canvas, config);
-                      } catch (e) {
-                        console.error('Chart init error:', e);
-                      }
-                    });
-                  }
+                    // Initialize Chart.js charts
+                    if (window.Chart) {
+                      container.querySelectorAll('canvas[data-chart-config]:not([data-chart-init])').forEach((canvas) => {
+                        try {
+                          const config = JSON.parse(canvas.dataset.chartConfig);
+                          new Chart(canvas, config);
+                          canvas.dataset.chartInit = 'true';
+                        } catch (e) {
+                          console.error('Chart init error:', e);
+                        }
+                      });
+                    }
+                  }, 10);
                 }
               } catch (e) {
                 console.error('Poll error:', e);

@@ -116,13 +116,13 @@ RUBY
 step2_diff_preview() {
   echo ""
   echo "Step 2: Diff Preview"
-  echo "  Features: cards, columns, alerts (red/green), inline code, badges"
+  echo "  Features: cards, columns, syntax-highlighted code blocks, badges"
   echo ""
   streamweaver canvas-push "$SESSION" <<'RUBY'
 header1 "Review Changes"
-md "Preview the fixes before applying. Expand each to see the changes:"
+md "Preview the fixes before applying:"
 
-# N+1 Query Fix
+# N+1 Query Fix - with syntax highlighted code
 card do
   hstack spacing: :sm, align: :center do
     badge "Performance", variant: :info
@@ -131,23 +131,33 @@ card do
   columns widths: ['50%', '50%'] do
     column do
       md "**Before** (N+1 problem)"
-      alert variant: :error do
-        md "`users.each { |u| u.posts.count }`"
-        md "Each iteration triggers a DB query!"
-      end
+      md <<~CODE
+```ruby
+# Each iteration triggers a DB query!
+users.each do |user|
+  puts user.posts.count
+  puts user.comments.count
+end
+```
+      CODE
     end
     column do
       md "**After** (Eager loaded)"
-      alert variant: :success do
-        md "`users.includes(:posts).each { |u| u.posts.count }`"
-        md "Single query loads all data upfront"
-      end
+      md <<~CODE
+```ruby
+# Single query loads all data
+users.includes(:posts, :comments).each do |user|
+  puts user.posts.count
+  puts user.comments.count
+end
+```
+      CODE
     end
   end
   md "**Impact:** Reduces queries from **24** to **2**"
 end
 
-# SQL Injection Fix
+# SQL Injection Fix - with syntax highlighted code
 card do
   hstack spacing: :sm, align: :center do
     badge "Security", variant: :danger
@@ -156,45 +166,30 @@ card do
   columns widths: ['50%', '50%'] do
     column do
       md "**Before** (Vulnerable)"
-      alert variant: :error do
-        md '`where("name LIKE \'%\#{q}%\'")`'
-        md "User input directly in SQL!"
-      end
+      md <<~CODE
+```ruby
+# User input directly in SQL!
+def search
+  query = params[:q]
+  User.where("name LIKE '%' + query + '%'")
+end
+```
+      CODE
     end
     column do
       md "**After** (Parameterized)"
-      alert variant: :success do
-        md '`where("name LIKE ?", "%\#{q}%")`'
-        md "Safe parameterized query"
-      end
+      md <<~CODE
+```ruby
+# Safe parameterized query
+def search
+  query = params[:q]
+  User.where("name LIKE ?", "%" + query + "%")
+end
+```
+      CODE
     end
   end
   md "**Impact:** Prevents SQL injection attacks"
-end
-
-# Long Method Refactor
-card do
-  hstack spacing: :sm, align: :center do
-    badge "Maintainability", variant: :warning
-    header3 "billing.rb - Long Method Refactor"
-  end
-  columns widths: ['50%', '50%'] do
-    column do
-      md "**Before** (87 lines)"
-      alert variant: :warning do
-        md "Monolithic `calculate_totals` method"
-        md "Tax, discount, shipping all inline"
-      end
-    end
-    column do
-      md "**After** (8 lines)"
-      alert variant: :success do
-        md "Extracted: `calculate_subtotal`"
-        md "Extracted: `calculate_tax`, `apply_discounts`"
-      end
-    end
-  end
-  md "**Impact:** Improved readability and testability"
 end
 
 md "---"
@@ -313,7 +308,7 @@ RUBY
 step4_results() {
   echo ""
   echo "Step 4: Results Summary"
-  echo "  Features: cards, badges, alerts, sortable table, collapsible sections"
+  echo "  Features: cards, badges, charts, sortable table, collapsible with code"
   echo ""
   streamweaver canvas-push "$SESSION" <<'RUBY'
 header1 "Fixes Applied Successfully"
@@ -342,9 +337,23 @@ end
 
 md "---"
 
-# Performance improvement highlight
-alert variant: :success, title: "Performance Improved" do
-  md "Average response time reduced from **2400ms** to **180ms** (92% faster)"
+# Charts showing impact
+columns widths: ['50%', '50%'] do
+  column do
+    bar_chart data: {
+      "N+1 Query" => 22,
+      "SQL Injection" => 18,
+      "Long Method" => 15,
+      "Unused Var" => 3,
+      "Magic Numbers" => 2
+    }, title: "DB Queries Saved Per Fix", height: "180px"
+  end
+  column do
+    bar_chart data: {
+      "Before" => 2400,
+      "After" => 180
+    }, title: "Response Time (ms)", height: "180px"
+  end
 end
 
 md "---"
@@ -352,42 +361,43 @@ md "---"
 # Detailed results table
 header3 "Fix Details"
 table [
-  { file: "user.rb", issue: "N+1 Query", status: "✅ Fixed", tests: "12 passed", impact: "High" },
-  { file: "search_controller.rb", issue: "SQL Injection", status: "✅ Fixed", tests: "8 passed", impact: "Critical" },
-  { file: "billing.rb", issue: "Long Method", status: "✅ Fixed", tests: "15 passed", impact: "Medium" },
-  { file: "processor.rb", issue: "Unused Variable", status: "✅ Fixed", tests: "3 passed", impact: "Low" },
-  { file: "constants.rb", issue: "Magic Numbers", status: "✅ Fixed", tests: "2 passed", impact: "Low" },
-  { file: "api_client.rb", issue: "Deprecated Method", status: "⏭️ Skipped", tests: "-", impact: "Low" },
-  { file: "config.rb", issue: "Missing Index", status: "⏭️ Skipped", tests: "-", impact: "Medium" }
+  { file: "user.rb", issue: "N+1 Query", status: "Fixed", tests: "12 passed", impact: "High" },
+  { file: "search_controller.rb", issue: "SQL Injection", status: "Fixed", tests: "8 passed", impact: "Critical" },
+  { file: "billing.rb", issue: "Long Method", status: "Fixed", tests: "15 passed", impact: "Medium" },
+  { file: "processor.rb", issue: "Unused Variable", status: "Fixed", tests: "3 passed", impact: "Low" },
+  { file: "constants.rb", issue: "Magic Numbers", status: "Fixed", tests: "2 passed", impact: "Low" },
+  { file: "api_client.rb", issue: "Deprecated Method", status: "Skipped", tests: "-", impact: "Low" },
+  { file: "config.rb", issue: "Missing Index", status: "Skipped", tests: "-", impact: "Medium" }
 ], striped: true, sortable: true
 
 md "---"
 
-# Expandable details for key fixes
+# Expandable details with syntax-highlighted code
 header3 "Change Details"
 collapsible "user.rb - N+1 Query Fix" do
-  md "**Before:**"
-  md "`users.each { |u| puts u.posts.count }`"
-  md "**After:**"
-  md "`users.includes(:posts).each { |u| puts u.posts.count }`"
-  md "---"
+  md <<~CODE
+```ruby
+# Before: N+1 queries
+users.each { |u| puts u.posts.count }
+
+# After: Single query with eager loading
+users.includes(:posts).each { |u| puts u.posts.count }
+```
+  CODE
   md "**Impact:** Reduces database queries from 24 to 2"
 end
 
 collapsible "search_controller.rb - SQL Injection Fix" do
-  md "**Before:**"
-  md '`User.where("name LIKE \'%\#{query}%\'")`'
-  md "**After:**"
-  md '`User.where("name LIKE ?", "%\#{query}%")`'
-  md "---"
-  md "**Impact:** Prevents SQL injection attacks"
-end
+  md <<~CODE
+```ruby
+# Before: Vulnerable to injection
+User.where("name LIKE '%" + query + "%'")
 
-collapsible "billing.rb - Long Method Refactor" do
-  md "**Before:** 87-line monolithic method"
-  md "**After:** 8-line method with extracted helpers"
-  md "---"
-  md "**Impact:** Improved readability and testability"
+# After: Safe parameterized query
+User.where("name LIKE ?", "%" + query + "%")
+```
+  CODE
+  md "**Impact:** Prevents SQL injection attacks"
 end
 
 md "---"
@@ -420,6 +430,8 @@ echo "are impossible or painful in traditional TUI:"
 echo ""
 echo "  Component             TUI Equivalent          Browser Advantage"
 echo "  ------------------    --------------------    ------------------"
+echo "  Syntax highlighting   Plain text              Color-coded keywords"
+echo "  Bar charts            None practical          Visual data comparison"
 echo "  Side-by-side columns  ASCII pipes             Precise alignment"
 echo "  Collapsible sections  None                    Smooth expand/collapse"
 echo "  Progress bar          [====>    ]             Smooth animation"
