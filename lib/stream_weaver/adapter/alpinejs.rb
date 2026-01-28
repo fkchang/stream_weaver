@@ -663,7 +663,10 @@ module StreamWeaver
               window.sendEvent = function(type, data) {
                 const payload = JSON.stringify({ type: type, ...data });
 
+                // Only show "Submitted" feedback for action events (button clicks)
+                // Change events (radio/checkbox) should just update state silently
                 function showFeedback() {
+                  if (type !== 'action') return;
                   const container = document.getElementById('app-container');
                   if (container) {
                     container.innerHTML = '<div style="text-align:center;padding:40px;"><h2 style="color:#10b981;">✓ Submitted</h2><p style="color:#666;">You can close this window.</p></div>';
