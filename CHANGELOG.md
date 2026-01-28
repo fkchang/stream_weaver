@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Collapsible sections, hstack/vstack spacing
 - **Canvas Syntax Highlighting** - Code blocks in canvas mode now have syntax highlighting via highlight.js (github theme)
 - **Canvas Charts** - Chart.js support in canvas mode for bar_chart, line_chart, etc.
+- **`git_health.sh` example** - Dynamic git repository analyzer:
+  - Scans real git history, generates custom health dashboard
+  - Charts showing commit patterns by day of week
+  - Author contribution tables with sorting
+  - Contextual recommendations based on findings
+  - Different results each run based on actual repo state
 - **Enhanced `panel_demo.sh`** - 4-step workflow showcasing canvas capabilities:
   - Step 1: Issue selection (cards, badges, checkboxes, radio groups)
   - Step 2: Diff preview (side-by-side columns, alerts)
