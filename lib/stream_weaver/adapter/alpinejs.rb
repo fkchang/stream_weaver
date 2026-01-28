@@ -161,29 +161,34 @@ module StreamWeaver
       def render_checkbox(view, key, label, options, state)
         form_context = options[:form_context]
         should_submit = options.fetch(:submit, true)
+        parsed_label = parse_inline_markdown(label)
 
         if form_context
           # Inside form: use form-scoped x-model, no HTMX
           form_name = form_context[:name]
           form_state = state[form_name] || {}
-          view.label do
+          view.div(class: "checkbox-wrapper") do
             view.input(
               type: "checkbox",
+              id: "checkbox_#{form_name}_#{key}",
               name: "#{form_name}[#{key}]",
               value: "true",
               checked: form_state[key],
               "x-model" => "_form.#{key}"  # Form-local Alpine scope
             )
-            view.plain " #{label}"
+            view.label(for: "checkbox_#{form_name}_#{key}") do
+              view.raw view.safe(parsed_label)
+            end
           end
         elsif should_submit
           # Use /event endpoint if there's a callback
           has_on_change = options[:on_change]
           endpoint = has_on_change ? url("/event/#{key}") : url("/update")
 
-          view.label do
+          view.div(class: "checkbox-wrapper") do
             view.input(
               type: "checkbox",
+              id: "checkbox_#{key}",
               name: key.to_s,
               value: "true",
               checked: state[key],
@@ -194,21 +199,44 @@ module StreamWeaver
               "hx-swap" => "innerHTML scroll:false",
               "hx-trigger" => "change"
             )
-            view.plain " #{label}"
+            view.label(for: "checkbox_#{key}") do
+              view.raw view.safe(parsed_label)
+            end
           end
         else
           # No auto-submit: just Alpine.js binding, no HTMX
-          view.label do
+          view.div(class: "checkbox-wrapper") do
             view.input(
               type: "checkbox",
+              id: "checkbox_#{key}",
               name: key.to_s,
               value: "true",
               checked: state[key],
               "x-model" => key.to_s
             )
-            view.plain " #{label}"
+            view.label(for: "checkbox_#{key}") do
+              view.raw view.safe(parsed_label)
+            end
           end
         end
+      end
+
+      # Parse inline markdown (bold, italic, code, links) for use in labels
+      # @param text [String] Text with markdown formatting
+      # @return [String] HTML string with parsed formatting
+      def parse_inline_markdown(text)
+        return text.to_s if text.nil?
+
+        result = text.to_s.dup
+        # Bold: **text** or __text__
+        result.gsub!(/\*\*(.+?)\*\*/) { "<strong>#{$1}</strong>" }
+        result.gsub!(/__(.+?)__/) { "<strong>#{$1}</strong>" }
+        # Italic: *text* or _text_
+        result.gsub!(/\*(.+?)\*/) { "<em>#{$1}</em>" }
+        result.gsub!(/_(.+?)_/) { "<em>#{$1}</em>" }
+        # Code: `text`
+        result.gsub!(/`(.+?)`/) { "<code>#{$1}</code>" }
+        result
       end
 
       # Render a select dropdown with Alpine.js binding

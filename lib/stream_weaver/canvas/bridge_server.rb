@@ -246,19 +246,38 @@ module StreamWeaver
 
       def canvas_styles
         <<~CSS
+          /* CSS Variables */
           :root {
             --sw-color-primary: #c2410c;
+            --sw-color-primary-hover: #9a3412;
+            --sw-color-primary-light: #fff7ed;
             --sw-color-text: #111111;
+            --sw-color-text-muted: #444444;
             --sw-color-bg: #f8f8f8;
             --sw-color-bg-card: #ffffff;
+            --sw-color-bg-elevated: #f3f3f3;
             --sw-color-border: #e0e0e0;
-            --sw-spacing: 16px;
-            --sw-radius: 8px;
+            --sw-spacing-xs: 0.5rem;
+            --sw-spacing-sm: 0.75rem;
+            --sw-spacing-md: 1.25rem;
+            --sw-spacing-lg: 2rem;
+            --sw-spacing-xl: 3rem;
+            --sw-radius-sm: 3px;
+            --sw-radius-md: 6px;
+            --sw-radius-lg: 10px;
+            --sw-shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.06);
+            --sw-shadow-md: 0 4px 8px -2px rgba(28, 25, 23, 0.08), 0 2px 4px -1px rgba(28, 25, 23, 0.04);
+            --sw-card-border-left: 3px solid var(--sw-color-primary);
           }
+
+          /* Base styles */
+          *, *::before, *::after { box-sizing: border-box; }
           body {
             font-family: 'Source Sans 3', system-ui, sans-serif;
+            font-size: 17px;
+            line-height: 1.7;
             margin: 0;
-            padding: var(--sw-spacing);
+            padding: var(--sw-spacing-md);
             background: var(--sw-color-bg);
             color: var(--sw-color-text);
           }
@@ -266,38 +285,120 @@ module StreamWeaver
             max-width: 800px;
             margin: 0 auto;
             background: var(--sw-color-bg-card);
-            border-radius: var(--sw-radius);
-            padding: var(--sw-spacing);
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-radius: var(--sw-radius-md);
+            padding: var(--sw-spacing-lg);
+            box-shadow: var(--sw-shadow-sm);
           }
-          h1, h2, h3, h4, h5, h6 { margin: 0 0 var(--sw-spacing) 0; }
+          h1, h2, h3, h4, h5, h6 { margin: 0 0 var(--sw-spacing-md) 0; line-height: 1.3; }
+          h1 { font-size: 2rem; }
+          h2 { font-size: 1.5rem; }
+          h3 { font-size: 1.25rem; }
+          p { margin: 0 0 var(--sw-spacing-md) 0; }
+          hr { border: none; border-top: 1px solid var(--sw-color-border); margin: var(--sw-spacing-lg) 0; }
+
+          /* Card component */
+          .card {
+            background: var(--sw-color-bg-card);
+            border: 1px solid var(--sw-color-border);
+            border-left: var(--sw-card-border-left);
+            border-radius: var(--sw-radius-md);
+            padding: var(--sw-spacing-lg);
+            margin-bottom: var(--sw-spacing-md);
+            box-shadow: var(--sw-shadow-sm);
+          }
+          .card h3 {
+            margin-top: 0;
+            margin-bottom: var(--sw-spacing-sm);
+            color: var(--sw-color-text);
+          }
+          .card-header {
+            padding-bottom: var(--sw-spacing-sm);
+            margin-bottom: var(--sw-spacing-md);
+            border-bottom: 1px solid var(--sw-color-border);
+          }
+          .card-header h1, .card-header h2, .card-header h3,
+          .card-header h4, .card-header h5, .card-header h6 { margin: 0; }
+          .card-body > *:first-child { margin-top: 0; }
+          .card-body > *:last-child { margin-bottom: 0; }
+          .card-footer {
+            padding-top: var(--sw-spacing-sm);
+            margin-top: var(--sw-spacing-md);
+            border-top: 1px solid var(--sw-color-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: var(--sw-spacing-sm);
+          }
+          .card-footer button { margin: 0; }
+
+          /* Columns layout */
+          .sw-columns {
+            display: flex;
+            gap: var(--sw-spacing-lg);
+            margin-bottom: var(--sw-spacing-md);
+          }
+          .sw-column { flex: 1; min-width: 0; }
+          @media (max-width: 768px) {
+            .sw-columns { flex-direction: column; }
+          }
+
+          /* Buttons */
           .btn {
             display: inline-block;
             padding: 10px 20px;
             border: none;
-            border-radius: 6px;
+            border-radius: var(--sw-radius-md);
             cursor: pointer;
             font-size: 16px;
             font-weight: 500;
+            transition: background-color 150ms ease;
           }
+          .btn:hover { filter: brightness(0.95); }
           .btn-primary {
             background: var(--sw-color-primary);
             color: white;
           }
+          .btn-primary:hover { background: var(--sw-color-primary-hover); }
           .btn-secondary {
             background: #e5e5e5;
             color: var(--sw-color-text);
           }
-          .radio-group { display: flex; flex-direction: column; gap: 8px; }
+          .btn-secondary:hover { background: #d5d5d5; }
+
+          /* Form elements */
+          .radio-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--sw-spacing-md); }
           .radio-option { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+          .checkbox-wrapper { display: flex; align-items: flex-start; gap: 8px; margin-bottom: var(--sw-spacing-sm); }
+          .checkbox-wrapper input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin: 2px 0 0 0;
+            cursor: pointer;
+          }
+          .checkbox-wrapper label { cursor: pointer; flex: 1; }
           input[type="text"], textarea {
             width: 100%;
             padding: 10px;
             border: 1px solid var(--sw-color-border);
-            border-radius: 6px;
+            border-radius: var(--sw-radius-md);
             font-size: 16px;
             box-sizing: border-box;
           }
+          input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: var(--sw-color-primary);
+            box-shadow: 0 0 0 2px var(--sw-color-primary-light);
+          }
+
+          /* Markdown rendering */
+          strong, b { font-weight: 600; }
+          code {
+            background: var(--sw-color-bg-elevated);
+            padding: 2px 6px;
+            border-radius: var(--sw-radius-sm);
+            font-size: 0.9em;
+          }
+
+          /* Canvas waiting state */
           .sw-canvas-waiting {
             text-align: center;
             padding: 60px 40px;
@@ -330,9 +431,7 @@ module StreamWeaver
             color: #444;
             margin-bottom: 24px;
           }
-          .sw-canvas-info {
-            margin-bottom: 32px;
-          }
+          .sw-canvas-info { margin-bottom: 32px; }
           .sw-canvas-session code {
             background: #f0f0f0;
             padding: 4px 12px;
