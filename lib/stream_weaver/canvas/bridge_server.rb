@@ -192,6 +192,11 @@ module StreamWeaver
               #{canvas_styles}
             </style>
             #{adapter.cdn_scripts.join("\n")}
+            <!-- Chart.js for charts -->
+            <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+            <!-- Highlight.js for syntax highlighting -->
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
+            <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
           </head>
           <body class="sw-theme-default">
             <div id="app-container" #{container_attrs(session.state, adapter)}>
@@ -226,8 +231,26 @@ module StreamWeaver
 
                   // Re-initialize Alpine.js on the new content
                   if (window.Alpine) {
-                    // Alpine 3.x re-initialization
                     Alpine.initTree(container);
+                  }
+
+                  // Apply syntax highlighting to code blocks
+                  if (window.hljs) {
+                    container.querySelectorAll('pre code').forEach((block) => {
+                      hljs.highlightElement(block);
+                    });
+                  }
+
+                  // Initialize Chart.js charts
+                  if (window.Chart) {
+                    container.querySelectorAll('canvas[data-chart-config]').forEach((canvas) => {
+                      try {
+                        const config = JSON.parse(canvas.dataset.chartConfig);
+                        new Chart(canvas, config);
+                      } catch (e) {
+                        console.error('Chart init error:', e);
+                      }
+                    });
                   }
                 }
               } catch (e) {

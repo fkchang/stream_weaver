@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Badges, alerts, activity items
   - Tables with striped rows and sortable headers
   - Collapsible sections, hstack/vstack spacing
+- **Canvas Syntax Highlighting** - Code blocks in canvas mode now have syntax highlighting via highlight.js (github theme)
+- **Canvas Charts** - Chart.js support in canvas mode for bar_chart, line_chart, etc.
 - **Enhanced `panel_demo.sh`** - 4-step workflow showcasing canvas capabilities:
   - Step 1: Issue selection (cards, badges, checkboxes, radio groups)
   - Step 2: Diff preview (side-by-side columns, alerts)
