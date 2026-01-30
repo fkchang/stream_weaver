@@ -119,7 +119,8 @@ module StreamWeaver
         {
           state: session.state,
           html: session.html,
-          version: session.html_version
+          version: session.html_version,
+          toasts: session.pop_toasts
         }.to_json
       end
 
@@ -217,6 +218,29 @@ module StreamWeaver
             const pollUrl = '/canvas/#{session_name}/poll';
             const container = document.getElementById('app-container');
 
+            function showToast(toast) {
+              // Remove any existing toast
+              const existing = document.querySelector('.sw-toast');
+              if (existing) existing.remove();
+
+              const el = document.createElement('div');
+              el.className = 'sw-toast sw-toast-' + (toast.variant || 'warning');
+              el.innerHTML = '<span class="sw-toast-message">' + escapeHtml(toast.message) + '</span>' +
+                             '<button class="sw-toast-close" onclick="this.parentElement.remove()">&times;</button>';
+              document.body.appendChild(el);
+
+              // Auto-dismiss if duration > 0
+              if (toast.duration > 0) {
+                setTimeout(() => el.remove(), toast.duration);
+              }
+            }
+
+            function escapeHtml(text) {
+              const div = document.createElement('div');
+              div.textContent = text;
+              return div.innerHTML;
+            }
+
             async function poll() {
               try {
                 const resp = await fetch(pollUrl);
@@ -224,10 +248,19 @@ module StreamWeaver
 
                 const data = await resp.json();
 
+                // Show any pending toasts
+                if (data.toasts && data.toasts.length > 0) {
+                  data.toasts.forEach(toast => showToast(toast));
+                }
+
                 // Update if version changed and there's HTML
                 if (data.version > currentVersion && data.html) {
                   currentVersion = data.version;
                   container.innerHTML = data.html;
+
+                  // Remove toast when new content arrives (unless persistent)
+                  const existingToast = document.querySelector('.sw-toast');
+                  if (existingToast) existingToast.remove();
 
                   // Re-initialize Alpine.js on the new content
                   if (window.Alpine) {
@@ -452,6 +485,10 @@ module StreamWeaver
           }
           @keyframes sw-spin {
             to { transform: rotate(360deg); }
+          }
+          @keyframes sw-toast-in {
+            from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
           }
           .sw-canvas-status {
             font-size: 18px;
@@ -697,6 +734,57 @@ module StreamWeaver
           }
           .sw-table-sortable th:hover {
             background: #e0e0e0;
+          }
+
+          /* Toast notifications */
+          .sw-toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 40px 12px 16px;
+            border-radius: var(--sw-radius-md);
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 10000;
+            animation: sw-toast-in 0.3s ease-out;
+            max-width: 90%;
+          }
+          .sw-toast-message { display: inline; }
+          .sw-toast-close {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            opacity: 0.7;
+            padding: 4px 8px;
+            line-height: 1;
+          }
+          .sw-toast-close:hover { opacity: 1; }
+          .sw-toast-info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+          }
+          .sw-toast-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+          }
+          .sw-toast-warning {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+          }
+          .sw-toast-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
           }
         CSS
       end

@@ -607,6 +607,13 @@ module StreamWeaver
       @components << Components::Spinner.new(size: size, label: label, **options)
     end
 
+    # Mark this canvas as continuing (more content coming after submit)
+    # When present, button clicks show a spinner instead of "close window"
+    # @param message [String] Optional message to show while processing (default: "Processing...")
+    def canvas_continue(message: "Processing...")
+      @components << Components::CanvasContinue.new(message: message)
+    end
+
     # Theme switcher dropdown for runtime theme selection
     # @param position [Symbol] Position (:inline, :fixed_top_right)
     # @param show_label [Boolean] Show "Theme:" label (default: true)

@@ -637,6 +637,11 @@ module StreamWeaver
                   if (msg.type === 'update' && msg.html) {
                     const container = document.getElementById('app-container');
                     if (container) container.innerHTML = msg.html;
+                    // Clear any existing toast when content updates
+                    const existingToast = document.getElementById('sw-toast-overlay');
+                    if (existingToast) existingToast.remove();
+                  } else if (msg.type === 'toast') {
+                    showToast(msg.message, msg.variant, msg.duration);
                   } else if (msg.type === 'closed') {
                     ws.close();
                   }
@@ -663,12 +668,19 @@ module StreamWeaver
               window.sendEvent = function(type, data) {
                 const payload = JSON.stringify({ type: type, ...data });
 
-                // Only show "Submitted" feedback for action events (button clicks)
+                // Only show feedback for action events (button clicks)
                 // Change events (radio/checkbox) should just update state silently
                 function showFeedback() {
                   if (type !== 'action') return;
                   const container = document.getElementById('app-container');
-                  if (container) {
+                  if (!container) return;
+
+                  // Check for canvas_continue marker - if present, show spinner instead of close message
+                  const continueMarker = document.getElementById('sw-canvas-continue');
+                  if (continueMarker) {
+                    const message = continueMarker.getAttribute('data-continue-message') || 'Processing...';
+                    container.innerHTML = '<div style="text-align:center;padding:40px;"><div class="sw-spinner" style="margin:0 auto 20px;width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#6366f1;border-radius:50%;animation:sw-spin 0.8s linear infinite;"></div><p style="color:#666;">' + message + '</p></div>';
+                  } else {
                     container.innerHTML = '<div style="text-align:center;padding:40px;"><h2 style="color:#10b981;">✓ Submitted</h2><p style="color:#666;">You can close this window.</p></div>';
                   }
                 }
@@ -700,6 +712,60 @@ module StreamWeaver
                   }
                 });
                 return state;
+              };
+
+              // Show toast overlay (doesn't replace main content)
+              window.showToast = function(message, variant, duration) {
+                // Remove existing toast if any
+                const existing = document.getElementById('sw-toast-overlay');
+                if (existing) existing.remove();
+
+                // Color based on variant
+                const colors = {
+                  info: { bg: '#3b82f6', border: '#2563eb' },
+                  success: { bg: '#10b981', border: '#059669' },
+                  warning: { bg: '#f59e0b', border: '#d97706' },
+                  error: { bg: '#ef4444', border: '#dc2626' }
+                };
+                const color = colors[variant] || colors.warning;
+
+                // Create toast element
+                const toast = document.createElement('div');
+                toast.id = 'sw-toast-overlay';
+                toast.innerHTML = `
+                  <div style="
+                    position: fixed;
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: ${color.bg};
+                    color: white;
+                    padding: 16px 24px;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                    border: 2px solid ${color.border};
+                    z-index: 10000;
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    font-family: system-ui, -apple-system, sans-serif;
+                    font-size: 14px;
+                    font-weight: 500;
+                    animation: sw-toast-in 0.3s ease-out;
+                  ">
+                    <div class="sw-spinner" style="width:20px;height:20px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:sw-spin 0.8s linear infinite;"></div>
+                    <span>${message}</span>
+                  </div>
+                `;
+                document.body.appendChild(toast);
+
+                // Auto-dismiss if duration > 0
+                if (duration && duration > 0) {
+                  setTimeout(() => {
+                    const el = document.getElementById('sw-toast-overlay');
+                    if (el) el.remove();
+                  }, duration);
+                }
               };
 
               // Connect when DOM is ready
@@ -1714,6 +1780,19 @@ module StreamWeaver
             view.span(class: "sw-spinner-label") { label }
           end
         end
+      end
+
+      # Render canvas continue marker - hidden element that tells JS to show spinner after submit
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param message [String] Message to show while processing
+      # @param state [Hash] Current state hash
+      def render_canvas_continue(view, message, state)
+        view.div(
+          id: "sw-canvas-continue",
+          "data-continue-message" => message,
+          style: "display:none"
+        )
       end
 
       # Render a theme switcher dropdown

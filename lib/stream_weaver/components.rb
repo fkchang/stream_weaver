@@ -1133,6 +1133,21 @@ module StreamWeaver
       end
     end
 
+    # CanvasContinue marker - tells JavaScript to show spinner instead of "close window"
+    # Used in multi-phase canvas flows where more content is coming
+    class CanvasContinue < Base
+      attr_reader :message
+
+      # @param message [String] Message to show while processing
+      def initialize(message: "Processing...")
+        @message = message
+      end
+
+      def render(view, state)
+        view.adapter.render_canvas_continue(view, @message, state)
+      end
+    end
+
     # ThemeSwitcher component for runtime theme selection
     # Renders a dropdown to switch between available themes
     class ThemeSwitcher < Base
