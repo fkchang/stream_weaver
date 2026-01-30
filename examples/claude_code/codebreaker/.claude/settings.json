@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(streamweaver panel:*)",
+      "Bash(streamweaver canvas-push:*)",
+      "Bash(streamweaver canvas-wait:*)",
+      "Bash(streamweaver canvas-toast:*)",
+      "Bash(streamweaver canvas-close:*)"
+    ]
+  }
+}
