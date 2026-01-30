@@ -54,6 +54,11 @@ module StreamWeaver
           { type: 'close', name: name }
         end
 
+        # Claude → Bridge: Set iTerm pane ID for a session
+        def self.set_pane_id(name, pane_id)
+          { type: 'set_pane_id', name: name, pane_id: pane_id }
+        end
+
         # Bridge → Claude: Session is ready
         def self.ready(name, url)
           { type: 'ready', name: name, url: url }

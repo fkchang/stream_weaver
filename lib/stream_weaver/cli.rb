@@ -64,8 +64,12 @@ module StreamWeaver
         canvas_wait(args)
       when 'canvas-close'
         canvas_close(args)
+      when 'canvas-toast'
+        canvas_toast(args)
       when 'canvas-list'
         canvas_list
+      when 'canvas-reset'
+        canvas_reset(args)
       when 'canvas-stop'
         canvas_stop
       # High-level canvas helpers
@@ -599,7 +603,10 @@ module StreamWeaver
           streamweaver canvas <name>              Create/connect to canvas session
           streamweaver canvas-push <name>         Push DSL content (from stdin)
           streamweaver canvas-wait <name>         Wait for user interaction
+          streamweaver canvas-toast <name> <msg>  Show toast overlay (doesn't replace content)
           streamweaver canvas-close <name>        Close a canvas session
+          streamweaver canvas-reset <name>        Reset session state (keep connections)
+          streamweaver canvas-reset --all         Reset all sessions
           streamweaver canvas-list                List canvas sessions
           streamweaver canvas-stop                Stop the canvas bridge
 
@@ -620,6 +627,7 @@ module StreamWeaver
 
         Panel (iTerm2 Split + Canvas):
           streamweaver panel [name]               Split iTerm2, open canvas in right pane
+          streamweaver panel [name] --fresh       Close existing session first, then open
           streamweaver setup                      Configure Claude Code (permissions + skill)
           streamweaver install-skill [--global]   Install Claude Code skill only
 
@@ -1113,6 +1121,47 @@ module StreamWeaver
       exit 1
     end
 
+    # Show a toast notification on a canvas session (doesn't replace main content)
+    def self.canvas_toast(args)
+      message = nil
+      variant = 'warning'
+      duration = 0  # 0 = persistent until dismissed or next push
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver canvas-toast <session-name> <message> [options]"
+        opts.on('-v', '--variant VARIANT', 'Toast variant: info, success, warning, error (default: warning)') { |v| variant = v }
+        opts.on('-d', '--duration MS', Integer, 'Auto-dismiss after milliseconds (default: 0 = persistent)') { |d| duration = d }
+      end
+
+      remaining = parser.parse(args)
+      session_name = remaining.shift
+      message = remaining.join(' ')
+
+      unless session_name && !message.empty?
+        $stderr.puts "Usage: streamweaver canvas-toast <session-name> <message> [--variant warning] [--duration 5000]"
+        $stderr.puts "Example: streamweaver canvas-toast myapp 'Check terminal for permissions' --variant warning"
+        exit 1
+      end
+
+      require_relative 'canvas/client'
+
+      response = Canvas::Client.send_message({
+        type: 'toast',
+        name: session_name,
+        message: message,
+        variant: variant,
+        duration: duration
+      })
+
+      puts "Toast sent to #{session_name}"
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    rescue Canvas::Client::ConnectionError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
     # Wait for user interaction on a canvas session
     def self.canvas_wait(args)
       session_name = args.first
@@ -1182,8 +1231,9 @@ module StreamWeaver
         Canvas::Protocol::Messages.close(session_name)
       )
 
-      if response && response[:type] == 'closed'
+      if response&.dig(:type) == 'closed'
         puts "Closed canvas session: #{session_name}"
+        puts "Closed browser pane" if ITerm.close_pane(response[:pane_id])
       else
         $stderr.puts "Session not found: #{session_name}"
         exit 1
@@ -1230,6 +1280,43 @@ module StreamWeaver
       else
         puts "Canvas bridge is not running"
       end
+    end
+
+    def self.canvas_reset(args)
+      reset_all = args.include?('--all') || args.include?('-a')
+      session_name = args.reject { |a| a.start_with?('-') }.first
+
+      unless session_name || reset_all
+        $stderr.puts "Usage: streamweaver canvas-reset <session-name>"
+        $stderr.puts "       streamweaver canvas-reset --all"
+        exit 1
+      end
+
+      require_relative 'canvas/client'
+
+      unless Canvas::Client.bridge_running?
+        $stderr.puts "Canvas bridge is not running"
+        exit 1
+      end
+
+      response = Canvas::Client.send_message({
+        type: 'reset', name: session_name, all: reset_all
+      })
+
+      case response&.dig(:type)
+      when 'reset_ok'
+        message = reset_all ? "Reset all canvas sessions (#{response[:count]} sessions)" : "Reset canvas session: #{session_name}"
+        puts message
+      when 'error'
+        $stderr.puts "Error: #{response[:message]}"
+        exit 1
+      else
+        $stderr.puts "Failed to reset session"
+        exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
     end
 
     # =========================================
@@ -1377,7 +1464,7 @@ module StreamWeaver
     # =========================================
 
     # Open a canvas panel in a split iTerm2 pane
-    # Usage: streamweaver panel [session-name]
+    # Usage: streamweaver panel [session-name] [--fresh]
     #
     # Panel never opens an external browser - the point is to have the browser
     # inline in a split pane. If iTerm2 Web Browser profile isn't available,
@@ -1387,14 +1474,21 @@ module StreamWeaver
       require_relative 'canvas/client'
 
       debug = ENV['DEBUG_PANEL']
+      fresh = args.include?('--fresh') || args.include?('-f')
+      args = args.reject { |a| a.start_with?('-') }
 
       session_name = args.first || "panel-#{SecureRandom.hex(4)}"
-      $stderr.puts "[DEBUG] session_name: #{session_name}" if debug
+      $stderr.puts "[DEBUG] session_name: #{session_name}, fresh: #{fresh}" if debug
 
       # Ensure bridge is running
       $stderr.puts "[DEBUG] Calling ensure_bridge_running..." if debug
       bridge_info = Canvas::Client.ensure_bridge_running
       $stderr.puts "[DEBUG] Bridge info: #{bridge_info.inspect}" if debug
+
+      if fresh
+        $stderr.puts "[DEBUG] Closing existing session for fresh start..." if debug
+        Canvas::Client.send_message(Canvas::Protocol::Messages.close(session_name))
+      end
 
       # Create session
       $stderr.puts "[DEBUG] Creating session..." if debug
@@ -1421,9 +1515,17 @@ module StreamWeaver
         # Try iTerm2 split with browser profile (never open external browser)
         if ITerm.available?
           $stderr.puts "[DEBUG] Calling ITerm.split_vertical_with_url..." if debug
-          result = ITerm.split_vertical_with_url(url, open_browser: false)
-          $stderr.puts "[DEBUG] iTerm result: #{result.inspect}" if debug
-          case result
+          iterm_result = ITerm.split_vertical_with_url(url, open_browser: false)
+          $stderr.puts "[DEBUG] iTerm result: #{iterm_result.inspect}" if debug
+
+          # Store pane_id in the canvas session for later cleanup
+          if iterm_result[:pane_id]
+            Canvas::Client.send_message(
+              Canvas::Protocol::Messages.set_pane_id(session_name, iterm_result[:pane_id])
+            )
+          end
+
+          case iterm_result[:type]
           when :browser
             puts "Canvas '#{session_name}' ready"
             puts "Browser opened in split pane"
@@ -1433,6 +1535,8 @@ module StreamWeaver
           else
             puts "Canvas '#{session_name}' ready at #{url}"
           end
+          puts ""
+          puts "URL (if browser didn't open): #{url}"
         else
           puts "Canvas '#{session_name}' ready at #{url}"
           puts "(iTerm2 not detected - open URL manually for side-by-side workflow)"

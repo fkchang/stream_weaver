@@ -2,7 +2,10 @@
 
 **Date:** January 2025
 **Branch:** `feature/canvas-ipc`
-**Status:** Superseded by template-based approach
+**Status:** OUTDATED - Canvas is now working and actively used
+
+> **Note:** This doc is historical. Canvas IPC is now fully functional.
+> See `docs/canvas-panel-workflow.md` for current documentation.
 
 ## What We Attempted
 

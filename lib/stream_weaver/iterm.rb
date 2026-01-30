@@ -25,9 +25,9 @@ module StreamWeaver
       # Split the calling iTerm2 pane vertically and optionally open URL in browser
       # @param url [String] The URL to display/open
       # @param open_browser [Boolean] Whether to open the URL in system browser if iTerm browser fails (default: true)
-      # Returns: :browser (iTerm2 browser), :terminal (fallback), or false (failed)
+      # Returns: Hash with :type (:browser, :terminal, or false) and :pane_id (unique ID of new pane)
       def split_vertical_with_url(url, open_browser: true)
-        return false unless available?
+        return { type: false, pane_id: nil } unless available?
 
         debug = ENV['DEBUG_PANEL']
 
@@ -57,11 +57,15 @@ module StreamWeaver
         $stderr.puts "[DEBUG iTerm] osascript status: #{status.success?}" if debug
         $stderr.puts "[DEBUG iTerm] osascript stdout: #{stdout.inspect}" if debug
 
-        return false unless status.success?
+        return { type: false, pane_id: nil } unless status.success?
 
+        # Parse result: "type:pane_id" e.g. "browser:12345-GUID"
         result = stdout.strip
+        parts = result.split(':', 2)
+        type_str = parts[0]
+        pane_id = parts[1]
 
-        case result
+        type = case type_str
         when "browser"
           :browser
         when "terminal"
@@ -71,6 +75,35 @@ module StreamWeaver
         else
           false
         end
+
+        { type: type, pane_id: pane_id }
+      end
+
+      # Close an iTerm2 pane by its unique ID
+      # @param pane_id [String] The unique ID of the pane to close
+      # @return [Boolean] true if closed successfully
+      def close_pane(pane_id)
+        return false unless available?
+        return false unless pane_id
+
+        script = <<~APPLESCRIPT
+          tell application "iTerm2"
+            repeat with aWindow in windows
+              repeat with aTab in tabs of aWindow
+                repeat with aSession in sessions of aTab
+                  if unique ID of aSession is "#{escape_for_applescript(pane_id)}" then
+                    tell aSession to close
+                    return "closed"
+                  end if
+                end repeat
+              end repeat
+            end repeat
+            return "not_found"
+          end tell
+        APPLESCRIPT
+
+        stdout, status = Open3.capture2("osascript", stdin_data: script)
+        status.success? && stdout.strip == "closed"
       end
 
       # Just split the pane and run a command (no browser)
@@ -113,32 +146,34 @@ module StreamWeaver
                       -- Try Web Browser profile first
                       try
                         set newSession to (split vertically with profile "Web Browser")
-                        -- Select the new session to ensure it has focus
+                        set newPaneId to unique ID of newSession
+                        -- Select the new session and ensure iTerm2 is frontmost
                         select newSession
-                        delay 1.0
-                        -- Use keyboard to navigate
-                        -- Press Escape first to dismiss any autocomplete/suggestions
+                        delay 0.5
+                        -- Activate iTerm2 to ensure keystrokes go to right place
+                        activate
+                        delay 0.1
+                        -- Use keyboard to navigate to URL bar and type
                         tell application "System Events"
                           tell process "iTerm2"
-                            key code 53 -- Escape
-                            delay 0.2
                             keystroke "l" using command down
-                            delay 0.3
-                            key code 53 -- Escape again to dismiss autocomplete dropdown
                             delay 0.2
+                            key code 53 -- Escape to dismiss autocomplete
+                            delay 0.1
                             keystroke "#{escaped_url}"
-                            delay 0.3
+                            delay 0.1
                             keystroke return
                           end tell
                         end tell
-                        return "browser"
+                        return "browser:" & newPaneId
                       on error errMsg
                         -- Fall back to terminal with info
                         set newSession to (split vertically with default profile)
+                        set newPaneId to unique ID of newSession
                         tell newSession
                           write text "clear; echo ''; echo '  StreamWeaver Canvas'; echo '  #{escaped_url}'; echo ''"
                         end tell
-                        return "terminal"
+                        return "terminal:" & newPaneId
                       end try
                     end tell
                   end if
@@ -158,32 +193,34 @@ module StreamWeaver
               -- Try Web Browser profile first
               try
                 set newSession to (split vertically with profile "Web Browser")
-                -- Select the new session to ensure it has focus
+                set newPaneId to unique ID of newSession
+                -- Select the new session and ensure iTerm2 is frontmost
                 select newSession
-                delay 1.0
-                -- Use keyboard to navigate
-                -- Press Escape first to dismiss any autocomplete/suggestions
+                delay 0.5
+                -- Activate iTerm2 to ensure keystrokes go to right place
+                activate
+                delay 0.1
+                -- Use keyboard to navigate to URL bar and type
                 tell application "System Events"
                   tell process "iTerm2"
-                    key code 53 -- Escape
-                    delay 0.2
                     keystroke "l" using command down
-                    delay 0.3
-                    key code 53 -- Escape again to dismiss autocomplete dropdown
                     delay 0.2
+                    key code 53 -- Escape to dismiss autocomplete
+                    delay 0.1
                     keystroke "#{escaped_url}"
-                    delay 0.3
+                    delay 0.1
                     keystroke return
                   end tell
                 end tell
-                return "browser"
+                return "browser:" & newPaneId
               on error errMsg
                 -- Fall back to terminal with info
                 set newSession to (split vertically with default profile)
+                set newPaneId to unique ID of newSession
                 tell newSession
                   write text "clear; echo ''; echo '  StreamWeaver Canvas'; echo '  #{escaped_url}'; echo ''"
                 end tell
-                return "terminal"
+                return "terminal:" & newPaneId
               end try
             end tell
           end tell

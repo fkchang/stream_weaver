@@ -53,8 +53,16 @@ module StreamWeaver
           handle_create(message[:name])
         when 'push'
           handle_push(message[:name], message[:dsl])
+        when 'toast'
+          handle_toast(message[:name], message[:message], message[:variant], message[:duration])
         when 'close'
           handle_close(message[:name])
+        when 'set_pane_id'
+          handle_set_pane_id(message[:name], message[:pane_id])
+        when 'reset'
+          handle_reset(message[:name], message[:all])
+        when 'list'
+          handle_list
         when 'get_state'
           handle_get_state(message[:name])
         else
@@ -114,14 +122,33 @@ module StreamWeaver
         nil # No response to Claude for push
       end
 
+      def handle_toast(name, message, variant, duration)
+        session = get_session(name)
+        return { type: 'error', message: "Session not found: #{name}" } unless session
+
+        session.queue_toast(
+          message: message,
+          variant: variant || 'warning',
+          duration: duration || 0
+        )
+
+        nil # No response to Claude for toast
+      end
+
       def handle_close(name)
         session = get_session(name)
-        if session
-          # Notify websockets before closing
-          session.broadcast({ type: 'closed' })
-        end
+        pane_id = session&.pane_id
+        session&.broadcast(type: 'closed')
         close_session(name)
-        { type: 'closed', name: name }
+        { type: 'closed', name: name, pane_id: pane_id }
+      end
+
+      def handle_set_pane_id(name, pane_id)
+        session = get_session(name)
+        return { type: 'error', message: "Session not found: #{name}" } unless session
+
+        session.pane_id = pane_id
+        { type: 'pane_id_set', name: name }
       end
 
       def handle_get_state(name)
@@ -133,6 +160,23 @@ module StreamWeaver
           name: name,
           data: session.state
         }
+      end
+
+      def handle_reset(name, reset_all = false)
+        return reset_all_sessions if reset_all
+
+        session = get_session(name) or return { type: 'error', message: "Session not found: #{name}" }
+        session.reset!
+        { type: 'reset_ok', name: name }
+      end
+
+      def reset_all_sessions
+        @sessions.each_value(&:reset!)
+        { type: 'reset_ok', count: @sessions.size }
+      end
+
+      def handle_list
+        { type: 'list', sessions: list_sessions }
       end
 
       # Render StreamWeaver DSL to HTML

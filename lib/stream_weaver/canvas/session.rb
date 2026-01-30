@@ -7,7 +7,7 @@ module StreamWeaver
     # Represents a single canvas session with its state and WebSocket connections.
     class Session
       attr_reader :name, :state, :websockets, :created_at
-      attr_accessor :html, :html_version
+      attr_accessor :html, :html_version, :pane_id
 
       # @param name [String] Session name
       def initialize(name)
@@ -17,6 +17,9 @@ module StreamWeaver
         @created_at = Time.now
         @html = nil
         @html_version = 0
+        @pending_toasts = []
+        @pane_id = nil
+        @mutex = Mutex.new
       end
 
       # Set the rendered HTML content and increment version
@@ -51,6 +54,31 @@ module StreamWeaver
         @websockets.each { |ws| ws.send(encoded) }
       end
 
+      def reset!
+        @state.clear
+        @html = nil
+        @html_version += 1
+        @mutex.synchronize { @pending_toasts.clear }
+        broadcast(type: 'reset')
+      end
+
+      # Queue a toast for polling clients
+      def queue_toast(message:, variant: 'warning', duration: 0)
+        toast = { message: message, variant: variant, duration: duration }
+        @mutex.synchronize { @pending_toasts << toast }
+        # Also broadcast to websocket clients
+        broadcast(type: 'toast', **toast)
+      end
+
+      # Pop all pending toasts (for polling clients)
+      def pop_toasts
+        @mutex.synchronize do
+          toasts = @pending_toasts.dup
+          @pending_toasts.clear
+          toasts
+        end
+      end
+
       # Return session info as a hash
       # @return [Hash]
       def to_h
@@ -58,7 +86,8 @@ module StreamWeaver
           name: @name,
           state: @state,
           websocket_count: @websockets.size,
-          created_at: @created_at
+          created_at: @created_at,
+          pane_id: @pane_id
         }
       end
     end
