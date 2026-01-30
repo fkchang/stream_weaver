@@ -4,16 +4,21 @@ A realistic multi-step workflow demonstrating StreamWeaver's canvas capabilities
 
 ## The Flow
 
-1. **Sign Up Form** → User enters email and name
-2. **Verification Page** → Shows status with pulsing indicator, sends toast "Check your email!", asks for code
-3. **Welcome Page** → Confirms verification, displays personalized greeting
+1. **Sign-Up Form** → User enters email and name
+2. **Provisioning Status** → Canvas shows progress while terminal work runs (toast alerts user to check terminal)
+3. **Verification Code** → User enters verification code from email
+4. **Welcome Page** → Confirms verification, displays personalized greeting
 
-## Why This Scenario?
+## Key Concepts Demonstrated
 
-- **Realistic**: Mirrors common 2FA/email verification flows
-- **Demonstrates all features**: Forms → status with toast → final confirmation
-- **Clear transitions**: Each page has a distinct purpose
-- **Natural toast usage**: "Check your email for the code" is a sensible notification
+### Canvas + Terminal Interplay
+Phase 2 shows how to use canvas as a status display while Claude runs terminal commands. The toast alerts the user to check the terminal for permission prompts.
+
+### Proper Toast Usage
+Toasts are for alerting users to check the terminal when their attention is on a **status page**. Don't use toasts on form pages where the user is already interacting with the canvas.
+
+### canvas_continue
+Use `canvas_continue message: "..."` on form pages to show a spinner after submit (instead of "You can close this window").
 
 ## Usage
 
@@ -27,12 +32,13 @@ cd examples/claude_code/verification_flow
 
 | Feature | Command | Purpose |
 |---------|---------|---------|
-| Fresh start | `canvas-reset` | Clear any existing canvas state |
-| Panel setup | `panel` | Open side panel at specific width |
+| Fresh start | `panel --fresh` | Open panel, close existing session first |
 | Form pages | `canvas-push` | Display forms with text fields and buttons |
-| Notifications | `canvas-toast` | Show overlay messages |
+| Status pages | `canvas-push` | Display progress while work happens |
+| Notifications | `canvas-toast` | Alert user to check terminal |
 | User input | `canvas-wait` | Block until button click, capture field values |
-| Cleanup | `canvas-close` | Close panel when done |
+| Spinner feedback | `canvas_continue` | Show spinner after form submit |
+| Cleanup | `canvas-close` | Close panel and browser pane |
 
 ## DSL Components Used
 
@@ -41,5 +47,6 @@ cd examples/claude_code/verification_flow
 - `md` - Markdown text with dynamic substitution
 - `text_field` - Form inputs with labels and placeholders
 - `button` - Actions with primary styling
-- `status_dot` - Visual status indicator with pulse animation
+- `status_dot` - Visual status indicator (yellow pulsing, green complete)
 - `badge` - Success/status badges
+- `canvas_continue` - Spinner feedback for multi-step flows
