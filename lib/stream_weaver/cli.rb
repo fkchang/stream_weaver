@@ -1111,8 +1111,17 @@ module StreamWeaver
         Canvas::Protocol::Messages.push(session_name, dsl)
       )
 
-      # Push doesn't return a response, just succeeds
-      puts "Pushed to #{session_name}"
+      # Check for DSL errors reported back from the bridge
+      if response && response[:type] == 'push_error'
+        $stderr.puts "DSL Error: #{response[:message]}"
+        $stderr.puts "Pushed with error to #{session_name}"
+        exit 1
+      elsif response && response[:type] == 'error'
+        $stderr.puts "Error: #{response[:message]}"
+        exit 1
+      else
+        puts "Pushed to #{session_name}"
+      end
     rescue Canvas::Client::NotRunningError => e
       $stderr.puts "Error: #{e.message}"
       exit 1

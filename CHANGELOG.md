@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Canvas-push error feedback** - DSL errors now reported to stderr with exit code 1, enabling Claude to see and fix syntax errors
+- **Tutorial checkbox syntax** - Fixed incorrect `checkbox :key, label: "text"` to correct `checkbox :key, "text"` in learn.md examples
+- **iTerm panel stability** - AppleScript keystrokes could hang or type into wrong window; now opens URL in external browser instead
+
 ### Added
 - **StatusDot `label:` option** - Display text labels below status dots:
   ```ruby

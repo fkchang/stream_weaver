@@ -10,6 +10,9 @@ module StreamWeaver
     class Bridge
       DEFAULT_PORT = 4568
 
+      # Result of rendering DSL to HTML
+      RenderResult = Struct.new(:html, :error, keyword_init: true)
+
       attr_reader :sessions, :port
 
       def initialize(port: DEFAULT_PORT)
@@ -111,15 +114,20 @@ module StreamWeaver
         return { type: 'error', message: "Session not found: #{name}" } unless session
 
         # Render DSL to HTML
-        html = render_dsl(dsl, session_name: name)
+        result = render_dsl(dsl, session_name: name)
 
         # Store in session for polling clients
-        session.set_html(html)
+        session.set_html(result.html)
 
         # Broadcast to all websockets (if any connected)
-        session.broadcast({ type: 'update', html: html })
+        session.broadcast({ type: 'update', html: result.html })
 
-        nil # No response to Claude for push
+        # Return error info if rendering failed
+        if result.error
+          { type: 'push_error', message: result.error }
+        else
+          { type: 'push_ok' }
+        end
       end
 
       def handle_toast(name, message, variant, duration)
@@ -182,7 +190,7 @@ module StreamWeaver
       # Render StreamWeaver DSL to HTML
       # @param dsl [String] DSL code
       # @param session_name [String] Session name for routing
-      # @return [String] Rendered HTML
+      # @return [RenderResult] Result with html and optional error
       def render_dsl(dsl, session_name:)
         # Create a mini app to evaluate the DSL
         mini_app = StreamWeaver::App.new("Canvas")
@@ -196,9 +204,13 @@ module StreamWeaver
 
         # Render to HTML
         state = {}
-        StreamWeaver::Views::AppContentView.new(mini_app, state, adapter, false).call
+        html = StreamWeaver::Views::AppContentView.new(mini_app, state, adapter, false).call
+        RenderResult.new(html: html, error: nil)
       rescue => e
-        "<div class='error'>Error: #{e.message}</div>"
+        RenderResult.new(
+          html: "<div class='error'>Error: #{e.message}</div>",
+          error: e.message
+        )
       end
     end
   end
