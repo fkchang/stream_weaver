@@ -24,7 +24,7 @@ Gem::Specification.new do |spec|
   spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|
     ls.readlines("\x0", chomp: true).reject do |f|
       (f == gemspec) ||
-        f.start_with?(*%w[bin/ test/ spec/ features/ .git appveyor Gemfile])
+        f.start_with?(*%w[test/ spec/ features/ .git appveyor Gemfile bin/])
     end
   end
   spec.bindir = "exe"
@@ -40,6 +40,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "kramdown", "~> 2.4"
   spec.add_dependency "kramdown-parser-gfm", "~> 1.1"
   spec.add_dependency "ostruct"  # Explicit dep for Ruby 3.5+ compatibility
+  spec.add_dependency "iterm2_ruby", "~> 0.1"  # iTerm2 browser pane API (macOS only)
 
   # Development dependencies
   spec.add_development_dependency "rack-test", "~> 2.1"

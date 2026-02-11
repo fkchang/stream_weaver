@@ -80,7 +80,7 @@ module StreamWeaver
             "hx-post" => endpoint,
             "hx-include" => input_selector,
             "hx-target" => "#app-container",
-            "hx-swap" => "innerHTML scroll:false",
+            "hx-swap" => "morph:innerHTML",
             "hx-trigger" => trigger_str
           )
         else
@@ -134,7 +134,7 @@ module StreamWeaver
             "hx-post" => endpoint,
             "hx-include" => input_selector,
             "hx-target" => "#app-container",
-            "hx-swap" => "innerHTML scroll:false",
+            "hx-swap" => "morph:innerHTML",
             "hx-trigger" => trigger_str
           ) { state[key] || "" }
         else
@@ -196,7 +196,7 @@ module StreamWeaver
               "hx-post" => endpoint,
               "hx-include" => input_selector,
               "hx-target" => "#app-container",
-              "hx-swap" => "innerHTML scroll:false",
+              "hx-swap" => "morph:innerHTML",
               "hx-trigger" => "change"
             )
             view.label(for: "checkbox_#{key}") do
@@ -282,7 +282,7 @@ module StreamWeaver
             "hx-post" => endpoint,
             "hx-include" => input_selector,
             "hx-target" => "#app-container",
-            "hx-swap" => "innerHTML scroll:false",
+            "hx-swap" => "morph:innerHTML",
             "hx-trigger" => "change"
           ) do
             choices.each do |choice|
@@ -377,7 +377,7 @@ module StreamWeaver
                   "hx-post" => url("/update"),
                   "hx-include" => input_selector,
                   "hx-target" => "#app-container",
-                  "hx-swap" => "innerHTML scroll:false",
+                  "hx-swap" => "morph:innerHTML",
                   "hx-trigger" => "change"  # Immediate update on change
                 )
                 view.span { choice }
@@ -434,7 +434,7 @@ module StreamWeaver
                 "hx-post" => url("/update"),
                 "hx-include" => input_selector,
                 "hx-target" => "#app-container",
-                "hx-swap" => "innerHTML scroll:false",
+                "hx-swap" => "morph:innerHTML",
                 "hx-trigger" => "change"
               )
 
@@ -491,7 +491,7 @@ module StreamWeaver
             "hx-post" => url("/action/#{button_id}"),
             "hx-include" => input_selector,
             "hx-target" => "#app-container",
-            "hx-swap" => "innerHTML scroll:false",
+            "hx-swap" => "morph:innerHTML",
             "hx-on::before-request" => "open = false"
           }
           attrs[:class] = button_class if button_class
@@ -503,7 +503,7 @@ module StreamWeaver
             "hx-post" => url("/action/#{button_id}"),     # HTMX POST to server
             "hx-include" => input_selector,          # Include all inputs with x-model
             "hx-target" => "#app-container",         # Replace app container
-            "hx-swap" => "innerHTML scroll:false"    # Replace inner HTML, preserve scroll
+            "hx-swap" => "morph:innerHTML"    # Replace inner HTML, preserve scroll
           }
           attrs[:class] = button_class if button_class
           attrs[:style] = inline_style if inline_style
@@ -530,7 +530,7 @@ module StreamWeaver
           state_data['wsReconnecting'] = false
         end
 
-        { "x-data" => JSON.generate(state_data) }
+        { "x-data" => JSON.generate(state_data), "hx-ext" => "alpine-morph" }
       end
 
       # Render an app header bar
@@ -667,35 +667,46 @@ module StreamWeaver
               // Global functions for components
               window.sendEvent = function(type, data) {
                 const payload = JSON.stringify({ type: type, ...data });
+                const dl = window._dbgLog || function(){};
 
-                // Only show feedback for action events (button clicks)
-                // Change events (radio/checkbox) should just update state silently
                 function showFeedback() {
                   if (type !== 'action') return;
+
+                  // Guard: don't clobber content from a newer version.
+                  // If the poll already rendered a newer push, skip feedback.
+                  const clickVersion = window._swContentVersion || 0;
+                  if (window._swFeedbackActive) {
+                    dl('FEEDBACK skip: already active');
+                    return;
+                  }
+
                   const container = document.getElementById('app-container');
                   if (!container) return;
 
-                  // Check for canvas_continue marker - if present, show spinner instead of close message
                   const continueMarker = document.getElementById('sw-canvas-continue');
+                  dl('FEEDBACK v=' + clickVersion + ' marker=' + (continueMarker ? continueMarker.getAttribute('data-continue-message') : 'null'));
+
                   if (continueMarker) {
                     const message = continueMarker.getAttribute('data-continue-message') || 'Processing...';
+                    window._swFeedbackActive = true;
                     container.innerHTML = '<div style="text-align:center;padding:40px;"><div class="sw-spinner" style="margin:0 auto 20px;width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#6366f1;border-radius:50%;animation:sw-spin 0.8s linear infinite;"></div><p style="color:#666;">' + message + '</p></div>';
                   } else {
                     container.innerHTML = '<div style="text-align:center;padding:40px;"><h2 style="color:#10b981;">✓ Submitted</h2><p style="color:#666;">You can close this window.</p></div>';
                   }
                 }
 
+                dl('EVENT type=' + type + ' btn=' + (data && data.button || '-'));
                 if (ws && ws.readyState === WebSocket.OPEN) {
                   ws.send(payload);
                   showFeedback();
                 } else {
-                  // Fallback to HTTP POST when WebSocket not connected
+                  // Show feedback immediately, then send event.
+                  showFeedback();
                   fetch('#{@url_prefix}/event', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: payload
-                  }).then(() => showFeedback())
-                    .catch(err => console.error('HTTP event error:', err));
+                  }).catch(err => console.error('HTTP event error:', err));
                 }
               };
 
@@ -784,9 +795,15 @@ module StreamWeaver
       # @param view [Phlex::HTML] The Phlex view instance
       # @return [void] Renders script tags to the view
       def render_cdn_scripts(view)
+        # CDN load order: htmx → Alpine morph plugin → HTMX alpine-morph extension → Alpine core
+        # Plugins must load before Alpine core; Alpine must have defer:true
         view.script(src: "https://unpkg.com/htmx.org@2.0.4")
+        view.script(src: "https://cdn.jsdelivr.net/npm/@alpinejs/morph@3.x.x/dist/cdn.min.js")
+        view.script(src: "https://cdn.jsdelivr.net/npm/htmx-ext-alpine-morph@2.0.0/alpine-morph.js")
         view.script(src: "https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js", defer: true)
-        # Focus, scroll restoration, and Alpine.js state sync script
+        # Focus and scroll restoration script
+        # alpine-morph handles state preservation natively via DOM morphing,
+        # but has documented issues with input focus, so we save/restore manually.
         view.script do
           view.raw(view.safe(<<~JS))
             (function() {
@@ -794,28 +811,20 @@ module StreamWeaver
               let scrollState = null;
 
               // =============================================================
-              // Alpine.js Defer Mutations Pattern for HTMX Integration
+              // Focus & Scroll Restoration for HTMX + Alpine Morph
               // =============================================================
-              // Problem: HTMX swaps innerHTML but Alpine's x-data on outer
-              // container keeps stale values. Alpine's x-model then overwrites
-              // correct server-rendered values with old data.
-              //
-              // Solution: Pause Alpine's MutationObserver during HTMX swap,
-              // then resume after DOM settles. This lets Alpine reinitialize
-              // with fresh x-data from server response.
+              // alpine-morph (via hx-swap="morph:innerHTML") preserves Alpine
+              // state natively by morphing the DOM instead of replacing it.
+              // However, input focus and scroll position can still be lost
+              // during morphing, so we save and restore them manually.
               //
               // References:
-              // - https://github.com/alpinejs/alpine/discussions/3985
-              // - https://github.com/bigskysoftware/htmx/discussions/1367
+              // - https://alpinejs.dev/plugins/morph
+              // - https://github.com/bigskysoftware/htmx-extensions/tree/main/ext/alpine-morph
               // =============================================================
 
-              // Before swap: save focus/scroll state and pause Alpine mutations
+              // Before swap: save focus and scroll state
               document.addEventListener('htmx:beforeSwap', function(e) {
-                // Defer Alpine mutations during swap to prevent stale state conflicts
-                if (typeof Alpine !== 'undefined' && Alpine.deferMutations) {
-                  Alpine.deferMutations();
-                }
-
                 // Save focus
                 const active = document.activeElement;
                 if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
@@ -835,36 +844,8 @@ module StreamWeaver
                 };
               });
 
-              // After settle: reinitialize Alpine with fresh state, restore focus/scroll
-              // afterSettle fires after DOM is fully updated, safer than afterSwap
+              // After settle: restore focus and scroll
               document.addEventListener('htmx:afterSettle', function(e) {
-                // Reinitialize Alpine with fresh state from server response
-                // The partial includes a script#sw-state-data with the new state JSON
-                const stateEl = document.getElementById('sw-state-data');
-                const container = document.getElementById('app-container');
-
-                if (stateEl && container && typeof Alpine !== 'undefined') {
-                  try {
-                    const newState = JSON.parse(stateEl.textContent);
-                    // Update Alpine's reactive data on the container
-                    // Alpine.$data gives access to the component's reactive data proxy
-                    const alpineData = Alpine.$data(container);
-                    if (alpineData) {
-                      // Merge new state into existing Alpine data
-                      Object.keys(newState).forEach(key => {
-                        alpineData[key] = newState[key];
-                      });
-                    }
-                  } catch (err) {
-                    console.warn('StreamWeaver: Failed to reinitialize Alpine state', err);
-                  }
-                }
-
-                // Resume Alpine mutations after state is updated
-                if (typeof Alpine !== 'undefined' && Alpine.flushAndStopDeferringMutations) {
-                  Alpine.flushAndStopDeferringMutations();
-                }
-
                 // Restore focus
                 if (focusState && focusState.id) {
                   const el = document.getElementById(focusState.id);
@@ -883,6 +864,33 @@ module StreamWeaver
                   scrollState = null;
                 }
               });
+            })();
+          JS
+        end
+      end
+
+      # Render SSE client script for streaming push updates.
+      # Connects to GET /stream and applies targeted DOM updates.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @return [void] Renders script tag to the view
+      def render_sse_client(view)
+        view.script do
+          view.raw(view.safe(<<~JS))
+            (function() {
+              var source = new EventSource('/stream');
+              source.onmessage = function(e) {
+                var msg = JSON.parse(e.data);
+                if (msg.type === 'connected') return;
+                var el = document.querySelector(msg.target);
+                if (!el) return;
+                switch(msg.action) {
+                  case 'replace': el.innerHTML = msg.html; break;
+                  case 'append':  el.insertAdjacentHTML('beforeend', msg.html); break;
+                  case 'prepend': el.insertAdjacentHTML('afterbegin', msg.html); break;
+                  case 'remove':  el.remove(); break;
+                }
+              };
             })();
           JS
         end
@@ -1260,7 +1268,7 @@ module StreamWeaver
               "hx-vals" => JSON.generate({ key.to_s => tag_value }),
               "hx-include" => input_selector,
               "hx-target" => "#app-container",
-              "hx-swap" => "innerHTML scroll:false"
+              "hx-swap" => "morph:innerHTML"
             ) { tag }
           end
         end
@@ -1283,7 +1291,7 @@ module StreamWeaver
             "hx-post" => url("/submit"),
             "hx-include" => input_selector,
             "hx-target" => "#app-container",
-            "hx-swap" => "innerHTML",
+            "hx-swap" => "morph:innerHTML",
             "@click" => "setTimeout(() => window.open('#{url}', '_blank'), 100)"
           ) { label }
         else
@@ -1371,7 +1379,7 @@ module StreamWeaver
                 "hx-post" => url("/form/#{name}"),
                 "hx-include" => "[name^='#{name}[']",
                 "hx-target" => "#app-container",
-                "hx-swap" => "innerHTML scroll:false"
+                "hx-swap" => "morph:innerHTML"
               ) { submit_label }
             end
 
@@ -1579,7 +1587,7 @@ module StreamWeaver
         view.div(
           class: "sw-modal-wrapper",
           "x-data" => "{ open: #{is_open} }",
-          "x-init" => "$watch('open', v => { if(!v) htmx.ajax('POST', '#{url("/update")}', {target:'#app-container', swap:'innerHTML scroll:false', values:{'#{open_key}': 'false'}}) })",
+          "x-init" => "$watch('open', v => { if(!v) htmx.ajax('POST', '#{url("/update")}', {target:'#app-container', swap:'morph:innerHTML', values:{'#{open_key}': 'false'}}) })",
           "@keydown.escape.window" => "open = false"
         ) do
           # Backdrop overlay
@@ -2500,7 +2508,7 @@ module StreamWeaver
               "hx-post" => url("/action/#{item_id}"),
               "hx-include" => input_selector,
               "hx-target" => "#app-container",
-              "hx-swap" => "innerHTML scroll:false",
+              "hx-swap" => "morph:innerHTML",
               "@click" => "open = false"
             ) { item.label }
           else

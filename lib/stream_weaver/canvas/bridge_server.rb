@@ -218,6 +218,32 @@ module StreamWeaver
             const pollUrl = '/canvas/#{session_name}/poll';
             const container = document.getElementById('app-container');
 
+            // Shared state for coordinating poll updates with showFeedback.
+            // When showFeedback shows a spinner, it records the version at that
+            // time. The poll will only replace the spinner with content from a
+            // NEWER version, preventing stale feedback from clobbering new content.
+            window._swContentVersion = currentVersion;
+            window._swFeedbackActive = false;
+
+            // --- Optional debug overlay: add ?debug to the URL to enable ---
+            if (location.search.includes('debug')) {
+              const _dbg = document.createElement('div');
+              _dbg.id = 'sw-debug';
+              _dbg.style.cssText = 'position:fixed;top:0;left:0;right:0;background:rgba(0,0,0,0.85);color:#0f0;font:10px/1.3 monospace;padding:2px 6px;z-index:99999;max-height:60px;overflow-y:auto;pointer-events:none;';
+              document.body.appendChild(_dbg);
+              const _dl = [];
+              window._dbgLog = function(msg) {
+                const t = new Date().toLocaleTimeString('en-US',{hour12:false});
+                _dl.push(t + ' ' + msg);
+                if (_dl.length > 30) _dl.shift();
+                _dbg.innerHTML = _dl.join('<br>');
+                _dbg.scrollTop = 99999;
+              };
+              window._dbgLog('init v=' + currentVersion);
+            } else {
+              window._dbgLog = function(){};
+            }
+
             function showToast(toast) {
               // Remove any existing toast
               const existing = document.querySelector('.sw-toast');
@@ -255,7 +281,10 @@ module StreamWeaver
 
                 // Update if version changed and there's HTML
                 if (data.version > currentVersion && data.html) {
+                  window._dbgLog('POLL v' + currentVersion + '->' + data.version + ' feedback=' + window._swFeedbackActive);
                   currentVersion = data.version;
+                  window._swContentVersion = data.version;
+                  window._swFeedbackActive = false;
                   container.innerHTML = data.html;
 
                   // Remove toast when new content arrives (unless persistent)

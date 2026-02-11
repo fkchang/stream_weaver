@@ -2,6 +2,7 @@ PATH
   remote: .
   specs:
     stream_weaver (0.1.0)
+      iterm2_ruby (~> 0.1)
       kramdown (~> 2.4)
       kramdown-parser-gfm (~> 1.1)
       ostruct
@@ -11,12 +12,27 @@ PATH
       sinatra (~> 4.0)
       sinatra-contrib (~> 4.0)
 
+PATH
+  remote: /Users/fkchang/work/iterm2_ruby
+  specs:
+    iterm2_ruby (0.1.0)
+      base64
+      google-protobuf (~> 4.0)
+      ostruct
+
 GEM
   remote: https://rubygems.org/
   specs:
     base64 (0.3.0)
+    bigdecimal (4.0.1)
     diff-lcs (1.6.2)
     docile (1.4.1)
+    google-protobuf (4.33.5)
+      bigdecimal
+      rake (>= 13)
+    google-protobuf (4.33.5-arm64-darwin)
+      bigdecimal
+      rake (>= 13)
     kramdown (2.5.1)
       rexml (>= 3.3.9)
     kramdown-parser-gfm (1.1.0)
@@ -87,6 +103,7 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  iterm2_ruby!
   rack-test (~> 2.1)
   rake (~> 13.0)
   rspec (~> 3.0)
