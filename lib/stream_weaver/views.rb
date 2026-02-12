@@ -29,6 +29,8 @@ module StreamWeaver
         html do
           head do
             title { @app.title }
+            meta(charset: "utf-8")
+            meta(name: "viewport", content: "width=device-width, initial-scale=1")
             # Inject adapter-specific CDN scripts using Phlex methods
             @adapter.render_cdn_scripts(self)
 
@@ -45,6 +47,11 @@ module StreamWeaver
             # Chart.js CDN - only load when charts are present
             if @app.has_charts?
               script(src: "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js")
+            end
+
+            # SSE client for streaming push updates (when app has stream block)
+            if @app.stream_block && @adapter.respond_to?(:render_sse_client)
+              @adapter.render_sse_client(self)
             end
 
             # Google Fonts: Source Sans 3 + Crimson Pro (for document theme)
@@ -1890,7 +1897,7 @@ module StreamWeaver
                 }
 
                 /* Responsive: Stack columns on mobile */
-                @media (max-width: 768px) {
+                @media (max-width: 640px) {
                   .sw-columns {
                     flex-direction: column;
                   }
@@ -2456,6 +2463,107 @@ module StreamWeaver
                   .sw-sidebar-sticky {
                     position: static;
                     max-height: none;
+                  }
+                }
+
+                /* ===========================================
+                   Mobile Responsive
+                   =========================================== */
+
+                /* Tablet */
+                @media (max-width: 900px) {
+                  body {
+                    padding: var(--sw-spacing-sm);
+                  }
+
+                  h1 { font-size: 1.75rem; }
+                  h2 { font-size: 1.35rem; }
+                  h3 { font-size: 1.15rem; }
+                }
+
+                /* Phone */
+                @media (max-width: 640px) {
+                  body {
+                    padding: var(--sw-spacing-xs);
+                  }
+
+                  .card {
+                    border-radius: 0;
+                    padding: var(--sw-spacing-md);
+                  }
+
+                  h1 { font-size: 1.5rem; }
+                  h2 { font-size: 1.25rem; }
+                  h3 { font-size: 1.1rem; }
+
+                  /* Tabs: horizontal scroll */
+                  .sw-tabs-list {
+                    overflow-x: auto;
+                    -webkit-overflow-scrolling: touch;
+                    scrollbar-width: none;
+                    flex-wrap: nowrap;
+                  }
+                  .sw-tabs-list::-webkit-scrollbar {
+                    display: none;
+                  }
+                  .sw-tab-trigger {
+                    white-space: nowrap;
+                    flex-shrink: 0;
+                    padding: var(--sw-spacing-xs) var(--sw-spacing-sm);
+                    font-size: var(--sw-font-size-sm);
+                    min-height: 44px;
+                  }
+
+                  /* HStacks: tighter gap */
+                  .sw-hstack {
+                    gap: var(--sw-spacing-xs);
+                  }
+
+                  /* Grid: single column override */
+                  .sw-grid {
+                    grid-template-columns: 1fr !important;
+                  }
+
+                  /* Forms: prevent iOS auto-zoom, 44px touch targets */
+                  input[type="text"],
+                  input[type="email"],
+                  select,
+                  textarea {
+                    font-size: 16px;
+                    min-height: 44px;
+                  }
+                  button, .btn {
+                    min-height: 44px;
+                  }
+
+                  /* Modals: full-screen on phones */
+                  .sw-modal {
+                    width: 100vw !important;
+                    max-width: 100vw !important;
+                    height: 100vh;
+                    max-height: 100vh;
+                    border-radius: 0;
+                    margin: 0;
+                  }
+
+                  /* Toasts: full-width at top */
+                  .sw-toast-container {
+                    left: 0 !important;
+                    right: 0 !important;
+                    top: 0 !important;
+                    bottom: auto !important;
+                    width: 100%;
+                    padding: var(--sw-spacing-xs);
+                  }
+                  .sw-toast {
+                    border-radius: 0;
+                  }
+
+                  /* Tables: horizontal scroll */
+                  .score-table {
+                    display: block;
+                    overflow-x: auto;
+                    -webkit-overflow-scrolling: touch;
                   }
                 }
 
