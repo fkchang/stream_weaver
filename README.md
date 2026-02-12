@@ -72,6 +72,24 @@ StreamWeaver evolved through real needs, resulting in four modes:
 
 The service mode runs one Sinatra server for all apps instead of one process per app.
 
+### From Local Script to Mobile Dashboard
+
+StreamWeaver apps cover a wide range — the same DSL works whether you're hacking a quick one-off or running a persistent dashboard you check from your phone:
+
+| Scenario | Host | Port | How |
+|----------|------|------|-----|
+| **Quick one-off** | localhost | auto-detect | `ruby app.rb` — browser opens, use it, Ctrl+C |
+| **Agentic popup** | localhost | auto-detect | `app.run_once!` — collect input, return JSON, exit |
+| **Mobile/Tailscale** | `0.0.0.0` | fixed | `STREAMWEAVER_HOST=0.0.0.0 STREAMWEAVER_PORT=4580 ruby app.rb` |
+| **LAN access** | `0.0.0.0` | fixed | Same — any device on your network can reach it |
+| **Always-on dashboard** | `0.0.0.0` | fixed | Bookmark `http://your-machine:4580` on your phone |
+
+**Environment variables** (overridden by code options if set):
+- `STREAMWEAVER_HOST` — bind address (default: `127.0.0.1`)
+- `STREAMWEAVER_PORT` — fixed port (default: auto-detect from 4567)
+
+For quick local work, the defaults are perfect — auto-find a port, open the browser, done. For mobile or remote access (Tailscale, LAN), set a fixed host and port so your URL stays stable across restarts.
+
 ---
 
 ## Quick Start

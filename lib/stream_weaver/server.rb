@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
 require 'sinatra/base'
+require 'sinatra/streaming'
 require 'stringio'
 require 'socket'
 require 'json'
+require 'fileutils'
 
 module StreamWeaver
   # Generated Sinatra application for serving the StreamWeaver app
@@ -32,11 +34,16 @@ module StreamWeaver
     # @param streamlit_app [StreamWeaver::App] The app definition
     # @return [Class] Sinatra::Base subclass
     def self.create(streamlit_app)
+      helpers Sinatra::Streaming
+
       # Store the streamlit app for access in routes
       set :streamlit_app, streamlit_app
 
       # Create adapter instance (Alpine.js by default)
       set :adapter, Adapter::AlpineJS.new
+
+      # Initialize streamer for SSE push (always available for POST /stream/push)
+      set :streamer, Streamer.new
 
       # Helper methods for state synchronization
       helpers do
@@ -332,6 +339,55 @@ module StreamWeaver
         end
       end
 
+      # SSE endpoint - browser subscribes for real-time push updates.
+      # Uses Sinatra stream (without :keep_open) for Puma compatibility.
+      # The block keeps the connection alive with a heartbeat loop;
+      # the Streamer broadcasts to the `out` object from other threads.
+      get '/stream' do
+        content_type 'text/event-stream'
+        cache_control :no_cache
+        headers 'Connection' => 'keep-alive',
+                'X-Accel-Buffering' => 'no'
+
+        stream do |out|
+          streamer = settings.streamer
+          streamer.add_connection(out)
+          out << "data: #{JSON.generate(type: "connected")}\n\n"
+          # Keep connection alive - Puma needs the block to stay open.
+          # Check shutdown flag so Ctrl+C can terminate cleanly.
+          until streamer.shutting_down?
+            sleep 1
+            out << ": heartbeat\n\n"
+          end
+        rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+          # Client disconnected
+        ensure
+          streamer.remove_connection(out)
+        end
+      end
+
+      # Push endpoint - any external process can POST targeted DOM updates
+      post '/stream/push' do
+        payload = if request.content_type&.include?('application/json')
+          JSON.parse(request.body.read, symbolize_names: true)
+        else
+          params
+        end
+
+        target = payload[:target] || '#main'
+        action = (payload[:action] || 'replace').to_sym
+        html   = payload[:html] || payload[:content] || ''
+
+        unless Streamer::ACTIONS.include?(action)
+          halt 400, { 'Content-Type' => 'application/json' },
+               JSON.generate(error: "Invalid action: #{action}")
+        end
+
+        settings.streamer.public_send(action, target, html)
+        content_type :json
+        JSON.generate(success: true, target: target, action: action)
+      end
+
       # Return the class itself (it's the Rack app)
       self
     end
@@ -440,25 +496,74 @@ module StreamWeaver
       end
     end
 
-    # Custom run! method with auto-browser opening (persistent server)
-    #
-    # @param options [Hash] Options
-    # @option options [Integer] :port Port number (default: auto-detect)
-    # @option options [String] :host Host to bind (default: '127.0.0.1')
-    # @option options [Boolean] :open_browser Auto-open browser (default: true)
-    def self.run!(options = {})
-      port = options[:port] || find_available_port
-      host = options[:host] || '127.0.0.1'
-      auto_open = options.fetch(:open_browser, true)
+    # Resolve host and port from options, env vars, or defaults
+    def self.resolve_host_and_port(options)
+      port = options[:port] || ENV['STREAMWEAVER_PORT']&.to_i || find_available_port
+      host = options[:host] || ENV['STREAMWEAVER_HOST'] || '127.0.0.1'
+      [host, port]
+    end
 
+    # Configure Sinatra server settings for host, port, and host authorization
+    def self.configure_server!(host, port)
       set :port, port
       set :bind, host
       set :server, :puma
       set :quiet, true if respond_to?(:quiet)
+      # Allow any Host header for non-loopback binds (Tailscale DNS, LAN IPs, etc.)
+      set(:host_authorization, { permitted_hosts: [] }) unless loopback_host?(host)
+    end
 
-      url = "http://#{host == '0.0.0.0' ? 'localhost' : host}:#{port}"
+    def self.loopback_host?(host)
+      %w[127.0.0.1 localhost ::1].include?(host)
+    end
+
+    def self.display_url(host, port)
+      display_host = (host == '0.0.0.0' || host == '::') ? 'localhost' : host
+      "http://#{display_host}:#{port}"
+    end
+
+    # Start the internal stream thread if the app has a stream block.
+    # Assumes rebuild_with_state has already been called to evaluate the DSL.
+    def self.start_stream_thread
+      stream_block = settings.streamlit_app.stream_block
+      return unless stream_block
+
+      Thread.new do
+        # Wait for at least one SSE subscriber before pushing
+        sleep 0.1 until settings.streamer.connection_count > 0
+        stream_block.call(settings.streamer)
+      rescue => e
+        $stderr.puts "Stream thread error: #{e.class}: #{e.message}"
+        $stderr.puts e.backtrace.first(5).join("\n")
+      end
+    end
+
+    # Custom run! method with auto-browser opening (persistent server)
+    #
+    # @param options [Hash] Options
+    # @option options [Integer] :port Port number (default: auto-detect, or STREAMWEAVER_PORT env var)
+    # @option options [String] :host Host to bind (default: '127.0.0.1', or STREAMWEAVER_HOST env var)
+    # @option options [Boolean] :open_browser Auto-open browser (default: true)
+    def self.run!(options = {})
+      host, port = resolve_host_and_port(options)
+      auto_open = options.fetch(:open_browser, true)
+
+      configure_server!(host, port)
+      # Force-kill after 1s on shutdown - SSE connections never complete gracefully
+      set :server_settings, force_shutdown_after: 1
+
+      url = display_url(host, port)
+
+      # Evaluate the DSL block to detect stream configuration
+      settings.streamlit_app.rebuild_with_state({})
+
+      # Portfile: write so feed scripts can discover this app by name
+      Portfile.clean_stale!
+      Portfile.write(settings.streamlit_app.title, url: url, pid: Process.pid)
+      at_exit { Portfile.delete(settings.streamlit_app.title) }
 
       # Custom startup banner
+      sanitized = Portfile.sanitize(settings.streamlit_app.title)
       puts "\n"
       puts "╔═══════════════════════════════════════════════════════════╗"
       puts "║              StreamWeaver App Running                    ║"
@@ -466,11 +571,18 @@ module StreamWeaver
       puts ""
       puts "  🌐  #{url}"
       puts "  📱  #{settings.streamlit_app.title}"
+      puts "  📁  ~/.streamweaver/apps/#{sanitized}.port"
+      if settings.streamlit_app.stream_block
+        puts "  📡  SSE streaming enabled (GET /stream, POST /stream/push)"
+      end
       puts ""
       puts "  Press Ctrl+C to stop"
       puts ""
 
       open_browser(url) if auto_open
+
+      # Start internal stream thread if app defined a stream block
+      start_stream_thread
 
       # Suppress Sinatra/Puma startup messages
       original_stdout = $stdout
@@ -478,14 +590,6 @@ module StreamWeaver
       unless ENV['DEBUG']
         $stdout = StringIO.new
         $stderr = StringIO.new
-      end
-
-      # Call Sinatra's original run! with quiet mode
-      trap('INT') do
-        $stdout = original_stdout
-        $stderr = original_stderr
-        puts "\n\n👋 Shutting down StreamWeaver..."
-        exit
       end
 
       begin
@@ -515,17 +619,12 @@ module StreamWeaver
       set :result_container, result_container
       set :auto_close_window, auto_close_window
 
-      # Find port and configure
-      port = options[:port] || find_available_port
-      host = options[:host] || '127.0.0.1'
+      host, port = resolve_host_and_port(options)
       auto_open = options.fetch(:open_browser, true)
 
-      set :port, port
-      set :bind, host
-      set :server, :puma
-      set :quiet, true if respond_to?(:quiet)
+      configure_server!(host, port)
 
-      url = "http://#{host == '0.0.0.0' ? 'localhost' : host}:#{port}"
+      url = display_url(host, port)
 
       # Startup banner
       puts "\n"

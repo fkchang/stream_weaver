@@ -81,10 +81,65 @@ end
 ```ruby
 text_field :name, placeholder: "Name"
 text_area :bio, rows: 5
-checkbox :active, "Is active"
+checkbox :key, "Label"                      # state[:key] = true/false
 select :role, ["Admin", "User"], default: "User"
 radio_group :choice, ["A", "B", "C"]
 ```
+
+### IMPORTANT: Form Input Auto-Submit Behavior
+
+**By default, ALL input components auto-submit on change.** Every keystroke, checkbox click, or selection triggers a server round-trip and page re-render. This is intentional for reactive UIs.
+
+**For "form-like" behavior** (collect multiple inputs, then act):
+
+Option 1: Use `submit: false` on individual inputs:
+```ruby
+# Checkboxes that don't auto-submit - user can check multiple before action
+items.each do |item|
+  checkbox :"select_#{item.id}", item.name, submit: false
+end
+
+button "Process Selected" do |state|
+  items.each do |item|
+    if state[:"select_#{item.id}"]
+      # act on selected items
+    end
+  end
+end
+```
+
+Option 2: Use `form` block for deferred submission:
+```ruby
+form :my_form do
+  text_field :name
+  select :status, %w[active paused]
+  submit "Save" do |form_values|
+    # All values submitted together
+  end
+  cancel "Reset"
+end
+```
+
+**When to use which:**
+- Default (auto-submit): Filters, toggles, instant feedback
+- `submit: false`: Multi-select lists with action buttons
+- `form` block: Traditional forms with Save/Cancel
+
+### Checkbox Group (Multi-Select with Select All/None)
+```ruby
+# For batch selection (emails, files, items to process)
+checkbox_group :selected_items, select_all: "Select All", select_none: "Clear" do
+  items.each do |item|
+    item item.id do          # Use `item value do`, NOT `checkbox`
+      text item.name
+      # Any components can be nested here
+    end
+  end
+end
+# state[:selected_items] = ["id1", "id3", ...] (array of selected IDs)
+```
+
+**CRITICAL:** Inside `checkbox_group`, ONLY `item` elements are allowed at the top level. You CANNOT use `text`, `header`, `div`, or other components directly inside `checkbox_group` - they must be nested inside an `item` block. If you need section headers, put them OUTSIDE the checkbox_group.
 
 ### Display
 ```ruby
@@ -191,6 +246,29 @@ app "My App" do
 end.run!
 ```
 Server runs until Ctrl+C. State persists in session.
+
+### Remote/Mobile Access (Tailscale, LAN)
+
+By default, StreamWeaver binds to `127.0.0.1` (localhost only). For access from phones, tablets, or other machines via Tailscale or LAN:
+
+```bash
+STREAMWEAVER_HOST=0.0.0.0 STREAMWEAVER_PORT=4580 ruby my_app.rb
+```
+
+Or in code:
+```ruby
+app "Dashboard" do
+  # ...
+end.run!(host: '0.0.0.0', port: 4580)
+```
+
+**Environment variables** (overridden by code options):
+- `STREAMWEAVER_HOST` — bind address (default: `127.0.0.1`)
+- `STREAMWEAVER_PORT` — fixed port (default: auto-detect)
+
+**Why fixed port matters for mobile:** Auto-port detection finds a different port each restart, breaking bookmarks. Set a fixed port when you need a stable URL.
+
+**Host authorization:** When bound to `0.0.0.0`, StreamWeaver automatically disables Sinatra's host authorization so Tailscale DNS names, LAN IPs, etc. are accepted.
 
 ### Agentic (one-shot)
 ```ruby
@@ -367,3 +445,7 @@ For comprehensive reference, see these docs:
 2. **Assuming port 4567** - Read stdout for actual port
 3. **Missing `.run!`** - App won't start without it
 4. **Agentic mode button state** - Only input values returned, not button-set state
+5. **Wrong checkbox signature** - `checkbox :key, "label"` (key first, then label). NOT `checkbox "label", value: x`
+6. **Using checkbox inside checkbox_group** - Use `item value do...end`, NOT `checkbox`. checkbox_group has its own DSL.
+7. **Putting text/headers inside checkbox_group** - ONLY `item` elements allowed directly inside `checkbox_group`. Put section headers OUTSIDE the checkbox_group block.
+8. **Expecting form-like behavior by default** - ALL inputs auto-submit on change. For multi-select lists where user picks several items then clicks an action button, use `submit: false` on each checkbox. For traditional forms, use the `form` block.
