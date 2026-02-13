@@ -1,13 +1,22 @@
 # frozen_string_literal: true
 
+require 'fileutils'
+
 require_relative "stream_weaver/version"
 require_relative "stream_weaver/utils"
 require_relative "stream_weaver/adapter/base"
 require_relative "stream_weaver/adapter/alpinejs"
 require_relative "stream_weaver/theme"
+require_relative "stream_weaver/display_dsl"
 require_relative "stream_weaver/app"
 require_relative "stream_weaver/components"
 require_relative "stream_weaver/views"
+require_relative "stream_weaver/component_renderer"
+require_relative "stream_weaver/feed_builder"
+require_relative "stream_weaver/pushable"
+require_relative "stream_weaver/portfile"
+require_relative "stream_weaver/feed"
+require_relative "stream_weaver/streamer"
 require_relative "stream_weaver/server"
 require_relative "stream_weaver/service"
 require_relative "stream_weaver/service_client"
@@ -34,23 +43,40 @@ module StreamWeaver
     attr_accessor :last_generated_app
   end
 
-  # Global app helper method for DSL
+  def self.default_adapter
+    Adapter::AlpineJS.new
+  end
+
+  # Connect to a running StreamWeaver app and return a Feed client.
   #
-  # @param title [String] The title of the application
-  # @param layout [Symbol] Layout mode (:default, :wide, :full, :fluid)
-  # @param theme [Symbol] Theme (:default, :dashboard, :document)
-  # @param theme_overrides [Hash] CSS variable overrides (e.g., { primary: "#0066cc" })
-  # @param components [Array<Module>] Custom component modules to include
-  # @param block [Proc] The DSL block defining the UI
-  # @return [StreamWeaver::SinatraApp] The generated Sinatra application
-  # @example
-  #   my_app = app "My App", theme: :dashboard do
-  #     text "Hello, world!"
-  #   end
+  # @param name [String, nil] App title to look up via portfile
+  # @param port [Integer, nil] Explicit port number
+  # @param url [String, nil] Explicit URL
+  # @return [StreamWeaver::Feed] Feed client for pushing updates
+  # @example By name (reads portfile)
+  #   feed = StreamWeaver.connect("Live Monitor")
+  # @example Single running app (auto-discover)
+  #   feed = StreamWeaver.connect
+  # @example Explicit port
+  #   feed = StreamWeaver.connect(port: 4569)
+  # @example Explicit URL
+  #   feed = StreamWeaver.connect(url: "http://myhost:4569")
+  def self.connect(name = nil, port: nil, url: nil)
+    if url
+      Feed.new(url)
+    elsif port
+      Feed.new("http://127.0.0.1:#{port}")
+    elsif name
+      Feed.new(Portfile.read(name))
+    else
+      Feed.new(Portfile.discover_single)
+    end
+  end
+
+  # Global app helper method for DSL
   def self.app(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], &block)
     app = App.new(title, layout: layout, theme: theme, theme_overrides: theme_overrides, components: components, scripts: scripts, stylesheets: stylesheets, &block)
     sinatra_app = app.generate
-    # Capture for service mode
     @last_generated_app = sinatra_app
     sinatra_app
   end

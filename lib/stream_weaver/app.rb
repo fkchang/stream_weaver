@@ -5,12 +5,14 @@ require 'digest'
 module StreamWeaver
   # Main app class that holds the DSL block and manages the component tree
   class App
+    include DisplayDSL
+
     # Built-in themes (custom themes checked via StreamWeaver.theme_exists?)
     BUILT_IN_THEMES = [:default, :dashboard, :document, :dark].freeze
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets
+    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :stream_block
 
     def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], &block)
       @title = title
@@ -91,58 +93,8 @@ module StreamWeaver
     public
 
     # =========================================
-    # Container DSL methods
+    # App-specific display components
     # =========================================
-
-    def div(**options, &block)
-      with_container(Components::Div.new(**options), &block)
-    end
-
-    # App header bar - renders a full-width header with title, optional subtitle, and optional right-side content
-    # @param title [String] The header title
-    # @param subtitle [String, nil] Optional subtitle
-    # @param variant [Symbol] Style variant (:dark, :light, :primary)
-    def app_header(title, subtitle: nil, variant: :dark, &block)
-      with_container(Components::AppHeader.new(title, subtitle: subtitle, variant: variant), &block)
-    end
-
-    def card(**options, &block)
-      with_container(Components::Card.new(**options), &block)
-    end
-
-    def card_header(content_or_options = nil, **options, &block)
-      component = if content_or_options.is_a?(String)
-        Components::CardHeader.new(content_or_options, **options)
-      else
-        opts = content_or_options.is_a?(Hash) ? content_or_options.merge(options) : options
-        Components::CardHeader.new(nil, **opts)
-      end
-      with_container(component, &block)
-    end
-
-    def card_body(**options, &block)
-      with_container(Components::CardBody.new(**options), &block)
-    end
-
-    def card_footer(**options, &block)
-      with_container(Components::CardFooter.new(**options), &block)
-    end
-
-    def vstack(spacing: :md, align: nil, divider: false, **options, &block)
-      with_container(Components::VStack.new(spacing: spacing, align: align, divider: divider, **options), &block)
-    end
-
-    def hstack(spacing: :sm, align: nil, justify: nil, divider: false, **options, &block)
-      with_container(Components::HStack.new(spacing: spacing, align: align, justify: justify, divider: divider, **options), &block)
-    end
-
-    def grid(columns: 3, gap: :md, **options, &block)
-      with_container(Components::Grid.new(columns: columns, gap: gap, **options), &block)
-    end
-
-    def collapsible(label, expanded: false, **options, &block)
-      with_container(Components::Collapsible.new(label, expanded: expanded, **options), &block)
-    end
 
     def lesson_text(content_or_options = nil, **options, &block)
       if content_or_options.is_a?(String)
@@ -155,6 +107,10 @@ module StreamWeaver
         glossary = opts[:glossary] || {}
         with_container(Components::LessonText.new(glossary: glossary), &block)
       end
+    end
+
+    def term(term_key, **options)
+      @components << Components::Term.new(term_key, **options)
     end
 
     # =========================================
@@ -279,31 +235,8 @@ module StreamWeaver
     end
 
     # =========================================
-    # Simple leaf components
+    # Interactive components
     # =========================================
-
-    def text(content)
-      @components << Components::Text.new(content)
-    end
-
-    def md(content)
-      @components << Components::Markdown.new(content)
-    end
-    alias_method :markdown, :md
-
-    # Header methods via metaprogramming (DRY)
-    (1..6).each do |level|
-      define_method(:"header#{level}") { |content| @components << Components::Header.new(content, level: level) }
-    end
-    alias_method :header, :header2
-
-    def phrase(content)
-      @components << Components::Phrase.new(content)
-    end
-
-    def term(term_key, **options)
-      @components << Components::Term.new(term_key, **options)
-    end
 
     def button(label, id: nil, **options, &block)
       # Generate stable ID: use source location for buttons with blocks,
@@ -320,47 +253,6 @@ module StreamWeaver
       # Pass modal context to button so it can close the modal via Alpine
       options[:modal_context] = @modal_context if @modal_context
       @components << Components::Button.new(label, stable_id, **options, &block)
-    end
-
-    def score_table(scores:, **options)
-      @components << Components::ScoreTable.new(scores: scores, **options)
-    end
-
-    # Table component for displaying tabular data with smart inference
-    # @param data [Array, Hash, Symbol, nil] Data source (positional or keyword)
-    # @param headers [Array<String>] Column headers (optional, auto-inferred from data)
-    # @param rows [Array<Array>] Row data (original API)
-    # @param file [String] Path to YAML/JSON file
-    # @param path [String] Dot-notation path within file data (e.g., "data.users")
-    # @param striped [Boolean] Zebra striping (default: false)
-    # @param bordered [Boolean] Show borders (default: false)
-    # @param hoverable [Boolean] Highlight on hover (default: true)
-    # @param compact [Boolean] Reduced padding (default: false)
-    # @param sortable [Boolean] Enable client-side sorting (default: false)
-    # @param sticky_header [Boolean] Keep header visible on scroll (default: false)
-    # @param caption [String] Table caption (optional)
-    # @example Original API
-    #   table headers: ["Name", "Size"], rows: [["app.rb", "12kb"]]
-    # @example Array of hashes (auto-infer headers)
-    #   table [{ name: "Alice", age: 30 }, { name: "Bob", age: 25 }]
-    # @example Hash of arrays
-    #   table({ name: ["Alice", "Bob"], age: [30, 25] })
-    # @example From file
-    #   table file: "users.yaml", path: "data.users"
-    # @example State binding
-    #   table data: :users
-    # @example Column DSL with formatters
-    #   table users do
-    #     column :name
-    #     column :balance, format: :currency, align: :right
-    #     column(:active) { |u| u.active ? "Yes" : "No" }
-    #   end
-    def table(positional_data = nil, data: nil, headers: nil, rows: nil, file: nil, path: nil, **options, &block)
-      # Support both: table [data] (positional) and table data: :key (keyword)
-      actual_data = positional_data || data
-      @components << Components::Table.new(
-        actual_data, headers: headers, rows: rows, file: file, path: path, **options, &block
-      )
     end
 
     # =========================================
@@ -403,14 +295,6 @@ module StreamWeaver
 
     def stacked_bar_chart(data: nil, file: nil, path: nil, **options, &block)
       @components << Components::StackedBarChart.new(data: data, file: file, path: path, **options, &block)
-    end
-
-    def status_badge(status, reasoning)
-      @components << Components::StatusBadge.new(status, reasoning)
-    end
-
-    def external_link_button(label, url:, submit: false)
-      @components << Components::ExternalLinkButton.new(label, url: url, submit: submit)
     end
 
     # =========================================
@@ -515,7 +399,6 @@ module StreamWeaver
     # =========================================
 
     def modal(key, title: nil, size: :md, **options, &block)
-      # Initialize state for modal open/close
       open_key = :"#{key}_open"
       @_state[open_key] = false unless @_state.key?(open_key)
 
@@ -524,7 +407,7 @@ module StreamWeaver
 
       parent_components = @components
       @current_modal = modal_component
-      @modal_context = { key: key }  # Track we're inside a modal
+      @modal_context = { key: key }
       @components = []
 
       instance_eval(&block) if block
@@ -540,7 +423,6 @@ module StreamWeaver
 
       footer_component = Components::ModalFooter.new(**options)
       parent_components = @components
-      # Keep modal_context active for buttons inside footer
       @components = []
 
       instance_eval(&block) if block
@@ -550,36 +432,23 @@ module StreamWeaver
       @current_modal.footer_component = footer_component
     end
 
-    # Helper to open a modal (use in button callbacks)
     def open_modal(key)
       @_state[:"#{key}_open"] = true
     end
 
-    # Helper to close a modal (use in button callbacks)
     def close_modal(key)
       @_state[:"#{key}_open"] = false
     end
 
     # =========================================
-    # Feedback DSL methods
+    # Feedback DSL methods (App-only)
     # =========================================
 
-    def alert(variant: :info, title: nil, dismissible: false, **options, &block)
-      with_container(Components::Alert.new(variant: variant, title: title, dismissible: dismissible, **options), &block)
-    end
-
-    # Add a toast container to render notifications at a screen position
-    # @param position [Symbol] Screen position (:top_right, :top_left, :bottom_right, :bottom_left)
-    # @param duration [Integer] Default auto-dismiss duration in milliseconds
     def toast_container(position: :top_right, duration: 5000, **options)
       @_state[:_toasts] ||= []
       @components << Components::ToastContainer.new(position: position, duration: duration, **options)
     end
 
-    # Helper to show a toast notification (use in button callbacks)
-    # @param message [String] The toast message
-    # @param variant [Symbol] Toast type (:info, :success, :warning, :error)
-    # @param duration [Integer] Auto-dismiss duration (uses container default if nil)
     def show_toast(message, variant: :info, duration: nil)
       @_state[:_toasts] ||= []
       toast_id = "toast_#{Time.now.to_f.to_s.gsub('.', '_')}_#{rand(1000)}"
@@ -588,141 +457,35 @@ module StreamWeaver
       @_state[:_toasts] << toast
     end
 
-    # Helper to dismiss a specific toast by ID
     def dismiss_toast(toast_id)
       @_state[:_toasts] ||= []
       @_state[:_toasts].reject! { |t| t[:id] == toast_id }
     end
 
-    # Helper to clear all toasts
     def clear_toasts
       @_state[:_toasts] = []
     end
 
-    def progress_bar(value:, max: 100, variant: :default, show_label: false, animated: false, **options)
-      @components << Components::ProgressBar.new(value: value, max: max, variant: variant, show_label: show_label, animated: animated, **options)
-    end
-
-    def spinner(size: :md, label: nil, **options)
-      @components << Components::Spinner.new(size: size, label: label, **options)
-    end
-
-    # Mark this canvas as continuing (more content coming after submit)
-    # When present, button clicks show a spinner instead of "close window"
-    # @param message [String] Optional message to show while processing (default: "Processing...")
     def canvas_continue(message: "Processing...")
       @components << Components::CanvasContinue.new(message: message)
     end
 
-    # Theme switcher dropdown for runtime theme selection
-    # @param position [Symbol] Position (:inline, :fixed_top_right)
-    # @param show_label [Boolean] Show "Theme:" label (default: true)
     def theme_switcher(position: :inline, show_label: true, **options)
       @components << Components::ThemeSwitcher.new(position: position, show_label: show_label, **options)
     end
 
     # =========================================
-    # Dashboard components (Cabinet Control style)
+    # Streaming DSL (server-push via SSE)
     # =========================================
 
-    # Colored status indicator dot with optional pulse animation
-    # @param status [Symbol] Status color (:red, :yellow, :green, :gray)
-    # @param pulse [Boolean] Enable pulsing animation (default: false)
-    # @param size [Symbol] Size (:sm, :md, :lg) - default :md
-    # @example
-    #   status_dot status: :green, pulse: true
-    def status_dot(status: :gray, pulse: false, size: :md, **options)
-      @components << Components::StatusDot.new(status: status, pulse: pulse, size: size, **options)
-    end
-
-    # Small count/label badge pill
-    # @param text [String] Badge text/count
-    # @param variant [Symbol] Color variant (:default, :danger, :warning, :success, :info)
-    # @param size [Symbol] Size (:sm, :md) - default :sm
-    # @example
-    #   badge "5", variant: :danger
-    def badge(text, variant: :default, size: :sm, **options)
-      @components << Components::Badge.new(text, variant: variant, size: size, **options)
-    end
-
-    # Large metric number with label
-    # @param value [String, Integer] The main value to display
-    # @param label [String] Label text below the value
-    # @param color [Symbol] Value color (:default, :blue, :purple, :green, :red, :yellow)
-    # @param size [Symbol] Size (:sm, :md, :lg) - default :md
-    # @example
-    #   stat_display value: 42, label: "TASKS", color: :blue
-    def stat_display(value:, label:, color: :blue, size: :md, **options)
-      @components << Components::StatDisplay.new(value: value, label: label, color: color, size: size, **options)
-    end
-
-    # Activity type tag badge
-    # @param type_name [Symbol, String] The type (:research, :task, :escalation, etc.)
-    # @param color [Symbol, nil] Override color for custom types
-    # @example
-    #   type_tag :research
-    #   type_tag "custom", color: :purple
-    def type_tag(type_name, color: nil, **options)
-      @components << Components::TypeTag.new(type_name, color: color, **options)
-    end
-
-    # Animated pulse indicator with label
-    # @param color [Symbol] Dot color (:green, :red, :yellow, :blue) - default :green
-    # @param label [String] Status text next to the dot
-    # @example
-    #   pulse_indicator color: :green, label: "System Active"
-    def pulse_indicator(color: :green, label: nil, **options)
-      @components << Components::PulseIndicator.new(color: color, label: label, **options)
-    end
-
-    # Priority item with colored left border (escalation style)
-    # @param priority [Symbol] Priority level (:critical, :urgent, :high, :normal, :low)
-    # @param title [String] Item title
-    # @param description [String, nil] Optional description text
-    # @param meta_left [String, nil] Left-side metadata (e.g., secretary name)
-    # @param meta_right [String, nil] Right-side metadata (e.g., action link)
-    # @example
-    #   priority_item priority: :critical, title: "Needs attention",
-    #                 description: "Something requires action",
-    #                 meta_left: "scheduler", meta_right: "View details"
-    def priority_item(priority: :normal, title:, description: nil, meta_left: nil, meta_right: nil, **options, &block)
-      component = Components::PriorityItem.new(
-        priority: priority, title: title, description: description,
-        meta_left: meta_left, meta_right: meta_right, **options
-      )
-      with_container(component, &block)
-    end
-
-    # Activity item with time, title, summary, and type tag
-    # @param time [String] Time display (e.g., "15:00")
-    # @param title [String] Activity title
-    # @param summary [String, nil] Optional summary text
-    # @param type [Symbol, nil] Activity type for TypeTag (:research, :task, etc.)
-    # @example
-    #   activity_item time: "14:30", title: "Meeting notes",
-    #                 summary: "Discussed Q4 planning", type: :task
-    def activity_item(time:, title:, summary: nil, type: nil, **options)
-      @components << Components::ActivityItem.new(time: time, title: title, summary: summary, type: type, **options)
+    def stream(&block)
+      @stream_block ||= block
     end
 
     # =========================================
     # Layout components (Cabinet Control style)
     # =========================================
 
-    # Two-column app layout with main content and sidebar
-    # @param sidebar_width [String] CSS width for sidebar (default: "320px")
-    # @param sidebar_position [Symbol] Sidebar position (:left, :right) - default :right
-    # @param gap [String] Gap between main and sidebar (default: "1.5rem")
-    # @yield Define main content with `main do ... end` and sidebar with `sidebar do ... end`
-    # @example
-    #   app_shell sidebar_width: "300px" do
-    #     main do
-    #       header2 "Content"
-    #     end
-    #     sidebar header: "Escalations" do
-    #       priority_item priority: :critical, title: "Urgent"
-    #     end
-    #   end
     def app_shell(sidebar_width: "320px", sidebar_position: :right, gap: "1.5rem", **options, &block)
       component = Components::AppShell.new(
         sidebar_width: sidebar_width,
@@ -734,7 +497,6 @@ module StreamWeaver
 
       return component unless block
 
-      # Capture the app_shell context for main/sidebar helpers
       @current_app_shell = component
       instance_eval(&block)
       @current_app_shell = nil
@@ -742,8 +504,6 @@ module StreamWeaver
       component
     end
 
-    # Main content area within app_shell
-    # @yield Define main content components
     def main(**options, &block)
       raise "main can only be used inside an app_shell block" unless @current_app_shell
 
@@ -754,10 +514,6 @@ module StreamWeaver
       @components = parent_components
     end
 
-    # Sidebar within app_shell
-    # @param header [String, nil] Optional header text for sidebar
-    # @param sticky [Boolean] Whether sidebar content is sticky (default: true)
-    # @yield Define sidebar content components
     def sidebar(header: nil, sticky: true, **options, &block)
       raise "sidebar can only be used inside an app_shell block" unless @current_app_shell
 
@@ -772,22 +528,6 @@ module StreamWeaver
       @current_app_shell.sidebar_children << sidebar_component
     end
 
-    # Expandable card that shows/hides content on click
-    # @param key [Symbol] State key for expanded state
-    # @param title [String] Card title (always visible)
-    # @param subtitle [String, nil] Optional subtitle
-    # @param badge_text [String, nil] Optional badge text (e.g., "5 activities")
-    # @param badge_variant [Symbol] Badge color variant
-    # @param status [Symbol, nil] Status indicator color (:red, :yellow, :green, :gray)
-    # @param initially_expanded [Boolean] Whether card starts expanded (default: false)
-    # @yield Define card body content
-    # @example
-    #   expandable_card key: :scheduler_expanded, title: "Scheduler",
-    #                   subtitle: "Time Management", badge_text: "5 activities",
-    #                   status: :red do
-    #     stat_display value: 1, label: "RESEARCH"
-    #     activity_item time: "15:00", title: "Research task", type: :research
-    #   end
     def expandable_card(key:, title:, subtitle: nil, badge_text: nil, badge_variant: :default,
                         status: nil, initially_expanded: false, **options, &block)
       @_state[key] ||= initially_expanded
@@ -802,19 +542,6 @@ module StreamWeaver
     end
 
     private
-
-    # Captures nested components into a container and appends to current context
-    def with_container(component, &block)
-      @components << component
-      return component unless block
-
-      parent_components = @components
-      @components = []
-      instance_eval(&block)
-      component.children = @components
-      @components = parent_components
-      component
-    end
 
     # Captures children then appends the component (for item, column patterns)
     def capture_children_then_append(component, &block)
