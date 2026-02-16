@@ -20,6 +20,9 @@ module StreamWeaver
     class AlpineJS < Base
       attr_reader :url_prefix, :mode
 
+      HTMX_TARGET = "#app-container"
+      HTMX_SWAP   = "morph:innerHTML"
+
       # Initialize with optional URL prefix for service mode
       # @param url_prefix [String] URL prefix for all endpoints (e.g., "/apps/abc123")
       # @param mode [Symbol] :http (default) for HTMX, :websocket for WebSocket canvas mode
@@ -77,11 +80,7 @@ module StreamWeaver
             value: state[key] || "",
             placeholder: options[:placeholder] || "",
             "x-model" => key.to_s,
-            "hx-post" => endpoint,
-            "hx-include" => input_selector,
-            "hx-target" => "#app-container",
-            "hx-swap" => "morph:innerHTML",
-            "hx-trigger" => trigger_str
+            **htmx_attrs(endpoint, "hx-trigger" => trigger_str)
           )
         else
           # No auto-submit: just Alpine.js binding, no HTMX
@@ -131,11 +130,7 @@ module StreamWeaver
             placeholder: options[:placeholder] || "",
             rows: options[:rows] || 3,
             "x-model" => key.to_s,
-            "hx-post" => endpoint,
-            "hx-include" => input_selector,
-            "hx-target" => "#app-container",
-            "hx-swap" => "morph:innerHTML",
-            "hx-trigger" => trigger_str
+            **htmx_attrs(endpoint, "hx-trigger" => trigger_str)
           ) { state[key] || "" }
         else
           # No auto-submit: just Alpine.js binding, no HTMX
@@ -193,11 +188,7 @@ module StreamWeaver
               value: "true",
               checked: state[key],
               "x-model" => key.to_s,
-              "hx-post" => endpoint,
-              "hx-include" => input_selector,
-              "hx-target" => "#app-container",
-              "hx-swap" => "morph:innerHTML",
-              "hx-trigger" => "change"
+              **htmx_attrs(endpoint, "hx-trigger" => "change")
             )
             view.label(for: "checkbox_#{key}") do
               view.raw view.safe(parsed_label)
@@ -279,11 +270,7 @@ module StreamWeaver
           view.select(
             name: key.to_s,
             "x-model" => key.to_s,
-            "hx-post" => endpoint,
-            "hx-include" => input_selector,
-            "hx-target" => "#app-container",
-            "hx-swap" => "morph:innerHTML",
-            "hx-trigger" => "change"
+            **htmx_attrs(endpoint, "hx-trigger" => "change")
           ) do
             choices.each do |choice|
               view.option(
@@ -373,12 +360,8 @@ module StreamWeaver
                   name: key.to_s,
                   value: choice,
                   checked: current_value == choice,
-                  "x-model" => key.to_s,  # Alpine.js two-way binding
-                  "hx-post" => url("/update"),
-                  "hx-include" => input_selector,
-                  "hx-target" => "#app-container",
-                  "hx-swap" => "morph:innerHTML",
-                  "hx-trigger" => "change"  # Immediate update on change
+                  "x-model" => key.to_s,
+                  **htmx_attrs(url("/update"), "hx-trigger" => "change")
                 )
                 view.span { choice }
               end
@@ -430,12 +413,8 @@ module StreamWeaver
                 name: key.to_s,
                 value: item.value,
                 checked: current_values.include?(item.value),
-                "x-model" => key.to_s,  # Alpine.js array binding
-                "hx-post" => url("/update"),
-                "hx-include" => input_selector,
-                "hx-target" => "#app-container",
-                "hx-swap" => "morph:innerHTML",
-                "hx-trigger" => "change"
+                "x-model" => key.to_s,
+                **htmx_attrs(url("/update"), "hx-trigger" => "change")
               )
 
               # Render item's nested content
@@ -487,24 +466,13 @@ module StreamWeaver
         elsif modal_context
           # Inside a modal: close via Alpine before HTMX request fires
           # hx-on::before-request runs before HTMX sends, allowing Alpine to close modal
-          attrs = {
-            "hx-post" => url("/action/#{button_id}"),
-            "hx-include" => input_selector,
-            "hx-target" => "#app-container",
-            "hx-swap" => "morph:innerHTML",
-            "hx-on::before-request" => "open = false"
-          }
+          attrs = htmx_attrs(url("/action/#{button_id}"), "hx-on::before-request" => "open = false")
           attrs[:class] = button_class if button_class
           attrs[:style] = inline_style if inline_style
           view.button(**attrs) { label }
         else
           # Normal button: use standard HTMX
-          attrs = {
-            "hx-post" => url("/action/#{button_id}"),     # HTMX POST to server
-            "hx-include" => input_selector,          # Include all inputs with x-model
-            "hx-target" => "#app-container",         # Replace app container
-            "hx-swap" => "morph:innerHTML"    # Replace inner HTML, preserve scroll
-          }
+          attrs = htmx_attrs(url("/action/#{button_id}"))
           attrs[:class] = button_class if button_class
           attrs[:style] = inline_style if inline_style
           view.button(**attrs) { label }
@@ -903,6 +871,20 @@ module StreamWeaver
         "[x-model]"  # Alpine.js selector for all bound inputs
       end
 
+      # Standard HTMX attributes for server interactions
+      #
+      # @param post_url [String] The POST endpoint
+      # @param overrides [Hash] Any attribute overrides
+      # @return [Hash] HTMX attribute hash
+      def htmx_attrs(post_url, **overrides)
+        {
+          "hx-post" => post_url,
+          "hx-include" => input_selector,
+          "hx-target" => HTMX_TARGET,
+          "hx-swap" => HTMX_SWAP
+        }.merge(overrides)
+      end
+
       # Render a term with tooltip functionality
       #
       # @param view [Phlex::HTML] The Phlex view instance
@@ -1264,11 +1246,7 @@ module StreamWeaver
             view.button(
               type: "button",
               class: "tag-btn #{selected ? 'tag-btn-selected' : ''}",
-              "hx-post" => url("/update"),
-              "hx-vals" => JSON.generate({ key.to_s => tag_value }),
-              "hx-include" => input_selector,
-              "hx-target" => "#app-container",
-              "hx-swap" => "morph:innerHTML"
+              **htmx_attrs(url("/update"), "hx-vals" => JSON.generate({ key.to_s => tag_value }))
             ) { tag }
           end
         end
@@ -1288,11 +1266,7 @@ module StreamWeaver
           view.button(
             type: "button",
             class: "btn btn-primary external-link-btn",
-            "hx-post" => url("/submit"),
-            "hx-include" => input_selector,
-            "hx-target" => "#app-container",
-            "hx-swap" => "morph:innerHTML",
-            "@click" => "setTimeout(() => window.open('#{url}', '_blank'), 100)"
+            **htmx_attrs(url("/submit"), "@click" => "setTimeout(() => window.open('#{url}', '_blank'), 100)")
           ) { label }
         else
           # Just open URL, no form submit
@@ -1376,10 +1350,7 @@ module StreamWeaver
               view.button(
                 type: "button",
                 class: "btn btn-primary",
-                "hx-post" => url("/form/#{name}"),
-                "hx-include" => "[name^='#{name}[']",
-                "hx-target" => "#app-container",
-                "hx-swap" => "morph:innerHTML"
+                **htmx_attrs(url("/form/#{name}"), "hx-include" => "[name^='#{name}[']")
               ) { submit_label }
             end
 
@@ -1477,7 +1448,7 @@ module StreamWeaver
                 "@click" => "activeTab = #{index}",
                 "hx-post" => url("/update"),
                 "hx-vals" => JSON.generate({ key.to_s => index }),
-                "hx-swap" => "none"
+                "hx-swap" => "none"  # Server response ignored; Alpine handles UI
               ) { tab.label }
             end
           end
@@ -1815,14 +1786,14 @@ module StreamWeaver
 
         view.div(
           class: "sw-theme-switcher #{position_class}".strip,
-          "x-data" => "{ open: false, dark: document.documentElement.classList.contains('dark') }"
+          "x-data" => theme_switcher_alpine_data(themes),
+          "x-init" => "$watch('dark', v => { document.documentElement.classList.toggle('dark', v); localStorage.setItem('sw-dark-mode', v) })"
         ) do
-          # Dark mode toggle button
           view.button(
             type: "button",
             class: "sw-dark-mode-toggle btn-ghost",
             "aria-label" => "Toggle dark mode",
-            "@click" => "dark = !dark; document.documentElement.classList.toggle('dark'); localStorage.setItem('sw-dark-mode', dark)",
+            "@click" => "dark = !dark",
             style: "padding: 0.4rem 0.6rem; margin: 0; font-size: 1.1rem; line-height: 1;"
           ) do
             view.span("x-show" => "!dark") { "\u{2600}\u{FE0F}" }
@@ -1858,7 +1829,7 @@ module StreamWeaver
                 view.button(
                   type: "button",
                   class: "sw-theme-switcher-option",
-                  "@click" => "open = false; document.body.className = document.body.className.replace(/sw-theme-\\w+/, 'sw-theme-#{theme[:id]}'); htmx.ajax('POST', '#{url("/theme/#{theme[:id]}")}', {swap:'none'})"
+                  "@click" => "switchTheme('#{theme[:id]}')"
                 ) do
                   view.span(class: "sw-theme-switcher-option-label") { theme[:label] }
                   view.span(class: "sw-theme-switcher-option-desc") { theme[:description] }
@@ -1867,6 +1838,22 @@ module StreamWeaver
             end
           end
         end
+      end
+
+      def theme_switcher_alpine_data(themes)
+        <<~JS.gsub(/\s+/, " ").strip
+          {
+            open: false,
+            dark: localStorage.getItem('sw-dark-mode') === 'true' ||
+                  (localStorage.getItem('sw-dark-mode') === null &&
+                   window.matchMedia('(prefers-color-scheme: dark)').matches),
+            switchTheme(id) {
+              this.open = false;
+              document.body.className = document.body.className.replace(/sw-theme-\\w+/, 'sw-theme-' + id);
+              htmx.ajax('POST', '#{url("/theme/")}' + id, {swap:'none'});
+            }
+          }
+        JS
       end
 
       # =========================================
@@ -2517,11 +2504,7 @@ module StreamWeaver
             view.button(
               type: "button",
               class: "sw-menu-item #{style_class}",
-              "hx-post" => url("/action/#{item_id}"),
-              "hx-include" => input_selector,
-              "hx-target" => "#app-container",
-              "hx-swap" => "morph:innerHTML",
-              "@click" => "open = false"
+              **htmx_attrs(url("/action/#{item_id}"), "@click" => "open = false")
             ) { item.label }
           else
             # No action: just close the menu
