@@ -92,6 +92,8 @@ hstack spacing: :md do
   button "Cancel", id: "btn_cancel", style: :secondary
   button "Preview Changes", id: "btn_preview", variant: "primary"
 end
+
+canvas_continue message: "Loading preview..."
 RUBY
 
   result=$(streamweaver canvas-wait "$SESSION" 2>/dev/null)
@@ -198,6 +200,8 @@ hstack spacing: :md do
   button "Go Back", id: "btn_back", style: :secondary
   button "Apply Fixes", id: "btn_apply", variant: "primary"
 end
+
+canvas_continue message: "Applying fixes..."
 RUBY
 
   result=$(streamweaver canvas-wait "$SESSION" 2>/dev/null)

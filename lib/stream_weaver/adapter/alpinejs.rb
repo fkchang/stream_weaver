@@ -1815,8 +1815,20 @@ module StreamWeaver
 
         view.div(
           class: "sw-theme-switcher #{position_class}".strip,
-          "x-data" => "{ open: false }"
+          "x-data" => "{ open: false, dark: document.documentElement.classList.contains('dark') }"
         ) do
+          # Dark mode toggle button
+          view.button(
+            type: "button",
+            class: "sw-dark-mode-toggle btn-ghost",
+            "aria-label" => "Toggle dark mode",
+            "@click" => "dark = !dark; document.documentElement.classList.toggle('dark'); localStorage.setItem('sw-dark-mode', dark)",
+            style: "padding: 0.4rem 0.6rem; margin: 0; font-size: 1.1rem; line-height: 1;"
+          ) do
+            view.span("x-show" => "!dark") { "\u{2600}\u{FE0F}" }
+            view.span("x-show" => "dark") { "\u{1F319}" }
+          end
+
           if component.show_label
             view.span(class: "sw-theme-switcher-label") { "Theme:" }
           end

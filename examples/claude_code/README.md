@@ -24,6 +24,16 @@ cd verification_flow && claude
 # /verify
 ```
 
+### [tutorial/](tutorial/)
+**StreamWeaver Canvas Tutorial** - Freeform, conversational learning.
+
+Unlike the standalone `tutorial.rb`, this is Claude-guided exploration. Ask questions naturally, see code + rendered output, iterate with modifications. No fixed order.
+
+```bash
+cd tutorial && claude
+# /learn
+```
+
 ## Architecture
 
 All examples follow the same pattern:

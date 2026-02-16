@@ -17,6 +17,7 @@ require_relative '../../lib/stream_weaver'
 LAYOUT = (ARGV[0] || 'wide').to_sym  # Pass layout as argument: ruby style_showcase.rb fluid
 
 StreamWeaver.app "Style Showcase", layout: LAYOUT do
+  theme_switcher position: :inline
   header1 "StreamWeaver Style Showcase"
   md "**Current layout: `#{LAYOUT}`**"
   md "Options: `default` (900px) | `wide` (1100px) | `full` (1400px) | `fluid` (100%)"
