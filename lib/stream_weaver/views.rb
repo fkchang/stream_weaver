@@ -61,6 +61,95 @@ module StreamWeaver
             style do
               raw(safe(<<~CSS))
                 /* ===========================================
+                   shadcn Token Layer
+                   Bridge: tokens fall back to --sw-* vars,
+                   so register_theme still works.
+                   =========================================== */
+                :root {
+                  --background: var(--sw-color-bg, oklch(1 0 0));
+                  --foreground: var(--sw-color-text, oklch(0.145 0 0));
+                  --card: var(--sw-color-bg-card, oklch(1 0 0));
+                  --card-foreground: var(--sw-color-text, oklch(0.145 0 0));
+                  --popover: var(--sw-color-bg-card, oklch(1 0 0));
+                  --popover-foreground: var(--sw-color-text, oklch(0.145 0 0));
+                  --primary: var(--sw-color-primary, oklch(0.205 0 0));
+                  --primary-foreground: oklch(0.985 0 0);
+                  --secondary: var(--sw-color-secondary, oklch(0.97 0 0));
+                  --secondary-foreground: oklch(0.205 0 0);
+                  --muted: var(--sw-color-bg-elevated, oklch(0.97 0 0));
+                  --muted-foreground: var(--sw-color-text-muted, oklch(0.556 0 0));
+                  --accent: var(--sw-color-accent, oklch(0.97 0 0));
+                  --accent-foreground: oklch(0.205 0 0);
+                  --destructive: oklch(0.577 0.245 27.325);
+                  --destructive-foreground: #fff;
+                  --border: var(--sw-color-border, oklch(0.922 0 0));
+                  --input: var(--sw-color-border, oklch(0.922 0 0));
+                  --ring: oklch(0.708 0 0);
+                  --radius: var(--sw-radius-md, 0.5rem);
+                  --warning: hsl(38 92% 50%);
+                  --warning-foreground: #fff;
+                  --success: hsl(142 71% 45%);
+                  --success-foreground: #fff;
+                  --info: hsl(217 91% 60%);
+                  --info-foreground: #fff;
+                }
+
+                .dark {
+                  --background: oklch(0.145 0 0);
+                  --foreground: oklch(0.985 0 0);
+                  --card: oklch(0.205 0 0);
+                  --card-foreground: oklch(0.985 0 0);
+                  --popover: oklch(0.205 0 0);
+                  --popover-foreground: oklch(0.985 0 0);
+                  --primary: oklch(0.922 0 0);
+                  --primary-foreground: oklch(0.205 0 0);
+                  --secondary: oklch(0.269 0 0);
+                  --secondary-foreground: oklch(0.985 0 0);
+                  --muted: oklch(0.269 0 0);
+                  --muted-foreground: oklch(0.708 0 0);
+                  --accent: oklch(0.269 0 0);
+                  --accent-foreground: oklch(0.985 0 0);
+                  --destructive: oklch(0.704 0.191 22.216);
+                  --destructive-foreground: oklch(0.985 0 0);
+                  --border: oklch(1 0 0 / 10%);
+                  --input: oklch(1 0 0 / 15%);
+                  --ring: oklch(0.556 0 0);
+                  --warning: hsl(38 92% 60%);
+                  --warning-foreground: hsl(38 92% 10%);
+                  --success: hsl(142 71% 55%);
+                  --success-foreground: hsl(142 71% 10%);
+                  --info: hsl(217 91% 70%);
+                  --info-foreground: hsl(217 91% 10%);
+                }
+
+                /* Dark mode: override sw-color-* tokens to match shadcn dark values.
+                   html.dark body beats body.sw-theme-* specificity (0-1-2 vs 0-1-1). */
+                html.dark body {
+                  --sw-color-bg: oklch(0.145 0 0);
+                  --sw-color-bg-card: oklch(0.205 0 0);
+                  --sw-color-bg-elevated: oklch(0.269 0 0);
+                  --sw-color-text: oklch(0.985 0 0);
+                  --sw-color-text-muted: oklch(0.708 0 0);
+                  --sw-color-text-light: oklch(0.556 0 0);
+                  --sw-color-border: oklch(1 0 0 / 10%);
+                  --sw-color-border-strong: oklch(1 0 0 / 15%);
+                  --sw-color-border-focus: var(--sw-color-primary);
+                  --sw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+                  --sw-shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+                  --sw-shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
+                  --sw-shadow-xl: 0 12px 24px rgba(0, 0, 0, 0.6);
+                  --sw-shadow-inner: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+                }
+
+                /* shadcn base resets */
+                body { background-color: var(--background); color: var(--foreground); }
+
+                .sw-focus-ring:focus-visible {
+                  outline: none;
+                  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+                }
+
+                /* ===========================================
                    StreamWeaver CSS - Multi-Theme System
                    =========================================== */
 
@@ -455,13 +544,13 @@ module StreamWeaver
                 input[type="text"], input[type="email"], select, textarea {
                   padding: var(--sw-spacing-md);
                   margin: var(--sw-spacing-sm) 0 var(--sw-spacing-md) 0;
-                  border: 1px solid var(--sw-color-border);
-                  border-radius: var(--sw-radius-md);
+                  border: 1px solid var(--input);
+                  border-radius: var(--radius);
                   font-size: var(--sw-font-size-base);
                   font-family: var(--sw-font-body);
                   width: 100%;
-                  background: var(--sw-color-bg-card);
-                  color: var(--sw-color-text);
+                  background: var(--background);
+                  color: var(--foreground);
                   box-shadow: var(--sw-shadow-inner);
                   transition:
                     border-color var(--sw-transition),
@@ -475,15 +564,14 @@ module StreamWeaver
 
                 input[type="text"]:focus, input[type="email"]:focus, select:focus, textarea:focus {
                   outline: none;
-                  border-color: var(--sw-color-primary);
+                  border-color: var(--ring);
                   box-shadow:
-                    var(--sw-shadow-inner),
-                    0 0 0 3px var(--sw-color-primary-glow);
-                  background: #fff;
+                    0 0 0 2px var(--background),
+                    0 0 0 4px var(--ring);
                 }
 
                 input[type="text"]::placeholder, input[type="email"]::placeholder, textarea::placeholder {
-                  color: var(--sw-color-text-light);
+                  color: var(--muted-foreground);
                   font-style: italic;
                 }
 
@@ -529,12 +617,12 @@ module StreamWeaver
 
                 /* Header variants */
                 .sw-app-header-dark {
-                  background: #1a1a1a;
-                  color: #ffffff;
+                  background: var(--card);
+                  color: var(--card-foreground);
                 }
 
                 .sw-app-header-dark .sw-app-header-subtitle {
-                  color: #aaaaaa;
+                  color: var(--muted-foreground);
                 }
 
                 .sw-app-header-dark button,
@@ -586,7 +674,7 @@ module StreamWeaver
                   padding: var(--sw-spacing-sm) var(--sw-spacing-md);
                   margin: var(--sw-spacing-sm) var(--sw-spacing-sm) var(--sw-spacing-sm) 0;
                   border: none;
-                  border-radius: var(--sw-radius-md);
+                  border-radius: var(--radius);
                   font-family: var(--sw-font-body);
                   font-size: var(--sw-font-size-sm);
                   font-weight: 600;
@@ -595,6 +683,7 @@ module StreamWeaver
                   white-space: nowrap;
                   transition:
                     background var(--sw-transition),
+                    color var(--sw-transition),
                     transform var(--sw-transition-fast),
                     box-shadow var(--sw-transition);
                   position: relative;
@@ -609,49 +698,67 @@ module StreamWeaver
                   transform: translateY(0) scale(0.98);
                 }
 
-                /* Primary - Terracotta with depth */
+                /* Primary */
                 .btn-primary {
-                  background: linear-gradient(
-                    135deg,
-                    var(--sw-color-primary) 0%,
-                    var(--sw-color-primary-hover) 100%
-                  );
-                  color: white;
-                  box-shadow:
-                    0 2px 4px rgba(194, 65, 12, 0.2),
-                    0 4px 8px rgba(194, 65, 12, 0.15);
+                  background: var(--primary);
+                  color: var(--primary-foreground);
+                  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
                 }
 
                 .btn-primary:hover {
-                  background: linear-gradient(
-                    135deg,
-                    #d9520f 0%,
-                    var(--sw-color-primary-hover) 100%
-                  );
-                  box-shadow:
-                    0 4px 8px rgba(194, 65, 12, 0.25),
-                    0 8px 16px rgba(194, 65, 12, 0.2);
+                  opacity: 0.9;
                 }
 
-                /* Secondary - Slate with subtle style */
+                /* Secondary */
                 .btn-secondary {
-                  background: var(--sw-color-bg-elevated);
-                  color: var(--sw-color-text);
-                  border: 1px solid var(--sw-color-border-strong);
-                  box-shadow: var(--sw-shadow-sm);
+                  background: var(--secondary);
+                  color: var(--secondary-foreground);
+                  border: 1px solid var(--border);
                 }
 
                 .btn-secondary:hover {
-                  background: var(--sw-color-border);
-                  border-color: var(--sw-color-text-light);
+                  opacity: 0.85;
+                }
+
+                /* Destructive */
+                .btn-destructive {
+                  background: var(--destructive);
+                  color: var(--destructive-foreground);
+                }
+
+                .btn-destructive:hover {
+                  opacity: 0.9;
+                }
+
+                /* Outline */
+                .btn-outline {
+                  background: transparent;
+                  color: var(--foreground);
+                  border: 1px solid var(--border);
+                }
+
+                .btn-outline:hover {
+                  background: var(--accent);
+                  color: var(--accent-foreground);
+                }
+
+                /* Ghost */
+                .btn-ghost {
+                  background: transparent;
+                  color: var(--foreground);
+                }
+
+                .btn-ghost:hover {
+                  background: var(--accent);
+                  color: var(--accent-foreground);
                 }
 
                 /* Button focus states */
                 button:focus-visible {
                   outline: none;
                   box-shadow:
-                    0 0 0 2px var(--sw-color-bg-card),
-                    0 0 0 4px var(--sw-color-primary);
+                    0 0 0 2px var(--background),
+                    0 0 0 4px var(--ring);
                 }
 
                 /* ===========================================
@@ -770,13 +877,14 @@ module StreamWeaver
                    Card - Clean, Elevated
                    =========================================== */
                 .card {
-                  background: var(--sw-color-bg-card);
-                  border: 1px solid var(--sw-color-border);
+                  background: var(--card);
+                  color: var(--card-foreground);
+                  border: 1px solid var(--border);
                   border-left: var(--sw-card-border-left);
-                  border-radius: var(--sw-radius-md);
+                  border-radius: calc(var(--radius) + 4px);
                   padding: var(--sw-spacing-lg);
                   margin-bottom: var(--sw-spacing-md);
-                  box-shadow: var(--sw-shadow-sm);
+                  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
                   overflow-x: auto;
                   word-wrap: break-word;
                   overflow-wrap: break-word;
@@ -786,14 +894,14 @@ module StreamWeaver
                 .card h3 {
                   margin-top: 0;
                   margin-bottom: var(--sw-spacing-sm);
-                  color: var(--sw-color-text);
+                  color: var(--card-foreground);
                 }
 
                 /* Card sub-components */
                 .card-header {
-                  padding-bottom: var(--sw-spacing-sm);
-                  margin-bottom: var(--sw-spacing-md);
-                  border-bottom: 1px solid var(--sw-color-border);
+                  padding: 1.5rem 1.5rem 0;
+                  margin-bottom: 0;
+                  border-bottom: none;
                 }
 
                 .card-header h1, .card-header h2, .card-header h3,
@@ -802,7 +910,8 @@ module StreamWeaver
                 }
 
                 .card-body {
-                  /* Default body styling - inherits card padding */
+                  padding: 1.5rem;
+                  padding-top: 0;
                 }
 
                 .card-body > *:first-child {
@@ -814,9 +923,9 @@ module StreamWeaver
                 }
 
                 .card-footer {
-                  padding-top: var(--sw-spacing-sm);
-                  margin-top: var(--sw-spacing-md);
-                  border-top: 1px solid var(--sw-color-border);
+                  padding: 0 1.5rem 1.5rem;
+                  margin-top: 0;
+                  border-top: 1px solid var(--border);
                   display: flex;
                   justify-content: flex-end;
                   gap: var(--sw-spacing-sm);
@@ -893,7 +1002,7 @@ module StreamWeaver
                 .sw-tabs-list {
                   display: flex;
                   gap: var(--sw-spacing-xs);
-                  border-bottom: 2px solid var(--sw-color-border);
+                  border-bottom: 2px solid var(--border);
                   margin-bottom: var(--sw-spacing-md);
                 }
 
@@ -904,7 +1013,7 @@ module StreamWeaver
                   font-family: var(--sw-font-body);
                   font-size: var(--sw-font-size-base);
                   font-weight: 500;
-                  color: var(--sw-color-text-muted);
+                  color: var(--muted-foreground);
                   cursor: pointer;
                   /* Only transition color on hover, not border/active state - prevents flash during HTMX swaps */
                   transition: color var(--sw-transition);
@@ -914,13 +1023,14 @@ module StreamWeaver
                 }
 
                 .sw-tab-trigger:hover {
-                  color: var(--sw-color-text);
+                  color: var(--foreground);
                   transform: none;
                 }
 
                 .sw-tab-trigger.sw-tab-active {
-                  color: var(--sw-color-primary);
-                  border-bottom: 2px solid var(--sw-color-primary);
+                  color: var(--foreground);
+                  background: var(--background);
+                  border-bottom: 2px solid var(--foreground);
                 }
 
                 .sw-tab-panel {
@@ -956,18 +1066,18 @@ module StreamWeaver
 
                 .sw-tabs-soft-rounded .sw-tabs-list {
                   border-bottom: none;
-                  background: var(--sw-color-bg-elevated);
+                  background: var(--muted);
                   padding: var(--sw-spacing-xs);
                   border-radius: var(--sw-radius-lg);
                 }
 
                 .sw-tabs-soft-rounded .sw-tab-trigger {
-                  border-radius: var(--sw-radius-md);
+                  border-radius: var(--radius);
                   margin-bottom: 0;
                 }
 
                 .sw-tabs-soft-rounded .sw-tab-trigger.sw-tab-active {
-                  background: var(--sw-color-bg-card);
+                  background: var(--background);
                   box-shadow: var(--sw-shadow-sm);
                   border-bottom: none;
                 }
@@ -1037,9 +1147,10 @@ module StreamWeaver
                   min-width: 180px;
                   margin-top: var(--sw-spacing-xs);
                   padding: var(--sw-spacing-xs) 0;
-                  background: var(--sw-color-bg-card);
-                  border: 1px solid var(--sw-color-border);
-                  border-radius: var(--sw-radius-md);
+                  background: var(--popover);
+                  color: var(--popover-foreground);
+                  border: 1px solid var(--border);
+                  border-radius: var(--radius);
                   box-shadow: var(--sw-shadow-lg);
                 }
 
@@ -1060,16 +1171,17 @@ module StreamWeaver
                 }
 
                 .sw-menu-item:hover {
-                  background: var(--sw-color-bg-elevated);
+                  background: var(--accent);
+                  color: var(--accent-foreground);
                   transform: none;
                 }
 
                 .sw-menu-item-destructive {
-                  color: #dc2626;
+                  color: var(--destructive);
                 }
 
                 .sw-menu-item-destructive:hover {
-                  background: rgba(220, 38, 38, 0.1);
+                  background: color-mix(in oklch, var(--destructive) 10%, transparent);
                 }
 
                 .sw-menu-divider {
@@ -1106,7 +1218,9 @@ module StreamWeaver
                   left: 50%;
                   transform: translate(-50%, -50%);
                   z-index: 1000;
-                  background: var(--sw-color-bg-card);
+                  background: var(--popover);
+                  color: var(--popover-foreground);
+                  border: 1px solid var(--border);
                   border-radius: var(--sw-radius-lg);
                   box-shadow: var(--sw-shadow-xl);
                   max-height: 90vh;
@@ -1126,7 +1240,7 @@ module StreamWeaver
                   align-items: center;
                   justify-content: space-between;
                   padding: var(--sw-spacing-md) var(--sw-spacing-lg);
-                  border-bottom: 1px solid var(--sw-color-border);
+                  border-bottom: 1px solid var(--border);
                   flex-shrink: 0;
                 }
 
@@ -1186,8 +1300,8 @@ module StreamWeaver
                   justify-content: flex-end;
                   gap: var(--sw-spacing-sm);
                   padding: var(--sw-spacing-md) var(--sw-spacing-lg);
-                  border-top: 1px solid var(--sw-color-border);
-                  background: var(--sw-color-bg-elevated);
+                  border-top: 1px solid var(--border);
+                  background: var(--muted);
                   flex-shrink: 0;
                 }
 
@@ -1267,32 +1381,32 @@ module StreamWeaver
 
                 /* Alert variants */
                 .sw-alert-info {
-                  background: rgba(59, 130, 246, 0.1);
-                  border-color: rgba(59, 130, 246, 0.3);
-                  color: #1e40af;
+                  background: color-mix(in oklch, var(--info) 10%, transparent);
+                  border-color: color-mix(in oklch, var(--info) 30%, transparent);
+                  color: var(--info);
                 }
-                .sw-alert-info .sw-alert-icon { color: #3b82f6; }
+                .sw-alert-info .sw-alert-icon { color: var(--info); }
 
                 .sw-alert-success {
-                  background: rgba(16, 185, 129, 0.1);
-                  border-color: rgba(16, 185, 129, 0.3);
-                  color: #065f46;
+                  background: color-mix(in oklch, var(--success) 10%, transparent);
+                  border-color: color-mix(in oklch, var(--success) 30%, transparent);
+                  color: var(--success);
                 }
-                .sw-alert-success .sw-alert-icon { color: #10b981; }
+                .sw-alert-success .sw-alert-icon { color: var(--success); }
 
                 .sw-alert-warning {
-                  background: rgba(245, 158, 11, 0.1);
-                  border-color: rgba(245, 158, 11, 0.3);
-                  color: #92400e;
+                  background: color-mix(in oklch, var(--warning) 10%, transparent);
+                  border-color: color-mix(in oklch, var(--warning) 30%, transparent);
+                  color: var(--warning);
                 }
-                .sw-alert-warning .sw-alert-icon { color: #f59e0b; }
+                .sw-alert-warning .sw-alert-icon { color: var(--warning); }
 
                 .sw-alert-error {
-                  background: rgba(239, 68, 68, 0.1);
-                  border-color: rgba(239, 68, 68, 0.3);
-                  color: #991b1b;
+                  background: color-mix(in oklch, var(--destructive) 10%, transparent);
+                  border-color: color-mix(in oklch, var(--destructive) 30%, transparent);
+                  color: var(--destructive);
                 }
-                .sw-alert-error .sw-alert-icon { color: #ef4444; }
+                .sw-alert-error .sw-alert-icon { color: var(--destructive); }
 
                 /* ===========================================
                    Toast Component (Multi-toast Stack)
@@ -1324,10 +1438,11 @@ module StreamWeaver
                   min-width: 280px;
                   max-width: 420px;
                   padding: var(--sw-spacing-md);
-                  background: var(--sw-color-bg-card);
-                  border-radius: var(--sw-radius-md);
+                  background: var(--card);
+                  color: var(--card-foreground);
+                  border-radius: var(--radius);
                   box-shadow: var(--sw-shadow-xl);
-                  border: 1px solid var(--sw-color-border);
+                  border: 1px solid var(--border);
                 }
 
                 .sw-toast-icon {
@@ -1367,10 +1482,10 @@ module StreamWeaver
                 }
 
                 /* Toast variants */
-                .sw-toast-info .sw-toast-icon { color: #3b82f6; }
-                .sw-toast-success .sw-toast-icon { color: #10b981; }
-                .sw-toast-warning .sw-toast-icon { color: #f59e0b; }
-                .sw-toast-error .sw-toast-icon { color: #ef4444; }
+                .sw-toast-info .sw-toast-icon { color: var(--info); }
+                .sw-toast-success .sw-toast-icon { color: var(--success); }
+                .sw-toast-warning .sw-toast-icon { color: var(--warning); }
+                .sw-toast-error .sw-toast-icon { color: var(--destructive); }
 
                 /* Toast transitions */
                 .sw-transition-toast-enter { transition: all var(--sw-transition); }
@@ -1386,7 +1501,7 @@ module StreamWeaver
                 .sw-progress {
                   position: relative;
                   height: 8px;
-                  background: var(--sw-color-bg-elevated);
+                  background: var(--muted);
                   border-radius: var(--sw-radius-sm);
                   overflow: hidden;
                   margin: var(--sw-spacing-sm) 0;
@@ -1394,7 +1509,7 @@ module StreamWeaver
 
                 .sw-progress-bar {
                   height: 100%;
-                  background: var(--sw-color-primary);
+                  background: var(--primary);
                   border-radius: var(--sw-radius-sm);
                   transition: width 0.3s ease;
                 }
@@ -1411,9 +1526,9 @@ module StreamWeaver
                 }
 
                 /* Progress variants */
-                .sw-progress-success .sw-progress-bar { background: #10b981; }
-                .sw-progress-warning .sw-progress-bar { background: #f59e0b; }
-                .sw-progress-error .sw-progress-bar { background: #ef4444; }
+                .sw-progress-success .sw-progress-bar { background: var(--success); }
+                .sw-progress-warning .sw-progress-bar { background: var(--warning); }
+                .sw-progress-error .sw-progress-bar { background: var(--destructive); }
 
                 /* Animated progress */
                 .sw-progress-animated .sw-progress-bar {
@@ -2043,19 +2158,19 @@ module StreamWeaver
                 .sw-status-dot-lg { width: 14px; height: 14px; }
 
                 .sw-status-dot-red {
-                  background: #f85149;
-                  box-shadow: 0 0 8px rgba(248, 81, 73, 0.4);
+                  background: var(--destructive);
+                  box-shadow: 0 0 8px color-mix(in oklch, var(--destructive) 40%, transparent);
                 }
                 .sw-status-dot-yellow {
-                  background: #d29922;
-                  box-shadow: 0 0 8px rgba(210, 153, 34, 0.4);
+                  background: var(--warning);
+                  box-shadow: 0 0 8px color-mix(in oklch, var(--warning) 40%, transparent);
                 }
                 .sw-status-dot-green {
-                  background: #3fb950;
-                  box-shadow: 0 0 8px rgba(63, 185, 80, 0.4);
+                  background: var(--success);
+                  box-shadow: 0 0 8px color-mix(in oklch, var(--success) 40%, transparent);
                 }
                 .sw-status-dot-gray {
-                  background: #8b949e;
+                  background: var(--muted-foreground);
                   opacity: 0.6;
                 }
 
@@ -2083,24 +2198,24 @@ module StreamWeaver
                 .sw-badge-md { font-size: 0.75rem; padding: 0.2rem 0.5rem; }
 
                 .sw-badge-default {
-                  background: var(--sw-color-bg-elevated, #f0f0f0);
-                  color: var(--sw-color-text-muted, #666);
+                  background: var(--muted);
+                  color: var(--muted-foreground);
                 }
                 .sw-badge-danger {
-                  background: #f85149;
-                  color: white;
+                  background: var(--destructive);
+                  color: var(--destructive-foreground);
                 }
                 .sw-badge-warning {
-                  background: #d29922;
-                  color: white;
+                  background: var(--warning);
+                  color: var(--warning-foreground);
                 }
                 .sw-badge-success {
-                  background: #3fb950;
-                  color: white;
+                  background: var(--success);
+                  color: var(--success-foreground);
                 }
                 .sw-badge-info {
-                  background: #58a6ff;
-                  color: white;
+                  background: var(--info);
+                  color: var(--info-foreground);
                 }
 
                 /* Stat Display - Large number with label */
@@ -2118,7 +2233,7 @@ module StreamWeaver
                   line-height: 1.2;
                 }
 
-                .sw-stat-value-default { color: var(--sw-color-text, #111); }
+                .sw-stat-value-default { color: var(--foreground); }
                 .sw-stat-value-blue { color: #58a6ff; }
                 .sw-stat-value-purple { color: #a371f7; }
                 .sw-stat-value-green { color: #3fb950; }
@@ -2129,7 +2244,7 @@ module StreamWeaver
                   font-size: 0.65rem;
                   text-transform: uppercase;
                   letter-spacing: 0.05em;
-                  color: var(--sw-color-text-muted, #666);
+                  color: var(--muted-foreground);
                   margin-top: 0.25rem;
                 }
 
@@ -2177,7 +2292,7 @@ module StreamWeaver
                   gap: 0.5rem;
                   font-family: 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
                   font-size: 0.8rem;
-                  color: var(--sw-color-text-muted, #666);
+                  color: var(--muted-foreground);
                 }
 
                 .sw-pulse-dot {
@@ -2193,7 +2308,7 @@ module StreamWeaver
                 .sw-pulse-dot-blue { background: #58a6ff; }
 
                 .sw-pulse-label {
-                  color: var(--sw-color-text-muted, #8b949e);
+                  color: var(--muted-foreground);
                 }
 
                 /* Priority Item - Escalation-style with colored border */
@@ -2359,7 +2474,7 @@ module StreamWeaver
                   font-weight: 600;
                   text-transform: uppercase;
                   letter-spacing: 0.05em;
-                  color: var(--sw-color-text-muted, #666);
+                  color: var(--muted-foreground);
                   margin: 0;
                 }
 
@@ -2677,11 +2792,6 @@ module StreamWeaver
                   border-color: var(--sw-color-primary);
                 }
 
-                body.sw-theme-dark .card {
-                  background: var(--sw-color-bg-elevated);
-                  border-color: var(--sw-color-border);
-                }
-
                 body.sw-theme-dark .btn-primary {
                   background: var(--sw-color-primary);
                   color: white;
@@ -2728,11 +2838,19 @@ module StreamWeaver
                 body.sw-theme-dark .sw-expandable-card-body {
                   border-top-color: var(--sw-color-border);
                 }
-
-                body.sw-theme-dark .sw-sidebar-title {
-                  color: var(--sw-color-text-muted);
-                }
               CSS
+            end
+
+            # Dark mode: check localStorage / system preference, apply .dark on <html>
+            script do
+              raw(safe(<<~JS))
+                (function() {
+                  var stored = localStorage.getItem('sw-dark-mode');
+                  if (stored === 'true' || (stored === null && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    document.documentElement.classList.add('dark');
+                  }
+                })();
+              JS
             end
           end
           body(class: body_classes) do
