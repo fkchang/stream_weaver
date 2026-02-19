@@ -853,10 +853,12 @@ module StreamWeaver
                 var el = document.querySelector(msg.target);
                 if (!el) return;
                 switch(msg.action) {
-                  case 'replace': el.innerHTML = msg.html; break;
-                  case 'append':  el.insertAdjacentHTML('beforeend', msg.html); break;
-                  case 'prepend': el.insertAdjacentHTML('afterbegin', msg.html); break;
-                  case 'remove':  el.remove(); break;
+                  case 'replace':      el.innerHTML = msg.html; break;
+                  case 'append':       el.insertAdjacentHTML('beforeend', msg.html); break;
+                  case 'prepend':      el.insertAdjacentHTML('afterbegin', msg.html); break;
+                  case 'remove':       el.remove(); break;
+                  case 'add_class':    el.classList.add(msg.value); break;
+                  case 'remove_class': el.classList.remove(msg.value); break;
                 }
               };
             })();
@@ -2401,8 +2403,11 @@ module StreamWeaver
         expanded = state[component.key] || component.initially_expanded
 
         css_classes = ["sw-expandable-card"]
+        css_classes << component.extra_classes if component.extra_classes
+        card_id = "card-#{component.key}"
 
         view.div(
+          id: card_id,
           class: css_classes.join(" "),
           "x-data" => "{ expanded: #{expanded} }"
         ) do

@@ -49,8 +49,8 @@ module StreamWeaver
               script(src: "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js")
             end
 
-            # SSE client for streaming push updates (when app has stream block)
-            if @app.stream_block && @adapter.respond_to?(:render_sse_client)
+            # SSE client for streaming push updates (when app has stream block or timers)
+            if (@app.stream_block || @app.has_timers?) && @adapter.respond_to?(:render_sse_client)
               @adapter.render_sse_client(self)
             end
 
@@ -2837,6 +2837,16 @@ module StreamWeaver
 
                 body.sw-theme-dark .sw-expandable-card-body {
                   border-top-color: var(--sw-color-border);
+                }
+
+                /* Expandable card highlight (e.g. current timeline slot) */
+                .sw-expandable-card--highlight {
+                  border-left: 4px solid var(--sw-color-primary, #3b82f6);
+                  background: color-mix(in srgb, var(--sw-color-primary, #3b82f6) 5%, var(--sw-color-bg-elevated, #f5f5f5));
+                }
+
+                body.sw-theme-dark .sw-expandable-card--highlight {
+                  background: color-mix(in srgb, var(--sw-color-primary, #3b82f6) 8%, var(--sw-color-bg-elevated));
                 }
               CSS
             end

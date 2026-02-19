@@ -24,6 +24,14 @@ module StreamWeaver
       push_update(action: :remove, target: target, html: "")
     end
 
+    def add_class(target, class_name)
+      push_update(action: :add_class, target: target, value: class_name)
+    end
+
+    def remove_class(target, class_name)
+      push_update(action: :remove_class, target: target, value: class_name)
+    end
+
     private
 
     def render_components(&block)

@@ -524,27 +524,52 @@ module StreamWeaver
     end
 
     # Start the internal stream thread if the app has a stream block.
+    # Start timer thread if the app has periodic timers.
     # Assumes rebuild_with_state has already been called to evaluate the DSL.
     def self.start_stream_thread
       stream_block = settings.streamlit_app.stream_block
-      return unless stream_block
+      timers = settings.streamlit_app.timers
 
       # Capture real stderr before it gets suppressed
       real_stderr = $stderr
 
-      Thread.new do
-        # Wait for at least one SSE subscriber before pushing
-        sleep 0.1 until settings.streamer.connection_count > 0
+      if stream_block
+        Thread.new do
+          # Wait for at least one SSE subscriber before pushing
+          sleep 0.1 until settings.streamer.connection_count > 0
 
-        retries = 0
-        begin
-          stream_block.call(settings.streamer)
-        rescue => e
-          retries += 1
-          real_stderr.puts "[StreamWeaver] Stream thread error (attempt #{retries}): #{e.class}: #{e.message}"
-          real_stderr.puts e.backtrace.first(5).join("\n")
-          sleep [2 ** retries, 30].min
-          retry
+          retries = 0
+          begin
+            stream_block.call(settings.streamer)
+          rescue => e
+            retries += 1
+            real_stderr.puts "[StreamWeaver] Stream thread error (attempt #{retries}): #{e.class}: #{e.message}"
+            real_stderr.puts e.backtrace.first(5).join("\n")
+            sleep [2 ** retries, 30].min
+            retry
+          end
+        end
+      end
+
+      if timers.any?
+        Thread.new do
+          # Wait for at least one SSE subscriber before firing timers
+          sleep 0.1 until settings.streamer.connection_count > 0
+
+          loop do
+            now = Time.now.to_f
+            timers.each do |timer|
+              next if timer[:last_run] && (now - timer[:last_run]) < timer[:interval]
+              timer[:last_run] = now
+              begin
+                timer[:block].call(settings.streamer)
+              rescue => e
+                real_stderr.puts "[StreamWeaver] Timer error: #{e.class}: #{e.message}"
+                real_stderr.puts e.backtrace.first(5).join("\n")
+              end
+            end
+            sleep 1
+          end
         end
       end
     end
@@ -585,6 +610,9 @@ module StreamWeaver
       puts "  📁  ~/.streamweaver/apps/#{sanitized}.port"
       if settings.streamlit_app.stream_block
         puts "  📡  SSE streaming enabled (GET /stream, POST /stream/push)"
+      end
+      if settings.streamlit_app.has_timers?
+        puts "  ⏱️   #{settings.streamlit_app.timers.size} periodic timer(s) registered"
       end
       puts ""
       puts "  Press Ctrl+C to stop"

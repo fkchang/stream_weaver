@@ -14,7 +14,7 @@ module StreamWeaver
   class Streamer
     include Pushable
 
-    ACTIONS = %i[replace append prepend remove].freeze
+    ACTIONS = %i[replace append prepend remove add_class remove_class].freeze
 
     def initialize
       @connections = []
@@ -44,8 +44,11 @@ module StreamWeaver
 
     private
 
-    def push_update(action:, target:, html:)
-      data = { action: action, target: target, html: html }.to_json
+    def push_update(action:, target:, html: nil, value: nil)
+      payload = { action: action, target: target }
+      payload[:html] = html if html
+      payload[:value] = value if value
+      data = payload.to_json
       @mutex.synchronize do
         dead = []
         @connections.each do |conn|

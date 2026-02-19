@@ -1585,7 +1585,7 @@ module StreamWeaver
     # ExpandableCard component for cards that expand/collapse
     # Displays header always, body toggles on click
     class ExpandableCard < Base
-      attr_reader :key, :title, :subtitle, :badge_text, :badge_variant, :status, :initially_expanded
+      attr_reader :key, :title, :subtitle, :badge_text, :badge_variant, :status, :initially_expanded, :extra_classes
       attr_accessor :children, :header_children
 
       # @param key [Symbol] State key for expanded state
@@ -1595,9 +1595,10 @@ module StreamWeaver
       # @param badge_variant [Symbol] Badge color variant
       # @param status [Symbol, nil] Status indicator color (:red, :yellow, :green, :gray)
       # @param initially_expanded [Boolean] Whether card starts expanded (default: false)
+      # @param extra_classes [String, nil] Additional CSS classes for the card container
       # @param options [Hash] Additional options
       def initialize(key:, title:, subtitle: nil, badge_text: nil, badge_variant: :default,
-                     status: nil, initially_expanded: false, **options)
+                     status: nil, initially_expanded: false, extra_classes: nil, **options)
         @key = key
         @title = title
         @subtitle = subtitle
@@ -1605,6 +1606,7 @@ module StreamWeaver
         @badge_variant = badge_variant
         @status = status
         @initially_expanded = initially_expanded
+        @extra_classes = extra_classes
         @options = options
         @children = []
         @header_children = []

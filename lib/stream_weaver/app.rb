@@ -13,7 +13,7 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :stream_block, :transient_keys
+    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :stream_block, :timers, :transient_keys
 
     def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], &block)
       @title = title
@@ -28,6 +28,7 @@ module StreamWeaver
       @scripts = scripts
       @stylesheets = stylesheets
       @transient_keys = Set.new
+      @timers = []
 
       components.each { |mod| singleton_class.include(mod) }
     end
@@ -53,6 +54,7 @@ module StreamWeaver
       @components = []
       @button_counter = 0
       instance_eval(&@block)
+      @timers_frozen = true
     end
 
     # Find a component by its key (for callback execution)
@@ -484,6 +486,15 @@ module StreamWeaver
 
     def stream(&block)
       @stream_block ||= block
+    end
+
+    def every(seconds, &block)
+      return if @timers_frozen
+      @timers << { interval: seconds, block: block, last_run: nil }
+    end
+
+    def has_timers?
+      @timers.any?
     end
 
     # =========================================

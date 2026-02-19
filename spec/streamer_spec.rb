@@ -125,7 +125,7 @@ RSpec.describe StreamWeaver::Streamer do
 
   describe "ACTIONS constant" do
     it "includes all public action methods" do
-      expect(described_class::ACTIONS).to contain_exactly(:replace, :append, :prepend, :remove)
+      expect(described_class::ACTIONS).to contain_exactly(:replace, :append, :prepend, :remove, :add_class, :remove_class)
     end
   end
 end
