@@ -71,9 +71,10 @@ module StreamWeaver
         # Filter state for session storage - remove large/transient keys
         # Session cookies have ~4KB limit, so we can't store file contents, etc.
         def session_safe_state(state)
-          transient_keys = [:code_content, :current_file_path, :examples]
+          hardcoded_transient = [:code_content, :current_file_path, :examples]
+          app_transient = settings.streamlit_app.transient_keys
           state.reject do |k, _|
-            transient_keys.include?(k) || k.to_s.end_with?('_edited_code')
+            hardcoded_transient.include?(k) || app_transient.include?(k) || k.to_s.end_with?('_edited_code')
           end
         end
 
@@ -528,13 +529,23 @@ module StreamWeaver
       stream_block = settings.streamlit_app.stream_block
       return unless stream_block
 
+      # Capture real stderr before it gets suppressed
+      real_stderr = $stderr
+
       Thread.new do
         # Wait for at least one SSE subscriber before pushing
         sleep 0.1 until settings.streamer.connection_count > 0
-        stream_block.call(settings.streamer)
-      rescue => e
-        $stderr.puts "Stream thread error: #{e.class}: #{e.message}"
-        $stderr.puts e.backtrace.first(5).join("\n")
+
+        retries = 0
+        begin
+          stream_block.call(settings.streamer)
+        rescue => e
+          retries += 1
+          real_stderr.puts "[StreamWeaver] Stream thread error (attempt #{retries}): #{e.class}: #{e.message}"
+          real_stderr.puts e.backtrace.first(5).join("\n")
+          sleep [2 ** retries, 30].min
+          retry
+        end
       end
     end
 

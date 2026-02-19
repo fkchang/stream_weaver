@@ -81,6 +81,7 @@ end
 ```ruby
 text_field :name, placeholder: "Name"
 text_area :bio, rows: 5
+text_area :paste, transient: true           # excluded from session cookie (for large paste areas)
 checkbox :key, "Label"                      # state[:key] = true/false
 select :role, ["Admin", "User"], default: "User"
 radio_group :choice, ["A", "B", "C"]

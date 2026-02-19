@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'digest'
+require 'set'
 
 module StreamWeaver
   # Main app class that holds the DSL block and manages the component tree
@@ -12,7 +13,7 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :stream_block
+    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :stream_block, :transient_keys
 
     def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], &block)
       @title = title
@@ -26,6 +27,7 @@ module StreamWeaver
       @button_counter = 0
       @scripts = scripts
       @stylesheets = stylesheets
+      @transient_keys = Set.new
 
       components.each { |mod| singleton_class.include(mod) }
     end
@@ -200,11 +202,13 @@ module StreamWeaver
     # =========================================
 
     def text_field(key, **options)
+      @transient_keys << key if options.delete(:transient)
       initialize_form_state(key, options, options[:default] || "")
       @components << Components::TextField.new(key, **options)
     end
 
     def text_area(key, **options)
+      @transient_keys << key if options.delete(:transient)
       initialize_form_state(key, options, options[:default] || "")
       @components << Components::TextArea.new(key, **options)
     end
