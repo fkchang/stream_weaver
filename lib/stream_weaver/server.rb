@@ -615,7 +615,7 @@ module StreamWeaver
         puts "  ⏱️   #{settings.streamlit_app.timers.size} periodic timer(s) registered"
       end
       puts ""
-      puts "  Press Ctrl+C to stop"
+      puts "  Press Ctrl+C to stop (may take a few seconds to drain SSE connections)"
       puts ""
 
       open_browser(url) if auto_open
