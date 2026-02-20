@@ -2,6 +2,16 @@
 
 This example demonstrates how to run StreamWeaver apps with [Puma-dev](https://github.com/puma/puma-dev), which provides memorable URLs like `http://myapp.test` for your local development.
 
+## Quick Comparison
+
+| Feature | Standalone (`ruby app.rb`) | Puma-dev (`config.ru`) |
+|---------|----------------------------|------------------------|
+| **Start command** | `ruby app.rb` | `puma-dev link` (once) |
+| **URL** | `http://localhost:4567` (auto-port) | `http://myapp.test` |
+| **Browser** | Opens automatically | Manual (on-demand) |
+| **Multiple apps** | Need separate terminals | All available via `.test` URLs |
+| **Best for** | Quick scripts, one-offs | Development, multiple apps |
+
 ## Why Use Puma-dev?
 
 - **Memorable URLs**: Access your app at `http://[directory-name].test` instead of remembering port numbers
@@ -104,3 +114,11 @@ To run an existing StreamWeaver app with Puma-dev:
 
 **Want both modes?**
 Keep your original `app.rb` with `App.run!` for standalone mode, and create a separate `config.ru` with `run App` for Puma-dev mode.
+
+## Files in This Example
+
+- **`config.ru`** - Puma-dev/Rack configuration (use with `puma-dev link`)
+- **`standalone_app.rb`** - Traditional standalone mode (use with `ruby standalone_app.rb`)
+- **`README.md`** - This file
+
+Try both to see the difference!
