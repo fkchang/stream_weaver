@@ -572,7 +572,7 @@ module StreamWeaver
 
     # Resolve host and port from options, env vars, or defaults
     def self.resolve_host_and_port(options)
-      port = options[:port] || ENV['STREAMWEAVER_PORT']&.to_i || find_available_port
+      port = options[:port] || ENV['STREAMWEAVER_PORT']&.to_i || ENV['PORT']&.to_i || find_available_port
       host = options[:host] || ENV['STREAMWEAVER_HOST'] || '127.0.0.1'
       [host, port]
     end
@@ -659,10 +659,10 @@ module StreamWeaver
     # @param options [Hash] Options
     # @option options [Integer] :port Port number (default: auto-detect, or STREAMWEAVER_PORT env var)
     # @option options [String] :host Host to bind (default: '127.0.0.1', or STREAMWEAVER_HOST env var)
-    # @option options [Boolean] :open_browser Auto-open browser (default: true)
+    # @option options [Boolean] :open_browser Auto-open browser (default: true, but false when PORT env var is set)
     def self.run!(options = {})
       host, port = resolve_host_and_port(options)
-      auto_open = options.fetch(:open_browser, true)
+      auto_open = options.fetch(:open_browser, !ENV['PORT'])
       @reset_state_pending = ARGV.delete('--reset') ? true : false
 
       configure_server!(host, port)

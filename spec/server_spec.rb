@@ -512,4 +512,65 @@ RSpec.describe "StreamWeaver Server" do
       expect(conn.string).to include("<b>live</b>")
     end
   end
+
+  describe "Port resolution and browser opening" do
+    describe ".resolve_host_and_port" do
+      it "uses explicit port option when provided" do
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port(port: 8080)
+        expect(port).to eq(8080)
+      end
+
+      it "uses STREAMWEAVER_PORT when no explicit port" do
+        ENV['STREAMWEAVER_PORT'] = '9090'
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port({})
+        expect(port).to eq(9090)
+      ensure
+        ENV.delete('STREAMWEAVER_PORT')
+      end
+
+      it "uses PORT env var when STREAMWEAVER_PORT not set" do
+        ENV['PORT'] = '3000'
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port({})
+        expect(port).to eq(3000)
+      ensure
+        ENV.delete('PORT')
+      end
+
+      it "prefers STREAMWEAVER_PORT over PORT" do
+        ENV['STREAMWEAVER_PORT'] = '9090'
+        ENV['PORT'] = '3000'
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port({})
+        expect(port).to eq(9090)
+      ensure
+        ENV.delete('STREAMWEAVER_PORT')
+        ENV.delete('PORT')
+      end
+
+      it "auto-detects port when no env vars set" do
+        ENV.delete('STREAMWEAVER_PORT')
+        ENV.delete('PORT')
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port({})
+        expect(port).to be >= 4567
+      end
+
+      it "uses explicit host option when provided" do
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port(host: '0.0.0.0')
+        expect(host).to eq('0.0.0.0')
+      end
+
+      it "uses STREAMWEAVER_HOST when no explicit host" do
+        ENV['STREAMWEAVER_HOST'] = '192.168.1.1'
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port({})
+        expect(host).to eq('192.168.1.1')
+      ensure
+        ENV.delete('STREAMWEAVER_HOST')
+      end
+
+      it "defaults to 127.0.0.1 when no host specified" do
+        ENV.delete('STREAMWEAVER_HOST')
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port({})
+        expect(host).to eq('127.0.0.1')
+      end
+    end
+  end
 end
