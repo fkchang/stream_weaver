@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Puma-dev support** - Run StreamWeaver apps with memorable URLs like `http://myapp.test`:
+  - Detects `PORT` environment variable (set by Puma-dev and PaaS platforms)
+  - Skips auto-browser opening when `PORT` is set for on-demand access
+  - Provides `config.ru` example in `examples/puma_dev/`
+  - See [examples/puma_dev/README.md](examples/puma_dev/README.md) for setup guide
+
 ### Fixed
 - **Puma thread pool exhaustion** - SSE streaming apps could hang when opening multiple browser tabs; increased default Puma thread pool from 5 to 16 to accommodate long-lived SSE connections
 - **Canvas-push error feedback** - DSL errors now reported to stderr with exit code 1, enabling Claude to see and fix syntax errors
