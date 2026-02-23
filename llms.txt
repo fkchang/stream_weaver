@@ -246,7 +246,11 @@ app "My App" do
   # ...
 end.run!
 ```
-Server runs until Ctrl+C. State persists in session.
+Server runs until Ctrl+C. State persists in session cookies (~4KB limit).
+
+**Reset corrupted state:** `ruby my_app.rb --reset` clears the session on first page load.
+
+**Debug logging:** `SW_DEBUG=1 ruby my_app.rb` logs every request with cookie size, state size, and SSE connection counts to stderr.
 
 ### Remote/Mobile Access (Tailscale, LAN)
 

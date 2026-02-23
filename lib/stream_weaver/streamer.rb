@@ -53,7 +53,7 @@ module StreamWeaver
         dead = []
         @connections.each do |conn|
           conn << "data: #{data}\n\n"
-        rescue IOError, Errno::EPIPE, Errno::ECONNRESET
+        rescue IOError, Errno::EPIPE, Errno::ECONNRESET, Puma::ConnectionError
           dead << conn
         end
         @connections -= dead
