@@ -31,6 +31,10 @@ module StreamWeaver
             title { @app.title }
             meta(charset: "utf-8")
             meta(name: "viewport", content: "width=device-width, initial-scale=1")
+            # Favicon (emoji or URL)
+            if (fav = @app.favicon_href)
+              link(rel: "icon", href: fav)
+            end
             # Inject adapter-specific CDN scripts using Phlex methods
             @adapter.render_cdn_scripts(self)
 
@@ -1125,6 +1129,39 @@ module StreamWeaver
                 .sw-breadcrumb-current {
                   color: var(--sw-color-text-muted);
                   font-size: var(--sw-font-size-sm);
+                }
+
+                /* ===========================================
+                   Navbar Component
+                   =========================================== */
+                .sw-navbar {
+                  display: flex;
+                  align-items: center;
+                  gap: var(--sw-spacing-xs);
+                  padding: var(--sw-spacing-xs) var(--sw-spacing-md);
+                  background: var(--sw-color-bg-elevated);
+                  border-bottom: 1px solid var(--border);
+                  margin-bottom: var(--sw-spacing-md);
+                }
+
+                .sw-navbar-item {
+                  padding: var(--sw-spacing-xs) var(--sw-spacing-sm);
+                  color: var(--sw-color-text-muted);
+                  text-decoration: none;
+                  border-radius: var(--sw-radius-sm);
+                  font-size: var(--sw-font-size-sm);
+                  transition: color var(--sw-transition), background var(--sw-transition);
+                }
+
+                .sw-navbar-item:hover {
+                  color: var(--sw-color-text);
+                  background: var(--muted);
+                }
+
+                .sw-navbar-item-active {
+                  font-weight: 600;
+                  color: var(--sw-color-text);
+                  cursor: default;
                 }
 
                 /* ===========================================

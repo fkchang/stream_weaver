@@ -307,6 +307,27 @@ breadcrumbs separator: ">" do
 end
 ```
 
+## Navbar
+
+Cross-app horizontal navigation bar. Active item renders as bold text; others as links.
+
+```ruby
+navbar do
+  nav_item "Home",     href: "/", active: true   # current page — bold, non-clickable
+  nav_item "Settings", href: "/settings"          # link
+  nav_item "Help",     href: "/help"
+end
+```
+
+## Link
+
+Inline anchor element.
+
+```ruby
+link_to "Visit docs", href: "https://example.com"
+link_to "Internal page", href: "/dashboard"
+```
+
 ## Dropdown Menu
 
 ```ruby

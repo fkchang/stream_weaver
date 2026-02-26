@@ -1543,6 +1543,26 @@ module StreamWeaver
         end
       end
 
+      def render_link(view, component, state)
+        extra_class = component.options[:class]
+        css = extra_class ? "sw-link #{extra_class}" : "sw-link"
+        view.a(href: component.href, class: css) { component.label }
+      end
+
+      def render_navbar(view, component, state)
+        view.nav(class: "sw-navbar") do
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      def render_nav_item(view, component, state)
+        if component.active?
+          view.span(class: "sw-navbar-item sw-navbar-item-active") { component.label }
+        else
+          view.a(href: component.href, class: "sw-navbar-item") { component.label }
+        end
+      end
+
       # Render a modal dialog
       #
       # @param view [Phlex::HTML] The Phlex view instance

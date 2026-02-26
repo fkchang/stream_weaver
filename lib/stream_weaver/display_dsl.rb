@@ -143,6 +143,18 @@ module StreamWeaver
       @components << Components::ExternalLinkButton.new(label, url: url, submit: submit)
     end
 
+    def link_to(label, href:, **options)
+      @components << Components::Link.new(label, href: href, **options)
+    end
+
+    def navbar(**options, &block)
+      with_container(Components::Navbar.new(**options), &block)
+    end
+
+    def nav_item(label, href: nil, active: false, **options)
+      @components << Components::NavItem.new(label, href: href, active: active, **options)
+    end
+
     private
 
     def with_container(component, &block)

@@ -1006,6 +1006,55 @@ module StreamWeaver
     end
 
     # =========================================
+    # Link / Navbar / NavItem Components
+    # =========================================
+
+    class Link < Base
+      attr_reader :label, :href, :options
+
+      def initialize(label, href:, **options)
+        @label = label
+        @href = href
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_link(view, self, state)
+      end
+    end
+
+    class Navbar < Base
+      attr_accessor :children
+      attr_reader :options
+
+      def initialize(**options)
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_navbar(view, self, state)
+      end
+    end
+
+    class NavItem < Base
+      attr_reader :label, :href, :options
+
+      def initialize(label, href: nil, active: false, **options)
+        @label = label
+        @href = href
+        @active = active
+        @options = options
+      end
+
+      def active? = @active
+
+      def render(view, state)
+        view.adapter.render_nav_item(view, self, state)
+      end
+    end
+
+    # =========================================
     # Modal Components
     # =========================================
 
