@@ -13,7 +13,7 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :stream_block, :timers, :transient_keys
+    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :stream_block, :timers, :transient_keys, :favicon_value
 
     def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], &block)
       @title = title
@@ -29,6 +29,7 @@ module StreamWeaver
       @stylesheets = stylesheets
       @transient_keys = Set.new
       @timers = []
+      @favicon_value = nil
 
       components.each { |mod| singleton_class.include(mod) }
     end
@@ -497,6 +498,25 @@ module StreamWeaver
       @timers.any?
     end
 
+    # Set favicon — accepts a URL string or a single emoji character
+    # Emoji example: favicon "🔥"
+    # URL example: favicon "https://example.com/icon.png"
+    def favicon(value)
+      @favicon_value = value
+    end
+
+    # Returns the favicon as an href suitable for <link rel="icon">
+    # Converts emoji to SVG data URI, file paths to base64 data URI; passes URLs through unchanged
+    def favicon_href
+      return nil unless @favicon_value
+      @_favicon_href_cache ||= build_favicon_href
+    end
+
+    FAVICON_MIME_TYPES = {
+      'ico' => 'image/x-icon', 'png' => 'image/png', 'svg' => 'image/svg+xml',
+      'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'gif' => 'image/gif', 'webp' => 'image/webp'
+    }.freeze
+
     # =========================================
     # Layout components (Cabinet Control style)
     # =========================================
@@ -557,6 +577,19 @@ module StreamWeaver
     end
 
     private
+
+    def build_favicon_href
+      v = @favicon_value
+      if v.match?(/\A\p{Emoji_Presentation}\z/) || v.match?(/\A[\p{So}\p{Sk}]\z/)
+        "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>#{v}</text></svg>"
+      elsif File.exist?(v)
+        require 'base64'
+        mime = FAVICON_MIME_TYPES[File.extname(v).delete('.').downcase] || 'image/png'
+        "data:#{mime};base64,#{Base64.strict_encode64(File.binread(v))}"
+      else
+        v
+      end
+    end
 
     # Captures children then appends the component (for item, column patterns)
     def capture_children_then_append(component, &block)
