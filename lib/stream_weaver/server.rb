@@ -142,6 +142,13 @@ module StreamWeaver
         end
       end
 
+      # Suppress browser's automatic /favicon.ico request (the real favicon
+      # is served via <link rel="icon"> in the HTML head)
+      get '/favicon.ico' do
+        status 204
+        ""
+      end
+
       # Define routes
       get '/' do
         # For agentic mode, always start with fresh state
@@ -209,6 +216,26 @@ module StreamWeaver
           if button
             button.execute(state)
             session[:streamlit_state] = session_safe_state(state)
+          end
+
+          # If button callback set _result in agentic mode, signal completion
+          if is_agentic && state[:_result] && settings.respond_to?(:result_container)
+            input_keys = self.class.collect_input_keys(streamlit_app.components)
+            filtered_result = {}
+            input_keys.each { |key| filtered_result[key] = state[key] if state.key?(key) }
+            filtered_result[:_result] = state[:_result]
+            settings.result_container[:result] = filtered_result
+            settings.result_container[:ready] = true
+
+            auto_close = settings.respond_to?(:auto_close_window) && settings.auto_close_window
+            if auto_close
+              return <<~HTML
+                <html><body>
+                  <h1>Done!</h1>
+                  <script>setTimeout(function(){ window.close(); }, 500);</script>
+                </body></html>
+              HTML
+            end
           end
 
           streamlit_app.rebuild_with_state(state)
