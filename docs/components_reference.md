@@ -823,6 +823,106 @@ Options:
 - `status:` - Status dot color (`:red`, `:yellow`, `:green`)
 - `initially_expanded:` - Start expanded (default: false)
 
+## Live Streaming (SSE Timers)
+
+Push live updates to the browser without polling. The `every` DSL registers periodic timers that fire server-side and push DOM updates via Server-Sent Events.
+
+### `every(seconds)`
+
+```ruby
+app "Live", theme: :dark do
+  div id: "clock" do
+    text "..."
+  end
+
+  every(1) do |streamer|
+    streamer.replace("#clock") do
+      div id: "clock" do
+        text Time.now.strftime("%H:%M:%S")
+      end
+    end
+  end
+end.run!
+```
+
+### Streamer Actions
+
+The `streamer` object passed to `every` blocks supports:
+
+```ruby
+# Replace element content (block or string)
+streamer.replace("#target") do
+  div id: "target" do
+    stat_display value: "42", label: "COUNT", color: :green
+  end
+end
+
+# Append/prepend content
+streamer.prepend("#feed") do
+  div style: "padding:4px" do
+    text "New entry at #{Time.now}"
+  end
+end
+
+streamer.append("#log", "<p>Raw HTML also works</p>")
+
+# CSS class manipulation
+streamer.add_class("#card-cpu", "highlight")
+streamer.remove_class("#card-cpu", "highlight")
+
+# Remove element entirely
+streamer.remove("#temporary-banner")
+```
+
+### CSS Injection Pattern
+
+To inject custom CSS for class effects, use a hidden placeholder with `replace` (not `append("head")` which creates duplicates):
+
+```ruby
+div id: "custom-css", style: "display:none"
+
+every(5) do |streamer|
+  streamer.replace("#custom-css", "<style>.glow{box-shadow:0 0 12px red}</style>")
+  streamer.add_class("#card-alert", "glow")
+end
+```
+
+### Multiple Timers
+
+Multiple `every` blocks run independently. Use closure variables to share state:
+
+```ruby
+latest = { cpu: 0.0 }
+
+every(3) do |streamer|
+  latest[:cpu] = read_cpu
+  streamer.replace("#cpu-metric") { ... }
+end
+
+every(10) do |streamer|
+  if latest[:cpu] > threshold
+    streamer.prepend("#alerts") { ... }
+  end
+end
+```
+
+### Targeting `expandable_card`
+
+`expandable_card key: :foo` generates `id="card-foo"` on the outer container. Target it with `#card-foo` for class manipulation:
+
+```ruby
+expandable_card key: :server, title: "Server", status: :green do
+  div id: "server-stats" do
+    stat_display value: "\u2014", label: "LOAD"
+  end
+end
+
+every(5) do |streamer|
+  streamer.replace("#server-stats") { ... }
+  streamer.add_class("#card-server", "alert-ring") if overloaded
+end
+```
+
 ## Dark Theme
 
 Use `theme: :dark` for a dark color scheme optimized for dashboards:
