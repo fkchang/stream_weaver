@@ -876,15 +876,17 @@ module StreamWeaver
     # Tabs container component for tabbed navigation
     # Contains Tab children, manages active tab state via state key
     class Tabs < Base
-      attr_reader :key, :variant, :options
+      attr_reader :key, :variant, :lazy, :options
       attr_accessor :children
 
       # @param key [Symbol] The state key for active tab index
       # @param variant [Symbol] Visual variant (:line, :enclosed, :soft-rounded)
+      # @param lazy [Boolean] When true, only render active tab content and morph on switch
       # @param options [Hash] Additional options
-      def initialize(key, variant: :line, **options)
+      def initialize(key, variant: :line, lazy: false, **options)
         @key = key
         @variant = variant
+        @lazy = lazy
         @options = options
         @children = []
       end

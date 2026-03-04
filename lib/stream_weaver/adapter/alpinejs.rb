@@ -791,7 +791,7 @@ module StreamWeaver
               // - https://github.com/bigskysoftware/htmx-extensions/tree/main/ext/alpine-morph
               // =============================================================
 
-              // Before swap: save focus and scroll state
+              // Before swap: save focus/scroll state + freeze viewport to prevent flash
               document.addEventListener('htmx:beforeSwap', function(e) {
                 // Save focus
                 const active = document.activeElement;
@@ -810,9 +810,17 @@ module StreamWeaver
                   x: window.scrollX,
                   y: window.scrollY
                 };
+
+                // Freeze viewport to prevent visual flash during morph.
+                // Without this, the browser may paint at scroll=0 for one frame
+                // before afterSettle restores the position.
+                var container = document.getElementById('app-container');
+                if (container) {
+                  container.style.minHeight = container.offsetHeight + 'px';
+                }
               });
 
-              // After settle: restore focus and scroll
+              // After settle: restore focus and scroll, unfreeze viewport
               document.addEventListener('htmx:afterSettle', function(e) {
                 // Restore focus
                 if (focusState && focusState.id) {
@@ -830,6 +838,31 @@ module StreamWeaver
                 if (scrollState) {
                   window.scrollTo(scrollState.x, scrollState.y);
                   scrollState = null;
+                }
+
+                // Unfreeze viewport height
+                var container = document.getElementById('app-container');
+                if (container) {
+                  container.style.minHeight = '';
+                }
+
+                // Sync Alpine reactive data from server state
+                // morph:innerHTML preserves Alpine x-data on the container but never
+                // updates it from the server response. The server embeds fresh state
+                // in #sw-state-data — merge it into Alpine's reactive store so
+                // x-model bindings reflect the latest server values.
+                var stateEl = document.getElementById('sw-state-data');
+                var container = document.getElementById('app-container');
+                if (stateEl && container) {
+                  try {
+                    var fresh = JSON.parse(stateEl.textContent);
+                    var data = Alpine.$data(container);
+                    if (data) {
+                      Object.keys(fresh).forEach(function(k) {
+                        if (data[k] !== fresh[k]) data[k] = fresh[k];
+                      });
+                    }
+                  } catch(e) {}
                 }
               });
             })();
@@ -1422,8 +1455,9 @@ module StreamWeaver
       # @return [void] Renders to view
       def render_tabs(view, component, state)
         key = component.key
-        active_index = state[key] || 0
+        active_index = (state[key] || 0).to_i
         variant_class = "sw-tabs-#{component.variant}"
+        lazy = component.lazy
 
         view.div(
           id: "tabs-#{key}",
@@ -1436,22 +1470,34 @@ module StreamWeaver
           # Tab headers
           view.div(class: "sw-tabs-list") do
             component.children.each_with_index do |tab, index|
-              # Pre-render active class server-side to prevent flash during HTMX swaps
-              # Alpine's :class maintains it after initialization
               tab_classes = ["sw-tab-trigger"]
               tab_classes << "sw-tab-active" if index == active_index
 
-              # Tab buttons: Alpine.js for instant UI + HTMX to sync state
-              # hx-swap="none" means server response is ignored (no DOM changes)
-              view.button(
-                type: "button",
-                class: tab_classes.join(" "),
-                ":class" => "{ 'sw-tab-active': activeTab === #{index} }",
-                "@click" => "activeTab = #{index}",
-                "hx-post" => url("/update"),
-                "hx-vals" => JSON.generate({ key.to_s => index }),
-                "hx-swap" => "none"  # Server response ignored; Alpine handles UI
-              ) { tab.label }
+              if lazy
+                # Lazy mode: tab switch does Alpine UI + HTMX morph to fetch active tab content
+                view.button(
+                  type: "button",
+                  class: tab_classes.join(" "),
+                  ":class" => "{ 'sw-tab-active': activeTab === #{index} }",
+                  "@click" => "activeTab = #{index}",
+                  "hx-post" => url("/update"),
+                  "hx-include" => input_selector,
+                  "hx-vals" => JSON.generate({ key.to_s => index }),
+                  "hx-target" => HTMX_TARGET,
+                  "hx-swap" => HTMX_SWAP
+                ) { tab.label }
+              else
+                # Standard mode: Alpine handles UI instantly, server response discarded
+                view.button(
+                  type: "button",
+                  class: tab_classes.join(" "),
+                  ":class" => "{ 'sw-tab-active': activeTab === #{index} }",
+                  "@click" => "activeTab = #{index}",
+                  "hx-post" => url("/update"),
+                  "hx-vals" => JSON.generate({ key.to_s => index }),
+                  "hx-swap" => "none"
+                ) { tab.label }
+              end
             end
           end
 
@@ -1462,7 +1508,12 @@ module StreamWeaver
               "x-show" => "activeTab === #{index}",
               "x-cloak" => true
             ) do
-              tab.children.each { |child| child.render(view, state) }
+              if lazy && index != active_index
+                # Lazy mode: skip rendering inactive tab content
+                view.comment { "lazy: tab #{index} not rendered" }
+              else
+                tab.children.each { |child| child.render(view, state) }
+              end
             end
           end
         end
