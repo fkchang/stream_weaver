@@ -34,3 +34,6 @@ blog_post_streamweaver_vs_react.md
 
 # Examples playground (editable copies)
 examples_playground/
+
+# Playwright CLI snapshots
+.playwright-cli/
