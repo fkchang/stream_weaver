@@ -22,7 +22,7 @@ App = app "Hello from Puma-dev" do
   text_field :name, placeholder: "Enter your name"
   
   if state[:name] && state[:name].strip != ""
-    text "Hello, #{state[:name]}! 👋"
+    text "Hello, #{state[:name]}!"
   end
   
   button "Clear" do |state|

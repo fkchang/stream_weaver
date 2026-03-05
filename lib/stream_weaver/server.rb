@@ -28,6 +28,9 @@ module StreamWeaver
     set :show_exceptions, :after_handler
     set :dump_errors, true
     set :raise_errors, false
+    # Allow any Host header — StreamWeaver is a local dev tool, and reverse
+    # proxies like puma-dev send .test domains to loopback
+    set :host_authorization, { permitted_hosts: [] }
 
     # Debug middleware - logs before Sinatra/session processing
     if ENV['SW_DEBUG']
@@ -583,8 +586,7 @@ module StreamWeaver
       set :bind, host
       set :server, :puma
       set :quiet, true if respond_to?(:quiet)
-      # Allow any Host header for non-loopback binds (Tailscale DNS, LAN IPs, etc.)
-      set(:host_authorization, { permitted_hosts: [] }) unless loopback_host?(host)
+      # host_authorization is set at class level (permits all hosts)
     end
 
     def self.loopback_host?(host)
