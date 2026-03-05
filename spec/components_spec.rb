@@ -170,7 +170,7 @@ RSpec.describe StreamWeaver::Components do
             "hx-post" => "/action/btn_submit_1",
             "hx-include" => "[x-model]",
             "hx-target" => "#app-container",
-            "hx-swap" => "innerHTML scroll:false"
+            "hx-swap" => "morph:innerHTML"
           )
         ).and_yield
         button.render(mock_view, state)

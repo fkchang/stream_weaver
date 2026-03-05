@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'tempfile'
+require 'base64'
+
 RSpec.describe StreamWeaver::App do
   describe "initialization" do
     it "stores title" do
@@ -602,6 +605,133 @@ RSpec.describe StreamWeaver::App do
 
       stream_weaver_app.rebuild_with_state({})
       expect(stream_weaver_app.components.length).to eq(1)
+    end
+  end
+
+  describe "#favicon and #favicon_href" do
+    let(:app) { described_class.new("Test") {} }
+
+    it "returns nil when no favicon is set" do
+      expect(app.favicon_href).to be_nil
+    end
+
+    it "converts emoji to SVG data URI" do
+      app.favicon("🔥")
+      expect(app.favicon_href).to start_with("data:image/svg+xml,")
+      expect(app.favicon_href).to include("🔥")
+    end
+
+    it "passes URL strings through unchanged" do
+      app.favicon("https://example.com/icon.png")
+      expect(app.favicon_href).to eq("https://example.com/icon.png")
+    end
+
+    it "passes data: URIs through unchanged" do
+      data_uri = "data:image/png;base64,iVBOR"
+      app.favicon(data_uri)
+      expect(app.favicon_href).to eq(data_uri)
+    end
+
+    context "with file paths" do
+      it "encodes a PNG file as base64 data URI" do
+        Tempfile.create(["favicon", ".png"]) do |f|
+          f.binmode
+          f.write("\x89PNG\r\n\x1a\n") # PNG magic bytes
+          f.flush
+
+          app.favicon(f.path)
+          href = app.favicon_href
+
+          expect(href).to start_with("data:image/png;base64,")
+          expect(href).to include(Base64.strict_encode64("\x89PNG\r\n\x1a\n"))
+        end
+      end
+
+      it "encodes an ICO file with correct MIME type" do
+        Tempfile.create(["favicon", ".ico"]) do |f|
+          f.binmode
+          f.write("\x00\x00\x01\x00") # ICO magic bytes
+          f.flush
+
+          app.favicon(f.path)
+          expect(app.favicon_href).to start_with("data:image/x-icon;base64,")
+        end
+      end
+
+      it "encodes a JPEG file with correct MIME type" do
+        Tempfile.create(["favicon", ".jpg"]) do |f|
+          f.binmode
+          f.write("\xFF\xD8\xFF") # JPEG magic bytes
+          f.flush
+
+          app.favicon(f.path)
+          expect(app.favicon_href).to start_with("data:image/jpeg;base64,")
+        end
+      end
+
+      it "encodes a SVG file with correct MIME type" do
+        Tempfile.create(["favicon", ".svg"]) do |f|
+          f.write("<svg></svg>")
+          f.flush
+
+          app.favicon(f.path)
+          expect(app.favicon_href).to start_with("data:image/svg+xml;base64,")
+        end
+      end
+
+      it "encodes a WebP file with correct MIME type" do
+        Tempfile.create(["favicon", ".webp"]) do |f|
+          f.binmode
+          f.write("RIFF")
+          f.flush
+
+          app.favicon(f.path)
+          expect(app.favicon_href).to start_with("data:image/webp;base64,")
+        end
+      end
+
+      it "defaults to image/png for unknown extensions" do
+        Tempfile.create(["favicon", ".bmp"]) do |f|
+          f.binmode
+          f.write("BM")
+          f.flush
+
+          app.favicon(f.path)
+          expect(app.favicon_href).to start_with("data:image/png;base64,")
+        end
+      end
+
+      it "falls through as URL when file does not exist" do
+        app.favicon("/nonexistent/path/icon.png")
+        expect(app.favicon_href).to eq("/nonexistent/path/icon.png")
+      end
+    end
+
+    context "caching" do
+      it "returns the same object on repeated calls" do
+        app.favicon("https://example.com/icon.png")
+        first = app.favicon_href
+        second = app.favicon_href
+        expect(first).to equal(second)
+      end
+
+      it "does not re-read the file on subsequent calls" do
+        Tempfile.create(["favicon", ".png"]) do |f|
+          f.binmode
+          f.write("\x89PNG\r\n\x1a\n")
+          f.flush
+
+          app.favicon(f.path)
+          first = app.favicon_href
+
+          # Overwrite file with different content — cached result should be unchanged
+          f.rewind
+          f.write("DIFFERENT")
+          f.flush
+
+          expect(app.favicon_href).to equal(first)
+        end
+      end
     end
   end
 

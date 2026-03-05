@@ -7,12 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Puma-dev support** - Run StreamWeaver apps with memorable URLs like `http://myapp.test`:
+  - Detects `PORT` environment variable (set by Puma-dev and PaaS platforms)
+  - Skips auto-browser opening when `PORT` is set for on-demand access
+  - Provides `config.ru` example in `examples/puma_dev/`
+  - See [examples/puma_dev/README.md](examples/puma_dev/README.md) for setup guide
+
 ### Fixed
+- **Puma thread pool exhaustion** - SSE streaming apps could hang when opening multiple browser tabs; increased default Puma thread pool from 5 to 16 to accommodate long-lived SSE connections
 - **Canvas-push error feedback** - DSL errors now reported to stderr with exit code 1, enabling Claude to see and fix syntax errors
 - **Tutorial checkbox syntax** - Fixed incorrect `checkbox :key, label: "text"` to correct `checkbox :key, "text"` in learn.md examples
 - **iTerm panel stability** - AppleScript keystrokes could hang or type into wrong window; now opens URL in external browser instead
 
 ### Added
+- **`navbar` / `nav_item` / `link_to` components** - Cross-app navigation bar DSL. `navbar` renders a horizontal nav bar; `nav_item` renders as a bold non-clickable span when `active: true` or a link otherwise; `link_to` renders an inline anchor element.
+  ```ruby
+  navbar do
+    nav_item "Dashboard", active: true
+    nav_item "Settings", href: "/settings"
+  end
+  link_to "Docs", href: "https://example.com"
+  ```
+- **`--reset` flag** - Clear corrupted session state on any app: `ruby my_app.rb --reset`. One-shot clear on first page load, then normal operation resumes
+- **`SW_DEBUG` env var** - Request-level debug logging for troubleshooting: `SW_DEBUG=1 ruby my_app.rb`. Logs request method, path, cookie/state sizes, and SSE connection counts
 - **StatusDot `label:` option** - Display text labels below status dots:
   ```ruby
   status_dot status: :green, pulse: true, label: "billing.rb"

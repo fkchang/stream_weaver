@@ -454,4 +454,123 @@ RSpec.describe "StreamWeaver Server" do
       # Should have Add button + 2 Delete buttons = 3 buttons with deterministic IDs
     end
   end
+
+  describe "POST /stream/push" do
+    it "accepts form-encoded push and returns success" do
+      post '/stream/push', { target: '#metric', action: 'replace', html: '<div>42</div>' }
+
+      expect(last_response).to be_ok
+      json = JSON.parse(last_response.body)
+      expect(json["success"]).to be true
+      expect(json["target"]).to eq("#metric")
+      expect(json["action"]).to eq("replace")
+    end
+
+    it "accepts JSON push" do
+      post '/stream/push',
+           JSON.generate(target: '#feed', action: 'prepend', html: '<p>new</p>'),
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response).to be_ok
+      json = JSON.parse(last_response.body)
+      expect(json["success"]).to be true
+      expect(json["action"]).to eq("prepend")
+    end
+
+    it "defaults to replace action and #main target" do
+      post '/stream/push', { html: '<div>content</div>' }
+
+      expect(last_response).to be_ok
+      json = JSON.parse(last_response.body)
+      expect(json["target"]).to eq("#main")
+      expect(json["action"]).to eq("replace")
+    end
+
+    it "rejects invalid actions" do
+      post '/stream/push', { target: '#x', action: 'broadcast', html: 'test' }
+
+      expect(last_response.status).to eq(400)
+      json = JSON.parse(last_response.body)
+      expect(json["error"]).to include("Invalid action")
+    end
+  end
+
+  describe "streamer integration" do
+    it "has a streamer instance on the app" do
+      expect(app.settings.streamer).to be_a(StreamWeaver::Streamer)
+    end
+
+    it "broadcasts push data to connected SSE clients" do
+      conn = StringIO.new
+      app.settings.streamer.add_connection(conn)
+
+      post '/stream/push', { target: '#test', action: 'replace', html: '<b>live</b>' }
+
+      expect(last_response).to be_ok
+      expect(conn.string).to include("replace")
+      expect(conn.string).to include("#test")
+      expect(conn.string).to include("<b>live</b>")
+    end
+  end
+
+  describe "Port resolution and browser opening" do
+    describe ".resolve_host_and_port" do
+      it "uses explicit port option when provided" do
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port(port: 8080)
+        expect(port).to eq(8080)
+      end
+
+      it "uses STREAMWEAVER_PORT when no explicit port" do
+        ENV['STREAMWEAVER_PORT'] = '9090'
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port({})
+        expect(port).to eq(9090)
+      ensure
+        ENV.delete('STREAMWEAVER_PORT')
+      end
+
+      it "uses PORT env var when STREAMWEAVER_PORT not set" do
+        ENV['PORT'] = '3000'
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port({})
+        expect(port).to eq(3000)
+      ensure
+        ENV.delete('PORT')
+      end
+
+      it "prefers STREAMWEAVER_PORT over PORT" do
+        ENV['STREAMWEAVER_PORT'] = '9090'
+        ENV['PORT'] = '3000'
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port({})
+        expect(port).to eq(9090)
+      ensure
+        ENV.delete('STREAMWEAVER_PORT')
+        ENV.delete('PORT')
+      end
+
+      it "auto-detects port when no env vars set" do
+        ENV.delete('STREAMWEAVER_PORT')
+        ENV.delete('PORT')
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port({})
+        expect(port).to be >= 4567
+      end
+
+      it "uses explicit host option when provided" do
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port(host: '0.0.0.0')
+        expect(host).to eq('0.0.0.0')
+      end
+
+      it "uses STREAMWEAVER_HOST when no explicit host" do
+        ENV['STREAMWEAVER_HOST'] = '192.168.1.1'
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port({})
+        expect(host).to eq('192.168.1.1')
+      ensure
+        ENV.delete('STREAMWEAVER_HOST')
+      end
+
+      it "defaults to 127.0.0.1 when no host specified" do
+        ENV.delete('STREAMWEAVER_HOST')
+        host, port = StreamWeaver::SinatraApp.resolve_host_and_port({})
+        expect(host).to eq('127.0.0.1')
+      end
+    end
+  end
 end

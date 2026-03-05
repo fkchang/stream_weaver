@@ -81,6 +81,7 @@ end
 ```ruby
 text_field :name, placeholder: "Name"
 text_area :bio, rows: 5
+text_area :paste, transient: true           # excluded from session cookie (for large paste areas)
 checkbox :key, "Label"                      # state[:key] = true/false
 select :role, ["Admin", "User"], default: "User"
 radio_group :choice, ["A", "B", "C"]
@@ -230,6 +231,18 @@ modal :my_modal, title: "Dialog", size: :md do
 end
 ```
 
+### Navigation
+```ruby
+# Horizontal navbar — active item is bold/non-clickable, others are links
+navbar do
+  nav_item "Dashboard", href: "/", active: true
+  nav_item "Settings",  href: "/settings"
+end
+
+# Inline link
+link_to "View docs", href: "https://example.com"
+```
+
 ### Feedback
 ```ruby
 alert(variant: :success) { text "Saved!" }
@@ -245,7 +258,11 @@ app "My App" do
   # ...
 end.run!
 ```
-Server runs until Ctrl+C. State persists in session.
+Server runs until Ctrl+C. State persists in session cookies (~4KB limit).
+
+**Reset corrupted state:** `ruby my_app.rb --reset` clears the session on first page load.
+
+**Debug logging:** `SW_DEBUG=1 ruby my_app.rb` logs every request with cookie size, state size, and SSE connection counts to stderr.
 
 ### Remote/Mobile Access (Tailscale, LAN)
 
@@ -432,12 +449,93 @@ For comprehensive reference, see these docs:
 | `docs/testing.md` | Unit and integration testing |
 | `docs/architecture/how_streamweaver_works.md` | Internal architecture, event flow |
 
+## Live Streaming with `every` Timers
+
+Push live updates to the browser via SSE (Server-Sent Events). No polling, no WebSockets — just `every(seconds)`.
+
+### Periodic Timers
+
+```ruby
+app "Monitor", theme: :dark do
+  div id: "status" do
+    text "Waiting..."
+  end
+
+  every(3) do |streamer|
+    streamer.replace("#status") do
+      div id: "status" do
+        text "Updated at #{Time.now.strftime('%H:%M:%S')}"
+      end
+    end
+  end
+end.run!
+```
+
+The `every` block receives a `streamer` object with these SSE actions:
+
+| Method | Purpose |
+|--------|---------|
+| `streamer.replace(selector) { ... }` | Replace element innerHTML |
+| `streamer.append(selector) { ... }` | Append to element |
+| `streamer.prepend(selector) { ... }` | Prepend to element |
+| `streamer.remove(selector)` | Remove element from DOM |
+| `streamer.add_class(selector, class)` | Add CSS class |
+| `streamer.remove_class(selector, class)` | Remove CSS class |
+
+All methods accept either a block (renders DSL components) or a raw HTML string.
+
+### Multiple Timers with Shared State
+
+Closure variables let timers share state naturally:
+
+```ruby
+app "Dashboard", theme: :dark do
+  div id: "metric" do
+    stat_display value: "\u2014", label: "CPU", color: :blue
+  end
+  div id: "alert-css", style: "display:none"
+
+  latest = { cpu: 0.0 }
+
+  every(3) do |streamer|
+    latest[:cpu] = `sysctl -n vm.loadavg`.scan(/[\d.]+/)[0].to_f
+
+    streamer.replace("#metric") do
+      div id: "metric" do
+        stat_display value: latest[:cpu].to_s, label: "CPU", color: :green
+      end
+    end
+  end
+
+  every(5) do |streamer|
+    # Idempotent CSS injection via replace (not append — avoids duplicates)
+    streamer.replace("#alert-css", "<style>.alert-ring{box-shadow:0 0 0 3px red}</style>")
+    streamer.add_class("#card-cpu", "alert-ring") if latest[:cpu] > 4.0
+  end
+end.run!
+```
+
+### Key Patterns
+
+- **Target elements by `id:`** — use `div id: "my-target"` in initial render, then `streamer.replace("#my-target")`
+- **Re-include `id:` inside replace blocks** — the id must survive replacement
+- **CSS injection via `replace`** — use a hidden placeholder div, not `append("head")` which duplicates on every tick
+- **Always re-apply `add_class`** — new SSE connections miss past class changes, so re-apply each tick
+- **`expandable_card key: :foo` generates `id="card-foo"`** — target it with `#card-foo` in SSE actions
+
+### Timer Examples
+
+| File | Description |
+|------|-------------|
+| `examples/timer_showcase.rb` | Live CPU/Memory/Disk with spotlight effects and alert feed |
+| `examples/timer_health_checker.rb` | HTTP endpoint health monitoring with SLA badges |
+
 ## Architecture Summary
 
 - **Backend**: Sinatra server, Phlex for HTML
 - **Frontend**: Alpine.js (reactivity) + HTMX (server communication)
 - **State**: Server-side, persisted in session cookies
-- **Updates**: HTMX swaps `#app-container` innerHTML on state changes
+- **Updates**: HTMX swaps `#app-container` innerHTML on state changes; SSE pushes for `every` timers
 
 ## Common Mistakes
 

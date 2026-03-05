@@ -28,6 +28,26 @@ module StreamWeaver
     set :show_exceptions, :after_handler
     set :dump_errors, true
     set :raise_errors, false
+    # Allow any Host header — StreamWeaver is a local dev tool, and reverse
+    # proxies like puma-dev send .test domains to loopback
+    set :host_authorization, { permitted_hosts: [] }
+
+    # Debug middleware - logs before Sinatra/session processing
+    if ENV['SW_DEBUG']
+      use(Class.new {
+        def initialize(app) @app = app end
+        def call(env)
+          $stderr.puts "[SW:rack] >>> #{env['REQUEST_METHOD']} #{env['PATH_INFO']} (thread: #{Thread.current.object_id})"
+          $stderr.puts "[SW:rack]     cookie size: #{env['HTTP_COOKIE']&.bytesize || 0}B"
+          $stderr.flush
+          status, headers, body = @app.call(env)
+          $stderr.puts "[SW:rack] <<< #{env['REQUEST_METHOD']} #{env['PATH_INFO']} -> #{status}"
+          $stderr.flush
+          [status, headers, body]
+        end
+      })
+    end
+
 
     # Create a Sinatra app from a StreamWeaver::App instance
     #
@@ -71,9 +91,10 @@ module StreamWeaver
         # Filter state for session storage - remove large/transient keys
         # Session cookies have ~4KB limit, so we can't store file contents, etc.
         def session_safe_state(state)
-          transient_keys = [:code_content, :current_file_path, :examples]
+          hardcoded_transient = [:code_content, :current_file_path, :examples]
+          app_transient = settings.streamlit_app.transient_keys
           state.reject do |k, _|
-            transient_keys.include?(k) || k.to_s.end_with?('_edited_code')
+            hardcoded_transient.include?(k) || app_transient.include?(k) || k.to_s.end_with?('_edited_code')
           end
         end
 
@@ -106,6 +127,31 @@ module StreamWeaver
         end
       end
 
+      # Request logging when DEBUG is set
+      before do
+        if ENV['SW_DEBUG']
+          state = session[:streamlit_state]
+          state_size = state ? state.to_s.bytesize : 0
+          cookie_size = request.env['HTTP_COOKIE']&.bytesize || 0
+          $stderr.puts "[SW] #{request.request_method} #{request.path_info} | cookie=#{cookie_size}B state=#{state_size}B keys=#{state&.keys&.join(',')}"
+        end
+      end
+
+      after do
+        if ENV['SW_DEBUG']
+          state = session[:streamlit_state]
+          state_size = state ? state.to_s.bytesize : 0
+          $stderr.puts "[SW] #{request.request_method} #{request.path_info} -> #{response.status} | state_after=#{state_size}B"
+        end
+      end
+
+      # Suppress browser's automatic /favicon.ico request (the real favicon
+      # is served via <link rel="icon"> in the HTML head)
+      get '/favicon.ico' do
+        status 204
+        ""
+      end
+
       # Define routes
       get '/' do
         # For agentic mode, always start with fresh state
@@ -116,6 +162,10 @@ module StreamWeaver
           session.clear
           state = {}
           session[:streamlit_state] = session_safe_state(state)
+        elsif self.class.reset_state_pending?
+          session.clear
+          state = {}
+          session[:streamlit_state] = state
         else
           state = session[:streamlit_state] ||= {}
         end
@@ -169,6 +219,26 @@ module StreamWeaver
           if button
             button.execute(state)
             session[:streamlit_state] = session_safe_state(state)
+          end
+
+          # If button callback set _result in agentic mode, signal completion
+          if is_agentic && state[:_result] && settings.respond_to?(:result_container)
+            input_keys = self.class.collect_input_keys(streamlit_app.components)
+            filtered_result = {}
+            input_keys.each { |key| filtered_result[key] = state[key] if state.key?(key) }
+            filtered_result[:_result] = state[:_result]
+            settings.result_container[:result] = filtered_result
+            settings.result_container[:ready] = true
+
+            auto_close = settings.respond_to?(:auto_close_window) && settings.auto_close_window
+            if auto_close
+              return <<~HTML
+                <html><body>
+                  <h1>Done!</h1>
+                  <script>setTimeout(function(){ window.close(); }, 500);</script>
+                </body></html>
+              HTML
+            end
           end
 
           streamlit_app.rebuild_with_state(state)
@@ -352,6 +422,7 @@ module StreamWeaver
         stream do |out|
           streamer = settings.streamer
           streamer.add_connection(out)
+          $stderr.puts "[SW] SSE connected (#{streamer.connection_count} total)" if ENV['SW_DEBUG']
           out << "data: #{JSON.generate(type: "connected")}\n\n"
           # Keep connection alive - Puma needs the block to stay open.
           # Check shutdown flag so Ctrl+C can terminate cleanly.
@@ -361,8 +432,10 @@ module StreamWeaver
           end
         rescue IOError, Errno::EPIPE, Errno::ECONNRESET
           # Client disconnected
+          $stderr.puts "[SW] SSE disconnected (client gone)" if ENV['SW_DEBUG']
         ensure
           streamer.remove_connection(out)
+          $stderr.puts "[SW] SSE removed (#{streamer.connection_count} remaining)" if ENV['SW_DEBUG']
         end
       end
 
@@ -469,8 +542,12 @@ module StreamWeaver
       port = start_port
       loop do
         begin
-          server = TCPServer.new('127.0.0.1', port)
-          server.close
+          # Check both 127.0.0.1 and 0.0.0.0 to avoid conflicts where
+          # a wildcard listener already holds the port (macOS routes to it)
+          s1 = TCPServer.new('127.0.0.1', port)
+          s1.close
+          s2 = TCPServer.new('0.0.0.0', port)
+          s2.close
           return port
         rescue Errno::EADDRINUSE
           port += 1
@@ -498,7 +575,7 @@ module StreamWeaver
 
     # Resolve host and port from options, env vars, or defaults
     def self.resolve_host_and_port(options)
-      port = options[:port] || ENV['STREAMWEAVER_PORT']&.to_i || find_available_port
+      port = options[:port] || ENV['STREAMWEAVER_PORT']&.to_i || ENV['PORT']&.to_i || find_available_port
       host = options[:host] || ENV['STREAMWEAVER_HOST'] || '127.0.0.1'
       [host, port]
     end
@@ -509,12 +586,18 @@ module StreamWeaver
       set :bind, host
       set :server, :puma
       set :quiet, true if respond_to?(:quiet)
-      # Allow any Host header for non-loopback binds (Tailscale DNS, LAN IPs, etc.)
-      set(:host_authorization, { permitted_hosts: [] }) unless loopback_host?(host)
+      # host_authorization is set at class level (permits all hosts)
     end
 
     def self.loopback_host?(host)
       %w[127.0.0.1 localhost ::1].include?(host)
+    end
+
+    # One-shot state reset: returns true once, then false thereafter
+    def self.reset_state_pending?
+      return false unless @reset_state_pending
+      @reset_state_pending = false
+      true
     end
 
     def self.display_url(host, port)
@@ -523,18 +606,53 @@ module StreamWeaver
     end
 
     # Start the internal stream thread if the app has a stream block.
+    # Start timer thread if the app has periodic timers.
     # Assumes rebuild_with_state has already been called to evaluate the DSL.
     def self.start_stream_thread
       stream_block = settings.streamlit_app.stream_block
-      return unless stream_block
+      timers = settings.streamlit_app.timers
 
-      Thread.new do
-        # Wait for at least one SSE subscriber before pushing
-        sleep 0.1 until settings.streamer.connection_count > 0
-        stream_block.call(settings.streamer)
-      rescue => e
-        $stderr.puts "Stream thread error: #{e.class}: #{e.message}"
-        $stderr.puts e.backtrace.first(5).join("\n")
+      # Capture real stderr before it gets suppressed
+      real_stderr = $stderr
+
+      if stream_block
+        Thread.new do
+          # Wait for at least one SSE subscriber before pushing
+          sleep 0.1 until settings.streamer.connection_count > 0
+
+          retries = 0
+          begin
+            stream_block.call(settings.streamer)
+          rescue => e
+            retries += 1
+            real_stderr.puts "[StreamWeaver] Stream thread error (attempt #{retries}): #{e.class}: #{e.message}"
+            real_stderr.puts e.backtrace.first(5).join("\n")
+            sleep [2 ** retries, 30].min
+            retry
+          end
+        end
+      end
+
+      if timers.any?
+        Thread.new do
+          # Wait for at least one SSE subscriber before firing timers
+          sleep 0.1 until settings.streamer.connection_count > 0
+
+          loop do
+            now = Time.now.to_f
+            timers.each do |timer|
+              next if timer[:last_run] && (now - timer[:last_run]) < timer[:interval]
+              timer[:last_run] = now
+              begin
+                timer[:block].call(settings.streamer)
+              rescue => e
+                real_stderr.puts "[StreamWeaver] Timer error: #{e.class}: #{e.message}"
+                real_stderr.puts e.backtrace.first(5).join("\n")
+              end
+            end
+            sleep 1
+          end
+        end
       end
     end
 
@@ -543,14 +661,16 @@ module StreamWeaver
     # @param options [Hash] Options
     # @option options [Integer] :port Port number (default: auto-detect, or STREAMWEAVER_PORT env var)
     # @option options [String] :host Host to bind (default: '127.0.0.1', or STREAMWEAVER_HOST env var)
-    # @option options [Boolean] :open_browser Auto-open browser (default: true)
+    # @option options [Boolean] :open_browser Auto-open browser (default: true, but false when PORT env var is set)
     def self.run!(options = {})
       host, port = resolve_host_and_port(options)
-      auto_open = options.fetch(:open_browser, true)
+      auto_open = options.fetch(:open_browser, !ENV['PORT'])
+      @reset_state_pending = ARGV.delete('--reset') ? true : false
 
       configure_server!(host, port)
       # Force-kill after 1s on shutdown - SSE connections never complete gracefully
-      set :server_settings, force_shutdown_after: 1
+      # SSE connections hold threads indefinitely, so we need a generous pool
+      set :server_settings, { force_shutdown_after: 1, Threads: '0:16' }
 
       url = display_url(host, port)
 
@@ -575,8 +695,14 @@ module StreamWeaver
       if settings.streamlit_app.stream_block
         puts "  📡  SSE streaming enabled (GET /stream, POST /stream/push)"
       end
+      if settings.streamlit_app.has_timers?
+        puts "  ⏱️   #{settings.streamlit_app.timers.size} periodic timer(s) registered"
+      end
+      if @reset_state_pending
+        puts "  🔄  State will be cleared on first page load (--reset)"
+      end
       puts ""
-      puts "  Press Ctrl+C to stop"
+      puts "  Press Ctrl+C to stop (may take a few seconds to drain SSE connections)"
       puts ""
 
       open_browser(url) if auto_open
@@ -587,7 +713,7 @@ module StreamWeaver
       # Suppress Sinatra/Puma startup messages
       original_stdout = $stdout
       original_stderr = $stderr
-      unless ENV['DEBUG']
+      unless ENV['DEBUG'] || ENV['SW_DEBUG']
         $stdout = StringIO.new
         $stderr = StringIO.new
       end

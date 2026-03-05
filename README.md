@@ -80,6 +80,7 @@ StreamWeaver apps cover a wide range — the same DSL works whether you're hacki
 |----------|------|------|-----|
 | **Quick one-off** | localhost | auto-detect | `ruby app.rb` — browser opens, use it, Ctrl+C |
 | **Agentic popup** | localhost | auto-detect | `app.run_once!` — collect input, return JSON, exit |
+| **Puma-dev** | localhost | from Puma-dev | `config.ru` + `puma-dev link` — access at `http://myapp.test` |
 | **Mobile/Tailscale** | `0.0.0.0` | fixed | `STREAMWEAVER_HOST=0.0.0.0 STREAMWEAVER_PORT=4580 ruby app.rb` |
 | **LAN access** | `0.0.0.0` | fixed | Same — any device on your network can reach it |
 | **Always-on dashboard** | `0.0.0.0` | fixed | Bookmark `http://your-machine:4580` on your phone |
@@ -87,8 +88,9 @@ StreamWeaver apps cover a wide range — the same DSL works whether you're hacki
 **Environment variables** (overridden by code options if set):
 - `STREAMWEAVER_HOST` — bind address (default: `127.0.0.1`)
 - `STREAMWEAVER_PORT` — fixed port (default: auto-detect from 4567)
+- `PORT` — standard port variable (used by Puma-dev, Heroku, etc.)
 
-For quick local work, the defaults are perfect — auto-find a port, open the browser, done. For mobile or remote access (Tailscale, LAN), set a fixed host and port so your URL stays stable across restarts.
+For quick local work, the defaults are perfect — auto-find a port, open the browser, done. For mobile or remote access (Tailscale, LAN), set a fixed host and port so your URL stays stable across restarts. For Puma-dev, see [examples/puma_dev](examples/puma_dev).
 
 ---
 
@@ -136,6 +138,40 @@ end.run!
 ruby todo.rb
 # Browser opens at http://localhost:4567
 ```
+
+---
+
+## Puma-dev Mode
+
+Run StreamWeaver apps with [Puma-dev](https://github.com/puma/puma-dev) for memorable local URLs like `http://myapp.test` that are always available without manually starting the server:
+
+```ruby
+# config.ru
+require 'bundler/setup'
+require 'stream_weaver'
+
+App = app "My App" do
+  header1 "Hello from Puma-dev!"
+  text_field :name, placeholder: "Your name"
+end
+
+run App
+```
+
+```bash
+# Link to Puma-dev
+puma-dev link
+
+# Access at http://[directory-name].test
+# Browser won't auto-open - perfect for on-demand access
+```
+
+**Key differences from standalone mode:**
+- Uses the `PORT` environment variable set by Puma-dev
+- Browser doesn't auto-open (you access the URL when you need it)
+- App starts automatically on first request
+
+See [examples/puma_dev](examples/puma_dev) for a complete example.
 
 ---
 

@@ -876,15 +876,17 @@ module StreamWeaver
     # Tabs container component for tabbed navigation
     # Contains Tab children, manages active tab state via state key
     class Tabs < Base
-      attr_reader :key, :variant, :options
+      attr_reader :key, :variant, :lazy, :options
       attr_accessor :children
 
       # @param key [Symbol] The state key for active tab index
       # @param variant [Symbol] Visual variant (:line, :enclosed, :soft-rounded)
+      # @param lazy [Boolean] When true, only render active tab content and morph on switch
       # @param options [Hash] Additional options
-      def initialize(key, variant: :line, **options)
+      def initialize(key, variant: :line, lazy: false, **options)
         @key = key
         @variant = variant
+        @lazy = lazy
         @options = options
         @children = []
       end
@@ -1002,6 +1004,55 @@ module StreamWeaver
     class MenuDivider < Base
       def render(view, state)
         view.hr(class: "sw-menu-divider")
+      end
+    end
+
+    # =========================================
+    # Link / Navbar / NavItem Components
+    # =========================================
+
+    class Link < Base
+      attr_reader :label, :href, :options
+
+      def initialize(label, href:, **options)
+        @label = label
+        @href = href
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_link(view, self, state)
+      end
+    end
+
+    class Navbar < Base
+      attr_accessor :children
+      attr_reader :options
+
+      def initialize(**options)
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_navbar(view, self, state)
+      end
+    end
+
+    class NavItem < Base
+      attr_reader :label, :href, :options
+
+      def initialize(label, href: nil, active: false, **options)
+        @label = label
+        @href = href
+        @active = active
+        @options = options
+      end
+
+      def active? = @active
+
+      def render(view, state)
+        view.adapter.render_nav_item(view, self, state)
       end
     end
 
@@ -1585,7 +1636,7 @@ module StreamWeaver
     # ExpandableCard component for cards that expand/collapse
     # Displays header always, body toggles on click
     class ExpandableCard < Base
-      attr_reader :key, :title, :subtitle, :badge_text, :badge_variant, :status, :initially_expanded
+      attr_reader :key, :title, :subtitle, :badge_text, :badge_variant, :status, :initially_expanded, :extra_classes
       attr_accessor :children, :header_children
 
       # @param key [Symbol] State key for expanded state
@@ -1595,9 +1646,10 @@ module StreamWeaver
       # @param badge_variant [Symbol] Badge color variant
       # @param status [Symbol, nil] Status indicator color (:red, :yellow, :green, :gray)
       # @param initially_expanded [Boolean] Whether card starts expanded (default: false)
+      # @param extra_classes [String, nil] Additional CSS classes for the card container
       # @param options [Hash] Additional options
       def initialize(key:, title:, subtitle: nil, badge_text: nil, badge_variant: :default,
-                     status: nil, initially_expanded: false, **options)
+                     status: nil, initially_expanded: false, extra_classes: nil, **options)
         @key = key
         @title = title
         @subtitle = subtitle
@@ -1605,6 +1657,7 @@ module StreamWeaver
         @badge_variant = badge_variant
         @status = status
         @initially_expanded = initially_expanded
+        @extra_classes = extra_classes
         @options = options
         @children = []
         @header_children = []

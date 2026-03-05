@@ -26,6 +26,22 @@ Interactive workflows with user input and state management.
 ### [claude_code/](claude_code/)
 **Claude Code slash command integrations**. Interactive canvas workflows powered by Claude Code. See [claude_code/README.md](claude_code/README.md).
 
+## Live Streaming Examples
+
+### timer_showcase.rb
+Dev Machine Monitor — live CPU, Memory, and Disk metrics updated every few seconds. Demonstrates `every` timers, `add_class`/`remove_class` for spotlight effects, and `prepend` for an alert feed.
+
+```bash
+bundle exec ruby examples/timer_showcase.rb
+```
+
+### timer_health_checker.rb
+Endpoint Health Checker — pings GitHub, RubyGems, and Httpbin every 5 seconds, showing response times, SLA badges, and ring effects on degraded endpoints.
+
+```bash
+bundle exec ruby examples/timer_health_checker.rb
+```
+
 ## Standalone Scripts
 
 ### panel_demo.sh
