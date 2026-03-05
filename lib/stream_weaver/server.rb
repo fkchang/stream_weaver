@@ -539,8 +539,12 @@ module StreamWeaver
       port = start_port
       loop do
         begin
-          server = TCPServer.new('127.0.0.1', port)
-          server.close
+          # Check both 127.0.0.1 and 0.0.0.0 to avoid conflicts where
+          # a wildcard listener already holds the port (macOS routes to it)
+          s1 = TCPServer.new('127.0.0.1', port)
+          s1.close
+          s2 = TCPServer.new('0.0.0.0', port)
+          s2.close
           return port
         rescue Errno::EADDRINUSE
           port += 1
