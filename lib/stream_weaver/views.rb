@@ -1844,6 +1844,32 @@ module StreamWeaver
                 }
 
                 /* ===========================================
+                   Scroll Box
+                   =========================================== */
+                .sw-scroll-box {
+                  position: relative;
+                  border: 1px solid var(--sw-color-border);
+                  border-radius: var(--sw-radius-md);
+                  padding: var(--sw-spacing-md);
+                  background: var(--sw-color-bg-card);
+                  transition: box-shadow var(--sw-transition);
+                  scrollbar-width: thin;
+                  scrollbar-color: var(--sw-color-border-strong) transparent;
+                  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
+                  mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent 100%);
+                }
+
+                .sw-scroll-box::-webkit-scrollbar { width: 6px; }
+                .sw-scroll-box::-webkit-scrollbar-track { background: transparent; }
+                .sw-scroll-box::-webkit-scrollbar-thumb {
+                  background: var(--sw-color-border-strong);
+                  border-radius: var(--sw-radius-sm);
+                }
+                .sw-scroll-box::-webkit-scrollbar-thumb:hover {
+                  background: var(--sw-color-text-muted);
+                }
+
+                /* ===========================================
                    Score Table
                    =========================================== */
                 .score-table {
@@ -2642,6 +2668,10 @@ module StreamWeaver
                   .card {
                     border-radius: 0;
                     padding: var(--sw-spacing-md);
+                  }
+
+                  .sw-scroll-box {
+                    padding: var(--sw-spacing-sm);
                   }
 
                   h1 { font-size: 1.5rem; }
