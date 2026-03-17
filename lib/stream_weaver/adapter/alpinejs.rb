@@ -856,9 +856,12 @@ module StreamWeaver
                 if (stateEl && container) {
                   try {
                     var fresh = JSON.parse(stateEl.textContent);
+                    var transientKeys = new Set(fresh._transient || []);
                     var data = Alpine.$data(container);
                     if (data) {
                       Object.keys(fresh).forEach(function(k) {
+                        if (k === '_transient') return;
+                        if (transientKeys.has(k)) return;
                         if (data[k] !== fresh[k]) data[k] = fresh[k];
                       });
                     }
@@ -886,7 +889,29 @@ module StreamWeaver
                 var el = document.querySelector(msg.target);
                 if (!el) return;
                 switch(msg.action) {
-                  case 'replace':      el.innerHTML = msg.html; break;
+                  case 'replace':
+                    var _focusedId = document.activeElement ? document.activeElement.id : null;
+                    var _focusSel = (_focusedId && document.activeElement.selectionStart !== undefined)
+                      ? [document.activeElement.selectionStart, document.activeElement.selectionEnd]
+                      : null;
+                    var _inputVals = {};
+                    el.querySelectorAll('input[id], textarea[id]').forEach(function(inp) {
+                      _inputVals[inp.id] = inp.value;
+                    });
+                    el.innerHTML = msg.html;
+                    el.querySelectorAll('input[id], textarea[id]').forEach(function(inp) {
+                      if (_inputVals[inp.id] !== undefined) inp.value = _inputVals[inp.id];
+                    });
+                    if (_focusedId) {
+                      var fe = document.getElementById(_focusedId);
+                      if (fe) {
+                        fe.focus();
+                        if (_focusSel && typeof fe.setSelectionRange === 'function') {
+                          fe.setSelectionRange(_focusSel[0], _focusSel[1]);
+                        }
+                      }
+                    }
+                    break;
                   case 'append':       el.insertAdjacentHTML('beforeend', msg.html); break;
                   case 'prepend':      el.insertAdjacentHTML('afterbegin', msg.html); break;
                   case 'remove':       el.remove(); break;
@@ -1059,14 +1084,28 @@ module StreamWeaver
         table_classes << "sw-table-hoverable" if options[:hoverable]
         table_classes << "sw-table-compact" if options[:compact]
         table_classes << "sw-table-sortable" if options[:sortable]
+        table_classes << "sw-table--alternating" if options[:alternating]
+        table_classes << "sw-table--hover" if options[:hover]
+        table_classes << "sw-table--sticky-header" if options[:sticky_header]
 
         columns = options[:columns] || []
         table_id = "table_#{SecureRandom.hex(4)}" if options[:sortable]
 
-        # Wrapper for sticky header
-        wrapper_style = options[:sticky_header] ? "max-height: 400px; overflow-y: auto;" : nil
+        # Wrapper for sticky header or scrollable
+        wrapper_classes = []
+        wrapper_style = nil
+        if options[:scrollable]
+          wrapper_classes << "sw-table--scrollable"
+          wrapper_style = "max-height: 400px; overflow: auto;"
+        elsif options[:sticky_header]
+          wrapper_style = "max-height: 400px; overflow-y: auto;"
+        end
 
-        view.div(style: wrapper_style) do
+        wrapper_attrs = {}
+        wrapper_attrs[:class] = wrapper_classes.join(" ") if wrapper_classes.any?
+        wrapper_attrs[:style] = wrapper_style if wrapper_style
+
+        view.div(**wrapper_attrs) do
           alpine_data = options[:sortable] ? "{ sortCol: null, sortAsc: true }" : nil
           table_attrs = { class: table_classes.join(" "), style: "width: 100%; border-collapse: collapse;" }
           table_attrs["x-data"] = alpine_data if options[:sortable]
@@ -1129,6 +1168,8 @@ module StreamWeaver
                 row_classes = []
                 row_classes << "sw-row-striped" if options[:striped] && idx.odd?
                 row_classes << "sw-row-hoverable" if options[:hoverable]
+                row_classes << "sw-table__row--alt" if options[:alternating] && idx.odd?
+                row_classes << "sw-table__row--hover" if options[:hover]
 
                 view.tr(class: row_classes.any? ? row_classes.join(" ") : nil) do
                   row.each_with_index do |cell, col_idx|
@@ -1185,7 +1226,7 @@ module StreamWeaver
           end
           view.tbody do
             scores.each do |score|
-              value = score[:value] || 0
+              value = score[:value] || score[:score] || 0
               max = score[:max] || 10
               ratio = value.to_f / max
 
@@ -1440,6 +1481,19 @@ module StreamWeaver
           view.div(class: css_classes.join(" "), style: styles.join(" ")) do
             component.children.each { |child| child.render(view, state) }
           end
+        end
+      end
+
+      # Render a scrollable container with max-height
+      def render_scroll_box(view, component, state)
+        css_classes = ["sw-scroll-box"]
+        css_classes << component.options[:class] if component.options[:class]
+
+        view.div(
+          class: css_classes.join(" "),
+          style: "max-height: #{component.max_height}; overflow-y: auto;"
+        ) do
+          component.children.each { |child| child.render(view, state) }
         end
       end
 
@@ -1930,6 +1984,2918 @@ module StreamWeaver
       end
 
       # =========================================
+      # Theme toggle rendering (visual skills auto-mode)
+      # =========================================
+
+      # Render a dark/light/auto mode toggle button.
+      # Uses sw- prefixed CSS classes following BEM convention.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [ThemeToggle] The theme toggle component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_theme_toggle(view, component, state)
+        alpine_data = StreamWeaver::Theme::AutoMode.alpine_data
+
+        view.div(
+          class: "sw-theme-toggle",
+          "x-data" => alpine_data
+        ) do
+          view.button(
+            type: "button",
+            class: "sw-theme-toggle__btn",
+            "aria-label" => "Toggle theme (dark/light/auto)",
+            "@click" => "toggle()"
+          ) do
+            # Sun icon (shown in dark mode)
+            view.span(
+              class: "sw-theme-toggle__icon",
+              "x-show" => "effective === 'dark'",
+              "aria-hidden" => "true"
+            ) do
+              view.raw(view.safe("\u{2600}\u{FE0F}"))
+            end
+            # Moon icon (shown in light mode)
+            view.span(
+              class: "sw-theme-toggle__icon",
+              "x-show" => "effective === 'light'",
+              "aria-hidden" => "true"
+            ) do
+              view.raw(view.safe("\u{1F319}"))
+            end
+          end
+
+          # Show current mode label
+          view.span(
+            class: "sw-theme-toggle__label",
+            "x-text" => "preference === 'auto' ? 'Auto' : preference === 'dark' ? 'Dark' : 'Light'"
+          )
+        end
+      end
+
+      # =========================================
+      # Theme preset rendering (visual skills T15)
+      # =========================================
+
+      # Render a theme preset: injects Google Fonts <link> and CSS custom
+      # property overrides for both light and dark modes.
+      # Also injects animation keyframes CSS on first use.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [ThemePreset] The theme preset component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_theme_preset(view, component, state)
+        preset = component.preset
+
+        # Inject Google Fonts <link>
+        fonts_url = StreamWeaver::Theme::Presets.google_fonts_url(preset)
+        view.link(rel: "stylesheet", href: fonts_url)
+
+        # Inject CSS custom properties for both modes + font-family rules
+        css = StreamWeaver::Theme::Presets.generate_preset_css(component.preset_name)
+        view.style { view.raw(view.safe(css)) }
+
+        # Inject animation CSS (once per render)
+        unless view.instance_variable_get(:@_sw_animations_injected)
+          view.instance_variable_set(:@_sw_animations_injected, true)
+          animations_css = StreamWeaver::Theme::Presets.animations_css
+          view.style { view.raw(view.safe(animations_css)) }
+        end
+      end
+
+      # =========================================
+      # CodeBlock rendering (visual skills T4)
+      # =========================================
+
+      # Track whether Prism.js CDN has been injected in the current page render.
+      # Lazily loaded -- only when a code_block component is actually used.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [CodeBlock] The code block component
+      # @param state [Hash] Current state hash
+      def render_code_block(view, component, state)
+        # Inject Prism.js CDN once per page (lazy load)
+        inject_prism_cdn(view)
+
+        view.div(class: "sw-code-block") do
+          # File header bar (optional)
+          if component.file
+            view.div(class: "sw-code-block__header") do
+              view.span(class: "sw-code-block__file") { component.file }
+            end
+          end
+
+          # Code container
+          scroll_style = component.scroll ? "overflow: auto; max-height: 500px;" : ""
+          view.div(class: "sw-code-block__body", style: scroll_style) do
+            view.pre(class: "sw-code-block__pre") do
+              view.code(class: component.language_class) do
+                view.plain(component.display_code)
+              end
+            end
+          end
+
+          # Truncation indicator
+          if component.truncated?
+            view.div(class: "sw-code-block__truncated") do
+              view.plain("... #{component.total_lines - component.truncate} more lines")
+            end
+          end
+        end
+      end
+
+      # =========================================
+      # ImageBlock rendering (visual skills T4)
+      # =========================================
+
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [ImageBlock] The image block component
+      # @param state [Hash] Current state hash
+      def render_image_block(view, component, state)
+        view.figure(class: "sw-image-block") do
+          view.img(
+            src: component.resolved_src,
+            alt: component.alt,
+            class: "sw-image-block__img"
+          )
+          if component.caption
+            view.figcaption(class: "sw-image-block__caption") do
+              view.plain(component.caption)
+            end
+          end
+        end
+      end
+
+      # =========================================
+      # Mermaid diagram rendering
+      # =========================================
+
+      def render_mermaid(view, component, state)
+        # Lazy-inject CSS and JS on first mermaid component render
+        unless view.instance_variable_get(:@_mermaid_assets_injected)
+          view.instance_variable_set(:@_mermaid_assets_injected, true)
+          view.style { view.raw(view.safe(MERMAID_CSS)) }
+          render_mermaid_cdn_scripts(view)
+        end
+
+        attrs = {
+          id: component.diagram_id,
+          class: component.css_classes,
+          "x-data" => "{}",
+          "x-init" => "swMermaidInit()"
+        }
+
+        # ELK layout flag for the JS loader
+        attrs["data-sw-mermaid-elk"] = "true" if component.elk?
+
+        # Per-block theme variable overrides
+        if component.theme_vars
+          attrs["data-sw-mermaid-vars"] = component.theme_vars_json
+        end
+
+        view.div(**attrs) do
+          # Zoom controls (only when zoom: true)
+          if component.zoom
+            view.div(class: "sw-mermaid__controls") do
+              view.button(
+                type: "button",
+                class: "sw-mermaid__btn",
+                "data-sw-zoom" => "in",
+                "aria-label" => "Zoom in",
+                title: "Zoom in"
+              ) { "+" }
+              view.button(
+                type: "button",
+                class: "sw-mermaid__btn",
+                "data-sw-zoom" => "out",
+                "aria-label" => "Zoom out",
+                title: "Zoom out"
+              ) { "\u2212" }
+              view.button(
+                type: "button",
+                class: "sw-mermaid__btn",
+                "data-sw-zoom" => "reset",
+                "aria-label" => "Reset zoom",
+                title: "Reset"
+              ) { "\u21BA" }
+            end
+          end
+
+          # The diagram rendering area.
+          # Mermaid code stored as data attribute; JS reads it to render.
+          view.div(
+            class: "sw-mermaid__diagram",
+            "data-sw-mermaid-code" => component.code
+          )
+        end
+      end
+
+      # Mermaid CDN scripts -- injected lazily by render_mermaid_cdn_scripts
+      def render_mermaid_cdn_scripts(view)
+        # Inline the zoom/pan engine JS
+        js_path = File.join(__dir__, '..', 'assets', 'js', 'sw-mermaid-zoom.js')
+        if File.exist?(js_path)
+          view.script { view.raw(view.safe(File.read(js_path))) }
+        end
+      end
+
+      # CSS for Mermaid containers
+      MERMAID_CSS = <<~CSS
+        /* ===========================================
+           Mermaid Component Styles (sw- prefix)
+           =========================================== */
+        .sw-mermaid {
+          position: relative;
+          overflow: hidden;
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-md, 6px);
+          background: var(--sw-surface, #ffffff);
+          padding: 1rem;
+          margin: 0.5rem 0;
+        }
+
+        .sw-mermaid--compact {
+          padding: 0.25rem;
+          margin: 0;
+          border: none;
+          background: transparent;
+        }
+
+        .sw-mermaid--zoom {
+          cursor: grab;
+          min-height: 200px;
+        }
+
+        .sw-mermaid--zoom:active {
+          cursor: grabbing;
+        }
+
+        .sw-mermaid__diagram {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 60px;
+        }
+
+        .sw-mermaid__diagram svg {
+          max-width: 100%;
+          height: auto;
+        }
+
+        .sw-mermaid--compact .sw-mermaid__diagram svg {
+          max-height: 150px;
+        }
+
+        .sw-mermaid__controls {
+          position: absolute;
+          top: 0.5rem;
+          right: 0.5rem;
+          display: flex;
+          gap: 0.25rem;
+          z-index: 10;
+        }
+
+        .sw-mermaid__btn {
+          width: 28px;
+          height: 28px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--sw-surface-elevated, #f3f3f3);
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-sm, 4px);
+          cursor: pointer;
+          font-size: 1rem;
+          line-height: 1;
+          color: var(--sw-text, #111);
+          transition: background 150ms ease-out;
+        }
+
+        .sw-mermaid__btn:hover {
+          background: var(--sw-accent, #0d9488);
+          color: #fff;
+          border-color: var(--sw-accent, #0d9488);
+        }
+
+        .sw-mermaid__error {
+          color: var(--sw-error, #dc2626);
+          font-family: var(--sw-font-mono, monospace);
+          font-size: 0.85rem;
+          padding: 1rem;
+        }
+      CSS
+
+      # =========================================
+      # Pipeline rendering (visual skills T12)
+      # =========================================
+
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Pipeline] The pipeline component
+      # @param state [Hash] Current state hash
+      def render_pipeline(view, component, state)
+        # Inject CSS once per render
+        unless view.instance_variable_get(:@_pipeline_css_injected)
+          view.instance_variable_set(:@_pipeline_css_injected, true)
+          view.style { view.raw(view.safe(PIPELINE_CSS)) }
+        end
+
+        view.div(class: "sw-pipeline", role: "list") do
+          component.steps.each_with_index do |step, idx|
+            # Arrow connector between steps (not before first)
+            if idx > 0
+              view.div(class: "sw-pipeline__arrow", "aria-hidden" => "true") do
+                view.raw(view.safe("&#9654;")) # right-pointing triangle
+              end
+            end
+
+            view.div(class: component.step_css_class(step), role: "listitem") do
+              view.div(class: "sw-pipeline__label") { step[:label] }
+              if step[:description]
+                view.div(class: "sw-pipeline__desc") { step[:description] }
+              end
+            end
+          end
+        end
+      end
+
+      PIPELINE_CSS = <<~CSS
+        /* ===========================================
+           Pipeline Component Styles (sw- prefix, T12)
+           =========================================== */
+        .sw-pipeline {
+          display: flex;
+          align-items: center;
+          gap: 0;
+          flex-wrap: nowrap;
+          margin: 0.75rem 0;
+          overflow-x: auto;
+        }
+
+        .sw-pipeline__step {
+          flex: 1 1 0;
+          min-width: 100px;
+          padding: 0.75rem 1rem;
+          border-radius: var(--sw-radius-md, 6px);
+          text-align: center;
+          border: 2px solid transparent;
+          transition: background 200ms ease-out, border-color 200ms ease-out;
+        }
+
+        .sw-pipeline__step--complete {
+          background: color-mix(in oklch, var(--sw-success, #16a34a) 12%, var(--sw-surface, #fff));
+          border-color: var(--sw-success, #16a34a);
+          color: var(--sw-text, #111);
+        }
+
+        .sw-pipeline__step--active {
+          background: color-mix(in oklch, var(--sw-info, #2563eb) 12%, var(--sw-surface, #fff));
+          border-color: var(--sw-info, #2563eb);
+          color: var(--sw-text, #111);
+        }
+
+        .sw-pipeline__step--pending {
+          background: var(--sw-surface-elevated, #f3f3f3);
+          border-color: var(--sw-border, #e0e0e0);
+          color: var(--sw-text-dim, #444);
+        }
+
+        .sw-pipeline__label {
+          font-weight: 600;
+          font-size: 0.9rem;
+        }
+
+        .sw-pipeline__desc {
+          font-size: 0.75rem;
+          color: var(--sw-text-dim, #444);
+          margin-top: 0.25rem;
+        }
+
+        .sw-pipeline__arrow {
+          flex: 0 0 auto;
+          padding: 0 0.375rem;
+          font-size: 0.875rem;
+          color: var(--sw-text-dim, #444);
+          line-height: 1;
+        }
+
+        /* Responsive: vertical layout on narrow screens */
+        @media (max-width: 600px) {
+          .sw-pipeline {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .sw-pipeline__step {
+            min-width: unset;
+          }
+
+          .sw-pipeline__arrow {
+            transform: rotate(90deg);
+            text-align: center;
+            padding: 0.25rem 0;
+          }
+        }
+      CSS
+
+      # =========================================
+      # KpiDashboard rendering (visual skills T12)
+      # =========================================
+
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [KpiDashboard] The KPI dashboard component
+      # @param state [Hash] Current state hash
+      def render_kpi_dashboard(view, component, state)
+        # Inject CSS once per render
+        unless view.instance_variable_get(:@_kpi_css_injected)
+          view.instance_variable_set(:@_kpi_css_injected, true)
+          view.style { view.raw(view.safe(KPI_DASHBOARD_CSS)) }
+        end
+
+        view.div(class: "sw-kpi-dashboard") do
+          component.metrics.each_with_index do |metric, idx|
+            view.div(
+              class: component.card_css_class(metric),
+              style: "animation-delay: #{idx * 80}ms"
+            ) do
+              view.div(class: "sw-kpi-card__value") { metric[:value] }
+              view.div(class: "sw-kpi-card__label") { metric[:label] }
+              if metric[:trend]
+                view.div(class: component.trend_css_class(metric)) do
+                  component.trend_arrow(metric)
+                end
+              end
+            end
+          end
+        end
+      end
+
+      KPI_DASHBOARD_CSS = <<~CSS
+        /* ===========================================
+           KPI Dashboard Component Styles (sw- prefix, T12)
+           =========================================== */
+        .sw-kpi-dashboard {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: var(--sw-spacing-md, 1rem);
+          margin: 0.75rem 0;
+        }
+
+        @keyframes sw-kpi-fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(8px) scale(0.97);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .sw-kpi-card {
+          background: var(--sw-surface, #fff);
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-md, 6px);
+          padding: 1rem;
+          text-align: center;
+          position: relative;
+          animation: sw-kpi-fadeIn 400ms ease-out both;
+        }
+
+        .sw-kpi-card--green  { border-left: 4px solid var(--sw-success, #16a34a); }
+        .sw-kpi-card--blue   { border-left: 4px solid var(--sw-info, #2563eb); }
+        .sw-kpi-card--red    { border-left: 4px solid var(--sw-error, #dc2626); }
+        .sw-kpi-card--orange { border-left: 4px solid var(--sw-warning, #d97706); }
+        .sw-kpi-card--purple { border-left: 4px solid var(--sw-node-c, #7c3aed); }
+
+        .sw-kpi-card__value {
+          font-size: 1.75rem;
+          font-weight: 700;
+          color: var(--sw-text, #111);
+          line-height: 1.2;
+        }
+
+        .sw-kpi-card__label {
+          font-size: 0.8rem;
+          color: var(--sw-text-dim, #444);
+          margin-top: 0.25rem;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+
+        .sw-kpi-card__trend {
+          font-size: 0.9rem;
+          margin-top: 0.375rem;
+          font-weight: 600;
+        }
+
+        .sw-kpi-card__trend--up   { color: var(--sw-success, #16a34a); }
+        .sw-kpi-card__trend--down { color: var(--sw-error, #dc2626); }
+        .sw-kpi-card__trend--flat { color: var(--sw-text-dim, #444); }
+      CSS
+
+      # =========================================
+      # Chart rendering (visual skills T12)
+      # =========================================
+
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Chart] The chart component
+      # @param state [Hash] Current state hash
+      def render_chartjs(view, component, state)
+        # Inject CSS and Chart.js CDN loader once per render
+        unless view.instance_variable_get(:@_chart_assets_injected)
+          view.instance_variable_set(:@_chart_assets_injected, true)
+          view.style { view.raw(view.safe(CHART_CSS)) }
+          render_chart_cdn_scripts(view)
+        end
+
+        view.div(class: "sw-chart") do
+          view.canvas(
+            id: component.canvas_id,
+            class: "sw-chart__canvas",
+            height: component.height,
+            "data-sw-chart-type" => component.chart_type.to_s,
+            "data-sw-chart-data" => component.data_json,
+            "data-sw-chart-options" => component.options_json
+          )
+        end
+      end
+
+      # Chart.js CDN loader + dark mode aware init script
+      def render_chart_cdn_scripts(view)
+        view.script { view.raw(view.safe(CHART_JS_INIT)) }
+      end
+
+      CHART_CSS = <<~CSS
+        /* ===========================================
+           Chart Component Styles (sw- prefix, T12)
+           =========================================== */
+        .sw-chart {
+          position: relative;
+          margin: 0.75rem 0;
+          padding: 0.5rem;
+          background: var(--sw-surface, #fff);
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-md, 6px);
+        }
+
+        .sw-chart__canvas {
+          width: 100% !important;
+        }
+      CSS
+
+      CHART_JS_INIT = <<~'JS'
+        /* Chart.js lazy loader + dark mode aware init (T12) */
+        (function() {
+          var SW_CHART_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js";
+          var _chartJsLoaded = false;
+          var _chartJsLoading = false;
+
+          function getThemeColors() {
+            var style = getComputedStyle(document.documentElement);
+            return {
+              text: style.getPropertyValue('--sw-text').trim() || '#111',
+              border: style.getPropertyValue('--sw-border').trim() || '#e0e0e0',
+              textDim: style.getPropertyValue('--sw-text-dim').trim() || '#444'
+            };
+          }
+
+          function initChart(canvas) {
+            if (!window.Chart) return;
+            var type = canvas.getAttribute('data-sw-chart-type');
+            var data = JSON.parse(canvas.getAttribute('data-sw-chart-data'));
+            var opts = JSON.parse(canvas.getAttribute('data-sw-chart-options') || '{}');
+            var colors = getThemeColors();
+
+            // Apply dark-mode-aware defaults
+            if (!opts.plugins) opts.plugins = {};
+            if (!opts.plugins.legend) opts.plugins.legend = {};
+            if (!opts.plugins.legend.labels) opts.plugins.legend.labels = {};
+            opts.plugins.legend.labels.color = opts.plugins.legend.labels.color || colors.text;
+
+            // Scale colors (for bar, line, radar)
+            if (['bar', 'line', 'radar'].indexOf(type) !== -1) {
+              if (!opts.scales) opts.scales = {};
+              ['x', 'y', 'r'].forEach(function(axis) {
+                if (!opts.scales[axis]) opts.scales[axis] = {};
+                if (!opts.scales[axis].ticks) opts.scales[axis].ticks = {};
+                opts.scales[axis].ticks.color = opts.scales[axis].ticks.color || colors.text;
+                if (!opts.scales[axis].grid) opts.scales[axis].grid = {};
+                opts.scales[axis].grid.color = opts.scales[axis].grid.color || colors.border;
+              });
+            }
+
+            // Provide default colors for datasets that lack them
+            var palette = [
+              'rgba(37, 99, 235, 0.7)',
+              'rgba(22, 163, 74, 0.7)',
+              'rgba(220, 38, 38, 0.7)',
+              'rgba(217, 119, 6, 0.7)',
+              'rgba(124, 58, 237, 0.7)',
+              'rgba(13, 148, 136, 0.7)',
+              'rgba(219, 39, 119, 0.7)',
+              'rgba(245, 158, 11, 0.7)'
+            ];
+            (data.datasets || []).forEach(function(ds, i) {
+              if (!ds.backgroundColor) {
+                if (['pie', 'doughnut'].indexOf(type) !== -1) {
+                  ds.backgroundColor = palette;
+                } else {
+                  ds.backgroundColor = palette[i % palette.length];
+                }
+              }
+              if (!ds.borderColor && ['line', 'radar'].indexOf(type) !== -1) {
+                ds.borderColor = palette[i % palette.length];
+              }
+            });
+
+            new Chart(canvas, { type: type, data: data, options: opts });
+          }
+
+          function initAllCharts() {
+            var canvases = document.querySelectorAll('.sw-chart__canvas');
+            canvases.forEach(function(c) {
+              if (!c._swChartInit) {
+                c._swChartInit = true;
+                initChart(c);
+              }
+            });
+          }
+
+          function loadChartJs() {
+            if (_chartJsLoaded) { initAllCharts(); return; }
+            if (_chartJsLoading) return;
+            _chartJsLoading = true;
+
+            var script = document.createElement('script');
+            script.src = SW_CHART_CDN;
+            script.onload = function() {
+              _chartJsLoaded = true;
+              _chartJsLoading = false;
+              initAllCharts();
+            };
+            script.onerror = function() {
+              _chartJsLoading = false;
+              console.error('[StreamWeaver] Failed to load Chart.js from CDN');
+            };
+            document.head.appendChild(script);
+          }
+
+          // Auto-init on DOM ready
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadChartJs);
+          } else {
+            loadChartJs();
+          }
+
+          // Re-init after HTMX swaps (for dynamic content)
+          document.addEventListener('htmx:afterSettle', function() {
+            if (_chartJsLoaded) initAllCharts();
+            else loadChartJs();
+          });
+
+          // Expose for manual init
+          window.swChartInit = loadChartJs;
+        })();
+      JS
+
+      # =========================================
+      # KeyboardShortcuts rendering (visual skills T5)
+      # =========================================
+
+      # Render keyboard shortcuts as a non-visual <script> block.
+      # Injects the sw-keyboard.js engine once, then emits registration calls.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [KeyboardShortcuts] The keyboard shortcuts component
+      # @param state [Hash] Current state hash
+      def render_keyboard_shortcuts(view, component, state)
+        inject_keyboard_js(view)
+
+        # Emit registration script
+        js_code = component.to_js
+        return if js_code.strip.empty?
+
+        view.script do
+          view.raw(view.safe("document.addEventListener('DOMContentLoaded', function() {\n#{js_code}\n});"))
+        end
+      end
+
+      # Inject sw-keyboard.js once per render
+      def inject_keyboard_js(view)
+        return if view.instance_variable_get(:@_keyboard_js_injected)
+        view.instance_variable_set(:@_keyboard_js_injected, true)
+        js_path = File.join(__dir__, '..', 'assets', 'js', 'sw-keyboard.js')
+        view.script { view.raw(view.safe(File.read(js_path))) } if File.exist?(js_path)
+      end
+
+      # =========================================
+      # SlideContainer rendering (visual skills T5)
+      # =========================================
+
+      # Render a slide container with navigation controls.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [SlideContainer] The slide container component
+      # @param state [Hash] Current state hash
+      def render_slide_container(view, component, state)
+        inject_slide_nav_js(view)
+        inject_keyboard_js(view) if component.keyboard_nav
+        inject_slide_container_css(view)
+
+        total = component.slide_count
+        alpine_data = "swSlideNav(#{total}, '#{component.mode}', #{component.keyboard_nav})"
+        container_id = component.container_id
+
+        view.div(
+          id: container_id,
+          class: component.css_classes,
+          "x-data" => alpine_data
+        ) do
+          # Fixed-position progress bar
+          if component.progress_bar
+            view.div(
+              class: "sw-slide-progress sw-slide-progress--fixed",
+              "aria-hidden" => "true"
+            ) do
+              view.div(
+                class: "sw-slide-progress__bar",
+                ":style" => "'width: ' + progress() + '%'"
+              )
+            end
+          end
+
+          # Counter (e.g. "2 / 5")
+          if component.counter
+            view.div(
+              class: "sw-slide-counter",
+              "x-text" => "(current + 1) + ' / ' + total"
+            )
+          end
+
+          if component.swap?
+            # Swap mode: show one slide at a time
+            component.children.each_with_index do |slide_component, index|
+              view.div(
+                id: "sw-slide-#{index}",
+                class: slide_component.css_classes,
+                "x-show" => "current === #{index}",
+                "x-transition:enter" => "sw-slide-fade-enter",
+                "x-transition:enter-start" => "sw-slide-fade-enter-start",
+                "x-transition:enter-end" => "sw-slide-fade-enter-end",
+                "x-cloak" => (index > 0 ? true : nil)
+              ) do
+                if slide_component.title
+                  view.h2(class: "sw-slide__title") { slide_component.title }
+                end
+                slide_component.children.each { |child| child.render(view, state) }
+              end
+            end
+
+            # Back / Next navigation buttons
+            view.div(class: "sw-slide-nav") do
+              view.button(
+                type: "button",
+                class: "sw-slide-nav__btn sw-slide-nav__btn--prev",
+                "@click" => "prev()",
+                ":disabled" => "!canPrev()"
+              ) { "Back" }
+              view.button(
+                type: "button",
+                class: "sw-slide-nav__btn sw-slide-nav__btn--next",
+                "@click" => "next()",
+                ":disabled" => "!canNext()"
+              ) { "Next" }
+            end
+          else
+            # Scroll-snap mode: all slides rendered
+            view.div(class: "sw-slide-container__scroll") do
+              component.children.each_with_index do |slide_component, index|
+                view.div(
+                  id: "sw-slide-#{index}",
+                  class: "#{slide_component.css_classes} sw-slide--snap"
+                ) do
+                  if slide_component.title
+                    view.h2(class: "sw-slide__title") { slide_component.title }
+                  end
+                  slide_component.children.each { |child| child.render(view, state) }
+                end
+              end
+            end
+          end
+
+          # Navigation dots
+          if component.nav_dots
+            view.div(class: "sw-slide-dots") do
+              total.times do |i|
+                view.button(
+                  type: "button",
+                  class: "sw-slide-dots__dot",
+                  ":class" => "{ 'sw-slide-dots__dot--active': current === #{i} }",
+                  "@click" => "goTo(#{i})",
+                  "aria-label" => "Go to slide #{i + 1}"
+                )
+              end
+            end
+          end
+        end
+      end
+
+      # Render an individual slide (when used outside a container)
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Slide] The slide component
+      # @param state [Hash] Current state hash
+      def render_slide(view, component, state)
+        view.div(class: component.css_classes) do
+          if component.title
+            view.h2(class: "sw-slide__title") { component.title }
+          end
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # =========================================
+      # Explainer component rendering (T11)
+      # =========================================
+
+      # Render a sticky sidebar TOC with scroll spy.
+      # Desktop: sticky 170px sidebar. Mobile: horizontal scrollable bar.
+      def render_sidebar_toc(view, component, state)
+        inject_sidebar_toc_assets(view)
+
+        view.nav(class: "sw-sidebar-toc", "aria-label" => "Table of contents") do
+          view.div(class: "sw-sidebar-toc__nav") do
+            component.sections.each do |section|
+              view.a(
+                class: "sw-sidebar-toc__link",
+                href: "##{section[:id]}",
+                "data-sw-toc-target" => section[:id]
+              ) { section[:label] }
+            end
+          end
+        end
+      end
+
+      # Render a non-dismissible callout box with colored left border and icon.
+      def render_callout(view, component, state)
+        inject_callout_css(view)
+
+        view.div(class: "sw-callout #{component.variant_class}", role: "note") do
+          view.div(class: "sw-callout__icon", "aria-hidden" => "true") do
+            view.plain(component.icon)
+          end
+          view.div(class: "sw-callout__body") do
+            if component.title
+              view.div(class: "sw-callout__title") { component.title }
+            end
+            view.div(class: "sw-callout__content") do
+              component.children.each { |child| child.render(view, state) }
+            end
+          end
+        end
+      end
+
+      # Render side-by-side comparison panels.
+      def render_comparison(view, component, state)
+        inject_comparison_css(view)
+
+        view.div(class: "sw-comparison") do
+          # Before panel
+          view.div(class: "sw-comparison__panel sw-comparison__panel--before") do
+            view.div(class: "sw-comparison__label") { component.before_label }
+            view.div(class: "sw-comparison__content") do
+              component.before_children.each { |child| child.render(view, state) }
+            end
+          end
+          # After panel
+          view.div(class: "sw-comparison__panel sw-comparison__panel--after") do
+            view.div(class: "sw-comparison__label") { component.after_label }
+            view.div(class: "sw-comparison__content") do
+              component.after_children.each { |child| child.render(view, state) }
+            end
+          end
+        end
+      end
+
+      # -- T11 CSS/JS injection helpers --
+
+      def inject_sidebar_toc_assets(view)
+        return if view.instance_variable_get(:@_sidebar_toc_assets_injected)
+
+        view.instance_variable_set(:@_sidebar_toc_assets_injected, true)
+        view.style { view.raw(view.safe(sidebar_toc_css)) }
+        js_path = File.join(__dir__, '..', 'assets', 'js', 'sw-sidebar-toc.js')
+        if File.exist?(js_path)
+          view.script { view.raw(view.safe(File.read(js_path))) }
+        end
+      end
+
+      def inject_callout_css(view)
+        return if view.instance_variable_get(:@_callout_css_injected)
+
+        view.instance_variable_set(:@_callout_css_injected, true)
+        view.style { view.raw(view.safe(callout_css)) }
+      end
+
+      def inject_comparison_css(view)
+        return if view.instance_variable_get(:@_comparison_css_injected)
+
+        view.instance_variable_set(:@_comparison_css_injected, true)
+        view.style { view.raw(view.safe(comparison_css)) }
+      end
+
+      def sidebar_toc_css
+        <<~CSS
+          /* ===========================================
+             SidebarToc Styles (sw- prefix, T11)
+             =========================================== */
+          .sw-sidebar-toc {
+            position: sticky;
+            top: 1rem;
+            z-index: 10;
+          }
+
+          /* Desktop: vertical sidebar */
+          @media (min-width: 1000px) {
+            .sw-sidebar-toc {
+              width: 170px;
+              max-height: calc(100vh - 2rem);
+              overflow-y: auto;
+              float: left;
+              margin-right: 1.5rem;
+              margin-left: -190px;
+            }
+
+            .sw-sidebar-toc__nav {
+              display: flex;
+              flex-direction: column;
+              gap: 0.25rem;
+            }
+          }
+
+          /* Mobile: horizontal scrollable bar */
+          @media (max-width: 999px) {
+            .sw-sidebar-toc {
+              top: 0;
+              background: var(--sw-surface, #ffffff);
+              border-bottom: 1px solid var(--sw-border, #e0e0e0);
+              padding: 0.5rem 0;
+              margin: 0 -1rem 1rem -1rem;
+              width: calc(100% + 2rem);
+            }
+
+            .sw-sidebar-toc__nav {
+              display: flex;
+              flex-direction: row;
+              gap: 0.25rem;
+              overflow-x: auto;
+              -webkit-overflow-scrolling: touch;
+              scrollbar-width: none;
+              padding: 0 1rem;
+            }
+
+            .sw-sidebar-toc__nav::-webkit-scrollbar {
+              display: none;
+            }
+
+            .sw-sidebar-toc__link {
+              white-space: nowrap;
+              flex-shrink: 0;
+            }
+          }
+
+          .sw-sidebar-toc__link {
+            display: block;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.8125rem;
+            color: var(--sw-text-dim, #444444);
+            text-decoration: none;
+            border-radius: var(--sw-radius-sm, 4px);
+            border-left: 2px solid transparent;
+            transition: color 150ms ease-out, background 150ms ease-out, border-color 150ms ease-out;
+          }
+
+          .sw-sidebar-toc__link:hover {
+            color: var(--sw-text, #111111);
+            background: var(--sw-surface-elevated, #f3f3f3);
+          }
+
+          .sw-sidebar-toc__link.sw-is-active {
+            color: var(--sw-accent, #0d9488);
+            border-left-color: var(--sw-accent, #0d9488);
+            font-weight: 600;
+            background: color-mix(in oklch, var(--sw-accent) 6%, transparent);
+          }
+
+          @media (max-width: 999px) {
+            .sw-sidebar-toc__link {
+              border-left: none;
+              border-bottom: 2px solid transparent;
+            }
+
+            .sw-sidebar-toc__link.sw-is-active {
+              border-left-color: transparent;
+              border-bottom-color: var(--sw-accent, #0d9488);
+            }
+          }
+        CSS
+      end
+
+      def callout_css
+        <<~CSS
+          /* ===========================================
+             Callout Styles (sw- prefix, T11)
+             =========================================== */
+          .sw-callout {
+            display: flex;
+            gap: 0.75rem;
+            padding: 1rem 1.25rem;
+            border-radius: var(--sw-radius-md, 6px);
+            border-left: 4px solid var(--sw-info, #2563eb);
+            background: color-mix(in oklch, var(--sw-info) 6%, var(--sw-surface, #ffffff));
+            margin: 0.75rem 0;
+          }
+
+          .sw-callout__icon {
+            flex-shrink: 0;
+            font-size: 1.25rem;
+            line-height: 1.4;
+          }
+
+          .sw-callout__body {
+            flex: 1;
+            min-width: 0;
+          }
+
+          .sw-callout__title {
+            font-weight: 700;
+            font-size: 0.9375rem;
+            margin-bottom: 0.25rem;
+            color: var(--sw-text, #111111);
+          }
+
+          .sw-callout__content {
+            font-size: 0.875rem;
+            color: var(--sw-text, #111111);
+            line-height: 1.6;
+          }
+
+          /* Variant colors */
+          .sw-callout--info {
+            border-left-color: var(--sw-info, #2563eb);
+            background: color-mix(in oklch, var(--sw-info) 6%, var(--sw-surface, #ffffff));
+          }
+
+          .sw-callout--warning {
+            border-left-color: var(--sw-warning, #d97706);
+            background: color-mix(in oklch, var(--sw-warning) 6%, var(--sw-surface, #ffffff));
+          }
+
+          .sw-callout--success {
+            border-left-color: var(--sw-success, #16a34a);
+            background: color-mix(in oklch, var(--sw-success) 6%, var(--sw-surface, #ffffff));
+          }
+
+          .sw-callout--error {
+            border-left-color: var(--sw-error, #dc2626);
+            background: color-mix(in oklch, var(--sw-error) 6%, var(--sw-surface, #ffffff));
+          }
+
+          .sw-callout--tip {
+            border-left-color: #7c3aed;
+            background: color-mix(in oklch, #7c3aed 6%, var(--sw-surface, #ffffff));
+          }
+
+          /* Dark mode adjustments */
+          html.dark .sw-callout {
+            background: color-mix(in oklch, var(--sw-info) 8%, var(--sw-surface, oklch(0.205 0 0)));
+          }
+          html.dark .sw-callout--info {
+            background: color-mix(in oklch, var(--sw-info) 8%, var(--sw-surface, oklch(0.205 0 0)));
+          }
+          html.dark .sw-callout--warning {
+            background: color-mix(in oklch, var(--sw-warning) 8%, var(--sw-surface, oklch(0.205 0 0)));
+          }
+          html.dark .sw-callout--success {
+            background: color-mix(in oklch, var(--sw-success) 8%, var(--sw-surface, oklch(0.205 0 0)));
+          }
+          html.dark .sw-callout--error {
+            background: color-mix(in oklch, var(--sw-error) 8%, var(--sw-surface, oklch(0.205 0 0)));
+          }
+          html.dark .sw-callout--tip {
+            background: color-mix(in oklch, #a78bfa 8%, var(--sw-surface, oklch(0.205 0 0)));
+          }
+        CSS
+      end
+
+      def comparison_css
+        <<~CSS
+          /* ===========================================
+             Comparison Styles (sw- prefix, T11)
+             =========================================== */
+          .sw-comparison {
+            display: flex;
+            gap: 1rem;
+            margin: 0.75rem 0;
+          }
+
+          .sw-comparison__panel {
+            flex: 1;
+            min-width: 0;
+            border: 1px solid var(--sw-border, #e0e0e0);
+            border-radius: var(--sw-radius-md, 6px);
+            background: var(--sw-surface, #ffffff);
+            overflow: hidden;
+          }
+
+          .sw-comparison__label {
+            padding: 0.5rem 1rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--sw-text-dim, #444444);
+            background: var(--sw-surface-elevated, #f3f3f3);
+            border-bottom: 1px solid var(--sw-border, #e0e0e0);
+          }
+
+          .sw-comparison__content {
+            padding: 1rem;
+          }
+
+          /* Before panel: subtle red/warm tint */
+          .sw-comparison__panel--before {
+            border-top: 3px solid var(--sw-error, #dc2626);
+          }
+
+          /* After panel: subtle green/cool tint */
+          .sw-comparison__panel--after {
+            border-top: 3px solid var(--sw-success, #16a34a);
+          }
+
+          /* Responsive: stack vertically on narrow viewports */
+          @media (max-width: 767px) {
+            .sw-comparison {
+              flex-direction: column;
+            }
+          }
+        CSS
+      end
+
+      # =========================================
+      # Design Deck rendering (T7)
+      # =========================================
+
+      # Render the top-level design deck.
+      # Wraps slides in a SlideContainer with :swap mode for navigation.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::DesignDeck] The deck component
+      # @param state [Hash] Current state hash
+      def render_design_deck(view, component, state)
+        inject_deck_css(view)
+        inject_slide_nav_js(view)
+        inject_keyboard_js(view)
+        inject_slide_container_css(view)
+
+        slides = component.children.select { |c| c.is_a?(Components::Deck::DeckSlide) }
+        summary = component.children.find { |c| c.is_a?(Components::Deck::DeckSummary) }
+        # Total includes regular slides + summary slide
+        total = slides.length + (summary ? 1 : 0)
+        current_slide = state[:_deck_current_slide] || 0
+        alpine_data = "swSlideNav(#{total}, 'swap', true, #{current_slide})"
+        container_id = "sw-deck-#{component.object_id}"
+
+        view.div(class: component.css_classes) do
+          # Slide container (swap mode)
+          view.div(
+            id: container_id,
+            class: "sw-slide-container sw-slide-container--swap",
+            "x-data" => alpine_data,
+            ":data-current-slide" => "current"
+          ) do
+            # Fixed-position progress bar
+            view.div(
+              class: "sw-slide-progress sw-slide-progress--fixed",
+              "aria-hidden" => "true"
+            ) do
+              view.div(
+                class: "sw-slide-progress__bar",
+                ":style" => "'width: ' + progress() + '%'"
+              )
+            end
+
+            # Render each slide with x-show for swap mode
+            slides.each_with_index do |deck_slide, index|
+              view.div(
+                id: "sw-deck-slide-#{deck_slide.id}",
+                class: deck_slide.css_classes,
+                "x-show" => "current === #{index}",
+                "x-transition:enter" => "sw-slide-fade-enter",
+                "x-transition:enter-start" => "sw-slide-fade-enter-start",
+                "x-transition:enter-end" => "sw-slide-fade-enter-end",
+                "x-cloak" => (index > 0 ? true : nil)
+              ) do
+                render_deck_slide_content(view, deck_slide, state)
+              end
+            end
+
+            # Render summary slide as last slide (T9)
+            if summary
+              summary_index = slides.length
+              view.div(
+                id: "sw-deck-slide-summary",
+                class: "sw-deck-slide",
+                "x-show" => "current === #{summary_index}",
+                "x-transition:enter" => "sw-slide-fade-enter",
+                "x-transition:enter-start" => "sw-slide-fade-enter-start",
+                "x-transition:enter-end" => "sw-slide-fade-enter-end",
+                "x-cloak" => true
+              ) do
+                summary.render(view, state)
+              end
+            end
+
+            # Back / Next navigation buttons
+            view.div(class: "sw-slide-nav") do
+              view.button(
+                type: "button",
+                class: "sw-slide-nav__btn sw-slide-nav__btn--prev",
+                "@click" => "prev()",
+                ":disabled" => "!canPrev()"
+              ) { "Back" }
+              view.button(
+                type: "button",
+                class: "sw-slide-nav__btn sw-slide-nav__btn--next",
+                "@click" => "next()",
+                ":disabled" => "!canNext()"
+              ) { "Next" }
+            end
+          end
+        end
+      end
+
+      # Render a standalone deck slide (when rendered outside of design_deck,
+      # e.g. in tests). Normally called via render_design_deck.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::DeckSlide] The slide component
+      # @param state [Hash] Current state hash
+      def render_deck_slide(view, component, state)
+        inject_deck_css(view)
+        view.div(class: component.css_classes) do
+          render_deck_slide_content(view, component, state)
+        end
+      end
+
+      # Render a deck option card.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::DeckOption] The option component
+      # @param state [Hash] Current state hash
+      def render_deck_option(view, component, state)
+        inject_deck_css(view)
+        inject_deck_selection_js(view)
+
+        # Read selection state from DeckState (T8)
+        deck_state = state[:_deck_state]
+        slide_id = component.slide_id
+        is_selected = deck_state && slide_id && deck_state.selected?(slide_id, component.label)
+        note_text = deck_state && slide_id ? deck_state.note(slide_id, component.label) : nil
+
+        aria_hash = { checked: is_selected ? "true" : "false" }
+        aria_hash[:label] = component.description if component.description
+
+        attrs = {
+          class: component.css_classes(selected: is_selected),
+          role: "radio",
+          aria: aria_hash,
+          tabindex: "0",
+          "data-slide-id" => slide_id,
+          "data-option-label" => component.label,
+          "data-option-index" => component.option_index.to_s,
+          "@click" => "swDeckSelect($el)"
+        }
+
+        view.div(**attrs) do
+          # Radio indicator
+          view.div(class: "sw-deck-option__radio") do
+            view.div(class: "sw-deck-option__radio-dot")
+          end
+
+          # Header with label and optional recommended badge
+          view.div(class: "sw-deck-option__header") do
+            view.span(class: "sw-deck-option__label") { component.label }
+            if component.recommended
+              view.span(class: "sw-deck-option__badge") { "Recommended" }
+            end
+          end
+
+          # Preview content area (children: mermaid, code_block, etc.)
+          unless component.children.empty?
+            view.div(class: "sw-deck-option__preview") do
+              component.children.each { |child| child.render(view, state) }
+            end
+          end
+
+          # Aside text
+          if component.aside
+            view.div(class: "sw-deck-option__aside") { component.aside }
+          end
+
+          # Notes textarea with persistence (T8)
+          view.div(class: "sw-deck-option__notes") do
+            view.textarea(
+              class: "sw-deck-option__notes-input",
+              placeholder: "Add notes...",
+              rows: "2",
+              "data-slide-id" => slide_id,
+              "data-option-label" => component.label,
+              "@blur" => "swDeckSaveNote($el)"
+            ) { note_text || "" }
+          end
+        end
+      end
+
+      # Render generate-more controls for a slide (T10).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::GenerateMoreControls] The controls component
+      # @param state [Hash] Current state hash
+      def render_generate_more_controls(view, component, state)
+        inject_deck_css(view)
+        inject_generate_more_css(view)
+        inject_generate_more_js(view)
+
+        slide_id = component.slide_id
+        is_generating = component.generating?
+        is_timed_out = component.timed_out?
+
+        view.div(class: component.css_classes, id: "sw-generate-more-#{slide_id}") do
+          if is_generating
+            # Status banner with cancel button
+            view.div(class: "sw-generate-more__status") do
+              view.div(class: "sw-generate-more__status-indicator") do
+                view.div(class: "sw-generate-more__status-dot")
+                view.span(class: "sw-generate-more__status-text") do
+                  "Generating #{component.requested_count} option(s)... " \
+                  "#{component.received_count}/#{component.requested_count} received"
+                end
+              end
+              view.button(
+                type: "button",
+                class: "sw-generate-more__btn sw-generate-more__btn--cancel",
+                "@click" => "swCancelGenerate()"
+              ) { "Cancel" }
+            end
+          elsif is_timed_out
+            # Timeout warning
+            view.div(class: "sw-generate-more__timeout") do
+              view.span(class: "sw-generate-more__timeout-text") do
+                "Generation timed out. " \
+                "#{component.received_count}/#{component.requested_count} options received. " \
+                "Click Generate to try again."
+              end
+            end
+          end
+
+          unless is_generating
+            # Generate form
+            view.div(class: "sw-generate-more__form") do
+              view.input(
+                type: "text",
+                class: "sw-generate-more__prompt",
+                id: "sw-gen-prompt-#{slide_id}",
+                placeholder: "e.g., Focus on event-driven patterns",
+                "aria-label" => "Generation prompt"
+              )
+              view.select(
+                class: "sw-generate-more__count",
+                id: "sw-gen-count-#{slide_id}",
+                "aria-label" => "Number of options"
+              ) do
+                (1..3).each do |n|
+                  attrs = { value: n.to_s }
+                  attrs[:selected] = "selected" if n == 2
+                  view.option(**attrs) { "#{n} option#{'s' if n > 1}" }
+                end
+              end
+              view.button(
+                type: "button",
+                class: "sw-generate-more__btn sw-generate-more__btn--generate",
+                "@click" => "swGenerate('#{slide_id}')"
+              ) { "Generate More" }
+            end
+          end
+        end
+      end
+
+      # Render a skeleton placeholder card (T10).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::SkeletonPlaceholder] The skeleton component
+      # @param state [Hash] Current state hash
+      def render_skeleton_placeholder(view, component, state)
+        inject_generate_more_css(view)
+
+        delay = component.index * 0.2
+        view.div(class: component.css_classes) do
+          view.div(
+            class: "sw-skeleton__line sw-skeleton__line--title",
+            style: "animation-delay: #{delay}s"
+          )
+          view.div(
+            class: "sw-skeleton__line sw-skeleton__line--body",
+            style: "animation-delay: #{delay + 0.15}s"
+          )
+          view.div(
+            class: "sw-skeleton__line sw-skeleton__line--body sw-skeleton__line--short",
+            style: "animation-delay: #{delay + 0.3}s"
+          )
+        end
+      end
+
+      # Render the auto-generated deck summary slide (T9).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::DeckSummary] The summary component
+      # @param state [Hash] Current state hash
+      def render_deck_summary(view, component, state)
+        inject_deck_css(view)
+        inject_deck_summary_js(view)
+
+        deck_state = state[:_deck_state]
+        is_complete = component.all_selected?(deck_state)
+        is_submitted = deck_state&.submitted? || false
+        missing = component.missing_slides(deck_state)
+        final_notes_text = deck_state&.final_notes || ""
+
+        view.div(class: component.css_classes) do
+          view.h2(class: "sw-deck-summary__title") { "Summary" }
+
+          # Summary cards grid
+          view.div(class: "sw-deck-summary__cards") do
+            component.deck_slides.each do |slide|
+              selected_label = deck_state&.selection(slide.id)
+              has_selection = !selected_label.nil? && !selected_label.empty?
+              note_text = has_selection ? deck_state&.note(slide.id, selected_label) : nil
+              card_class = "sw-deck-summary__card"
+              card_class += " sw-deck-summary__card--empty" unless has_selection
+
+              view.div(class: card_class) do
+                view.div(class: "sw-deck-summary__card-title") { slide.title || slide.id }
+                if has_selection
+                  view.div(class: "sw-deck-summary__card-label") { selected_label }
+                  # Find the option's aside text
+                  option = slide.children.find { |c|
+                    c.is_a?(Components::Deck::DeckOption) && c.label == selected_label
+                  }
+                  if option&.aside
+                    view.div(class: "sw-deck-summary__card-aside") { option.aside }
+                  end
+                  if note_text && !note_text.empty?
+                    view.div(class: "sw-deck-summary__card-notes") do
+                      view.span(class: "sw-deck-summary__card-notes-label") { "Notes: " }
+                      view.span { note_text }
+                    end
+                  end
+                else
+                  view.div(class: "sw-deck-summary__card-label sw-deck-summary__card-label--none") { "No selection" }
+                end
+              end
+            end
+          end
+
+          # Missing selections message
+          unless is_complete
+            view.div(class: "sw-deck-summary__missing") do
+              "Still need: #{missing.join(', ')}"
+            end
+          end
+
+          # Final notes textarea
+          view.div(class: "sw-deck-summary__final-notes") do
+            view.label(class: "sw-deck-summary__final-notes-label") { "Final notes" }
+            view.textarea(
+              class: "sw-deck-summary__final-notes-input",
+              placeholder: "Add any overall comments...",
+              rows: "3",
+              "@blur" => "swDeckSaveFinalNotes($el)",
+              disabled: is_submitted ? true : nil
+            ) { final_notes_text }
+          end
+
+          # Submit button
+          if is_submitted
+            view.div(class: "sw-deck-summary__submitted") { "Submitted" }
+          else
+            btn_class = "sw-deck-summary__submit"
+            btn_class += " sw-deck-summary__submit--disabled" unless is_complete
+            view.button(
+              type: "button",
+              class: btn_class,
+              disabled: is_complete ? nil : true,
+              "@click" => "swDeckSubmit()"
+            ) { "Submit" }
+          end
+        end
+      end
+
+      # Render an AI model selector with provider filter pills (T14).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::ModelSelector] The model selector component
+      # @param state [Hash] Current state hash
+      def render_model_selector(view, component, state)
+        return unless component.visible?
+
+        inject_deck_polish_css(view)
+
+        deck_state = state[:_deck_state]
+        current_model = deck_state&.selected_model || component.default_model
+        providers = ["All"] + component.providers
+
+        alpine_data = "{ provider: 'All', selectedModel: '#{current_model}' }"
+
+        view.div(class: component.css_classes, "x-data" => alpine_data) do
+          # Provider filter pills
+          view.div(class: "sw-model-selector__pills") do
+            providers.each do |prov|
+              pill_bind = ":class=\"provider === '#{prov}' ? 'sw-model-selector__pill sw-model-selector__pill--active' : 'sw-model-selector__pill'\""
+              view.button(
+                type: "button",
+                class: "sw-model-selector__pill",
+                ":class" => "provider === '#{prov}' ? 'sw-model-selector__pill sw-model-selector__pill--active' : 'sw-model-selector__pill'",
+                "@click" => "provider = '#{prov}'"
+              ) { prov }
+            end
+          end
+
+          # Model list
+          view.div(class: "sw-model-selector__list") do
+            component.models.each do |model|
+              item_show = "provider === 'All' || provider === '#{model[:provider]}'"
+              view.div(
+                class: "sw-model-selector__item",
+                ":class" => "selectedModel === '#{model[:id]}' ? 'sw-model-selector__item sw-model-selector__item--selected' : 'sw-model-selector__item'",
+                "x-show" => item_show,
+                "@click" => "selectedModel = '#{model[:id]}'; fetch('/deck/set_model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model_id: '#{model[:id]}' }) })",
+                "data-model-id" => model[:id]
+              ) do
+                view.span(class: "sw-model-selector__name") { model[:name] }
+                view.span(class: "sw-model-selector__provider") { model[:provider] }
+              end
+            end
+          end
+        end
+      end
+
+      # Render a fixed top confirmation bar (T14).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::ConfirmationBar] The confirmation bar component
+      # @param state [Hash] Current state hash
+      def render_confirmation_bar(view, component, state)
+        inject_deck_polish_css(view)
+
+        auto_hide_js = if component.auto_hide?
+          "{ visible: true, remaining: #{component.auto_hide}, " \
+          "init() { this.interval = setInterval(() => { this.remaining--; if (this.remaining <= 0) { this.visible = false; clearInterval(this.interval); } }, 1000); }, " \
+          "dismiss() { this.visible = false; clearInterval(this.interval); } }"
+        else
+          "{ visible: true, remaining: null, dismiss() { this.visible = false; } }"
+        end
+
+        view.div(
+          class: component.css_classes,
+          "x-data" => auto_hide_js,
+          "x-show" => "visible",
+          "x-transition:enter" => "sw-confirmation-bar-enter",
+          "x-transition:enter-start" => "sw-confirmation-bar-enter-start",
+          "x-transition:enter-end" => "sw-confirmation-bar-enter-end",
+          "x-transition:leave" => "sw-confirmation-bar-leave",
+          "x-transition:leave-start" => "sw-confirmation-bar-leave-start",
+          "x-transition:leave-end" => "sw-confirmation-bar-leave-end",
+          role: "alertdialog",
+          "aria-label" => component.message
+        ) do
+          view.span(class: "sw-confirmation-bar__message") { component.message }
+
+          view.div(class: "sw-confirmation-bar__actions") do
+            if component.auto_hide?
+              view.span(
+                class: "sw-confirmation-bar__timer",
+                "x-text" => "remaining + 's'"
+              )
+            end
+
+            view.button(
+              type: "button",
+              class: "sw-confirmation-bar__btn sw-confirmation-bar__btn--cancel",
+              "@click" => "dismiss()"
+            ) { component.cancel_label }
+
+            view.button(
+              type: "button",
+              class: "sw-confirmation-bar__btn sw-confirmation-bar__btn--confirm",
+              "@click" => "$dispatch('sw-confirm')"
+            ) { component.confirm_label }
+          end
+        end
+      end
+
+      # Render a full-screen close overlay (T14).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::CloseOverlay] The overlay component
+      # @param state [Hash] Current state hash
+      def render_close_overlay(view, component, state)
+        inject_deck_polish_css(view)
+
+        countdown_s = (component.auto_close_delay / 1000.0).round(1)
+        auto_close_js = "{ countdown: #{countdown_s}, " \
+          "init() { setTimeout(() => { try { window.close(); } catch(e) {} }, #{component.auto_close_delay}); " \
+          "this.interval = setInterval(() => { this.countdown = Math.max(0, (this.countdown - 0.1).toFixed(1)); }, 100); } }"
+
+        view.div(
+          class: component.css_classes,
+          "x-data" => auto_close_js,
+          role: "status",
+          "aria-live" => "polite"
+        ) do
+          view.div(class: "sw-close-overlay__backdrop")
+
+          view.div(class: "sw-close-overlay__content") do
+            # Status icon
+            icon_class = "sw-close-overlay__icon"
+            icon_class += component.submitted? ? " sw-close-overlay__icon--success" : " sw-close-overlay__icon--cancel"
+            view.div(class: icon_class) { component.icon }
+
+            # Message
+            view.div(class: "sw-close-overlay__message") { component.message }
+
+            # Countdown
+            view.div(
+              class: "sw-close-overlay__countdown",
+              "x-text" => "'Closing in ' + countdown + 's...'"
+            )
+
+            # Manual close button
+            view.button(
+              type: "button",
+              class: "sw-close-overlay__close-btn",
+              "@click" => "try { window.close(); } catch(e) { document.body.innerHTML = '<p style=\"text-align:center;margin-top:2rem\">You can close this tab.</p>'; }"
+            ) { "Close Now" }
+          end
+        end
+      end
+
+      private
+
+      # Render the inner content of a deck slide (title, context, options grid)
+      def render_deck_slide_content(view, component, state)
+        # Slide title
+        if component.title
+          view.h2(class: "sw-deck-slide__title") { component.title }
+        end
+
+        # Context text
+        if component.context_text
+          view.p(class: "sw-deck-slide__context") { component.context_text }
+        end
+
+        # Check for generated options and generate state from DeckState (T10)
+        deck_state = state[:_deck_state]
+        gen_state = deck_state ? deck_state.generate_state : { "status" => "idle" }
+        generated_opts = deck_state ? deck_state.generated_options(component.id) : []
+        is_generating = gen_state["status"] == "generating" && gen_state["slide_id"] == component.id
+        remaining = is_generating ? [gen_state["requested_count"].to_i - gen_state["received_count"].to_i, 0].max : 0
+
+        # Count total options (defined + generated) for auto-columns
+        total_option_count = component.option_count + generated_opts.size + remaining
+        cols = component.columns || (
+          case total_option_count
+          when 0, 1 then 1
+          when 2 then 2
+          when 3 then 3
+          else 2
+          end
+        )
+        grid_style = "grid-template-columns: repeat(#{cols}, 1fr);"
+
+        view.div(
+          class: "sw-deck-slide__grid",
+          role: "radiogroup",
+          "aria-label" => component.title || "Options",
+          style: grid_style
+        ) do
+          # Render defined options (from DSL)
+          component.children.each { |child| child.render(view, state) }
+
+          # Render generated options (from DeckState, pushed by agent) (T10)
+          generated_opts.each do |opt_data|
+            gen_opt = Components::Deck::DeckOption.new(
+              opt_data["label"] || "Generated",
+              aside: opt_data["aside"] || opt_data["description"],
+              description: opt_data["description"]
+            )
+            gen_opt.slide_id = component.id
+            gen_opt.option_index = component.option_count + generated_opts.index(opt_data)
+            gen_opt.render(view, state)
+          end
+
+          # Render skeleton placeholders for pending options (T10)
+          remaining.times do |i|
+            skeleton = Components::Deck::SkeletonPlaceholder.new(index: i)
+            skeleton.render(view, state)
+          end
+        end
+
+        # Generate-more controls (T10)
+        if deck_state
+          controls = Components::Deck::GenerateMoreControls.new(
+            component.id,
+            generate_state: gen_state
+          )
+          controls.render(view, state)
+        end
+      end
+
+      public
+
+      # Inject deck CSS once per render
+      def inject_deck_css(view)
+        return if view.instance_variable_get(:@_deck_css_injected)
+        view.instance_variable_set(:@_deck_css_injected, true)
+        view.style { view.raw(view.safe(DECK_CSS)) }
+      end
+
+      # Inject deck selection JS once per render (T8)
+      def inject_deck_selection_js(view)
+        return if view.instance_variable_get(:@_deck_selection_js_injected)
+        view.instance_variable_set(:@_deck_selection_js_injected, true)
+        view.script { view.raw(view.safe(DECK_SELECTION_JS)) }
+      end
+
+      # JavaScript for deck option selection and note persistence (T8)
+      DECK_SELECTION_JS = <<~JS
+        // Read current slide index from the DOM (set by Alpine :data-current-slide binding)
+        function swDeckCurrentSlide() {
+          var el = document.querySelector('.sw-slide-container--swap');
+          return el ? parseInt(el.dataset.currentSlide || '0', 10) : 0;
+        }
+
+        // Fetch fresh HTML from /deck/refresh, replace #app-container innerHTML,
+        // and re-initialize Alpine on the new DOM tree.
+        function swDeckRefresh() {
+          fetch('/deck/refresh?slide=' + swDeckCurrentSlide()).then(function(resp) {
+            return resp.text();
+          }).then(function(html) {
+            var container = document.getElementById('app-container');
+            if (!container) return;
+            // Destroy Alpine state on old children
+            Alpine.destroyTree(container);
+            container.innerHTML = html;
+            // Initialize Alpine on the new DOM
+            Alpine.initTree(container);
+          });
+        }
+
+        // Select a deck option (radio semantics per slide)
+        function swDeckSelect(el) {
+          // Don't select if clicking on the notes textarea
+          if (document.activeElement && document.activeElement.classList.contains('sw-deck-option__notes-input')) return;
+
+          var slideId = el.dataset.slideId;
+          var optionLabel = el.dataset.optionLabel;
+          if (!slideId || !optionLabel) return;
+
+          // Visual update: deselect all siblings in the same radiogroup
+          var grid = el.closest('[role="radiogroup"]');
+          if (grid) {
+            grid.querySelectorAll('.sw-deck-option').forEach(function(opt) {
+              opt.classList.remove('sw-deck-option--selected');
+              opt.setAttribute('aria-checked', 'false');
+            });
+          }
+          el.classList.add('sw-deck-option--selected');
+          el.setAttribute('aria-checked', 'true');
+
+          // Persist to server, then re-render (StreamWeaver model)
+          fetch('/deck/select', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slide_id: slideId, option_label: optionLabel })
+          }).then(function() {
+            swDeckRefresh();
+          });
+        }
+
+        // Save note on blur
+        function swDeckSaveNote(textarea) {
+          var slideId = textarea.dataset.slideId;
+          var optionLabel = textarea.dataset.optionLabel;
+          if (!slideId || !optionLabel) return;
+
+          fetch('/deck/note', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slide_id: slideId, option_label: optionLabel, text: textarea.value })
+          }).then(function() {
+            swDeckRefresh();
+          });
+        }
+
+        // Number key quick-select (1-9) for deck options
+        document.addEventListener('keydown', function(e) {
+          // Suppress when typing in inputs
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+          if (e.target.isContentEditable) return;
+          if (e.altKey || e.ctrlKey || e.metaKey) return;
+
+          var num = parseInt(e.key);
+          if (num >= 1 && num <= 9) {
+            // Find the currently visible slide
+            var visibleSlide = document.querySelector('.sw-deck-slide:not([style*="display: none"])');
+            if (!visibleSlide) {
+              // Try x-show based visibility (Alpine)
+              var allSlides = document.querySelectorAll('.sw-deck-slide');
+              for (var i = 0; i < allSlides.length; i++) {
+                if (allSlides[i].offsetParent !== null || allSlides[i].style.display !== 'none') {
+                  visibleSlide = allSlides[i];
+                  break;
+                }
+              }
+            }
+            if (!visibleSlide) return;
+
+            var options = visibleSlide.querySelectorAll('.sw-deck-option');
+            var target = options[num - 1];
+            if (target) {
+              e.preventDefault();
+              swDeckSelect(target);
+            }
+          }
+        });
+      JS
+
+      # Inject deck summary JS once per render (T9)
+      def inject_deck_summary_js(view)
+        return if view.instance_variable_get(:@_deck_summary_js_injected)
+        view.instance_variable_set(:@_deck_summary_js_injected, true)
+        view.script { view.raw(view.safe(DECK_SUMMARY_JS)) }
+      end
+
+      # JavaScript for deck summary submit and final notes (T9)
+      DECK_SUMMARY_JS = <<~JS
+        // Save final notes on blur
+        function swDeckSaveFinalNotes(textarea) {
+          fetch('/deck/final_notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: textarea.value })
+          }).then(function() {
+            swDeckRefresh();
+          });
+        }
+
+        // Submit the deck (sends selections + notes as _result)
+        function swDeckSubmit() {
+          fetch('/deck/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          }).then(function(resp) {
+            if (resp.ok) {
+              // Reload to show submitted state
+              window.location.reload();
+            }
+          });
+        }
+      JS
+
+      # Inject generate-more CSS once per render (T10)
+      def inject_generate_more_css(view)
+        return if view.instance_variable_get(:@_generate_more_css_injected)
+        view.instance_variable_set(:@_generate_more_css_injected, true)
+        view.style { view.raw(view.safe(GENERATE_MORE_CSS)) }
+      end
+
+      # Inject generate-more JS once per render (T10)
+      def inject_generate_more_js(view)
+        return if view.instance_variable_get(:@_generate_more_js_injected)
+        view.instance_variable_set(:@_generate_more_js_injected, true)
+        view.script { view.raw(view.safe(GENERATE_MORE_JS)) }
+      end
+
+      # JavaScript for generate-more controls (T10)
+      GENERATE_MORE_JS = <<~JS
+        // Request more options via the generate endpoint
+        function swGenerate(slideId) {
+          var promptEl = document.getElementById('sw-gen-prompt-' + slideId);
+          var countEl = document.getElementById('sw-gen-count-' + slideId);
+          var prompt = promptEl ? promptEl.value : '';
+          var count = countEl ? parseInt(countEl.value) : 2;
+
+          fetch('/deck/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slide_id: slideId, count: count, prompt: prompt })
+          }).then(function(resp) {
+            if (!resp.ok) {
+              console.error('Generate request failed:', resp.status);
+            }
+            // SSE will push the re-render with skeletons
+          }).catch(function(err) {
+            console.error('Generate request error:', err);
+          });
+        }
+
+        // Cancel a pending generation
+        function swCancelGenerate() {
+          fetch('/deck/cancel_generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          }).then(function(resp) {
+            if (!resp.ok) {
+              console.error('Cancel request failed:', resp.status);
+            }
+            // SSE will push the re-render
+          }).catch(function(err) {
+            console.error('Cancel request error:', err);
+          });
+        }
+      JS
+
+      # CSS for generate-more controls and skeleton placeholders (T10)
+      GENERATE_MORE_CSS = <<~CSS
+        /* ===========================================
+           Generate-More Controls (sw- prefix, T10)
+           =========================================== */
+
+        .sw-generate-more {
+          margin-top: 1.25rem;
+          padding-top: 1rem;
+          border-top: 1px solid var(--sw-border, #e0e0e0);
+        }
+
+        .sw-generate-more__form {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          flex-wrap: wrap;
+        }
+
+        .sw-generate-more__prompt {
+          flex: 1;
+          min-width: 180px;
+          padding: 0.5rem 0.75rem;
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-sm, 4px);
+          background: var(--sw-surface, #ffffff);
+          color: var(--sw-text, #1a1a2e);
+          font-size: 0.875rem;
+          font-family: inherit;
+        }
+
+        .sw-generate-more__prompt:focus {
+          outline: 2px solid var(--sw-accent, #6366f1);
+          outline-offset: -1px;
+          border-color: var(--sw-accent, #6366f1);
+        }
+
+        .sw-generate-more__prompt::placeholder {
+          color: var(--sw-text-dim, #999);
+        }
+
+        .sw-generate-more__count {
+          padding: 0.5rem 0.75rem;
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-sm, 4px);
+          background: var(--sw-surface, #ffffff);
+          color: var(--sw-text, #1a1a2e);
+          font-size: 0.875rem;
+          font-family: inherit;
+          cursor: pointer;
+        }
+
+        .sw-generate-more__btn {
+          padding: 0.5rem 1rem;
+          border: none;
+          border-radius: var(--sw-radius-sm, 4px);
+          font-size: 0.875rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background 0.15s, opacity 0.15s;
+          font-family: inherit;
+        }
+
+        .sw-generate-more__btn--generate {
+          background: var(--sw-accent, #6366f1);
+          color: #ffffff;
+        }
+
+        .sw-generate-more__btn--generate:hover {
+          opacity: 0.9;
+        }
+
+        .sw-generate-more__btn--cancel {
+          background: #dc2626;
+          color: #ffffff;
+        }
+
+        .sw-generate-more__btn--cancel:hover {
+          opacity: 0.9;
+        }
+
+        /* Status banner */
+        .sw-generate-more__status {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.75rem;
+          padding: 0.75rem 1rem;
+          background: color-mix(in srgb, var(--sw-accent, #6366f1) 10%, var(--sw-surface, #ffffff));
+          border: 1px solid color-mix(in srgb, var(--sw-accent, #6366f1) 30%, transparent);
+          border-radius: var(--sw-radius-md, 6px);
+          margin-bottom: 0.75rem;
+        }
+
+        .sw-generate-more__status-indicator {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .sw-generate-more__status-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: var(--sw-accent, #6366f1);
+          animation: sw-pulse 1s ease-in-out infinite;
+        }
+
+        .sw-generate-more__status-text {
+          font-size: 0.875rem;
+          color: var(--sw-text, #1a1a2e);
+        }
+
+        /* Timeout warning */
+        .sw-generate-more__timeout {
+          padding: 0.75rem 1rem;
+          background: color-mix(in srgb, #f59e0b 10%, var(--sw-surface, #ffffff));
+          border: 1px solid color-mix(in srgb, #f59e0b 40%, transparent);
+          border-radius: var(--sw-radius-md, 6px);
+          margin-bottom: 0.75rem;
+        }
+
+        .sw-generate-more__timeout-text {
+          font-size: 0.875rem;
+          color: var(--sw-text, #1a1a2e);
+        }
+
+        /* ===========================================
+           Skeleton Placeholder (sw- prefix, T10)
+           =========================================== */
+
+        .sw-skeleton {
+          border: 2px dashed var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-lg, 12px);
+          padding: 1rem;
+          background: var(--sw-surface, #ffffff);
+        }
+
+        .sw-skeleton__line {
+          border-radius: var(--sw-radius-sm, 4px);
+          background: var(--sw-border, #e0e0e0);
+          animation: sw-shimmer 1.5s ease-in-out infinite alternate;
+        }
+
+        .sw-skeleton__line--title {
+          height: 20px;
+          width: 55%;
+          margin-bottom: 0.75rem;
+        }
+
+        .sw-skeleton__line--body {
+          height: 14px;
+          width: 85%;
+          margin-bottom: 0.5rem;
+        }
+
+        .sw-skeleton__line--short {
+          width: 65%;
+        }
+
+        @keyframes sw-shimmer {
+          from { opacity: 0.4; }
+          to { opacity: 1; }
+        }
+
+        @keyframes sw-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+          .sw-generate-more__form {
+            flex-direction: column;
+            align-items: stretch;
+          }
+        }
+      CSS
+
+      # Inject deck polish CSS once per render (T14)
+      def inject_deck_polish_css(view)
+        return if view.instance_variable_get(:@_deck_polish_css_injected)
+        view.instance_variable_set(:@_deck_polish_css_injected, true)
+        view.style { view.raw(view.safe(DECK_POLISH_CSS)) }
+      end
+
+      # CSS for deck polish components: ModelSelector, ConfirmationBar, CloseOverlay (T14)
+      DECK_POLISH_CSS = <<~CSS
+        /* ===========================================
+           Model Selector (sw- prefix, T14)
+           =========================================== */
+
+        .sw-model-selector {
+          margin: 1rem 0;
+          padding: 1rem;
+          background: var(--sw-surface, #ffffff);
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-md, 6px);
+        }
+
+        .sw-model-selector__pills {
+          display: flex;
+          gap: 0.375rem;
+          margin-bottom: 0.75rem;
+          flex-wrap: wrap;
+        }
+
+        .sw-model-selector__pill {
+          padding: 0.25rem 0.75rem;
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: 9999px;
+          background: transparent;
+          color: var(--sw-text-dim, #666);
+          font-size: 0.8125rem;
+          font-family: inherit;
+          cursor: pointer;
+          transition: background 150ms, color 150ms, border-color 150ms;
+        }
+
+        .sw-model-selector__pill:hover {
+          background: var(--sw-surface-elevated, #f5f5f5);
+          color: var(--sw-text, #1a1a2e);
+        }
+
+        .sw-model-selector__pill--active {
+          background: var(--sw-accent, #6366f1);
+          color: #ffffff;
+          border-color: var(--sw-accent, #6366f1);
+        }
+
+        .sw-model-selector__pill--active:hover {
+          background: var(--sw-accent, #6366f1);
+          color: #ffffff;
+        }
+
+        .sw-model-selector__list {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .sw-model-selector__item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0.5rem 0.75rem;
+          border-radius: var(--sw-radius-sm, 4px);
+          cursor: pointer;
+          transition: background 150ms;
+        }
+
+        .sw-model-selector__item:hover {
+          background: var(--sw-surface-elevated, #f5f5f5);
+        }
+
+        .sw-model-selector__item--selected {
+          background: color-mix(in srgb, var(--sw-accent, #6366f1) 10%, var(--sw-surface, #ffffff));
+          border: 1px solid color-mix(in srgb, var(--sw-accent, #6366f1) 30%, transparent);
+        }
+
+        .sw-model-selector__name {
+          font-weight: 500;
+          font-size: 0.875rem;
+          color: var(--sw-text, #1a1a2e);
+        }
+
+        .sw-model-selector__provider {
+          font-size: 0.75rem;
+          color: var(--sw-text-dim, #999);
+        }
+
+        /* ===========================================
+           Confirmation Bar (sw- prefix, T14)
+           =========================================== */
+
+        .sw-confirmation-bar {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          z-index: 9999;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0.75rem 1.5rem;
+          background: var(--sw-surface-elevated, #2a2a3e);
+          color: var(--sw-text, #ffffff);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+          font-family: inherit;
+        }
+
+        .sw-confirmation-bar-enter {
+          transition: transform 300ms ease-out, opacity 300ms ease-out;
+        }
+        .sw-confirmation-bar-enter-start {
+          transform: translateY(-100%);
+          opacity: 0;
+        }
+        .sw-confirmation-bar-enter-end {
+          transform: translateY(0);
+          opacity: 1;
+        }
+        .sw-confirmation-bar-leave {
+          transition: transform 200ms ease-in, opacity 200ms ease-in;
+        }
+        .sw-confirmation-bar-leave-start {
+          transform: translateY(0);
+          opacity: 1;
+        }
+        .sw-confirmation-bar-leave-end {
+          transform: translateY(-100%);
+          opacity: 0;
+        }
+
+        .sw-confirmation-bar__message {
+          font-size: 0.9375rem;
+          font-weight: 500;
+        }
+
+        .sw-confirmation-bar__actions {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .sw-confirmation-bar__timer {
+          font-size: 0.8125rem;
+          color: var(--sw-text-dim, #aaa);
+          min-width: 2ch;
+        }
+
+        .sw-confirmation-bar__btn {
+          padding: 0.375rem 0.875rem;
+          border: none;
+          border-radius: var(--sw-radius-sm, 4px);
+          font-size: 0.8125rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: opacity 150ms;
+          font-family: inherit;
+        }
+
+        .sw-confirmation-bar__btn:hover {
+          opacity: 0.85;
+        }
+
+        .sw-confirmation-bar__btn--confirm {
+          background: #dc2626;
+          color: #ffffff;
+        }
+
+        .sw-confirmation-bar__btn--cancel {
+          background: var(--sw-surface, rgba(255,255,255,0.15));
+          color: var(--sw-text, #ffffff);
+        }
+
+        /* ===========================================
+           Close Overlay (sw- prefix, T14)
+           =========================================== */
+
+        .sw-close-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 10000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .sw-close-overlay__backdrop {
+          position: absolute;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.5);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+
+        .sw-close-overlay__content {
+          position: relative;
+          z-index: 1;
+          text-align: center;
+          padding: 2.5rem;
+          background: var(--sw-surface, #ffffff);
+          border-radius: var(--sw-radius-lg, 12px);
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+          max-width: 420px;
+          width: 90%;
+        }
+
+        .sw-close-overlay__icon {
+          font-size: 3rem;
+          margin-bottom: 1rem;
+          width: 4rem;
+          height: 4rem;
+          border-radius: 50%;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .sw-close-overlay__icon--success {
+          background: #dcfce7;
+          color: #16a34a;
+        }
+
+        .sw-close-overlay__icon--cancel {
+          background: #fef3c7;
+          color: #d97706;
+        }
+
+        .sw-close-overlay--submitted .sw-close-overlay__content {
+          border-top: 4px solid #16a34a;
+        }
+
+        .sw-close-overlay--cancelled .sw-close-overlay__content {
+          border-top: 4px solid #d97706;
+        }
+
+        .sw-close-overlay__message {
+          font-size: 1.125rem;
+          font-weight: 600;
+          color: var(--sw-text, #1a1a2e);
+          margin-bottom: 0.75rem;
+        }
+
+        .sw-close-overlay__countdown {
+          font-size: 0.8125rem;
+          color: var(--sw-text-dim, #999);
+          margin-bottom: 1rem;
+        }
+
+        .sw-close-overlay__close-btn {
+          padding: 0.5rem 1.5rem;
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-sm, 4px);
+          background: transparent;
+          color: var(--sw-text, #1a1a2e);
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: background 150ms;
+          font-family: inherit;
+        }
+
+        .sw-close-overlay__close-btn:hover {
+          background: var(--sw-surface-elevated, #f5f5f5);
+        }
+      CSS
+
+      # CSS for design deck components
+      DECK_CSS = <<~CSS
+        /* ===========================================
+           Design Deck Styles (sw- prefix, T7)
+           =========================================== */
+
+        .sw-deck {
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 1rem;
+        }
+
+        .sw-deck__title {
+          font-size: 1.75rem;
+          font-weight: 700;
+          margin-bottom: 1.5rem;
+          color: var(--sw-text, #1a1a2e);
+        }
+
+        /* Deck container: fit within viewport so nav buttons stay visible */
+        .sw-deck .sw-slide-container--swap {
+          display: flex;
+          flex-direction: column;
+          max-height: calc(100vh - 120px);
+        }
+
+        .sw-deck .sw-slide-container--swap > .sw-deck-slide {
+          flex: 1 1 auto;
+          overflow-y: auto;
+          min-height: 0;
+        }
+
+        .sw-deck .sw-slide-container--swap > .sw-slide-nav {
+          flex-shrink: 0;
+        }
+
+        /* Deck Slide */
+        .sw-deck-slide {
+          padding: 1rem 0;
+        }
+
+        .sw-deck-slide__title {
+          font-size: 1.375rem;
+          font-weight: 600;
+          margin-bottom: 0.75rem;
+          color: var(--sw-text, #1a1a2e);
+        }
+
+        .sw-deck-slide__context {
+          font-size: 0.9375rem;
+          color: var(--sw-text-dim, #666);
+          margin-bottom: 1.25rem;
+          line-height: 1.5;
+        }
+
+        .sw-deck-slide__grid {
+          display: grid;
+          gap: 1rem;
+        }
+
+        /* Deck Option Card */
+        .sw-deck-option {
+          position: relative;
+          border: 2px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-lg, 12px);
+          padding: 1rem;
+          background: var(--sw-surface, #ffffff);
+          cursor: pointer;
+          transition: border-color 0.2s, box-shadow 0.2s;
+          min-width: 0;
+          overflow: hidden;
+        }
+
+        .sw-deck-option:hover {
+          border-color: var(--sw-accent, #6366f1);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .sw-deck-option:focus-visible {
+          outline: 2px solid var(--sw-accent, #6366f1);
+          outline-offset: 2px;
+        }
+
+        .sw-deck-option--recommended {
+          border-color: var(--sw-accent, #6366f1);
+        }
+
+        /* Selected state (T8) */
+        .sw-deck-option--selected {
+          border-color: var(--sw-accent, #6366f1);
+          box-shadow: 0 0 0 1px var(--sw-accent, #6366f1), 0 2px 8px rgba(99, 102, 241, 0.15);
+        }
+
+        .sw-deck-option--selected .sw-deck-option__radio {
+          border-color: var(--sw-accent, #6366f1);
+        }
+
+        .sw-deck-option--selected .sw-deck-option__radio-dot {
+          background: var(--sw-accent, #6366f1);
+        }
+
+        /* Radio indicator */
+        .sw-deck-option__radio {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 20px;
+          height: 20px;
+          border: 2px solid var(--sw-border, #ccc);
+          border-radius: 50%;
+          margin-bottom: 0.5rem;
+          flex-shrink: 0;
+        }
+
+        .sw-deck-option__radio-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          background: transparent;
+          transition: background 0.15s;
+        }
+
+        /* Header */
+        .sw-deck-option__header {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-bottom: 0.75rem;
+        }
+
+        .sw-deck-option__label {
+          font-size: 1rem;
+          font-weight: 600;
+          color: var(--sw-text, #1a1a2e);
+        }
+
+        .sw-deck-option__badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.125rem 0.5rem;
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: var(--sw-accent, #6366f1);
+          background: color-mix(in srgb, var(--sw-accent, #6366f1) 12%, transparent);
+          border-radius: var(--sw-radius-sm, 4px);
+          text-transform: uppercase;
+          letter-spacing: 0.025em;
+        }
+
+        /* Preview content area */
+        .sw-deck-option__preview {
+          max-height: 260px;
+          margin-bottom: 0.75rem;
+          overflow: hidden;
+          border-radius: var(--sw-radius-md, 6px);
+        }
+
+        /* Aside text */
+        .sw-deck-option__aside {
+          font-size: 0.875rem;
+          color: var(--sw-text-dim, #666);
+          margin-bottom: 0.75rem;
+          line-height: 1.4;
+        }
+
+        /* Notes textarea */
+        .sw-deck-option__notes {
+          margin-top: 0.5rem;
+        }
+
+        .sw-deck-option__notes-input {
+          width: 100%;
+          padding: 0.5rem;
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-sm, 4px);
+          background: var(--sw-surface, #ffffff);
+          color: var(--sw-text, #1a1a2e);
+          font-size: 0.8125rem;
+          font-family: inherit;
+          resize: vertical;
+          min-height: 2.5rem;
+        }
+
+        .sw-deck-option__notes-input:focus {
+          outline: 2px solid var(--sw-accent, #6366f1);
+          outline-offset: -1px;
+          border-color: var(--sw-accent, #6366f1);
+        }
+
+        .sw-deck-option__notes-input::placeholder {
+          color: var(--sw-text-dim, #999);
+        }
+
+        /* Responsive: stack on narrow screens */
+        @media (max-width: 640px) {
+          .sw-deck-slide__grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
+        /* ===========================================
+           Deck Summary Styles (sw- prefix, T9)
+           =========================================== */
+
+        .sw-deck-summary {
+          padding: 1rem 0;
+        }
+
+        .sw-deck-summary__title {
+          font-size: 1.375rem;
+          font-weight: 600;
+          margin-bottom: 1.25rem;
+          color: var(--sw-text, #1a1a2e);
+        }
+
+        .sw-deck-summary__cards {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 1rem;
+          margin-bottom: 1.5rem;
+        }
+
+        .sw-deck-summary__card {
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-lg, 12px);
+          padding: 1rem;
+          background: var(--sw-surface, #ffffff);
+        }
+
+        .sw-deck-summary__card--empty {
+          opacity: 0.6;
+          border-style: dashed;
+        }
+
+        .sw-deck-summary__card-title {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: var(--sw-text-dim, #666);
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+          margin-bottom: 0.5rem;
+        }
+
+        .sw-deck-summary__card-label {
+          font-size: 1.0625rem;
+          font-weight: 600;
+          color: var(--sw-text, #1a1a2e);
+          margin-bottom: 0.375rem;
+        }
+
+        .sw-deck-summary__card-label--none {
+          font-style: italic;
+          color: var(--sw-text-dim, #999);
+          font-weight: 400;
+        }
+
+        .sw-deck-summary__card-aside {
+          font-size: 0.8125rem;
+          color: var(--sw-text-dim, #666);
+          margin-bottom: 0.375rem;
+        }
+
+        .sw-deck-summary__card-notes {
+          font-size: 0.8125rem;
+          color: var(--sw-text-dim, #666);
+          margin-top: 0.375rem;
+          padding-top: 0.375rem;
+          border-top: 1px solid var(--sw-border, #e0e0e0);
+        }
+
+        .sw-deck-summary__card-notes-label {
+          font-weight: 600;
+        }
+
+        .sw-deck-summary__missing {
+          color: var(--sw-status-warning, #d97706);
+          font-size: 0.9375rem;
+          font-weight: 500;
+          margin-bottom: 1.25rem;
+          padding: 0.75rem 1rem;
+          background: color-mix(in srgb, var(--sw-status-warning, #d97706) 8%, transparent);
+          border-radius: var(--sw-radius-md, 6px);
+        }
+
+        .sw-deck-summary__final-notes {
+          margin-bottom: 1.25rem;
+        }
+
+        .sw-deck-summary__final-notes-label {
+          display: block;
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: var(--sw-text, #1a1a2e);
+          margin-bottom: 0.375rem;
+        }
+
+        .sw-deck-summary__final-notes-input {
+          width: 100%;
+          padding: 0.625rem;
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-sm, 4px);
+          background: var(--sw-surface, #ffffff);
+          color: var(--sw-text, #1a1a2e);
+          font-size: 0.875rem;
+          font-family: inherit;
+          resize: vertical;
+          min-height: 3rem;
+        }
+
+        .sw-deck-summary__final-notes-input:focus {
+          outline: 2px solid var(--sw-accent, #6366f1);
+          outline-offset: -1px;
+          border-color: var(--sw-accent, #6366f1);
+        }
+
+        .sw-deck-summary__submit {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0.625rem 2rem;
+          font-size: 1rem;
+          font-weight: 600;
+          color: #fff;
+          background: var(--sw-accent, #6366f1);
+          border: none;
+          border-radius: var(--sw-radius-md, 6px);
+          cursor: pointer;
+          transition: background 0.15s, opacity 0.15s;
+        }
+
+        .sw-deck-summary__submit:hover {
+          filter: brightness(1.1);
+        }
+
+        .sw-deck-summary__submit--disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .sw-deck-summary__submit--disabled:hover {
+          filter: none;
+        }
+
+        .sw-deck-summary__submitted {
+          display: inline-flex;
+          align-items: center;
+          padding: 0.625rem 2rem;
+          font-size: 1rem;
+          font-weight: 600;
+          color: var(--sw-status-success, #16a34a);
+          background: color-mix(in srgb, var(--sw-status-success, #16a34a) 10%, transparent);
+          border-radius: var(--sw-radius-md, 6px);
+        }
+      CSS
+
+      # Inject sw-slide-nav.js once per render
+      def inject_slide_nav_js(view)
+        return if view.instance_variable_get(:@_slide_nav_js_injected)
+        view.instance_variable_set(:@_slide_nav_js_injected, true)
+        js_path = File.join(__dir__, '..', 'assets', 'js', 'sw-slide-nav.js')
+        view.script { view.raw(view.safe(File.read(js_path))) } if File.exist?(js_path)
+      end
+
+      # Inject slide container CSS once per render
+      def inject_slide_container_css(view)
+        return if view.instance_variable_get(:@_slide_css_injected)
+        view.instance_variable_set(:@_slide_css_injected, true)
+        view.style { view.raw(view.safe(SLIDE_CONTAINER_CSS)) }
+      end
+
+      # CSS for slide containers
+      SLIDE_CONTAINER_CSS = <<~CSS
+        /* ===========================================
+           Slide Container Styles (sw- prefix, T5)
+           =========================================== */
+
+        .sw-slide-container {
+          position: relative;
+          width: 100%;
+        }
+
+        /* Progress bar */
+        .sw-slide-progress {
+          height: 3px;
+          background: var(--sw-border, #e0e0e0);
+          overflow: hidden;
+        }
+
+        .sw-slide-progress--fixed {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          z-index: 1000;
+        }
+
+        .sw-slide-progress__bar {
+          height: 100%;
+          background: var(--sw-accent, #0d9488);
+          transition: width 300ms ease-out;
+        }
+
+        /* Slide */
+        .sw-slide {
+          padding: 1rem 0;
+        }
+
+        .sw-slide__title {
+          margin: 0 0 1rem 0;
+          font-family: var(--sw-font-display, inherit);
+          color: var(--sw-text, #111);
+        }
+
+        /* Swap mode fade transition */
+        .sw-slide-fade-enter {
+          transition: opacity 200ms ease-out;
+        }
+
+        .sw-slide-fade-enter-start {
+          opacity: 0;
+        }
+
+        .sw-slide-fade-enter-end {
+          opacity: 1;
+        }
+
+        /* Navigation buttons */
+        .sw-slide-nav {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 1rem 0;
+          gap: 1rem;
+        }
+
+        .sw-slide-nav__btn {
+          padding: 0.5rem 1.25rem;
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-md, 6px);
+          background: var(--sw-surface, #fff);
+          color: var(--sw-text, #111);
+          cursor: pointer;
+          font-size: 0.9rem;
+          transition: background 150ms ease-out, border-color 150ms ease-out;
+        }
+
+        .sw-slide-nav__btn:hover:not(:disabled) {
+          background: var(--sw-surface-elevated, #f3f3f3);
+          border-color: var(--sw-accent, #0d9488);
+        }
+
+        .sw-slide-nav__btn:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
+
+        .sw-slide-nav__btn--next {
+          margin-left: auto;
+        }
+
+        /* Scroll-snap mode */
+        .sw-slide-container--scroll-snap .sw-slide-container__scroll {
+          overflow-y: auto;
+          scroll-snap-type: y mandatory;
+          height: 100dvh;
+        }
+
+        .sw-slide--snap {
+          scroll-snap-align: start;
+          min-height: 100dvh;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          padding: 2rem;
+          box-sizing: border-box;
+        }
+
+        /* Navigation dots */
+        .sw-slide-dots {
+          display: flex;
+          justify-content: center;
+          gap: 0.5rem;
+          padding: 0.75rem 0;
+        }
+
+        .sw-slide-dots__dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
+          border: 1px solid var(--sw-border, #e0e0e0);
+          background: var(--sw-surface, #fff);
+          cursor: pointer;
+          padding: 0;
+          transition: background 150ms ease-out, border-color 150ms ease-out;
+        }
+
+        .sw-slide-dots__dot:hover {
+          border-color: var(--sw-accent, #0d9488);
+        }
+
+        .sw-slide-dots__dot--active {
+          background: var(--sw-accent, #0d9488);
+          border-color: var(--sw-accent, #0d9488);
+        }
+
+        /* Counter */
+        .sw-slide-counter {
+          text-align: center;
+          font-size: 0.8rem;
+          color: var(--sw-text-dim, #444);
+          padding: 0.25rem 0;
+        }
+
+        /* x-cloak: hide until Alpine initializes */
+        [x-cloak] { display: none !important; }
+      CSS
+
+      # =========================================
       # Chart components rendering
       # =========================================
 
@@ -2400,6 +5366,43 @@ module StreamWeaver
         end
       end
 
+      # Render a timeline event row with expandable details
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::TimelineEvent] The timeline event component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_timeline_event(view, component, state)
+        css_classes = ["sw-timeline-event", "sw-timeline-event--#{component.event_type}"]
+
+        view.div(
+          class: css_classes.join(" "),
+          "x-data" => "{ open: #{component.expanded} }",
+          "@click" => "open = !open"
+        ) do
+          view.span(class: "sw-timeline-event__idx") { component.index.to_s }
+          view.span(class: "sw-timeline-event__badge") { component.event_type.to_s }
+          view.span(class: "sw-timeline-event__ts") { component.timestamp }
+          view.span(class: "sw-timeline-event__label") { component.label }
+
+          if component.fields.any?
+            view.div(class: "sw-timeline-event__detail", "x-show" => "open", "x-cloak" => true) do
+              component.fields.each do |key, value|
+                view.div(class: "sw-timeline-event__field") do
+                  view.strong(class: "sw-timeline-event__field-key") { "#{key}:" }
+                  val = value.to_s
+                  if val.include?("\n")
+                    view.pre(class: "sw-timeline-event__field-value") { val }
+                  else
+                    view.span(class: "sw-timeline-event__field-value") { " #{val}" }
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+
       # =========================================
       # Layout components rendering (Cabinet Control style)
       # =========================================
@@ -2604,6 +5607,399 @@ module StreamWeaver
         view.div(class: css_classes.join(" "), style: "gap: #{spacing_to_css(component.spacing)};") do
           component.children.each { |child| child.render(view, state) }
         end
+      end
+
+      # Inject Prism.js CDN scripts and CSS (once per adapter instance).
+      # Lazy-loaded: only included when a code_block component is actually used.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      def inject_prism_cdn(view)
+        return if view.instance_variable_get(:@_prism_injected)
+
+        view.instance_variable_set(:@_prism_injected, true)
+
+        # Prism.js tomorrow-night theme (dark-friendly)
+        view.link(
+          rel: "stylesheet",
+          href: "https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css"
+        )
+        # Prism.js core
+        view.script(
+          src: "https://cdn.jsdelivr.net/npm/prismjs@1/prism.min.js",
+          defer: true
+        )
+        # Autoloader plugin for lazy per-language loading
+        view.script(
+          src: "https://cdn.jsdelivr.net/npm/prismjs@1/plugins/autoloader/prism-autoloader.min.js",
+          defer: true
+        )
+
+        # Inline CSS for sw-code-block and sw-image-block components
+        view.style do
+          view.raw(view.safe(code_block_css))
+        end
+      end
+
+      # CSS for CodeBlock and ImageBlock components.
+      # All classes use sw- prefix per convention.
+      #
+      # @return [String] CSS rules
+      def code_block_css
+        <<~CSS
+          .sw-code-block {
+            border: 1px solid var(--sw-border, #e0e0e0);
+            border-radius: var(--sw-radius-md, 6px);
+            overflow: hidden;
+            margin: 0.75rem 0;
+            background: var(--sw-surface, #ffffff);
+          }
+          .sw-code-block__header {
+            background: var(--sw-surface-elevated, #f3f3f3);
+            border-bottom: 1px solid var(--sw-border, #e0e0e0);
+            padding: 0.375rem 0.75rem;
+            font-family: var(--sw-font-mono, monospace);
+            font-size: 0.8rem;
+            color: var(--sw-text-dim, #444444);
+          }
+          .sw-code-block__file {
+            user-select: all;
+          }
+          .sw-code-block__body {
+            margin: 0;
+          }
+          .sw-code-block__pre {
+            margin: 0;
+            padding: 0.75rem;
+            font-family: var(--sw-font-mono, monospace);
+            font-size: 0.875rem;
+            line-height: 1.5;
+          }
+          .sw-code-block__pre code {
+            font-family: inherit;
+          }
+          .sw-code-block__truncated {
+            background: var(--sw-surface-elevated, #f3f3f3);
+            border-top: 1px solid var(--sw-border, #e0e0e0);
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
+            color: var(--sw-text-dim, #444444);
+            font-style: italic;
+          }
+
+          .sw-image-block {
+            margin: 0.75rem 0;
+            text-align: center;
+          }
+          .sw-image-block__img {
+            max-width: 100%;
+            height: auto;
+            border-radius: var(--sw-radius-md, 6px);
+          }
+          .sw-image-block__caption {
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--sw-text-dim, #444444);
+            font-style: italic;
+          }
+        CSS
+      end
+
+      public
+
+      # =========================================
+      # CSS-Only Helpers (T13)
+      # =========================================
+
+      def render_hero(view, component, state)
+        inject_helpers_css(view)
+        view.div(class: "sw-hero") do
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      def render_prose(view, component, state)
+        inject_helpers_css(view)
+        css = component.dropcap ? "sw-prose sw-prose--dropcap" : "sw-prose"
+        view.div(class: css) do
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      def render_pullquote(view, component, state)
+        inject_helpers_css(view)
+        view.blockquote(class: "sw-pullquote") do
+          view.p(class: "sw-pullquote__text") { component.text }
+          if component.attribution
+            view.footer(class: "sw-pullquote__attribution") do
+              view.plain("-- #{component.attribution}")
+            end
+          end
+        end
+      end
+
+      def render_dir_tree(view, component, state)
+        inject_helpers_css(view)
+        view.div(class: "sw-dir-tree") do
+          view.pre(class: "sw-dir-tree__pre") do
+            component.parsed_lines.each do |line|
+              status_class = case line[:status]
+                             when :new then "sw-dir-tree__line--new"
+                             when :modified then "sw-dir-tree__line--modified"
+                             when :deleted then "sw-dir-tree__line--deleted"
+                             else ""
+                             end
+              view.span(class: "sw-dir-tree__line #{status_class}".strip) do
+                view.plain(line[:text])
+              end
+              view.plain("\n")
+            end
+          end
+        end
+      end
+
+      def render_legend(view, component, state)
+        inject_helpers_css(view)
+        view.div(class: "sw-legend") do
+          component.items.each do |item|
+            view.span(class: "sw-legend__item") do
+              view.span(
+                class: "sw-legend__dot",
+                style: "background-color: #{item[:color]};"
+              )
+              view.span(class: "sw-legend__label") { item[:label] }
+            end
+          end
+        end
+      end
+
+      def render_flow_arrow(view, component, state)
+        inject_helpers_css(view)
+        view.div(class: "sw-flow-arrow") do
+          view.div(class: "sw-flow-arrow__line")
+          view.div(class: "sw-flow-arrow__head")
+          if component.label
+            view.span(class: "sw-flow-arrow__label") { component.label }
+          end
+        end
+      end
+
+      def render_layout_toggle(view, component, state)
+        inject_helpers_css(view)
+        target_sel = component.target
+        view.div(class: "sw-layout-toggle") do
+          component.columns.each do |n|
+            view.button(
+              class: "sw-layout-toggle__btn",
+              type: "button",
+              "@click" => "document.querySelector('#{target_sel}').style.gridTemplateColumns='repeat(#{n},1fr)'"
+            ) { n.to_s }
+          end
+        end
+      end
+
+      private
+
+      # Inject CSS-only helpers stylesheet once
+      def inject_helpers_css(view)
+        return if view.instance_variable_get(:@_helpers_css_injected)
+
+        view.instance_variable_set(:@_helpers_css_injected, true)
+        view.style { view.raw(view.safe(helpers_css)) }
+      end
+
+      def helpers_css
+        <<~CSS
+          /* ===========================================
+             CSS-Only Helpers (T13)
+             All classes use sw- prefix.
+             =========================================== */
+
+          /* Hero section */
+          .sw-hero {
+            padding: var(--sw-spacing-2xl, 3rem) var(--sw-spacing-xl, 2rem);
+            background: color-mix(in oklch, var(--sw-accent, #0d9488) 6%, var(--sw-surface, #ffffff));
+            border-radius: var(--sw-radius-lg, 12px);
+            text-align: center;
+            margin-bottom: var(--sw-spacing-lg, 1.5rem);
+          }
+
+          .sw-hero h1, .sw-hero h2 {
+            margin: 0 0 var(--sw-spacing-sm, 0.5rem) 0;
+          }
+
+          /* Prose container */
+          .sw-prose {
+            max-width: 65ch;
+            line-height: 1.8;
+            font-size: 1.05rem;
+            color: var(--sw-text, #111111);
+          }
+
+          .sw-prose p {
+            margin-bottom: 1em;
+          }
+
+          .sw-prose--dropcap > p:first-of-type::first-letter {
+            float: left;
+            font-size: 3.2em;
+            line-height: 0.8;
+            padding-right: 0.1em;
+            font-weight: 700;
+            color: var(--sw-accent, #0d9488);
+          }
+
+          /* Pullquote */
+          .sw-pullquote {
+            border-left: 4px solid var(--sw-accent, #0d9488);
+            margin: var(--sw-spacing-lg, 1.5rem) 0;
+            padding: var(--sw-spacing-md, 1rem) var(--sw-spacing-lg, 1.5rem);
+            background: transparent;
+          }
+
+          .sw-pullquote__text {
+            font-size: 1.25rem;
+            font-style: italic;
+            line-height: 1.6;
+            color: var(--sw-text, #111111);
+            margin: 0;
+          }
+
+          .sw-pullquote__attribution {
+            margin-top: var(--sw-spacing-sm, 0.5rem);
+            font-size: 0.875rem;
+            color: var(--sw-text-dim, #444444);
+            font-style: normal;
+          }
+
+          /* Dir tree */
+          .sw-dir-tree {
+            margin: var(--sw-spacing-md, 1rem) 0;
+            border: 1px solid var(--sw-border, #e0e0e0);
+            border-radius: var(--sw-radius-md, 6px);
+            background: var(--sw-surface, #ffffff);
+            overflow-x: auto;
+          }
+
+          .sw-dir-tree__pre {
+            font-family: var(--sw-font-mono, monospace);
+            font-size: 0.875rem;
+            line-height: 1.6;
+            padding: var(--sw-spacing-md, 1rem);
+            margin: 0;
+            white-space: pre;
+          }
+
+          .sw-dir-tree__line { display: inline; }
+
+          .sw-dir-tree__line--new {
+            color: #16a34a;
+          }
+
+          html.dark .sw-dir-tree__line--new {
+            color: #22c55e;
+          }
+
+          .sw-dir-tree__line--modified {
+            color: #d97706;
+          }
+
+          html.dark .sw-dir-tree__line--modified {
+            color: #fbbf24;
+          }
+
+          .sw-dir-tree__line--deleted {
+            color: #dc2626;
+            text-decoration: line-through;
+          }
+
+          html.dark .sw-dir-tree__line--deleted {
+            color: #f87171;
+          }
+
+          /* Legend */
+          .sw-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--sw-spacing-md, 1rem);
+            align-items: center;
+            margin: var(--sw-spacing-sm, 0.5rem) 0;
+          }
+
+          .sw-legend__item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            font-size: 0.875rem;
+            color: var(--sw-text-dim, #444444);
+          }
+
+          .sw-legend__dot {
+            display: inline-block;
+            width: 0.625rem;
+            height: 0.625rem;
+            border-radius: 50%;
+          }
+
+          /* Flow arrow */
+          .sw-flow-arrow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: var(--sw-spacing-sm, 0.5rem) 0;
+            position: relative;
+          }
+
+          .sw-flow-arrow__line {
+            width: 2px;
+            height: 2rem;
+            background: var(--sw-border, #e0e0e0);
+          }
+
+          .sw-flow-arrow__head {
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 8px solid var(--sw-border, #e0e0e0);
+          }
+
+          .sw-flow-arrow__label {
+            position: absolute;
+            top: 50%;
+            left: calc(50% + 1rem);
+            transform: translateY(-50%);
+            font-size: 0.75rem;
+            color: var(--sw-text-dim, #444444);
+            white-space: nowrap;
+          }
+
+          /* Layout toggle */
+          .sw-layout-toggle {
+            display: inline-flex;
+            gap: 2px;
+            background: var(--sw-surface-elevated, #f3f3f3);
+            border-radius: var(--sw-radius-md, 6px);
+            padding: 2px;
+            margin: var(--sw-spacing-sm, 0.5rem) 0;
+          }
+
+          .sw-layout-toggle__btn {
+            background: transparent;
+            border: none;
+            padding: 0.25rem 0.625rem;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--sw-text-dim, #444444);
+            border-radius: var(--sw-radius-sm, 4px);
+            cursor: pointer;
+            transition: background 150ms, color 150ms;
+          }
+
+          .sw-layout-toggle__btn:hover {
+            background: var(--sw-surface, #ffffff);
+            color: var(--sw-text, #111111);
+          }
+        CSS
       end
 
     end

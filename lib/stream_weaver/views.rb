@@ -2481,6 +2481,129 @@ module StreamWeaver
                 }
 
                 /* ===========================================
+                   Timeline Event (Run Viewer style)
+                   =========================================== */
+
+                .sw-timeline-event {
+                  padding: 6px 10px;
+                  border-radius: 4px;
+                  cursor: pointer;
+                  display: flex;
+                  flex-wrap: wrap;
+                  align-items: center;
+                  gap: 8px;
+                  border-left: 3px solid transparent;
+                  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+                  font-size: 13px;
+                }
+
+                .sw-timeline-event:hover {
+                  background: var(--sw-color-bg-hover, #2a2a4a);
+                }
+
+                .sw-timeline-event__idx {
+                  color: #555;
+                  width: 24px;
+                  text-align: right;
+                  flex-shrink: 0;
+                }
+
+                .sw-timeline-event__badge {
+                  display: inline-block;
+                  width: 100px;
+                  padding: 1px 6px;
+                  border-radius: 3px;
+                  text-align: center;
+                  font-size: 11px;
+                  flex-shrink: 0;
+                }
+
+                .sw-timeline-event__ts {
+                  color: #666;
+                  flex-shrink: 0;
+                }
+
+                .sw-timeline-event__label {
+                  color: #ccc;
+                }
+
+                .sw-timeline-event__detail {
+                  width: 100%;
+                  padding: 10px 0 6px 36px;
+                }
+
+                .sw-timeline-event__field {
+                  margin-bottom: 4px;
+                }
+
+                .sw-timeline-event__field-key {
+                  color: #aaa;
+                }
+
+                .sw-timeline-event__field-value pre {
+                  margin: 4px 0 4px 12px;
+                  padding: 8px;
+                  background: #0d0d1a;
+                  border-radius: 4px;
+                  overflow-x: auto;
+                  white-space: pre-wrap;
+                }
+
+                /* Type: phase — cyan */
+                .sw-timeline-event--phase {
+                  border-left-color: #00bcd4;
+                }
+                .sw-timeline-event--phase .sw-timeline-event__badge {
+                  background: #0e3a3f;
+                  color: #00bcd4;
+                }
+
+                /* Type: snapshot — yellow */
+                .sw-timeline-event--snapshot {
+                  border-left-color: #ffc107;
+                }
+                .sw-timeline-event--snapshot .sw-timeline-event__badge {
+                  background: #3f3500;
+                  color: #ffc107;
+                }
+
+                /* Type: intervention — purple */
+                .sw-timeline-event--intervention {
+                  border-left-color: #ce93d8;
+                }
+                .sw-timeline-event--intervention .sw-timeline-event__badge {
+                  background: #3a1a44;
+                  color: #ce93d8;
+                }
+
+                /* Type: timeout — red */
+                .sw-timeline-event--timeout {
+                  border-left-color: #ef5350;
+                }
+                .sw-timeline-event--timeout .sw-timeline-event__badge {
+                  background: #3f0e0e;
+                  color: #ef5350;
+                }
+
+                /* Type: guard — red */
+                .sw-timeline-event--guard {
+                  border-left-color: #ef5350;
+                }
+                .sw-timeline-event--guard .sw-timeline-event__badge {
+                  background: #3f0e0e;
+                  color: #ef5350;
+                }
+
+                /* Type: final — green */
+                .sw-timeline-event--final {
+                  border-left-color: #66bb6a;
+                }
+                .sw-timeline-event--final .sw-timeline-event__badge {
+                  background: #0e3f12;
+                  color: #66bb6a;
+                }
+
+                /* ===========================================
                    Layout Components (Cabinet Control style)
                    =========================================== */
 
@@ -2918,16 +3041,15 @@ module StreamWeaver
               CSS
             end
 
+            # Visual Skills CSS foundation (--sw-* semantic tokens)
+            style do
+              raw(safe(StreamWeaver::Theme.visual_skills_css))
+            end
+
             # Dark mode: check localStorage / system preference, apply .dark on <html>
+            # Also provides swToggleTheme() / swGetTheme() for auto-mode support
             script do
-              raw(safe(<<~JS))
-                (function() {
-                  var stored = localStorage.getItem('sw-dark-mode');
-                  if (stored === 'true' || (stored === null && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                    document.documentElement.classList.add('dark');
-                  }
-                })();
-              JS
+              raw(safe(StreamWeaver::Theme::AutoMode.inline_script))
             end
           end
           body(class: body_classes) do
@@ -3032,7 +3154,11 @@ module StreamWeaver
         # Include fresh state data for Alpine.js reinitialization
         # This allows JavaScript to update the outer container's x-data after HTMX swap
         # See: Alpine.js Defer Mutations Pattern in adapter/alpinejs.rb
-        state_json = JSON.generate(@state.transform_keys(&:to_s))
+        state_json_data = @state.transform_keys(&:to_s)
+        if @app.respond_to?(:transient_keys) && @app.transient_keys.any?
+          state_json_data["_transient"] = @app.transient_keys.map(&:to_s)
+        end
+        state_json = JSON.generate(state_json_data)
         script(type: "application/json", id: "sw-state-data") { raw safe(state_json) }
 
         @app.components.each do |component|
