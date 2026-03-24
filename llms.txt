@@ -165,6 +165,24 @@ header1 "Page Title"          # h1
 header3 "Subsection"          # h3
 ```
 
+### CRITICAL: `text` Does NOT Render Markdown
+
+**`text` is literal — markdown syntax appears as raw characters.**
+
+```ruby
+# WRONG — renders as: **Select the article PDF:**  (asterisks visible)
+text "**Select the article PDF:**"
+
+# CORRECT — renders as bold text
+md "**Select the article PDF:**"
+
+# BETTER — use semantic headers for section labels
+header3 "Select the article PDF:"
+header4 "What do you want to know?"
+```
+
+**Rule:** Never put `**`, `*`, `#`, or other markdown in a `text` call. Use `md` if you need inline formatting, or `header1`–`header6` for structural labels.
+
 ### Tables
 ```ruby
 # Basic - explicit headers/rows

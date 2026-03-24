@@ -9,6 +9,19 @@ text "Plain paragraph"           # Literal text - what you type is what you get
 text "Value: #{state[:value]}"   # String interpolation works
 ```
 
+> **WARNING for LLMs:** `text` renders its argument as a literal string. Markdown syntax like `**bold**` or `## heading` will appear as raw characters on screen — not as formatted HTML. Use `md` for markdown, or `header*` for section labels.
+
+```ruby
+# WRONG — asterisks show up literally on screen
+text "**Select the article PDF:**"
+
+# CORRECT — use md for inline markdown formatting
+md "**Select the article PDF:**"
+
+# BETTER — use semantic headers for labels and section titles
+header3 "Select the article PDF:"
+```
+
 ## Headers
 
 ```ruby

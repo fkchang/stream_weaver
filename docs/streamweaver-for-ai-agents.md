@@ -101,6 +101,24 @@ StreamWeaver includes components for common agent needs:
 | Status | `status_dot`, `progress_bar`, `spinner`, `badge`, `alert` |
 | Media | `image`, `video`, `audio` |
 
+### CRITICAL: Never Put Markdown Inside `text`
+
+`text` is a literal renderer — markdown syntax appears as raw characters on screen.
+
+```ruby
+# WRONG — renders as: **Select the article PDF:**  (asterisks visible to user)
+text "**Select the article PDF:**"
+
+# CORRECT — use md for markdown formatting
+md "**Select the article PDF:**"
+
+# BETTER — use semantic headers for labels and section titles
+header3 "Select the article PDF:"
+header4 "What do you want to know?"
+```
+
+Use `text` only for plain prose. Use `md` when you need inline markdown (bold, italic, links, code). Use `header1`–`header6` for structural headings and form-section labels.
+
 ## The Modes Gamut
 
 StreamWeaver supports multiple modes, from full standalone apps to persistent canvas sessions with Claude Code.
