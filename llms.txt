@@ -91,6 +91,20 @@ radio_group :choice, ["A", "B", "C"]
 
 **By default, ALL input components auto-submit on change.** Every keystroke, checkbox click, or selection triggers a server round-trip and page re-render. This is intentional for reactive UIs.
 
+**ANTI-PATTERN — text_area / text_field / select paired with a button:**
+```ruby
+# WRONG — every keystroke redaws the UI, textarea resize is lost, select jumps
+text_area :prompt, rows: 4
+select :choice, options
+button "Submit" do |s| ... end
+
+# CORRECT — no round-trips until button click
+text_area :prompt, rows: 4, submit: false
+select :choice, options, submit: false
+button "Submit" do |s| ... end
+```
+Any `text_field`, `text_area`, or `select` that feeds into a button action **must** use `submit: false`. Without it, typing causes full page re-renders, textarea resize resets, and the UI flickers on every keystroke.
+
 **For "form-like" behavior** (collect multiple inputs, then act):
 
 Option 1: Use `submit: false` on individual inputs:
@@ -547,3 +561,6 @@ end.run!
 6. **Using checkbox inside checkbox_group** - Use `item value do...end`, NOT `checkbox`. checkbox_group has its own DSL.
 7. **Putting text/headers inside checkbox_group** - ONLY `item` elements allowed directly inside `checkbox_group`. Put section headers OUTSIDE the checkbox_group block.
 8. **Expecting form-like behavior by default** - ALL inputs auto-submit on change. For multi-select lists where user picks several items then clicks an action button, use `submit: false` on each checkbox. For traditional forms, use the `form` block.
+9. **Using buttons to simulate selection** - Don't set `state[:x] = index` in button callbacks to track which option is selected. Use `select :key, choices, submit: false` or `radio_group :key, choices` instead. Buttons are for actions, not selection state.
+10. **Storing array indices in state** - Indices break when lists change. Store the string name/label and resolve to index at action time.
+11. **Long lists without scroll** - Use `scroll_box(max_height: "400px") do...end` to constrain list height. See `docs/form-patterns.md` for all canonical patterns.
