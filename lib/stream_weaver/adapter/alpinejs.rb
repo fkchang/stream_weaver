@@ -253,7 +253,8 @@ module StreamWeaver
           view.select(
             name: "#{form_name}[#{key}]",  # Rails-style nested params
             "x-model" => "_form.#{key}",   # Form-local Alpine scope
-            autocomplete: "off"            # Prevent browser form-state restoration
+            autocomplete: "off",
+            "x-init" => "$el.value = _form.#{key}"
           ) do
             choices.each do |choice|
               label, value = choice.is_a?(Array) ? choice : [choice, choice]
@@ -290,7 +291,8 @@ module StreamWeaver
           view.select(
             name: key.to_s,
             "x-model" => key.to_s,
-            autocomplete: "off"
+            autocomplete: "off",
+            "x-init" => "$el.value = #{key}"
           ) do
             choices.each do |choice|
               label, value = choice.is_a?(Array) ? choice : [choice, choice]
