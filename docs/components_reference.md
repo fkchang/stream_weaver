@@ -923,6 +923,57 @@ every(5) do |streamer|
 end
 ```
 
+### Accessing `state` Inside Replace Blocks
+
+`streamer.replace` blocks run in a `FeedBuilder` context, not the App context. `state` is a method on App — it is **not available** inside replace blocks unless you pass it explicitly via the `state:` keyword.
+
+```ruby
+# WRONG — raises NameError in timer thread at runtime
+every(30) do |streamer|
+  streamer.replace("#panel") do
+    text "Mode: #{state[:mode]}"  # NameError: undefined method `state'
+  end
+end
+
+# CORRECT
+every(30) do |streamer|
+  streamer.replace("#panel", state: state) do
+    text "Mode: #{state[:mode]}"  # works
+  end
+end
+```
+
+This applies to `replace`, `append`, and `prepend`. The error appears in the server log as `[StreamWeaver] Timer error: NameError` — it will not raise on startup, only when the timer fires.
+
+### Helper Methods and Replace Blocks
+
+Top-level `def` helper methods are accessible inside replace blocks (they're global). If those helpers use `state`, pass `state:` to `replace` so it is available:
+
+```ruby
+def render_dashboard(metrics:, state:)
+  columns do
+    column do
+      stat_display value: metrics[:count], label: "Total"
+    end
+    column do
+      text "Filter: #{state[:filter]}"
+    end
+  end
+end
+
+app "Dashboard" do
+  div id: "dash" do
+    render_dashboard(metrics: load_metrics, state: state)
+  end
+
+  every(10) do |streamer|
+    streamer.replace("#dash", state: state) do
+      render_dashboard(metrics: load_metrics, state: state)
+    end
+  end
+end.run!
+```
+
 ## Dark Theme
 
 Use `theme: :dark` for a dark color scheme optimized for dashboards:

@@ -537,6 +537,56 @@ end.run!
 - **Always re-apply `add_class`** — new SSE connections miss past class changes, so re-apply each tick
 - **`expandable_card key: :foo` generates `id="card-foo"`** — target it with `#card-foo` in SSE actions
 
+### CRITICAL: Accessing `state` Inside `streamer.replace` Blocks
+
+**The problem:** `streamer.replace("#target") { ... }` evaluates its block in a `FeedBuilder` context, NOT in the App context. This means `state` — which is a method on the App — is **not accessible** inside the block. This will raise `NameError: undefined local variable or method 'state'` at runtime (not at startup).
+
+```ruby
+# WRONG — `state` is not available inside replace blocks
+every(30) do |streamer|
+  streamer.replace("#my-panel") do
+    text "Filter: #{state[:filter]}"  # NameError: undefined method `state'
+  end
+end
+
+# CORRECT — pass state: explicitly
+every(30) do |streamer|
+  streamer.replace("#my-panel", state: state) do
+    text "Filter: #{state[:filter]}"  # works
+  end
+end
+```
+
+The same applies to `streamer.append` and `streamer.prepend`.
+
+### CRITICAL: Helper Methods Inside `streamer.replace` Blocks
+
+Top-level `def` helper methods work inside `streamer.replace` blocks (they're globally accessible). However, if those helpers call `state`, the `state:` keyword must be passed to `replace` — not to the helper itself.
+
+```ruby
+def render_summary(data:, state:)
+  card do
+    text "Mode: #{state[:mode]}"   # state passed as arg — fine
+    stat_display value: data[:count], label: "Items"
+  end
+end
+
+app "Dashboard" do
+  div id: "summary" do
+    render_summary(data: load_data, state: state)
+  end
+
+  every(10) do |streamer|
+    # Pass state: to replace so FeedBuilder exposes it
+    streamer.replace("#summary", state: state) do
+      render_summary(data: load_data, state: state)
+    end
+  end
+end.run!
+```
+
+**Why this matters:** The error appears in the timer thread log (`[StreamWeaver] Timer error: NameError`), not on page load. It's easy to miss during development if the timer interval is long.
+
 ### Timer Examples
 
 | File | Description |

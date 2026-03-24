@@ -137,9 +137,9 @@ RSpec.describe StreamWeaver::FeedBuilder do
       expect(builder).not_to respond_to(:text_field)
     end
 
-    it "does not define button" do
+    it "defines button for render-only use in streamer push contexts" do
       builder = described_class.new
-      expect(builder).not_to respond_to(:button)
+      expect(builder).to respond_to(:button)
     end
 
     it "does not define form" do
@@ -152,9 +152,9 @@ RSpec.describe StreamWeaver::FeedBuilder do
       expect(builder).not_to respond_to(:checkbox)
     end
 
-    it "does not define select" do
+    it "defines select for render-only use in streamer push contexts" do
       builder = described_class.new
-      expect(builder).not_to respond_to(:select)
+      expect(builder).to respond_to(:select)
     end
 
     it "does not define text_area" do

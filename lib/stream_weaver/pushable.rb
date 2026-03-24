@@ -5,18 +5,18 @@ module StreamWeaver
   # Included by Feed (HTTP push) and Streamer (SSE broadcast).
   # Implementors provide `push_update(action:, target:, html:)`.
   module Pushable
-    def replace(target, html = nil, &block)
-      html ||= render_components(&block) if block
+    def replace(target, html = nil, state: nil, &block)
+      html ||= render_components(state, &block) if block
       push_update(action: :replace, target: target, html: html)
     end
 
-    def append(target, html = nil, &block)
-      html ||= render_components(&block) if block
+    def append(target, html = nil, state: nil, &block)
+      html ||= render_components(state, &block) if block
       push_update(action: :append, target: target, html: html)
     end
 
-    def prepend(target, html = nil, &block)
-      html ||= render_components(&block) if block
+    def prepend(target, html = nil, state: nil, &block)
+      html ||= render_components(state, &block) if block
       push_update(action: :prepend, target: target, html: html)
     end
 
@@ -34,8 +34,8 @@ module StreamWeaver
 
     private
 
-    def render_components(&block)
-      components = FeedBuilder.build(&block)
+    def render_components(state = nil, &block)
+      components = FeedBuilder.build(state, &block)
       ComponentRenderer.render_html(StreamWeaver.default_adapter, components)
     end
   end

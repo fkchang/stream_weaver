@@ -118,30 +118,6 @@ module StreamWeaver
       @components << Components::Term.new(term_key, **options)
     end
 
-    # =========================================
-    # Layout containers with special behavior
-    # =========================================
-
-    def columns(widths: nil, **options, &block)
-      columns_component = Components::Columns.new(widths: widths, **options)
-      @components << columns_component
-
-      parent_components = @components
-      @current_columns = columns_component
-      @components = []
-
-      instance_eval(&block) if block
-
-      columns_component.children = @components
-      @components = parent_components
-      @current_columns = nil
-    end
-
-    def column(**options, &block)
-      column_component = Components::Column.new(**options)
-      capture_children_then_append(column_component, &block)
-    end
-
     def checkbox_group(key, **options, &block)
       @_state[key] = options[:default] || [] unless @_state.key?(key)
 
@@ -479,6 +455,165 @@ module StreamWeaver
 
     def theme_switcher(position: :inline, show_label: true, **options)
       @components << Components::ThemeSwitcher.new(position: position, show_label: show_label, **options)
+    end
+
+    # =========================================
+    # Design Deck DSL methods (T7)
+    # =========================================
+
+    # Create a design deck with slide-based option selection.
+    # The deck wraps its slides in a SlideContainer with :swap mode.
+    #
+    # @param title [String] Deck title
+    # @param options [Hash] Additional options
+    # @yield Block containing slide definitions
+    # @return [Components::Deck::DesignDeck] The deck component
+    #
+    # @example
+    #   design_deck "Architecture Direction" do
+    #     slide "arch", "System Architecture" do
+    #       option "Monolith" do
+    #         code_block "...", lang: "ts"
+    #       end
+    #     end
+    #   end
+    def design_deck(title, **options, &block)
+      deck = Components::Deck::DesignDeck.new(title, **options)
+      @components << deck
+      @current_deck = deck
+
+      parent_components = @components
+      @components = []
+      instance_eval(&block) if block
+      deck.children = @components
+      @components = parent_components
+
+      deck.validate!
+
+      # Auto-append DeckSummary as the last slide (T9)
+      slides = deck.children.select { |c| c.is_a?(Components::Deck::DeckSlide) }
+      summary = Components::Deck::DeckSummary.new
+      summary.deck_slides = slides
+      deck.children << summary
+
+      @current_deck = nil
+      deck
+    end
+
+    # Override slide to create DeckSlide when inside a design_deck context.
+    # Falls through to DisplayDSL#slide when not in deck context.
+    def slide(id, title = nil, **options, &block)
+      unless @current_deck
+        return super(id, title, **options, &block)
+      end
+
+      deck_slide = Components::Deck::DeckSlide.new(id, title, **options)
+      @components << deck_slide
+      @current_slide = deck_slide
+
+      parent_components = @components
+      @components = []
+      instance_eval(&block) if block
+      deck_slide.children = @components
+      @components = parent_components
+
+      @current_slide = nil
+      deck_slide
+    end
+
+    # Create an option card within a DeckSlide.
+    # Must be called inside a slide block within a design_deck.
+    #
+    # @param label [String] Option label
+    # @param aside [String, nil] Aside text below preview
+    # @param recommended [Boolean] Show "Recommended" badge
+    # @param description [String, nil] Description for tooltip/aria
+    # @param options [Hash] Additional options
+    # @yield Block containing preview content (mermaid, code_block, etc.)
+    #
+    # @example
+    #   option "Monolith", aside: "Simple", recommended: true do
+    #     mermaid "graph TD; A-->B", compact: true
+    #   end
+    def option(label, **options, &block)
+      raise "option must be inside a slide within design_deck" unless @current_deck && @current_slide
+
+      opt = Components::Deck::DeckOption.new(label, **options)
+      # Track parent slide context for selection state (T8)
+      opt.slide_id = @current_slide.id
+      # Count options already in the current build's @components list (not slide.children which isn't set yet)
+      opt.option_index = @components.count { |c| c.is_a?(Components::Deck::DeckOption) }
+      @components << opt
+
+      parent_components = @components
+      @components = []
+      instance_eval(&block) if block
+      opt.children = @components
+      @components = parent_components
+
+      opt
+    end
+
+    # =========================================
+    # Deck Polish DSL methods (T14)
+    # =========================================
+
+    # Create an AI model picker for generate-more.
+    # Hidden when fewer than 2 models are provided.
+    #
+    # @param models [Array<Hash>] Array of { id:, name:, provider: } hashes
+    # @param default_model [String, nil] ID of the default selected model
+    #
+    # @example
+    #   model_selector(
+    #     models: [
+    #       { id: "claude-3", name: "Claude 3 Opus", provider: "Anthropic" },
+    #       { id: "gpt-4", name: "GPT-4", provider: "OpenAI" }
+    #     ],
+    #     default_model: "claude-3"
+    #   )
+    def model_selector(models:, default_model: nil, **options)
+      @components << Components::Deck::ModelSelector.new(
+        models: models, default_model: default_model, **options
+      )
+    end
+
+    # Show a fixed top confirmation bar with confirm/cancel buttons.
+    # Slides down from top with optional auto-hide timer.
+    #
+    # @param message [String] Confirmation message
+    # @param confirm_label [String] Label for confirm action (default: "Cancel")
+    # @param cancel_label [String] Label for dismiss action (default: "Keep Going")
+    # @param auto_hide [Integer, nil] Auto-hide after N seconds (default: 5)
+    #
+    # @example
+    #   confirmation_bar(
+    #     message: "Are you sure you want to cancel?",
+    #     confirm_label: "Yes, Cancel",
+    #     cancel_label: "Keep Going"
+    #   )
+    def confirmation_bar(message:, confirm_label: "Cancel", cancel_label: "Keep Going",
+                         auto_hide: 5, **options)
+      @components << Components::Deck::ConfirmationBar.new(
+        message: message, confirm_label: confirm_label,
+        cancel_label: cancel_label, auto_hide: auto_hide, **options
+      )
+    end
+
+    # Show a full-screen overlay after submit or cancel.
+    # Displays status message with blur backdrop and optional auto-close tab.
+    #
+    # @param status [Symbol] Status type (:submitted or :cancelled)
+    # @param message [String] Status message
+    # @param auto_close_delay [Integer] Auto-close tab delay in ms (default: 800)
+    #
+    # @example
+    #   close_overlay(status: :submitted, message: "Deck submitted!")
+    def close_overlay(status:, message:, auto_close_delay: 800, **options)
+      @components << Components::Deck::CloseOverlay.new(
+        status: status, message: message,
+        auto_close_delay: auto_close_delay, **options
+      )
     end
 
     # =========================================

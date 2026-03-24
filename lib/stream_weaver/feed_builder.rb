@@ -13,12 +13,17 @@ module StreamWeaver
 
     attr_reader :components
 
-    def initialize
+    def initialize(state = nil)
       @components = []
+      @_state = state
     end
 
-    def self.build(&block)
-      builder = new
+    def state
+      @_state
+    end
+
+    def self.build(state = nil, &block)
+      builder = new(state)
       builder.instance_eval(&block)
       builder.components
     end
