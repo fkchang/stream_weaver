@@ -252,13 +252,15 @@ module StreamWeaver
 
           view.select(
             name: "#{form_name}[#{key}]",  # Rails-style nested params
-            "x-model" => "_form.#{key}"  # Form-local Alpine scope
+            "x-model" => "_form.#{key}",   # Form-local Alpine scope
+            autocomplete: "off"            # Prevent browser form-state restoration
           ) do
             choices.each do |choice|
+              label, value = choice.is_a?(Array) ? choice : [choice, choice]
               view.option(
-                value: choice,
-                selected: current_value == choice
-              ) { choice }
+                value: value,
+                selected: current_value == value
+              ) { label }
             end
           end
         elsif should_submit
@@ -270,13 +272,15 @@ module StreamWeaver
           view.select(
             name: key.to_s,
             "x-model" => key.to_s,
+            autocomplete: "off",
             **htmx_attrs(endpoint, "hx-trigger" => "change")
           ) do
             choices.each do |choice|
+              label, value = choice.is_a?(Array) ? choice : [choice, choice]
               view.option(
-                value: choice,
-                selected: current_value == choice
-              ) { choice }
+                value: value,
+                selected: current_value == value
+              ) { label }
             end
           end
         else
@@ -285,13 +289,15 @@ module StreamWeaver
 
           view.select(
             name: key.to_s,
-            "x-model" => key.to_s
+            "x-model" => key.to_s,
+            autocomplete: "off"
           ) do
             choices.each do |choice|
+              label, value = choice.is_a?(Array) ? choice : [choice, choice]
               view.option(
-                value: choice,
-                selected: current_value == choice
-              ) { choice }
+                value: value,
+                selected: current_value == value
+              ) { label }
             end
           end
         end
