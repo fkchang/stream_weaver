@@ -91,7 +91,7 @@ module StreamWeaver
         # Filter state for session storage - remove large/transient keys
         # Session cookies have ~4KB limit, so we can't store file contents, etc.
         def session_safe_state(state)
-          hardcoded_transient = [:code_content, :current_file_path, :examples]
+          hardcoded_transient = [:code_content, :current_file_path, :examples, :_deck_state]
           app_transient = settings.streamlit_app.transient_keys
           state.reject do |k, _|
             hardcoded_transient.include?(k) || app_transient.include?(k) || k.to_s.end_with?('_edited_code')
@@ -105,6 +105,14 @@ module StreamWeaver
             if component.is_a?(Components::Checkbox) && !params.key?(key.to_s)
               state[key] = false
             end
+          end
+        end
+
+        # Inject deck state into the render state so adapter can read it.
+        # Called before rebuild_with_state for routes that render content.
+        def inject_deck_state!(state)
+          if session[:deck_session_id]
+            state[:_deck_state] = Components::Deck::DeckState.new(session[:deck_session_id])
           end
         end
 
@@ -177,7 +185,17 @@ module StreamWeaver
         streamlit_app = settings.streamlit_app
         adapter = settings.adapter
         session_theme = session[:theme_override]
+        inject_deck_state!(state)
         streamlit_app.rebuild_with_state(state)
+
+        # Scrub transient keys that leaked into the session (e.g. from old code
+        # before a key was marked transient, or a schema change after restart).
+        # rebuild_with_state must run first so DSL-defined transient keys are known.
+        unless streamlit_app.transient_keys.empty?
+          changed = state.reject! { |k, _| streamlit_app.transient_keys.include?(k) }
+          session[:streamlit_state] = session_safe_state(state) if changed
+        end
+
         Views::AppView.new(streamlit_app, state, adapter, is_agentic, session_theme: session_theme).call
       end
 
@@ -189,6 +207,7 @@ module StreamWeaver
           adapter = settings.adapter
           is_agentic = settings.respond_to?(:result_container)
 
+          inject_deck_state!(state)
           streamlit_app.rebuild_with_state(state)
           sync_params_to_state(state)
           handle_unchecked_checkboxes(state, streamlit_app.components)
@@ -210,6 +229,7 @@ module StreamWeaver
           adapter = settings.adapter
           is_agentic = settings.respond_to?(:result_container)
 
+          inject_deck_state!(state)
           streamlit_app.rebuild_with_state(state)
           sync_params_to_state(state, excluded_keys: [:button_id])
           handle_unchecked_checkboxes(state, streamlit_app.components)
@@ -406,6 +426,321 @@ module StreamWeaver
           status 400
           content_type 'text/plain'
           "Invalid theme: #{theme}. Available themes: #{StreamWeaver.available_themes.join(', ')}"
+        end
+      end
+
+      # =========================================
+      # Deck State endpoints (T8)
+      # =========================================
+
+      # Select an option for a slide (radio semantics)
+      post '/deck/select' do
+        begin
+          payload = if request.content_type&.include?('application/json')
+            JSON.parse(request.body.read, symbolize_names: true)
+          else
+            { slide_id: params[:slide_id], option_label: params[:option_label] }
+          end
+
+          slide_id = payload[:slide_id]
+          option_label = payload[:option_label]
+
+          unless slide_id && option_label
+            halt 400, { 'Content-Type' => 'application/json' },
+                 JSON.generate(error: "Missing slide_id or option_label")
+          end
+
+          # Get or create deck session
+          session[:deck_session_id] ||= Components::Deck::DeckState.generate_session_id
+          deck_state = Components::Deck::DeckState.new(session[:deck_session_id])
+          deck_state.select(slide_id, option_label)
+
+          content_type :json
+          JSON.generate(success: true, slide_id: slide_id, option_label: option_label)
+        rescue => e
+          render_error("/deck/select", e)
+        end
+      end
+
+      # Save a note for an option
+      post '/deck/note' do
+        begin
+          payload = if request.content_type&.include?('application/json')
+            JSON.parse(request.body.read, symbolize_names: true)
+          else
+            { slide_id: params[:slide_id], option_label: params[:option_label], text: params[:text] }
+          end
+
+          slide_id = payload[:slide_id]
+          option_label = payload[:option_label]
+          text = payload[:text] || ""
+
+          unless slide_id && option_label
+            halt 400, { 'Content-Type' => 'application/json' },
+                 JSON.generate(error: "Missing slide_id or option_label")
+          end
+
+          session[:deck_session_id] ||= Components::Deck::DeckState.generate_session_id
+          deck_state = Components::Deck::DeckState.new(session[:deck_session_id])
+          deck_state.set_note(slide_id, option_label, text)
+
+          content_type :json
+          JSON.generate(success: true, slide_id: slide_id, option_label: option_label)
+        rescue => e
+          render_error("/deck/note", e)
+        end
+      end
+
+      # Read the full deck state (for debugging / agent access)
+      get '/deck/state' do
+        session[:deck_session_id] ||= Components::Deck::DeckState.generate_session_id
+        deck_state = Components::Deck::DeckState.new(session[:deck_session_id])
+
+        content_type :json
+        JSON.generate(deck_state.to_h)
+      end
+
+      # Re-render app content with current deck state.
+      # Accepts ?slide=N to remember which slide the user is on.
+      get '/deck/refresh' do
+        state = session[:streamlit_state] ||= {}
+        state[:_deck_current_slide] = params[:slide].to_i if params[:slide]
+        inject_deck_state!(state)
+        streamlit_app = settings.streamlit_app
+        adapter = settings.adapter
+        is_agentic = settings.respond_to?(:result_container)
+        streamlit_app.rebuild_with_state(state)
+        Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+      end
+
+      # Save final notes on the summary slide (T9)
+      post '/deck/final_notes' do
+        begin
+          payload = if request.content_type&.include?('application/json')
+            JSON.parse(request.body.read, symbolize_names: true)
+          else
+            { text: params[:text] }
+          end
+
+          session[:deck_session_id] ||= Components::Deck::DeckState.generate_session_id
+          deck_state = Components::Deck::DeckState.new(session[:deck_session_id])
+          deck_state.set_final_notes(payload[:text] || "")
+
+          content_type :json
+          JSON.generate(success: true)
+        rescue => e
+          render_error("/deck/final_notes", e)
+        end
+      end
+
+      # Submit the deck -- marks as submitted and sets _result for run_once! (T9)
+      post '/deck/submit' do
+        begin
+          session[:deck_session_id] ||= Components::Deck::DeckState.generate_session_id
+          deck_state = Components::Deck::DeckState.new(session[:deck_session_id])
+          deck_state.submit!
+
+          state = session[:streamlit_state] ||= {}
+          state[:_result] = {
+            deck_selections: deck_state.selections,
+            deck_notes: deck_state.notes,
+            deck_final_notes: deck_state.final_notes
+          }
+          session[:streamlit_state] = session_safe_state(state)
+
+          # Signal completion for agentic mode (run_once!)
+          is_agentic = settings.respond_to?(:result_container)
+          if is_agentic && settings.respond_to?(:result_container)
+            settings.result_container[:result] = state[:_result]
+            settings.result_container[:ready] = true
+          end
+
+          content_type :json
+          JSON.generate(success: true, submitted: true)
+        rescue => e
+          render_error("/deck/submit", e)
+        end
+      end
+
+      # =========================================
+      # Model Selector endpoint (T14)
+      # =========================================
+
+      # Set the selected AI model for generate-more.
+      post '/deck/set_model' do
+        begin
+          payload = if request.content_type&.include?('application/json')
+            JSON.parse(request.body.read, symbolize_names: true)
+          else
+            { model_id: params[:model_id] }
+          end
+
+          model_id = payload[:model_id]
+          halt 400, JSON.generate(error: "model_id required") unless model_id
+
+          deck_state = get_or_create_deck_state
+          deck_state.set_model(model_id.to_s)
+
+          content_type :json
+          JSON.generate(success: true, model_id: model_id.to_s)
+        rescue => e
+          render_error("/deck/set_model", e)
+        end
+      end
+
+      # =========================================
+      # Generate-More endpoints (T10)
+      # =========================================
+
+      # User requests more options for a slide.
+      # Queues a generate request and transitions to :generating.
+      post '/deck/generate' do
+        begin
+          payload = if request.content_type&.include?('application/json')
+            JSON.parse(request.body.read, symbolize_names: true)
+          else
+            { slide_id: params[:slide_id], count: params[:count], prompt: params[:prompt] }
+          end
+
+          slide_id = payload[:slide_id]
+          count = (payload[:count] || 2).to_i
+          prompt = payload[:prompt]
+
+          unless slide_id
+            halt 400, { 'Content-Type' => 'application/json' },
+                 JSON.generate(error: "Missing slide_id")
+          end
+
+          count = [[count, 1].max, 5].min # Clamp 1-5
+
+          session[:deck_session_id] ||= Components::Deck::DeckState.generate_session_id
+          deck_state = Components::Deck::DeckState.new(session[:deck_session_id])
+          request_id = deck_state.start_generate(slide_id, count, prompt: prompt)
+
+          # Trigger SSE re-render so skeletons appear
+          if settings.respond_to?(:streamer) && settings.streamer
+            state = session[:streamlit_state] ||= {}
+            inject_deck_state!(state)
+            streamlit_app = settings.streamlit_app
+            adapter = settings.adapter
+            is_agentic = settings.respond_to?(:result_container)
+            streamlit_app.rebuild_with_state(state)
+            html = Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+            settings.streamer.replace("#main", html)
+          end
+
+          status 202
+          content_type :json
+          JSON.generate(
+            status: "generating",
+            request_id: request_id,
+            slide_id: slide_id,
+            count: count
+          )
+        rescue => e
+          render_error("/deck/generate", e)
+        end
+      end
+
+      # Agent polls for pending generate requests.
+      # Returns and removes all queued requests for the given session.
+      get '/deck/pending' do
+        begin
+          session_id = params[:session_id]
+          unless session_id
+            halt 400, { 'Content-Type' => 'application/json' },
+                 JSON.generate(error: "Missing session_id")
+          end
+
+          deck_state = Components::Deck::DeckState.new(session_id)
+          requests = deck_state.take_pending_requests!
+
+          content_type :json
+          JSON.generate(requests: requests)
+        rescue => e
+          render_error("/deck/pending", e)
+        end
+      end
+
+      # Agent pushes a generated option into state.
+      # Increments received_count, transitions to :idle when all received.
+      # Triggers SSE re-render.
+      post '/deck/add_option' do
+        begin
+          payload = if request.content_type&.include?('application/json')
+            JSON.parse(request.body.read, symbolize_names: true)
+          else
+            halt 400, { 'Content-Type' => 'application/json' },
+                 JSON.generate(error: "Request body must be JSON")
+          end
+
+          session_id = payload[:session_id]
+          slide_id = payload[:slide_id]
+          request_id = payload[:request_id]
+          option_data = payload[:option] || {}
+
+          unless session_id && slide_id && request_id
+            halt 400, { 'Content-Type' => 'application/json' },
+                 JSON.generate(error: "Missing session_id, slide_id, or request_id")
+          end
+
+          deck_state = Components::Deck::DeckState.new(session_id)
+
+          # Convert symbol keys to strings for storage
+          option_hash = {}
+          option_data.each { |k, v| option_hash[k.to_s] = v }
+
+          gen_state = deck_state.add_generated_option(slide_id, option_hash, request_id: request_id)
+
+          # Trigger SSE re-render so new option appears
+          if settings.respond_to?(:streamer) && settings.streamer
+            # We can't easily re-render for a different session from the agent endpoint.
+            # Instead, use replace on #main to trigger a page refresh via SSE.
+            # The connected browser will pick up new state on next render.
+            # Push a refresh-trigger event.
+            settings.streamer.replace(
+              "#sw-generate-area",
+              "<div id='sw-generate-area' data-refresh='#{Time.now.to_f}'></div>"
+            )
+          end
+
+          content_type :json
+          JSON.generate(
+            success: true,
+            slide_id: slide_id,
+            received_count: gen_state["received_count"],
+            status: gen_state["status"]
+          )
+        rescue => e
+          render_error("/deck/add_option", e)
+        end
+      end
+
+      # User cancels a pending generation.
+      post '/deck/cancel_generate' do
+        begin
+          session[:deck_session_id] ||= Components::Deck::DeckState.generate_session_id
+          deck_state = Components::Deck::DeckState.new(session[:deck_session_id])
+          deck_state.cancel_generate
+          # Immediately transition cancelled -> idle
+          deck_state.reset_generate
+
+          # Trigger SSE re-render
+          if settings.respond_to?(:streamer) && settings.streamer
+            state = session[:streamlit_state] ||= {}
+            inject_deck_state!(state)
+            streamlit_app = settings.streamlit_app
+            adapter = settings.adapter
+            is_agentic = settings.respond_to?(:result_container)
+            streamlit_app.rebuild_with_state(state)
+            html = Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+            settings.streamer.replace("#main", html)
+          end
+
+          content_type :json
+          JSON.generate(success: true, status: "idle")
+        rescue => e
+          render_error("/deck/cancel_generate", e)
         end
       end
 
