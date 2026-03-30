@@ -765,6 +765,36 @@ module StreamWeaver
                     0 0 0 4px var(--ring);
                 }
 
+                /* Button loading state (HTMX hx-disabled-elt or manual disable) */
+                button:disabled, button.htmx-request {
+                  opacity: 0.65;
+                  cursor: not-allowed;
+                  transform: none;
+                  pointer-events: none;
+                }
+
+                button:disabled::after, button.htmx-request::after {
+                  content: "";
+                  position: absolute;
+                  top: 50%;
+                  left: 50%;
+                  width: 0.85em;
+                  height: 0.85em;
+                  margin-top: -0.425em;
+                  margin-left: -0.425em;
+                  border: 2px solid currentColor;
+                  border-top-color: transparent;
+                  border-radius: 50%;
+                  opacity: 0;
+                  animation:
+                    sw-btn-spinner-appear 0ms 300ms forwards,
+                    sw-spin 0.7s 300ms linear infinite;
+                }
+
+                @keyframes sw-btn-spinner-appear {
+                  to { opacity: 1; }
+                }
+
                 /* ===========================================
                    Checkbox & Labels
                    =========================================== */

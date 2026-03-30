@@ -444,48 +444,42 @@ module StreamWeaver
       # @param modal_context [Hash, nil] Modal context if button is inside a modal
       # @return [void] Renders to view
       def render_button(view, button_id, label, options, modal_context = nil)
-        # Support :none style for unstyled buttons, or string styles for inline CSS
-        style_option = options[:style]
-        if style_option == :none || style_option.is_a?(String)
-          # Custom/unstyled button - use inline style if provided
-          button_class = options[:class]
-          inline_style = style_option.is_a?(String) ? style_option : nil
-        else
-          style_class = style_option == :secondary ? "secondary" : "primary"
-          button_class = "btn btn-#{style_class}"
-          inline_style = nil
-        end
-        should_submit = options.fetch(:submit, true)
+        view.button(**button_attrs(button_id, options, modal_context)) { label }
+      end
 
-        if !should_submit
-          # Display-only button: no HTMX, just visual
-          attrs = { type: "button" }
-          attrs[:class] = button_class if button_class
-          attrs[:style] = inline_style if inline_style
-          view.button(**attrs) { label }
-        elsif websocket_mode?
-          # WebSocket mode: use Alpine.js @click to send via WebSocket
-          attrs = {
-            "@click" => "sendEvent('action', {button: '#{button_id}', state: getFormState()})"
-          }
-          attrs[:class] = button_class if button_class
-          attrs[:style] = inline_style if inline_style
-          view.button(**attrs) { label }
+      private
+
+      def button_attrs(button_id, options, modal_context)
+        style = button_style_attrs(options)
+
+        unless options.fetch(:submit, true)
+          return style.merge(type: "button")
+        end
+
+        if websocket_mode?
+          # Disable on click; page morph from server response replaces the element, clearing disabled
+          style.merge("@click" => "$el.disabled=true; sendEvent('action', {button: '#{button_id}', state: getFormState()})")
         elsif modal_context
-          # Inside a modal: close via Alpine before HTMX request fires
-          # hx-on::before-request runs before HTMX sends, allowing Alpine to close modal
-          attrs = htmx_attrs(url("/action/#{button_id}"), "hx-on::before-request" => "open = false")
-          attrs[:class] = button_class if button_class
-          attrs[:style] = inline_style if inline_style
-          view.button(**attrs) { label }
+          # hx-on::before-request closes the modal before HTMX fires — ordering matters here
+          htmx_attrs(url("/action/#{button_id}"),
+            "hx-disabled-elt" => "this",
+            "hx-on::before-request" => "open = false").merge(style)
         else
-          # Normal button: use standard HTMX
-          attrs = htmx_attrs(url("/action/#{button_id}"))
-          attrs[:class] = button_class if button_class
-          attrs[:style] = inline_style if inline_style
-          view.button(**attrs) { label }
+          htmx_attrs(url("/action/#{button_id}"), "hx-disabled-elt" => "this").merge(style)
         end
       end
+
+      def button_style_attrs(options)
+        style_option = options[:style]
+        if style_option == :none || style_option.is_a?(String)
+          { class: options[:class], style: (style_option if style_option.is_a?(String)) }.compact
+        else
+          style_class = style_option == :secondary ? "secondary" : "primary"
+          { class: "btn btn-#{style_class}" }
+        end
+      end
+
+      public
 
       # Get HTML attributes for the app container with Alpine.js initialization
       #
