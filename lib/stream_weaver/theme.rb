@@ -1,9 +1,42 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative 'theme/presets'
+require_relative 'theme/auto_mode'
 
 module StreamWeaver
-  # Custom theme registration and management
+  # Custom theme registration and management.
+  #
+  # == Visual Skills CSS Foundation (T2)
+  #
+  # This module provides the CSS custom property vocabulary used by ALL
+  # visual skills components (T3-T15). The convention is:
+  #
+  # === sw- CSS Prefix Convention
+  #
+  # All visual skills CSS classes MUST use the +sw-+ prefix to avoid
+  # collisions with user CSS and third-party libraries.
+  #
+  #   BEM naming:   sw-component--variant   (e.g. sw-card--hero)
+  #   State:        sw-is-active, sw-is-selected
+  #   Utility:      sw-text-dim, sw-bg-surface
+  #
+  # === CSS Custom Properties
+  #
+  # Semantic tokens (set per light/dark mode):
+  #   --sw-bg              Page background
+  #   --sw-surface         Card / panel surface
+  #   --sw-surface-elevated  Elevated surface (dropdowns, popovers)
+  #   --sw-border          Default border color
+  #   --sw-text            Primary text color
+  #   --sw-text-dim        Secondary / muted text
+  #   --sw-accent          Primary accent color
+  #   --sw-node-a/b/c      Diagram node palette
+  #   --sw-success/warning/error/info  Status colors
+  #
+  # These are _additional_ to the existing --sw-color-* tokens.
+  # Components should prefer the short --sw-* names; the --sw-color-*
+  # variants remain for backward compatibility.
   #
   # @example Register a custom theme
   #   StreamWeaver.register_theme :corporate, {
@@ -81,7 +114,38 @@ module StreamWeaver
 
       # Term highlighting
       term_color: { css: "--sw-term-color", type: :color },
-      term_bg_hover: { css: "--sw-term-bg-hover", type: :color }
+      term_bg_hover: { css: "--sw-term-bg-hover", type: :color },
+
+      # ============================================
+      # Visual Skills Semantic Tokens (T2 foundation)
+      # These short-form --sw-* tokens are the primary
+      # vocabulary for visual skills components.
+      # ============================================
+
+      # Surfaces
+      vs_bg: { css: "--sw-bg", type: :color },
+      vs_surface: { css: "--sw-surface", type: :color },
+      vs_surface_elevated: { css: "--sw-surface-elevated", type: :color },
+      vs_border: { css: "--sw-border", type: :color },
+
+      # Text
+      vs_text: { css: "--sw-text", type: :color },
+      vs_text_dim: { css: "--sw-text-dim", type: :color },
+      vs_accent: { css: "--sw-accent", type: :color },
+
+      # Diagram node colors
+      vs_node_a: { css: "--sw-node-a", type: :color },
+      vs_node_b: { css: "--sw-node-b", type: :color },
+      vs_node_c: { css: "--sw-node-c", type: :color },
+
+      # Status colors
+      vs_success: { css: "--sw-success", type: :color },
+      vs_warning: { css: "--sw-warning", type: :color },
+      vs_error: { css: "--sw-error", type: :color },
+      vs_info: { css: "--sw-info", type: :color },
+
+      # Monospace font (for code blocks, dir trees)
+      font_mono: { css: "--sw-font-mono", type: :string }
     }.freeze
 
     # Built-in theme definitions (matches CSS in views.rb)
@@ -243,6 +307,210 @@ module StreamWeaver
         shadows: %i[shadow_sm shadow_md shadow_lg shadow_xl shadow_inner],
         components: %i[card_border_left term_color term_bg_hover]
       }
+    end
+
+    # Generate the visual skills CSS custom properties block.
+    # This produces the --sw-* semantic tokens for both light and dark modes,
+    # using sensible defaults that bridge to existing --sw-color-* tokens.
+    #
+    # @return [String] CSS with :root and html.dark blocks
+    def self.visual_skills_css
+      <<~CSS
+        /* ===========================================
+           Visual Skills CSS Foundation (T2)
+           Semantic tokens for visual skills components.
+           All classes use sw- prefix with BEM modifiers:
+             sw-component--variant  (e.g. sw-card--hero)
+             sw-is-active           (state classes)
+           =========================================== */
+
+        /* Light mode defaults -- bridge to existing --sw-color-* tokens */
+        :root {
+          --sw-bg: var(--sw-color-bg, #f8f8f8);
+          --sw-surface: var(--sw-color-bg-card, #ffffff);
+          --sw-surface-elevated: var(--sw-color-bg-elevated, #f3f3f3);
+          --sw-border: var(--sw-color-border, #e0e0e0);
+          --sw-text: var(--sw-color-text, #111111);
+          --sw-text-dim: var(--sw-color-text-muted, #444444);
+          --sw-accent: var(--sw-color-accent, #0d9488);
+          --sw-font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+          /* Diagram node palette */
+          --sw-node-a: var(--sw-color-primary, #c2410c);
+          --sw-node-b: var(--sw-color-accent, #0d9488);
+          --sw-node-c: #7c3aed;
+
+          /* Status colors */
+          --sw-success: #16a34a;
+          --sw-warning: #d97706;
+          --sw-error: #dc2626;
+          --sw-info: #2563eb;
+        }
+
+        /* Theme toggle button (sw- prefixed, BEM) */
+        .sw-theme-toggle {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+        }
+
+        .sw-theme-toggle__btn {
+          background: transparent;
+          border: 1px solid var(--sw-border);
+          border-radius: var(--sw-radius-md, 6px);
+          padding: 0.375rem 0.5rem;
+          cursor: pointer;
+          font-size: 1.1rem;
+          line-height: 1;
+          color: var(--sw-text);
+          transition: background 200ms ease-out, border-color 200ms ease-out;
+        }
+
+        .sw-theme-toggle__btn:hover {
+          background: var(--sw-surface-elevated);
+          border-color: var(--sw-accent);
+        }
+
+        .sw-theme-toggle__label {
+          font-size: 0.75rem;
+          color: var(--sw-text-dim);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        /* Dark mode overrides */
+        html.dark {
+          --sw-bg: var(--sw-color-bg, oklch(0.145 0 0));
+          --sw-surface: var(--sw-color-bg-card, oklch(0.205 0 0));
+          --sw-surface-elevated: var(--sw-color-bg-elevated, oklch(0.269 0 0));
+          --sw-border: var(--sw-color-border, oklch(1 0 0 / 10%));
+          --sw-text: var(--sw-color-text, oklch(0.985 0 0));
+          --sw-text-dim: var(--sw-color-text-muted, oklch(0.708 0 0));
+          --sw-accent: var(--sw-color-accent, #2dd4bf);
+
+          /* Brighter node colors for dark backgrounds */
+          --sw-node-a: #f97316;
+          --sw-node-b: #2dd4bf;
+          --sw-node-c: #a78bfa;
+
+          /* Brighter status colors for dark backgrounds */
+          --sw-success: #22c55e;
+          --sw-warning: #fbbf24;
+          --sw-error: #f87171;
+          --sw-info: #60a5fa;
+        }
+
+        /* ===========================================
+           Card Depth Tiers (T6)
+           sw-card--{depth} classes for visual hierarchy.
+           =========================================== */
+
+        .sw-card--hero {
+          background: color-mix(in oklch, var(--sw-accent) 8%, var(--sw-surface));
+          box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
+          border-left: 4px solid var(--sw-accent);
+        }
+
+        .sw-card--elevated {
+          background: var(--sw-surface);
+          box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+        }
+
+        .sw-card--default {
+          background: var(--sw-surface);
+          border: 1px solid var(--sw-border);
+          box-shadow: none;
+        }
+
+        .sw-card--recessed {
+          background: var(--sw-surface-elevated);
+          box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+          border: 1px solid var(--sw-border);
+        }
+
+        .sw-card--glass {
+          background: rgba(255, 255, 255, 0.08);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+        }
+
+        html.dark .sw-card--glass {
+          background: rgba(255, 255, 255, 0.05);
+          border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Card accent borders (left border colored by node palette) */
+        .sw-card--accent-a { border-left: 4px solid var(--sw-node-a); }
+        .sw-card--accent-b { border-left: 4px solid var(--sw-node-b); }
+        .sw-card--accent-c { border-left: 4px solid var(--sw-node-c); }
+        .sw-card--accent   { border-left: 4px solid; }
+
+        /* Card corner label */
+        .sw-card__label {
+          position: absolute;
+          top: 0.5rem;
+          right: 0.5rem;
+          font-size: 0.625rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          padding: 0.125rem 0.5rem;
+          border-radius: var(--sw-radius-sm, 4px);
+          background: var(--sw-accent);
+          color: white;
+          line-height: 1.4;
+        }
+
+        /* Card with label: position: relative is applied inline by the component */
+
+        /* ===========================================
+           Table Enhancements (T6)
+           sw-table--{feature} classes for enhanced tables.
+           =========================================== */
+
+        /* Alternating row backgrounds */
+        .sw-table--alternating .sw-table__row--alt {
+          background: var(--sw-surface-elevated, rgba(0, 0, 0, 0.02));
+        }
+
+        html.dark .sw-table--alternating .sw-table__row--alt {
+          background: rgba(255, 255, 255, 0.03);
+        }
+
+        /* Row hover highlight */
+        .sw-table--hover .sw-table__row--hover:hover {
+          background: color-mix(in oklch, var(--sw-accent) 6%, transparent);
+          transition: background 150ms ease-out;
+        }
+
+        /* Scrollable wrapper */
+        .sw-table--scrollable {
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-md, 6px);
+        }
+
+        /* Sticky header styling */
+        .sw-table--sticky-header thead {
+          position: sticky;
+          top: 0;
+          z-index: 1;
+        }
+
+        #{Presets.animations_css}
+      CSS
+    end
+
+    # Generate a Google Fonts <link> tag URL for the given font families.
+    #
+    # @param families [Array<String>] Google Fonts family strings
+    #   e.g. ["Instrument+Serif:ital@0;1", "JetBrains+Mono:wght@400;500"]
+    # @return [String] Full Google Fonts CSS URL
+    def self.google_fonts_url(*families)
+      families = families.flatten
+      query = families.map { |f| "family=#{f}" }.join("&")
+      "https://fonts.googleapis.com/css2?#{query}&display=swap"
     end
 
     private

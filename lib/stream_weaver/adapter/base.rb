@@ -199,6 +199,11 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_grid"
       end
 
+      # Render a scrollable container with max-height
+      def render_scroll_box(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_scroll_box"
+      end
+
       # =========================================
       # Navigation component rendering
       # =========================================
@@ -234,6 +239,240 @@ module StreamWeaver
       # @raise [NotImplementedError] if not implemented by subclass
       def render_dropdown(view, component, state)
         raise NotImplementedError, "#{self.class} must implement #render_dropdown"
+      end
+
+      # Render a theme toggle button (dark/light/auto mode)
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [ThemeToggle] The theme toggle component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_theme_toggle(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_theme_toggle"
+      end
+
+      # Render a theme preset (Google Fonts link + CSS custom properties)
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [ThemePreset] The theme preset component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_theme_preset(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_theme_preset"
+      end
+
+      # Render a syntax-highlighted code block with Prism.js
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [CodeBlock] The code block component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_code_block(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_code_block"
+      end
+
+      # Render an image with optional caption
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [ImageBlock] The image block component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_image_block(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_image_block"
+      end
+
+      # Render a Mermaid diagram with optional zoom/pan
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Mermaid] The mermaid component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_mermaid(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_mermaid"
+      end
+
+      # Render a pipeline step flow visualization
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Pipeline] The pipeline component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_pipeline(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_pipeline"
+      end
+
+      # Render a KPI dashboard grid of metric cards
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [KpiDashboard] The KPI dashboard component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_kpi_dashboard(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_kpi_dashboard"
+      end
+
+      # Render a Chart.js chart (visual skills T12 wrapper)
+      # Named render_chartjs to avoid collision with existing render_chart
+      # which uses config_class: keyword for legacy BarChart/LineChart/PieChart.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Chart] The chart component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_chartjs(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_chartjs"
+      end
+
+      # Render keyboard shortcuts (non-visual -- emits <script> block)
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [KeyboardShortcuts] The keyboard shortcuts component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_keyboard_shortcuts(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_keyboard_shortcuts"
+      end
+
+      # Render a slide container with navigation
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [SlideContainer] The slide container component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_slide_container(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_slide_container"
+      end
+
+      # Render an individual slide within a container
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Slide] The slide component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_slide(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_slide"
+      end
+
+      # =========================================
+      # Explainer component rendering (T11)
+      # =========================================
+
+      # Render a sticky sidebar table-of-contents with scroll spy
+      def render_sidebar_toc(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_sidebar_toc"
+      end
+
+      # Render a non-dismissible callout box with colored left border
+      def render_callout(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_callout"
+      end
+
+      # Render side-by-side comparison panels
+      def render_comparison(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_comparison"
+      end
+
+      # =========================================
+      # Design Deck component rendering (T7)
+      # =========================================
+
+      # Render a design deck (top-level orchestrator)
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::DesignDeck] The deck component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_design_deck(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_design_deck"
+      end
+
+      # Render a deck slide with options grid
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::DeckSlide] The slide component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_deck_slide(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_deck_slide"
+      end
+
+      # Render a deck option card
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::DeckOption] The option component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_deck_option(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_deck_option"
+      end
+
+      # Render the auto-generated deck summary slide
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Deck::DeckSummary] The summary component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_deck_summary(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_deck_summary"
+      end
+
+      # =========================================
+      # CSS-Only Helpers (T13)
+      # =========================================
+
+      # Render a hero section
+      def render_hero(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_hero"
+      end
+
+      # Render a prose container
+      def render_prose(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_prose"
+      end
+
+      # Render a pullquote
+      def render_pullquote(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_pullquote"
+      end
+
+      # Render a directory tree display
+      def render_dir_tree(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_dir_tree"
+      end
+
+      # Render a color legend
+      def render_legend(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_legend"
+      end
+
+      # Render a flow arrow connector
+      def render_flow_arrow(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_flow_arrow"
+      end
+
+      # Render layout toggle buttons
+      def render_layout_toggle(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_layout_toggle"
+      end
+
+      # Render a timeline event row with expandable details
+      def render_timeline_event(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_timeline_event"
       end
 
       protected

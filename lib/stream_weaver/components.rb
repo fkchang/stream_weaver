@@ -122,7 +122,7 @@ module StreamWeaver
         @modal_context = options.delete(:modal_context)
         @options = options
         # stable_id is derived from source location (for buttons with blocks) or counter (for blockless)
-        @button_id = "btn_#{label.downcase.gsub(/\s+/, '_')}_#{stable_id}"
+        @button_id = "btn_#{label.downcase.gsub(/[^a-z0-9]+/, '_')}_#{stable_id}"
       end
 
       def render(view, state)
@@ -257,17 +257,41 @@ module StreamWeaver
 
     # Card component for visual grouping of content
     class Card < Base
-      attr_accessor :children
+      VALID_DEPTHS = %i[hero elevated default recessed glass].freeze
 
+      attr_accessor :children
+      attr_reader :depth, :accent, :label
+
+      # @param depth [Symbol] Depth tier (:hero, :elevated, :default, :recessed, :glass)
+      # @param accent [Symbol, String, nil] Accent color for left border (:a, :b, :c or CSS color)
+      # @param label [String, nil] Corner label text (e.g. "RISK", "NEW")
       # @param options [Hash] Options (e.g., class: "question-card")
-      def initialize(**options)
+      def initialize(depth: nil, accent: nil, label: nil, **options)
+        @depth = depth
+        @accent = accent
+        @label = label
         @options = options
         @children = []
       end
 
       def render(view, state)
-        css_class = ["card", @options[:class]].compact.join(" ")
-        view.div(class: css_class) do
+        classes = ["card"]
+        classes << "sw-card--#{@depth}" if @depth && VALID_DEPTHS.include?(@depth)
+        classes << "sw-card--accent-#{@accent}" if @accent.is_a?(Symbol)
+        classes << "sw-card--accent" if @accent && !@accent.is_a?(Symbol)
+        classes << @options[:class] if @options[:class]
+        attrs = { class: classes.join(" ") }
+
+        # Build inline style for custom accent and/or label positioning
+        styles = []
+        styles << "border-left-color: #{@accent};" if @accent && !@accent.is_a?(Symbol)
+        styles << "position: relative;" if @label
+        attrs[:style] = styles.join(" ") unless styles.empty?
+
+        view.div(**attrs) do
+          if @label
+            view.span(class: "sw-card__label") { @label }
+          end
           @children.each { |child| child.render(view, state) }
         end
       end
@@ -431,6 +455,22 @@ module StreamWeaver
       end
     end
 
+    # ScrollBox component for scrollable content with max-height
+    class ScrollBox < Base
+      attr_reader :max_height, :options
+      attr_accessor :children
+
+      def initialize(max_height: "300px", **options)
+        @max_height = max_height
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_scroll_box(view, self, state)
+      end
+    end
+
     # Collapsible component for expandable/collapsible content sections
     class Collapsible < Base
       attr_accessor :children
@@ -536,7 +576,8 @@ module StreamWeaver
 
       def initialize(data = nil, headers: nil, rows: nil, file: nil, path: nil,
                      striped: false, bordered: false, hoverable: true, compact: false,
-                     sortable: false, sticky_header: false, markdown: false, caption: nil, **options, &block)
+                     sortable: false, sticky_header: false, markdown: false, caption: nil,
+                     alternating: false, scrollable: false, hover: false, **options, &block)
         @data = data
         @headers = headers
         @rows = rows
@@ -550,6 +591,9 @@ module StreamWeaver
         @sticky_header = sticky_header
         @markdown = markdown
         @caption = caption
+        @alternating = alternating
+        @scrollable = scrollable
+        @hover = hover
         @options = options
         @columns = []
         @transform_block = nil
@@ -676,7 +720,10 @@ module StreamWeaver
           sticky_header: @sticky_header,
           markdown: @markdown,
           caption: @caption,
-          columns: @columns
+          columns: @columns,
+          alternating: @alternating,
+          scrollable: @scrollable,
+          hover: @hover
         )
       end
     end
@@ -1230,6 +1277,65 @@ module StreamWeaver
       end
     end
 
+    # ThemeToggle component for visual skills auto-mode theme switching.
+    # Manages data-sw-theme attribute on <html>, <meta name="theme-color">,
+    # and localStorage persistence.
+    #
+    # Unlike ThemeSwitcher (which handles theme _selection_ among presets),
+    # ThemeToggle handles dark/light/auto _mode_ switching.
+    #
+    # sw- CSS classes:
+    #   sw-theme-toggle           - toggle button container
+    #   sw-theme-toggle--auto     - when in auto mode
+    #   sw-theme-toggle__btn      - the button element
+    #   sw-theme-toggle__icon     - sun/moon icon span
+    class ThemeToggle < Base
+      attr_reader :mode, :hotkey, :persist
+
+      # @param mode [Symbol] Initial mode (:dark, :light, :auto)
+      # @param hotkey [String, nil] Keyboard shortcut (e.g. "mod+shift+l")
+      # @param persist [Boolean] Persist preference in localStorage
+      # @param options [Hash] Additional options
+      def initialize(mode: :auto, hotkey: nil, persist: true, **options)
+        @mode = mode
+        @hotkey = hotkey
+        @persist = persist
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_theme_toggle(view, self, state)
+      end
+    end
+
+    # ThemePreset component for applying curated theme presets.
+    # Injects a Google Fonts <link> tag and a <style> block with
+    # CSS custom property overrides for both light and dark modes.
+    #
+    # This is a non-visual "head-level" component: it renders CSS
+    # infrastructure, not visible DOM elements.
+    #
+    # @example DSL usage
+    #   theme_preset :editorial
+    #   theme_preset :warm
+    class ThemePreset < Base
+      attr_reader :preset_name, :preset
+
+      # @param name [Symbol] Preset name (:editorial, :technical, :warm, :minimal, :terminal)
+      # @param options [Hash] Additional options
+      # @raise [ArgumentError] if preset name is not recognized
+      def initialize(name, **options)
+        @preset_name = name.to_sym
+        @preset = Theme::Presets.get(@preset_name)
+        raise ArgumentError, "Unknown theme preset: #{name}. Available: #{Theme::Presets.available.join(', ')}" unless @preset
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_theme_preset(view, self, state)
+      end
+    end
+
     # =========================================
     # Chart Components
     # =========================================
@@ -1704,5 +1810,157 @@ module StreamWeaver
         view.adapter.render_code_editor(view, self, state)
       end
     end
+
+    # =========================================
+    # CSS-Only Helpers (T13)
+    # Thin wrappers around divs with sw- CSS classes.
+    # Per DHH: "a div with a CSS class is still a div."
+    # =========================================
+
+    # Hero section -- large padded area with accent background tint
+    class Hero < Base
+      attr_accessor :children
+
+      def initialize(**options)
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_hero(view, self, state)
+      end
+    end
+
+    # Prose container -- reading-optimized text (max-width ~65ch, comfortable line-height)
+    class Prose < Base
+      attr_accessor :children
+      attr_reader :dropcap
+
+      def initialize(dropcap: false, **options)
+        @dropcap = dropcap
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_prose(view, self, state)
+      end
+    end
+
+    # Pullquote -- highlighted quotation with optional attribution
+    class Pullquote < Base
+      attr_reader :text, :attribution
+
+      def initialize(text, attribution: nil, **options)
+        @text = text
+        @attribution = attribution
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_pullquote(view, self, state)
+      end
+    end
+
+    # DirTree -- monospace file tree display with color-coded status
+    # Status markers: [new] (green), [modified] (amber), [deleted] (red)
+    class DirTree < Base
+      attr_reader :tree_text
+
+      def initialize(tree_text, **options)
+        @tree_text = tree_text
+        @options = options
+      end
+
+      # Parse lines and annotate with status
+      def parsed_lines
+        @tree_text.lines.map do |line|
+          stripped = line.rstrip
+          if stripped =~ /\[new\]\s*$/i
+            { text: stripped.sub(/\s*\[new\]\s*$/i, ''), status: :new }
+          elsif stripped =~ /\[modified\]\s*$/i
+            { text: stripped.sub(/\s*\[modified\]\s*$/i, ''), status: :modified }
+          elsif stripped =~ /\[deleted\]\s*$/i
+            { text: stripped.sub(/\s*\[deleted\]\s*$/i, ''), status: :deleted }
+          else
+            { text: stripped, status: nil }
+          end
+        end
+      end
+
+      def render(view, state)
+        view.adapter.render_dir_tree(view, self, state)
+      end
+    end
+
+    # Legend -- horizontal row of color dots with labels
+    class Legend < Base
+      attr_reader :items
+
+      # @param items [Array<Hash>] Array of { color: "#hex", label: "text" }
+      def initialize(items:, **options)
+        @items = items
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_legend(view, self, state)
+      end
+    end
+
+    # FlowArrow -- vertical arrow connector between sections
+    class FlowArrow < Base
+      attr_reader :label
+
+      def initialize(label: nil, **options)
+        @label = label
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_flow_arrow(view, self, state)
+      end
+    end
+
+    # LayoutToggle -- column count override buttons (1/2/3/4)
+    class LayoutToggle < Base
+      attr_reader :target, :columns
+
+      # @param target [String] CSS selector of the grid to control
+      # @param columns [Array<Integer>] Available column counts (default: [1, 2, 3, 4])
+      def initialize(target: ".sw-layout-target", columns: [1, 2, 3, 4], **options)
+        @target = target
+        @columns = columns
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_layout_toggle(view, self, state)
+      end
+    end
   end
 end
+
+# Load component files from components/ directory
+require_relative "components/code_block"
+require_relative "components/image_block"
+require_relative "components/mermaid"
+require_relative "components/keyboard_shortcuts"
+require_relative "components/slide_container"
+require_relative "components/sidebar_toc"
+require_relative "components/callout"
+require_relative "components/comparison"
+require_relative "components/pipeline"
+require_relative "components/kpi_dashboard"
+require_relative "components/chart"
+require_relative "components/timeline_event"
+require_relative "components/deck/design_deck"
+require_relative "components/deck/deck_slide"
+require_relative "components/deck/deck_option"
+require_relative "components/deck/deck_state"
+require_relative "components/deck/deck_summary"
+require_relative "components/deck/generate_more_controls"
+require_relative "components/deck/skeleton_placeholder"
+require_relative "components/deck/model_selector"
+require_relative "components/deck/confirmation_bar"
+require_relative "components/deck/close_overlay"

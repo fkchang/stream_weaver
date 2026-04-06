@@ -16,9 +16,7 @@ PATH
   remote: /Users/fkchang/work/iterm2_ruby
   specs:
     iterm2_ruby (0.1.0)
-      base64
       google-protobuf (~> 4.0)
-      ostruct
 
 GEM
   remote: https://rubygems.org/
