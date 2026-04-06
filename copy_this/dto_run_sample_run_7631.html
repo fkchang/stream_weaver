@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Run Viewer — abc-123</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; background: #1a1a2e; color: #e0e0e0; padding: 16px; }
+  header { margin-bottom: 16px; }
+  h1 { font-size: 18px; color: #fff; margin-bottom: 8px; }
+  .meta { color: #888; margin-bottom: 4px; }
+  .meta span { margin-right: 16px; }
+  .timeline { display: flex; flex-direction: column; gap: 2px; }
+  .event { padding: 6px 10px; border-radius: 4px; cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-left: 3px solid transparent; }
+  .event:hover { background: #2a2a4a; }
+  .idx { color: #555; width: 24px; text-align: right; flex-shrink: 0; }
+  .ts { color: #666; flex-shrink: 0; }
+  .type-badge { display: inline-block; width: 100px; padding: 1px 6px; border-radius: 3px; text-align: center; font-size: 11px; flex-shrink: 0; }
+  .label { color: #ccc; }
+  .detail { width: 100%; padding: 10px 0 6px 36px; }
+  .field { margin-bottom: 4px; }
+  .field strong { color: #aaa; }
+  .field pre { margin: 4px 0 4px 12px; padding: 8px; background: #0d0d1a; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
+  .phase { border-left-color: #00bcd4; }
+  .phase .type-badge { background: #0e3a3f; color: #00bcd4; }
+  .snapshot { border-left-color: #ffc107; }
+  .snapshot .type-badge { background: #3f3500; color: #ffc107; }
+  .intervention { border-left-color: #ce93d8; }
+  .intervention .type-badge { background: #3a1a44; color: #ce93d8; }
+  .timeout { border-left-color: #ef5350; }
+  .timeout .type-badge { background: #3f0e0e; color: #ef5350; }
+  .guard { border-left-color: #ef5350; }
+  .guard .type-badge { background: #3f0e0e; color: #ef5350; }
+  .final { border-left-color: #66bb6a; }
+  .final .type-badge { background: #0e3f12; color: #66bb6a; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Run Viewer</h1>
+  <div class="meta">
+    <span>run_id: abc-123</span>
+    <span>target: codex</span>
+    <span>duration: 60.0s</span>
+    <span>events: 11</span>
+  </div>
+  <div class="meta">
+    <span>interventions: 2</span>
+    <span>timeouts: 0</span>
+    <span>snapshots: 2</span>
+  </div>
+  <div class="meta"><span>source: demo/sample_run.jsonl</span></div>
+</header>
+<main><div class="timeline"><div class="event phase" onclick="toggle(this)">
+  <span class="idx">0</span>
+  <span class="type-badge">phase</span>
+  <span class="ts">10:00:00</span>
+  <span class="label">launch</span>
+  <div class="detail" style="display:none"><div class="field"><strong>run_id:</strong> abc-123</div>
+<div class="field"><strong>phase:</strong> launch</div>
+<div class="field"><strong>target:</strong> codex</div>
+<div class="field"><strong>baseline_files:</strong> lib/app.rb</div>
+<div class="field"><strong>step_id:</strong> launch</div>
+<div class="field"><strong>target_socket_name:</strong> dto-codex</div>
+<div class="field"><strong>target_session_name:</strong> run-1</div></div>
+</div>
+
+<div class="event phase" onclick="toggle(this)">
+  <span class="idx">1</span>
+  <span class="type-badge">phase</span>
+  <span class="ts">10:00:05</span>
+  <span class="label">settle step=1</span>
+  <div class="detail" style="display:none"><div class="field"><strong>run_id:</strong> abc-123</div>
+<div class="field"><strong>phase:</strong> settle</div>
+<div class="field"><strong>step:</strong> 1</div>
+<div class="field"><strong>step_id:</strong> step-1</div></div>
+</div>
+
+<div class="event phase" onclick="toggle(this)">
+  <span class="idx">2</span>
+  <span class="type-badge">phase</span>
+  <span class="ts">10:00:15</span>
+  <span class="label">observe step=1</span>
+  <div class="detail" style="display:none"><div class="field"><strong>run_id:</strong> abc-123</div>
+<div class="field"><strong>phase:</strong> observe</div>
+<div class="field"><strong>step:</strong> 1</div>
+<div class="field"><strong>step_id:</strong> step-1</div></div>
+</div>
+
+<div class="event snapshot" onclick="toggle(this)">
+  <span class="idx">3</span>
+  <span class="type-badge">snapshot</span>
+  <span class="ts">10:00:16</span>
+  <span class="label">state=working verification_ok=false step=1</span>
+  <div class="detail" style="display:none"><div class="field"><strong>run_id:</strong> abc-123</div>
+<div class="field"><strong>step:</strong> 1</div>
+<div class="field"><strong>step_id:</strong> step-1</div>
+<div class="field"><strong>state:</strong> working</div>
+<div class="field"><strong>waiting_for_input:</strong> false</div>
+<div class="field"><strong>busy:</strong> true</div>
+<div class="field"><strong>likely_complete:</strong> false</div>
+<div class="field"><strong>signals_found:</strong> []</div>
+<div class="field"><strong>signals_missing:</strong> test passes</div>
+<div class="field"><strong>verification_ok:</strong> false</div>
+<div class="field"><strong>changed_files:</strong> lib/app.rb</div>
+<div class="field"><strong>last_assistant_lines:</strong> Writing the initial implementation...</div></div>
+</div>
+
+<div class="event phase" onclick="toggle(this)">
+  <span class="idx">4</span>
+  <span class="type-badge">phase</span>
+  <span class="ts">10:00:17</span>
+  <span class="label">decide step=1</span>
+  <div class="detail" style="display:none"><div class="field"><strong>run_id:</strong> abc-123</div>
+<div class="field"><strong>phase:</strong> decide</div>
+<div class="field"><strong>step:</strong> 1</div>
+<div class="field"><strong>step_id:</strong> step-1</div>
+<div class="field"><strong>driver:</strong> ClaudeDriverBackend</div></div>
+</div>
+
+<div class="event intervention" onclick="toggle(this)">
+  <span class="idx">5</span>
+  <span class="type-badge">intervention</span>
+  <span class="ts">10:00:22</span>
+  <span class="label">action=question terminal=false step=1</span>
+  <div class="detail" style="display:none"><div class="field"><strong>run_id:</strong> abc-123</div>
+<div class="field"><strong>step:</strong> 1</div>
+<div class="field"><strong>step_id:</strong> step-1</div>
+<div class="field"><strong>action:</strong> question</div>
+<div class="field"><strong>intent:</strong> Clarify scope</div>
+<div class="field"><strong>why:</strong> Worker jumped into coding without asking about interface shape</div>
+<div class="field"><strong>next_step:</strong> List the product choices before writing code</div>
+<div class="field"><strong>stop_if:</strong> Worker starts asking clarifying questions</div>
+<div class="field"><strong>rendered_message:</strong> <pre>INTENT: Clarify scope
+WHY: You started coding without clarifying the interface shape.
+NEXT: List the product choices first.
+STOP IF: You start asking clarifying questions.</pre></div>
+<div class="field"><strong>terminal:</strong> false</div></div>
+</div>
+
+<div class="event phase" onclick="toggle(this)">
+  <span class="idx">6</span>
+  <span class="type-badge">phase</span>
+  <span class="ts">10:00:23</span>
+  <span class="label">send step=1</span>
+  <div class="detail" style="display:none"><div class="field"><strong>run_id:</strong> abc-123</div>
+<div class="field"><strong>phase:</strong> send</div>
+<div class="field"><strong>step:</strong> 1</div>
+<div class="field"><strong>step_id:</strong> step-1</div></div>
+</div>
+
+<div class="event phase" onclick="toggle(this)">
+  <span class="idx">7</span>
+  <span class="type-badge">phase</span>
+  <span class="ts">10:00:35</span>
+  <span class="label">settle step=2</span>
+  <div class="detail" style="display:none"><div class="field"><strong>run_id:</strong> abc-123</div>
+<div class="field"><strong>phase:</strong> settle</div>
+<div class="field"><strong>step:</strong> 2</div>
+<div class="field"><strong>step_id:</strong> step-2</div></div>
+</div>
+
+<div class="event snapshot" onclick="toggle(this)">
+  <span class="idx">8</span>
+  <span class="type-badge">snapshot</span>
+  <span class="ts">10:00:45</span>
+  <span class="label">state=waiting verification_ok=true step=2</span>
+  <div class="detail" style="display:none"><div class="field"><strong>run_id:</strong> abc-123</div>
+<div class="field"><strong>step:</strong> 2</div>
+<div class="field"><strong>step_id:</strong> step-2</div>
+<div class="field"><strong>state:</strong> waiting</div>
+<div class="field"><strong>waiting_for_input:</strong> true</div>
+<div class="field"><strong>busy:</strong> false</div>
+<div class="field"><strong>likely_complete:</strong> false</div>
+<div class="field"><strong>signals_found:</strong> test passes</div>
+<div class="field"><strong>signals_missing:</strong> []</div>
+<div class="field"><strong>verification_ok:</strong> true</div>
+<div class="field"><strong>changed_files:</strong> lib/app.rb, test/test_app.rb</div>
+<div class="field"><strong>last_assistant_lines:</strong> All tests pass. Here is the summary...</div></div>
+</div>
+
+<div class="event intervention" onclick="toggle(this)">
+  <span class="idx">9</span>
+  <span class="type-badge">intervention</span>
+  <span class="ts">10:00:50</span>
+  <span class="label">action=verify terminal=true step=2</span>
+  <div class="detail" style="display:none"><div class="field"><strong>run_id:</strong> abc-123</div>
+<div class="field"><strong>step:</strong> 2</div>
+<div class="field"><strong>step_id:</strong> step-2</div>
+<div class="field"><strong>action:</strong> verify</div>
+<div class="field"><strong>intent:</strong> Confirm completion</div>
+<div class="field"><strong>why:</strong> Signals met and verification passes</div>
+<div class="field"><strong>next_step:</strong> Summarize what changed</div>
+<div class="field"><strong>stop_if:</strong> nil</div>
+<div class="field"><strong>rendered_message:</strong> <pre>INTENT: Confirm completion
+WHY: All signals met.
+NEXT: Summarize.
+STOP IF: n/a</pre></div>
+<div class="field"><strong>terminal:</strong> true</div></div>
+</div>
+
+<div class="event final" onclick="toggle(this)">
+  <span class="idx">10</span>
+  <span class="type-badge">final</span>
+  <span class="ts">10:01:00</span>
+  <span class="label">interventions=2</span>
+  <div class="detail" style="display:none"><div class="field"><strong>run_id:</strong> abc-123</div>
+<div class="field"><strong>interventions:</strong> 2</div>
+<div class="field"><strong>final_transcript_tail:</strong> Done. All tests pass.</div>
+<div class="field"><strong>step_id:</strong> final</div></div>
+</div>
+</div></main>
+<script>
+  function toggle(el) {
+    var d = el.querySelector('.detail');
+    if (d) d.style.display = d.style.display === 'none' ? 'block' : 'none';
+  }
+</script>
+</body>
+</html>
