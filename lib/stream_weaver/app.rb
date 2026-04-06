@@ -13,7 +13,7 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :stream_block, :timers, :transient_keys, :favicon_value
+    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes
 
     def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], &block)
       @title = title
@@ -30,6 +30,9 @@ module StreamWeaver
       @transient_keys = Set.new
       @timers = []
       @favicon_value = nil
+      @route_key = nil
+      @routes = nil
+      @routes_inverse = nil
 
       components.each { |mod| singleton_class.include(mod) }
     end
@@ -48,6 +51,25 @@ module StreamWeaver
 
     def state
       @_state
+    end
+
+    # Declare URL routing: maps a state key's values to URL paths.
+    # Example: route_by :page, home: "/", about: "/about", settings: "/settings"
+    def route_by(state_key, paths)
+      @route_key = state_key
+      @routes = paths.transform_keys(&:to_sym)
+      @routes_inverse = @routes.invert
+    end
+
+    def path_for_state(state)
+      return unless @routes
+      @routes[state[@route_key]&.to_sym]
+    end
+
+    def state_for_path(path)
+      return unless @routes_inverse
+      val = @routes_inverse[path]
+      val ? { @route_key => val } : nil
     end
 
     def rebuild_with_state(current_state)

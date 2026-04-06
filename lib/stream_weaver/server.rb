@@ -116,6 +116,27 @@ module StreamWeaver
           end
         end
 
+        def render_app(state, is_htmx: false)
+          adapter = settings.adapter
+          streamlit_app = settings.streamlit_app
+          is_agentic = settings.respond_to?(:result_container)
+          session_theme = session[:theme_override]
+          inject_deck_state!(state)
+          streamlit_app.rebuild_with_state(state)
+
+          # Scrub transient keys that leaked into the session
+          unless streamlit_app.transient_keys.empty?
+            state.reject! { |k, _| streamlit_app.transient_keys.include?(k) }
+          end
+          session[:streamlit_state] = session_safe_state(state)
+
+          if is_htmx
+            Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+          else
+            Views::AppView.new(streamlit_app, state, adapter, is_agentic, session_theme: session_theme).call
+          end
+        end
+
         # Render error page for debugging
         def render_error(route_name, error)
           File.open("/tmp/streamweaver_error.log", "a") do |f|
@@ -182,21 +203,7 @@ module StreamWeaver
         cache_control :no_cache, :no_store, :must_revalidate, max_age: 0
         headers 'Pragma' => 'no-cache'
 
-        streamlit_app = settings.streamlit_app
-        adapter = settings.adapter
-        session_theme = session[:theme_override]
-        inject_deck_state!(state)
-        streamlit_app.rebuild_with_state(state)
-
-        # Scrub transient keys that leaked into the session (e.g. from old code
-        # before a key was marked transient, or a schema change after restart).
-        # rebuild_with_state must run first so DSL-defined transient keys are known.
-        unless streamlit_app.transient_keys.empty?
-          changed = state.reject! { |k, _| streamlit_app.transient_keys.include?(k) }
-          session[:streamlit_state] = session_safe_state(state) if changed
-        end
-
-        Views::AppView.new(streamlit_app, state, adapter, is_agentic, session_theme: session_theme).call
+        render_app(state)
       end
 
       # Update state from form inputs
@@ -794,6 +801,32 @@ module StreamWeaver
         settings.streamer.public_send(action, target, html)
         content_type :json
         JSON.generate(success: true, target: target, action: action)
+      end
+
+      # URL routing: catch-all GET for deep-linked paths
+      get '/*' do
+        streamlit_app = settings.streamlit_app
+        pass unless streamlit_app.routes
+
+        path = "/#{params['splat'].first}"
+        route_state = streamlit_app.state_for_path(path)
+        pass unless route_state
+
+        state = session[:streamlit_state] ||= {}
+        route_state.each { |k, v| state[k] = v }
+
+        cache_control :no_cache, :no_store, :must_revalidate, max_age: 0
+        headers 'Pragma' => 'no-cache'
+
+        render_app(state, is_htmx: request.env.key?('HTTP_HX_REQUEST'))
+      end
+
+      # URL routing: push URL on POST responses when route key changes
+      after do
+        next unless request.post? && settings.streamlit_app.routes
+        state = session[:streamlit_state] || {}
+        new_path = settings.streamlit_app.path_for_state(state)
+        headers['HX-Push-Url'] = new_path if new_path
       end
 
       # Return the class itself (it's the Rack app)

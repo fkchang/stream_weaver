@@ -926,6 +926,19 @@ module StreamWeaver
         end
       end
 
+      # URL routing: handle browser back/forward via popstate
+      def render_routing_scripts(view)
+        view.script do
+          view.raw(view.safe(<<~JS))
+            window.addEventListener('popstate', function(e) {
+              htmx.ajax('GET', window.location.pathname, {
+                target: '#{HTMX_TARGET}', swap: 'morph:innerHTML'
+              });
+            });
+          JS
+        end
+      end
+
       # Get the CSS selector for Alpine.js bound inputs
       #
       # @return [String] CSS selector "[x-model]"
@@ -1256,7 +1269,8 @@ module StreamWeaver
           content,
           input: 'GFM',
           hard_wrap: false,
-          syntax_highlighter: nil
+          syntax_highlighter: nil,
+          typographic_symbols: { mdash: '---', ndash: '--' }
         ).to_html
         view.div(class: "markdown-content") do
           view.raw view.safe(html)

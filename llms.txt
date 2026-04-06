@@ -275,6 +275,38 @@ end
 link_to "View docs", href: "https://example.com"
 ```
 
+### URL Routing (Deep Links & Bookmarks)
+
+Use `route_by` to map a state key's values to URL paths. This enables:
+- Direct URL access (e.g. visiting `/settings` loads the settings page)
+- Browser back/forward navigation
+- Bookmarkable URLs
+- External deep-linking
+
+```ruby
+app "My App" do
+  route_by :page, home: "/", dashboard: "/dashboard", settings: "/settings"
+
+  state[:page] ||= :home
+
+  navbar do
+    nav_item "Home",      href: "/",          active: state[:page] == :home
+    nav_item "Dashboard", href: "/dashboard",  active: state[:page] == :dashboard
+    nav_item "Settings",  href: "/settings",   active: state[:page] == :settings
+  end
+
+  case state[:page]
+  when :home      then # ...
+  when :dashboard then # ...
+  when :settings  then # ...
+  end
+end.run!
+```
+
+**How it works:** When `state[:page]` changes (via button callback or nav click), StreamWeaver emits an `HX-Push-Url` header that updates the browser URL. Visiting `/dashboard` directly seeds `state[:page] = :dashboard` before render. Back/forward uses HTMX to re-fetch the page at the popped URL.
+
+**Important:** `route_by` is opt-in — apps without it are unaffected.
+
 ### Feedback
 ```ruby
 alert(variant: :success) { text "Saved!" }

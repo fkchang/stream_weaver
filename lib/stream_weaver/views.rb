@@ -58,6 +58,11 @@ module StreamWeaver
               @adapter.render_sse_client(self)
             end
 
+            # URL routing: popstate handler for browser back/forward
+            if @app.routes && @adapter.respond_to?(:render_routing_scripts)
+              @adapter.render_routing_scripts(self)
+            end
+
             # Google Fonts: Source Sans 3 + Crimson Pro (for document theme)
             link(rel: "preconnect", href: "https://fonts.googleapis.com")
             link(rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "anonymous")
