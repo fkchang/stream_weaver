@@ -6,19 +6,41 @@ require 'stringio'
 require 'socket'
 require 'json'
 require 'fileutils'
+require_relative 'session_store'
 
 module StreamWeaver
   # Generated Sinatra application for serving the StreamWeaver app
   class SinatraApp < Sinatra::Base
-    enable :sessions
-    # Use static secret in development to avoid HMAC errors on restart (must be >=64 chars)
-    set :session_secret, ENV.fetch('SESSION_SECRET') {
+    # ── Session store configuration ──────────────────────────────────────────
+    # SW_SESSION_STORE=file (default) — one file per session, no 4KB limit
+    # SW_SESSION_STORE=cookie         — cookie-based, 4KB limit, warns when near limit
+    SW_SESSION_STORE_NAME = (ENV['SW_SESSION_STORE'] || 'file').freeze
+    SW_SESSION_FILTER     = StreamWeaver::SessionStore.build(SW_SESSION_STORE_NAME)
+
+    SW_SESSION_SECRET = ENV.fetch('SESSION_SECRET') {
       if ENV['RACK_ENV'] == 'production'
         raise "SESSION_SECRET environment variable required in production"
       else
         'stream-weaver-development-secret-key-change-in-production-environments-minimum-64-characters'
       end
     }
+
+    case SW_SESSION_STORE_NAME
+    when 'file'
+      SW_SESSION_DIR = ENV.fetch('SW_SESSION_DIR') {
+        ::File.join(Dir.home, '.config', 'stream_weaver', 'sessions')
+      }
+      FileUtils.mkdir_p(SW_SESSION_DIR)
+      # Clean up session files older than 7 days on startup
+      cutoff = Time.now - (7 * 86_400)
+      Dir.glob("#{SW_SESSION_DIR}/session_*").each { |f| ::File.delete(f) if ::File.mtime(f) < cutoff rescue nil }
+      use StreamWeaver::FileSession, path: SW_SESSION_DIR, expire_after: 86_400
+      $stderr.puts "[SW] Sessions: file (#{SW_SESSION_DIR})"
+    else
+      enable :sessions
+      set :session_secret, SW_SESSION_SECRET
+      $stderr.puts "[SW] Sessions: cookie (4KB limit — set SW_SESSION_STORE=file to remove limit)"
+    end
 
     # Disable protection in test mode to allow Rack::Test requests
     set :protection, false if ENV['RACK_ENV'] == 'test'
@@ -88,14 +110,11 @@ module StreamWeaver
           end
         end
 
-        # Filter state for session storage - remove large/transient keys
-        # Session cookies have ~4KB limit, so we can't store file contents, etc.
+        # Filter state before saving to session.
+        # Cookie store enforces 4KB limit and warns; file store passes through unchanged.
         def session_safe_state(state)
-          hardcoded_transient = [:code_content, :current_file_path, :examples, :_deck_state]
           app_transient = settings.streamlit_app.transient_keys
-          state.reject do |k, _|
-            hardcoded_transient.include?(k) || app_transient.include?(k) || k.to_s.end_with?('_edited_code')
-          end
+          SW_SESSION_FILTER.filter(state, app_transient: app_transient)
         end
 
         # Set unchecked checkboxes to false (they don't send params)
@@ -198,6 +217,9 @@ module StreamWeaver
         else
           state = session[:streamlit_state] ||= {}
         end
+
+        sync_params_to_state(state)
+        session[:streamlit_state] = session_safe_state(state)
 
         # Prevent browser caching for all forms to ensure fresh rendering
         cache_control :no_cache, :no_store, :must_revalidate, max_age: 0
@@ -803,10 +825,62 @@ module StreamWeaver
         JSON.generate(success: true, target: target, action: action)
       end
 
+      # ── StreamWeaver Debug Routes (/sw/*) ─────────────────────────────────
+      # /sw/session          — dump current session state as JSON
+      # /sw/session/size     — per-key byte breakdown + overflow flag
+      # /sw/reset            — clear session and redirect to /
+      # /sw/sessions/cleanup — delete file sessions older than 7 days
+
+      get '/sw/session' do
+        content_type :json
+        state = session[:streamlit_state] || {}
+        JSON.pretty_generate(state.transform_keys(&:to_s))
+      end
+
+      get '/sw/session/size' do
+        content_type :json
+        state = session[:streamlit_state] || {}
+        serialized = JSON.dump(state)
+        by_key = state.map { |k, v| { key: k.to_s, bytes: JSON.dump(v).bytesize } }
+                      .sort_by { |x| -x[:bytes] }
+        result = {
+          store:       SW_SESSION_STORE_NAME,
+          total_bytes: serialized.bytesize,
+          keys:        by_key
+        }
+        if SW_SESSION_STORE_NAME == 'cookie'
+          result[:limit_bytes] = 4096
+          result[:over_limit]  = serialized.bytesize > 4096
+        end
+        JSON.pretty_generate(result)
+      end
+
+      get '/sw/reset' do
+        session.clear
+        redirect '/'
+      end
+
+      get '/sw/sessions/cleanup' do
+        content_type :json
+        unless SW_SESSION_STORE_NAME == 'file'
+          halt 400, JSON.generate({ error: 'cleanup only applies to file session store' })
+        end
+        dir = defined?(SW_SESSION_DIR) ? SW_SESSION_DIR : ''
+        unless ::File.directory?(dir)
+          halt 400, JSON.generate({ error: "session dir not found: #{dir}" })
+        end
+        cutoff  = Time.now - (7 * 86_400)
+        deleted = Dir.glob("#{dir}/session_*").count do |f|
+          ::File.mtime(f) < cutoff && ::File.delete(f) rescue false
+        end
+        remaining = Dir.glob("#{dir}/session_*").count
+        JSON.generate({ deleted: deleted, remaining: remaining, dir: dir })
+      end
+
       # URL routing: catch-all GET for deep-linked paths
       get '/*' do
         streamlit_app = settings.streamlit_app
-        pass unless streamlit_app.routes
+        pass unless streamlit_app.routable?
 
         path = "/#{params['splat'].first}"
         route_state = streamlit_app.state_for_path(path)
@@ -814,6 +888,8 @@ module StreamWeaver
 
         state = session[:streamlit_state] ||= {}
         route_state.each { |k, v| state[k] = v }
+        sync_params_to_state(state)
+        session[:streamlit_state] = session_safe_state(state)
 
         cache_control :no_cache, :no_store, :must_revalidate, max_age: 0
         headers 'Pragma' => 'no-cache'
@@ -823,7 +899,7 @@ module StreamWeaver
 
       # URL routing: push URL on POST responses when route key changes
       after do
-        next unless request.post? && settings.streamlit_app.routes
+        next unless request.post? && settings.streamlit_app.routable?
         state = session[:streamlit_state] || {}
         new_path = settings.streamlit_app.path_for_state(state)
         headers['HX-Push-Url'] = new_path if new_path

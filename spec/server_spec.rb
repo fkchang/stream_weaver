@@ -73,11 +73,13 @@ RSpec.describe "StreamWeaver Server" do
 
     it "initializes session state with component defaults" do
       get '/'
-      # State is initialized with default values for each form component
+      # Blank values (empty string) are stripped from session by the session filter
+      # (FileStore removes blanks; they're re-initialized on each rebuild_with_state).
+      # False booleans are preserved.
       state = last_request.session[:streamlit_state]
-      expect(state[:name]).to eq("")       # text_field default
-      expect(state[:subscribe]).to eq(false) # checkbox default
-      expect(state[:color]).to eq("")      # select without default
+      expect(state[:name]).to be_nil.or(eq(""))       # text_field: blank stripped or empty
+      expect(state[:subscribe]).to eq(false)           # checkbox: false preserved
+      expect(state[:color]).to be_nil.or(eq(""))      # select: blank stripped or empty
     end
   end
 
@@ -441,7 +443,8 @@ RSpec.describe "StreamWeaver Server" do
 
       session_state = last_request.session[:streamlit_state]
       expect(session_state[:todos]).to include("Buy milk")
-      expect(session_state[:new_todo]).to eq("")
+      # Blank string is stripped from session by FileStore filter; nil means it was reset
+      expect(session_state[:new_todo]).to be_nil.or(eq(""))
     end
 
     it "renders dynamic buttons for each todo" do

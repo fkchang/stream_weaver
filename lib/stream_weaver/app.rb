@@ -2,6 +2,7 @@
 
 require 'digest'
 require 'set'
+require_relative 'resource'
 
 module StreamWeaver
   # Main app class that holds the DSL block and manages the component tree
@@ -13,7 +14,7 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes
+    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs
 
     def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], &block)
       @title = title
@@ -33,6 +34,10 @@ module StreamWeaver
       @route_key = nil
       @routes = nil
       @routes_inverse = nil
+      @route_parser = nil
+      @route_builder = nil
+      @route_rules   = []  # Array<RouteRule> — persistent, never cleared in rebuild
+      @resource_defs = {}  # name(sym) → ResourceDefinition — persistent
 
       components.each { |mod| singleton_class.include(mod) }
     end
@@ -61,15 +66,37 @@ module StreamWeaver
       @routes_inverse = @routes.invert
     end
 
+    # Declare dynamic URL routing with custom path parser/builder lambdas.
+    # parser receives the request path and returns a partial state hash or nil.
+    # builder receives the current state and returns a path string or nil.
+    def route_with(parser:, builder: nil)
+      # Idempotent guard: don't re-register if same parser lambda already in chain
+      @route_rules << RouteRule.new(parser: parser, builder: builder) \
+        unless @route_rules.any? { |r| r.parser == parser }
+    end
+
     def path_for_state(state)
+      @route_rules.each do |rule|
+        path = rule.builder&.call(state)
+        return path if path
+      end
+      return @route_builder.call(state) if @route_builder  # legacy fallback (belt+suspenders)
       return unless @routes
       @routes[state[@route_key]&.to_sym]
     end
 
     def state_for_path(path)
+      @route_rules.each do |rule|
+        hash = rule.parser&.call(path)
+        return hash if hash
+      end
       return unless @routes_inverse
       val = @routes_inverse[path]
       val ? { @route_key => val } : nil
+    end
+
+    def routable?
+      @route_rules.any? || @routes || @route_parser
     end
 
     def rebuild_with_state(current_state)
