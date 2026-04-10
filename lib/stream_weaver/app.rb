@@ -99,6 +99,39 @@ module StreamWeaver
       @route_rules.any? || @routes || @route_parser
     end
 
+    def resource(name, store:, plural: nil, &block)
+      unless @resource_defs.key?(name.to_sym)
+        defn = ResourceDefinition.new(name, store, plural: plural)
+        defn.instance_eval(&block) if block
+        @resource_defs[name.to_sym] = defn
+        @route_rules << RouteRule.new(
+          parser:  defn.method(:parse_path),
+          builder: defn.method(:build_path),
+          source:  [:resource, name.to_sym]
+        )
+        define_path_helpers(defn)
+      end
+      @resource_defs[name.to_sym].render_if_active(self)
+    end
+
+    def page(name, path, &block)
+      key = name.to_sym
+      unless @route_rules.any? { |r| r.source == [:page, key] }
+        @route_rules << RouteRule.new(
+          parser:  ->(p) { p == path ? { _sw_resource: nil, _sw_action: key } : nil },
+          builder: ->(st) { st[:_sw_action] == key && st[:_sw_resource].nil? ? path : nil },
+          source:  [:page, key]
+        )
+      end
+      if @_state[:_sw_action] == key && @_state[:_sw_resource].nil?
+        instance_eval(&block)
+      end
+    end
+
+    def route(name, path)
+      page(name, path) {}
+    end
+
     def rebuild_with_state(current_state)
       @_state = current_state
       @components = []
@@ -802,6 +835,14 @@ module StreamWeaver
       else
         target[key] ||= default_value
       end
+    end
+
+    def define_path_helpers(defn)
+      s, p = defn.singular, defn.plural
+      define_singleton_method(:"#{p}_path")      { "/#{p}" }
+      define_singleton_method(:"new_#{s}_path")  { "/#{p}/new" }
+      define_singleton_method(:"#{s}_path")      { |rec| "/#{s}/#{CGI.escape(rec[:id].to_s)}" }
+      define_singleton_method(:"edit_#{s}_path") { |rec| "/#{s}/#{CGI.escape(rec[:id].to_s)}/edit" }
     end
 
     # Parse a string with {term} markers into Phrase and Term components
