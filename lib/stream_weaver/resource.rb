@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'cgi'
+require_relative 'resource/store'
+require_relative 'resource/default_views'
 
 module StreamWeaver
   RouteRule = Struct.new(:parser, :builder, :source, keyword_init: true)
@@ -20,7 +22,7 @@ module StreamWeaver
       @only      = %i[index show new edit destroy]
       @overrides = {}
 
-      Resource::Store.validate!(store, name) if defined?(Resource::Store)
+      Resource::Store.validate!(store, name)
     end
 
     # DSL methods (dual-purpose: reader when called with no args, setter with args)
@@ -74,10 +76,16 @@ module StreamWeaver
 
     def render_action(action, app, data)
       if (override = @overrides[action])
-        app.instance_exec(data, &override)
-      elsif defined?(Resource::DefaultViews)
+        saved_form    = app.instance_variable_get(:@current_form)
+        saved_context = app.instance_variable_get(:@form_context)
+        begin
+          app.instance_exec(data, &override)
+        ensure
+          app.instance_variable_set(:@current_form,    saved_form)
+          app.instance_variable_set(:@form_context, saved_context)
+        end
+      else
         Resource::DefaultViews.send(action, self, app, data)
-      # else: no-op until T3 ships DefaultViews
       end
     end
 
