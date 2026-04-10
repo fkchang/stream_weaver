@@ -307,6 +307,22 @@ end.run!
 
 **Important:** `route_by` is opt-in — apps without it are unaffected.
 
+### Resource Scaffolding
+
+Use `resource` for convention-over-configuration CRUD. One block replaces ~40 lines of route/state/form boilerplate:
+
+```ruby
+resource :post, store: PostStore do
+  field :title,  :string
+  field :body,   :text
+  field :status, :enum, values: %w[draft published]
+end
+```
+
+Generates index / show / new / edit / destroy with deep-linkable URLs, named-route helpers (`posts_path`, `post_path(rec)`, etc.), store validation at startup, and override blocks for any action. Declare `page` / `route` calls before `resource` blocks (first-registered-wins routing chain).
+
+See `docs/resource-dsl.md` for full reference: field types, `only`/`except`, store protocol, `_sw_` state schema, override blocks.
+
 ### Feedback
 ```ruby
 alert(variant: :success) { text "Saved!" }
@@ -512,6 +528,8 @@ For comprehensive reference, see these docs:
 | `docs/SERVICE_MODE.md` | Multi-app service mode, CLI commands |
 | `docs/testing.md` | Unit and integration testing |
 | `docs/architecture/how_streamweaver_works.md` | Internal architecture, event flow |
+| `docs/routing.md` | URL routing: `route_by`, `route_with`, parameterized paths, edit routes |
+| `docs/crud-patterns.md` | CRUD: create/edit/delete modals, URL-addressable edit pages, store adapters |
 
 ## Live Streaming with `every` Timers
 
