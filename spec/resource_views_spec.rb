@@ -3,6 +3,8 @@
 require 'spec_helper'
 require 'securerandom'
 
+SK = StreamWeaver::Resource::StateKeys unless defined?(SK)
+
 module FakeStoreForViews
   @records = [
     { id: '1', title: 'Foo', status: 'active' },
@@ -40,7 +42,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
     end
 
     it "renders a Table component in app components" do
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :index) do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :index) do
         resource :post, store: FakeStoreForViews do
           field :title,  :string
           field :status, :enum, values: %w[active inactive]
@@ -53,7 +55,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
     end
 
     it "renders a 'New' button in app components" do
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :index) do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :index) do
         resource :post, store: FakeStoreForViews do
           field :title, :string
         end
@@ -74,7 +76,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
       def empty_store.destroy(id);      true; end
 
       expect do
-        build_app_with_state(_sw_resource: :post, _sw_action: :index) do
+        build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :index) do
           resource :post, store: empty_store do
             field :title, :string
           end
@@ -91,7 +93,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
       def nil_store.destroy(id);      true; end
 
       expect do
-        build_app_with_state(_sw_resource: :post, _sw_action: :index) do
+        build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :index) do
           resource :post, store: nil_store do
             field :title, :string
           end
@@ -100,7 +102,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
     end
 
     it "renders a Table component with an actions column (markdown links)" do
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :index) do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :index) do
         resource :post, store: FakeStoreForViews do
           field :title, :string
         end
@@ -124,7 +126,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
 
   describe "DefaultViews.show" do
     it "renders a Card component in app components" do
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :show, _sw_id: '1') do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :show, SK::ID => '1') do
         resource :post, store: FakeStoreForViews do
           field :title,  :string
           field :status, :enum, values: %w[active inactive]
@@ -144,7 +146,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
       def missing_store.update(id, attrs) true; end
       def missing_store.destroy(id);      true; end
 
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :show, _sw_id: 'missing') do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :show, SK::ID => 'missing') do
         resource :post, store: missing_store do
           field :title, :string
         end
@@ -154,7 +156,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
     end
 
     it "renders Edit and Delete buttons in the card" do
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :show, _sw_id: '1') do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :show, SK::ID => '1') do
         resource :post, store: FakeStoreForViews do
           field :title, :string
         end
@@ -174,7 +176,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
       override_ran = false
       fake_store = FakeStoreForViews
 
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :index) do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :index) do
         resource :post, store: fake_store do
           field :title, :string
           index do |items|
@@ -195,7 +197,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
       received_items = nil
       fake_store = FakeStoreForViews
 
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :index) do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :index) do
         resource :post, store: fake_store do
           field :title, :string
           index do |items|
@@ -210,7 +212,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
     it "after override runs, @current_form is same as before" do
       fake_store = FakeStoreForViews
 
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :index) do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :index) do
         resource :post, store: fake_store do
           index do |items|
             form :override_form do

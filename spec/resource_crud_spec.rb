@@ -3,6 +3,8 @@
 require 'spec_helper'
 require 'securerandom'
 
+SK = StreamWeaver::Resource::StateKeys unless defined?(SK)
+
 module FakeStore
   @records = [{ id: '1', title: 'Foo', status: 'active' }]
 
@@ -107,7 +109,7 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
 
   describe "DefaultViews.new form submit" do
     it "renders a Form component in new view" do
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :new) do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :new) do
         resource :post, store: FakeStore do
           field :title, :string
           field :status, :enum, values: %w[active inactive]
@@ -120,7 +122,7 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
     end
 
     it "calls store.create and transitions state to :show on submit" do
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :new) do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :new) do
         resource :post, store: FakeStore do
           field :title, :string
         end
@@ -138,15 +140,15 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
       submit_block.call(form_values)
 
       expect(FakeStore.all.length).to eq(initial_count + 1)
-      expect(app.state[:_sw_action]).to eq(:show)
-      expect(app.state[:_sw_resource]).to eq(:post)
-      expect(app.state[:_sw_id]).not_to be_nil
+      expect(app.state[SK::ACTION]).to eq(:show)
+      expect(app.state[SK::RESOURCE]).to eq(:post)
+      expect(app.state[SK::ID]).not_to be_nil
     end
   end
 
   describe "DefaultViews.edit form submit" do
     it "renders a Form component in edit view" do
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :edit, _sw_id: '1') do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :edit, SK::ID => '1') do
         resource :post, store: FakeStore do
           field :title, :string
         end
@@ -158,7 +160,7 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
     end
 
     it "calls store.update and transitions state to :show on submit" do
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :edit, _sw_id: '1') do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :edit, SK::ID => '1') do
         resource :post, store: FakeStore do
           field :title, :string
         end
@@ -175,11 +177,11 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
       submit_block.call(form_values)
 
       expect(FakeStore.find('1')[:title]).to eq('Updated Title')
-      expect(app.state[:_sw_action]).to eq(:show)
+      expect(app.state[SK::ACTION]).to eq(:show)
     end
 
     it "seeds form state from record on first load" do
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :edit, _sw_id: '1') do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :edit, SK::ID => '1') do
         resource :post, store: FakeStore do
           field :title, :string
         end
@@ -192,7 +194,7 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
     end
 
     it "returns early (renders nothing) when item is nil" do
-      app = build_app_with_state(_sw_resource: :post, _sw_action: :edit, _sw_id: 'missing') do
+      app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :edit, SK::ID => 'missing') do
         resource :post, store: FakeStore do
           field :title, :string
         end
@@ -203,11 +205,11 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
   end
 
   describe "destroy confirmation flow" do
-    it "renders an Alert component when _sw_action is :destroy_confirm" do
+    it "renders an Alert component when action is :destroy_confirm" do
       app = build_app_with_state(
-        _sw_resource: :post,
-        _sw_action: :destroy_confirm,
-        _sw_id: '1'
+        SK::RESOURCE => :post,
+        SK::ACTION => :destroy_confirm,
+        SK::ID => '1'
       ) do
         resource :post, store: FakeStore do
           field :title, :string
@@ -221,9 +223,9 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
 
     it "calls store.destroy and transitions to :index on confirm" do
       app = build_app_with_state(
-        _sw_resource: :post,
-        _sw_action: :destroy_confirm,
-        _sw_id: '1'
+        SK::RESOURCE => :post,
+        SK::ACTION => :destroy_confirm,
+        SK::ID => '1'
       ) do
         resource :post, store: FakeStore do
           field :title, :string
@@ -242,15 +244,15 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
       confirm_callback.call(app.state)
 
       expect(FakeStore.all.length).to eq(initial_count - 1)
-      expect(app.state[:_sw_action]).to eq(:index)
-      expect(app.state[:_sw_id]).to be_nil
+      expect(app.state[SK::ACTION]).to eq(:index)
+      expect(app.state[SK::ID]).to be_nil
     end
 
     it "cancel button navigates to index without destroying" do
       app = build_app_with_state(
-        _sw_resource: :post,
-        _sw_action: :destroy_confirm,
-        _sw_id: '1'
+        SK::RESOURCE => :post,
+        SK::ACTION => :destroy_confirm,
+        SK::ID => '1'
       ) do
         resource :post, store: FakeStore do
           field :title, :string
@@ -267,7 +269,7 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
       cancel_callback.call(app.state)
 
       expect(FakeStore.all.length).to eq(initial_count)
-      expect(app.state[:_sw_action]).to eq(:index)
+      expect(app.state[SK::ACTION]).to eq(:index)
     end
   end
 end
