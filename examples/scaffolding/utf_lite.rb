@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require_relative '../../lib/stream_weaver'
+require 'cgi'
 
 # Inline GoalStore — hardcoded fixtures, no YAML file dependencies
 module GoalStore
@@ -70,14 +71,11 @@ app 'UTF Lite', layout: :wide, theme: :dashboard do
       header1 'Goals'
       goals.group_by { |g| g[:horizon] }.each do |horizon, gs|
         header3 horizon.to_s.capitalize
-        table gs do
-          column :title
-          column(:actions) do |g|
-            button('Open') do |s|
-              s[:_sw_action]   = :show
-              s[:_sw_resource] = :goal
-              s[:_sw_id]       = g[:id]
-            end
+        table gs, markdown: true do
+          column :title do |g| CGI.escape_html(g[:title].to_s) end
+          column(:actions, header: '') do |g|
+            eid = CGI.escape(g[:id].to_s)
+            "[View](/goal/#{eid}) [Edit](/goal/#{eid}/edit) [Delete](/goal/#{eid}/delete)"
           end
         end
       end
