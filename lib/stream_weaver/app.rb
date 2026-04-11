@@ -163,6 +163,17 @@ module StreamWeaver
       SinatraApp.create(self)
     end
 
+    # Save and restore form DSL ivars around a block — used by ResourceDefinition
+    # when executing override blocks so they can't leave form state dirty.
+    def with_clean_form_context
+      saved_form    = @current_form
+      saved_context = @form_context
+      yield
+    ensure
+      @current_form    = saved_form
+      @form_context = saved_context
+    end
+
     def has_charts?
       components_include?(Components::ChartBase)
     end

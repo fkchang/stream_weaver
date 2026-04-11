@@ -22,6 +22,12 @@ module StreamWeaver
       @only      = %i[index show new edit destroy destroy_confirm]
       @overrides = {}
 
+      # Memoize member-route regexes — built once, matched on every request
+      esc = Regexp.escape(@singular)
+      @edit_re    = %r{\A/#{esc}/([^/]+)/edit\z}
+      @delete_re  = %r{\A/#{esc}/([^/]+)/delete\z}
+      @show_re    = %r{\A/#{esc}/([^/]+)\z}
+
       Resource::Store.validate!(store, name)
     end
 
@@ -41,14 +47,11 @@ module StreamWeaver
     # Routing
     def parse_path(path)
       case path
-      when "/#{@plural}"                                          then sw_state(:index)
-      when "/#{@plural}/new"                                      then sw_state(:new)
-      when %r{\A/#{Regexp.escape(@singular)}/([^/]+)/edit\z}
-        sw_state(:edit, CGI.unescape($1))
-      when %r{\A/#{Regexp.escape(@singular)}/([^/]+)/delete\z}
-        sw_state(:destroy_confirm, CGI.unescape($1))
-      when %r{\A/#{Regexp.escape(@singular)}/([^/]+)\z}
-        sw_state(:show, CGI.unescape($1))
+      when "/#{@plural}"     then sw_state(:index)
+      when "/#{@plural}/new" then sw_state(:new)
+      when @edit_re          then sw_state(:edit,           CGI.unescape($1))
+      when @delete_re        then sw_state(:destroy_confirm, CGI.unescape($1))
+      when @show_re          then sw_state(:show,           CGI.unescape($1))
       end
     end
 
@@ -80,14 +83,7 @@ module StreamWeaver
 
     def render_action(action, app, data)
       if (override = @overrides[action])
-        saved_form    = app.instance_variable_get(:@current_form)
-        saved_context = app.instance_variable_get(:@form_context)
-        begin
-          app.instance_exec(data, &override)
-        ensure
-          app.instance_variable_set(:@current_form,    saved_form)
-          app.instance_variable_set(:@form_context, saved_context)
-        end
+        app.with_clean_form_context { app.instance_exec(data, &override) }
       else
         Resource::DefaultViews.send(action, self, app, data)
       end
