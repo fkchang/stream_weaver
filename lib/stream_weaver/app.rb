@@ -116,14 +116,15 @@ module StreamWeaver
 
     def page(name, path, &block)
       key = name.to_sym
+      sk  = Resource::StateKeys
       unless @route_rules.any? { |r| r.source == [:page, key] }
         @route_rules << RouteRule.new(
-          parser:  ->(p) { p == path ? { _sw_resource: nil, _sw_action: key } : nil },
-          builder: ->(st) { st[:_sw_action] == key && st[:_sw_resource].nil? ? path : nil },
+          parser:  ->(p) { p == path ? { sk::RESOURCE => nil, sk::ACTION => key } : nil },
+          builder: ->(st) { st[sk::ACTION] == key && st[sk::RESOURCE].nil? ? path : nil },
           source:  [:page, key]
         )
       end
-      if @_state[:_sw_action] == key && @_state[:_sw_resource].nil?
+      if @_state[sk::ACTION] == key && @_state[sk::RESOURCE].nil?
         instance_eval(&block)
       end
     end

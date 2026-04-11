@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'cgi'
+require_relative 'resource/state_keys'
 require_relative 'resource/store'
 require_relative 'resource/default_views'
 
@@ -9,6 +10,8 @@ module StreamWeaver
   Field     = Struct.new(:name, :type, :opts)
 
   class ResourceDefinition
+    include Resource::StateKeys
+
     attr_reader :name, :singular, :plural, :store, :fields
 
     def initialize(name, store, plural: nil)
@@ -56,9 +59,9 @@ module StreamWeaver
     end
 
     def build_path(st)
-      return nil unless st[:_sw_resource] == @name
-      id = st[:_sw_id]
-      case st[:_sw_action]
+      return nil unless st[RESOURCE] == @name
+      id = st[ID]
+      case st[ACTION]
       when :index then "/#{@plural}"
       when :new   then "/#{@plural}/new"
       when :show            then id && "/#{@singular}/#{CGI.escape(id.to_s)}"
@@ -70,9 +73,9 @@ module StreamWeaver
     # Rendering — called every rebuild; dispatches to DefaultViews or override block
     def render_if_active(app)
       st = app.state
-      return unless st[:_sw_resource] == @name && @only.include?(st[:_sw_action])
-      id = st[:_sw_id]
-      case st[:_sw_action]
+      return unless st[RESOURCE] == @name && @only.include?(st[ACTION])
+      id = st[ID]
+      case st[ACTION]
       when :index           then render_action(:index,           app, @store.all)
       when :show            then render_action(:show,            app, @store.find(id))
       when :new             then render_action(:new,             app, nil)
@@ -92,8 +95,8 @@ module StreamWeaver
     private
 
     def sw_state(action, id = nil)
-      h = { _sw_resource: @name, _sw_action: action }
-      h[:_sw_id] = id if id
+      h = { RESOURCE => @name, ACTION => action }
+      h[ID] = id if id
       h
     end
   end

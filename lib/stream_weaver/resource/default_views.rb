@@ -5,6 +5,8 @@ require 'cgi'
 module StreamWeaver
   module Resource
     module DefaultViews
+      include StateKeys
+
       # Proc for rendering a single form field — called via instance_exec so
       # DSL methods (text_field, select, etc.) resolve against the App instance.
       FIELD_INPUT = proc do |field|
@@ -27,8 +29,8 @@ module StreamWeaver
           header1 defn.plural.capitalize
 
           button("New #{defn.singular.capitalize}", style: :primary) do |s|
-            s[:_sw_action]   = :new
-            s[:_sw_resource] = defn.name
+            s[ACTION]   = :new
+            s[RESOURCE] = defn.name
           end
 
           unless items.empty?
@@ -64,14 +66,14 @@ module StreamWeaver
 
             hstack do
               button("Edit") do |s|
-                s[:_sw_action]   = :edit
-                s[:_sw_resource] = defn.name
-                s[:_sw_id]       = item[:id]
+                s[ACTION]   = :edit
+                s[RESOURCE] = defn.name
+                s[ID]       = item[:id]
               end
               button("Delete", style: :danger) do |s|
-                s[:_sw_action]   = :destroy_confirm
-                s[:_sw_resource] = defn.name
-                # _sw_id already set
+                s[ACTION]   = :destroy_confirm
+                s[RESOURCE] = defn.name
+                # ID already set
               end
             end
           end
@@ -87,9 +89,9 @@ module StreamWeaver
 
             submit("Create") do |form_values|
               id = defn.store.create(form_values.transform_keys(&:to_sym))
-              app.state[:_sw_action]   = :show
-              app.state[:_sw_resource] = defn.name
-              app.state[:_sw_id]       = id
+              app.state[ACTION]   = :show
+              app.state[RESOURCE] = defn.name
+              app.state[ID]       = id
             end
           end
         end
@@ -116,8 +118,8 @@ module StreamWeaver
             defn.fields.each { |f| instance_exec(f, &FIELD_INPUT) }
 
             submit("Save") do |form_values|
-              defn.store.update(app.state[:_sw_id], form_values.transform_keys(&:to_sym))
-              app.state[:_sw_action] = :show
+              defn.store.update(app.state[ID], form_values.transform_keys(&:to_sym))
+              app.state[ACTION] = :show
             end
           end
         end
@@ -135,13 +137,13 @@ module StreamWeaver
             hstack do
               button("Confirm Delete", style: :danger) do |s|
                 defn.store.destroy(item[:id])
-                s[:_sw_action]   = :index
-                s[:_sw_resource] = defn.name
-                s[:_sw_id]       = nil
+                s[ACTION]   = :index
+                s[RESOURCE] = defn.name
+                s[ID]       = nil
               end
               button("Cancel") do |s|
-                s[:_sw_action]   = :index
-                s[:_sw_resource] = defn.name
+                s[ACTION]   = :index
+                s[RESOURCE] = defn.name
               end
             end
           end
