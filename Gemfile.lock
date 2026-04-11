@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    stream_weaver (0.1.0)
+    stream_weaver (0.1.1)
       iterm2_ruby (~> 0.1)
       kramdown (~> 2.4)
       kramdown-parser-gfm (~> 1.1)

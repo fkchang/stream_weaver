@@ -1,7 +1,7 @@
 # Implementation State
 
 ## Current Wave: 1
-## Status: IN_PROGRESS
+## Status: DONE
 
 | Task | Status | Commit | Notes |
 |------|--------|--------|-------|
@@ -10,4 +10,4 @@
 | T3 | DONE | 29b991e | DefaultViews + store validation + override blocks (T4 collapsed) |
 | T4 | DONE | 29b991e | Collapsed into T3 — render_action save/restore implemented |
 | T5 | DONE | 6a89742 | blog.rb + utf_lite.rb scaffolding examples |
-| T6 | NOT_STARTED | -- | Needs T4 — unblocked |
+| T6 | DONE | d64c861 | lib requires verified, resource-dsl.md, for_llms.md + crud-patterns.md updated |

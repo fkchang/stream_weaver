@@ -195,7 +195,7 @@ The `_sw_` prefix is reserved. Do not use `state[:_sw_*]` keys in your own code.
 | `state[:_sw_action]` | `:index`, `:show`, `:new`, `:edit`, page name sym | Current action |
 | `state[:_sw_resource]` | `:post`, `:goal`, etc. / `nil` | Active resource (nil for pages) |
 | `state[:_sw_id]` | String id / nil | Selected record |
-| `state[:_sw_confirm_delete]` | String id / nil | Record pending delete confirmation |
+| `state[:_sw_action]` `:destroy_confirm` | — | Delete confirmation (routed via `GET /singular/:id/delete`) |
 | `state[:"#{singular}_form"]` | Hash | Form state (managed by `form` DSL) |
 
 Use `state[:_sw_resource]` and `state[:_sw_action]` in navbar `active:` checks:
@@ -233,9 +233,11 @@ end.run!
 
 When no override block is provided:
 
-**Index** — renders a `header1` with the plural name, a "New" button, a `table` with one column per field plus an actions column (View / Edit / Delete buttons per row). If `state[:_sw_confirm_delete]` is set, a warning `alert` with Confirm / Cancel appears inline.
+**Index** — renders a `header1` with the plural name, a "New" button, and a `table` with one column per field plus an actions column with View / Edit / Delete links per row. Delete links navigate to `/singular/:id/delete`.
 
-**Show** — renders a `card` with `header3` (value of first field), one `text` line per field, and an hstack with Edit and Delete buttons. Same inline confirm alert when pending delete.
+**Show** — renders a `card` with `header3` (value of first field), one `text` line per field, and an hstack with Edit and Delete buttons. Delete navigates to `/singular/:id/delete`.
+
+**Destroy confirm** — renders a warning `alert` prompting confirmation. "Confirm Delete" calls `store.destroy` and transitions to `:index`; "Cancel" returns to `:index`.
 
 **New** — renders `header1 "New ..."` and a `form` block with inputs auto-generated from field types. Submit calls `store.create`, then transitions to `:show` for the new record.
 
