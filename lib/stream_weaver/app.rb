@@ -171,7 +171,7 @@ module StreamWeaver
       saved_context = @form_context
       yield
     ensure
-      @current_form    = saved_form
+      @current_form = saved_form
       @form_context = saved_context
     end
 

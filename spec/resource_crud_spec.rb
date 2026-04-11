@@ -3,8 +3,6 @@
 require 'spec_helper'
 require 'securerandom'
 
-SK = StreamWeaver::Resource::StateKeys unless defined?(SK)
-
 module FakeStore
   @records = [{ id: '1', title: 'Foo', status: 'active' }]
 

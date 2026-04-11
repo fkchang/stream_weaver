@@ -2,8 +2,6 @@
 
 require 'spec_helper'
 
-SK = StreamWeaver::Resource::StateKeys
-
 RSpec.describe "ResourceDefinition routing (T2)" do
   let(:fake_store) do
     store = Object.new
