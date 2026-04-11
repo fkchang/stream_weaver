@@ -19,7 +19,7 @@ module StreamWeaver
       @fields    = []
       @edit_view = :modal
       @new_view  = :modal
-      @only      = %i[index show new edit destroy]
+      @only      = %i[index show new edit destroy destroy_confirm]
       @overrides = {}
 
       Resource::Store.validate!(store, name)
@@ -45,6 +45,8 @@ module StreamWeaver
       when "/#{@plural}/new"                                      then sw_state(:new)
       when %r{\A/#{Regexp.escape(@singular)}/([^/]+)/edit\z}
         sw_state(:edit, CGI.unescape($1))
+      when %r{\A/#{Regexp.escape(@singular)}/([^/]+)/delete\z}
+        sw_state(:destroy_confirm, CGI.unescape($1))
       when %r{\A/#{Regexp.escape(@singular)}/([^/]+)\z}
         sw_state(:show, CGI.unescape($1))
       end
@@ -56,8 +58,9 @@ module StreamWeaver
       case st[:_sw_action]
       when :index then "/#{@plural}"
       when :new   then "/#{@plural}/new"
-      when :show  then id && "/#{@singular}/#{CGI.escape(id.to_s)}"
-      when :edit  then id && "/#{@singular}/#{CGI.escape(id.to_s)}/edit"
+      when :show            then id && "/#{@singular}/#{CGI.escape(id.to_s)}"
+      when :edit            then id && "/#{@singular}/#{CGI.escape(id.to_s)}/edit"
+      when :destroy_confirm then id && "/#{@singular}/#{CGI.escape(id.to_s)}/delete"
       end
     end
 
@@ -67,10 +70,11 @@ module StreamWeaver
       return unless st[:_sw_resource] == @name && @only.include?(st[:_sw_action])
       id = st[:_sw_id]
       case st[:_sw_action]
-      when :index then render_action(:index, app, @store.all)
-      when :show  then render_action(:show,  app, @store.find(id))
-      when :new   then render_action(:new,   app, nil)
-      when :edit  then render_action(:edit,  app, @store.find(id))
+      when :index           then render_action(:index,           app, @store.all)
+      when :show            then render_action(:show,            app, @store.find(id))
+      when :new             then render_action(:new,             app, nil)
+      when :edit            then render_action(:edit,            app, @store.find(id))
+      when :destroy_confirm then render_action(:destroy_confirm, app, @store.find(id))
       end
     end
 

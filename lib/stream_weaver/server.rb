@@ -218,6 +218,13 @@ module StreamWeaver
           state = session[:streamlit_state] ||= {}
         end
 
+        # Seed state from URL routing (e.g., `page :home, '/'` registers a parser for '/')
+        if settings.streamlit_app.routable?
+          if (route_state = settings.streamlit_app.state_for_path('/'))
+            route_state.each { |k, v| state[k] = v }
+          end
+        end
+
         sync_params_to_state(state)
         session[:streamlit_state] = session_safe_state(state)
 

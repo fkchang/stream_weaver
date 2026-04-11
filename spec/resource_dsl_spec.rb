@@ -49,9 +49,9 @@ RSpec.describe "ResourceDefinition DSL (T2)" do
   end
 
   describe "only / except" do
-    it "defaults to all 5 actions" do
+    it "defaults to all CRUD actions including destroy_confirm" do
       defn = StreamWeaver::ResourceDefinition.new(:post, fake_store)
-      expect(defn.only).to eq(%i[index show new edit destroy])
+      expect(defn.only).to eq(%i[index show new edit destroy destroy_confirm])
     end
 
     it "only restricts to given actions" do
@@ -63,7 +63,7 @@ RSpec.describe "ResourceDefinition DSL (T2)" do
     it "except removes given actions" do
       defn = StreamWeaver::ResourceDefinition.new(:post, fake_store)
       defn.except(%i[destroy edit])
-      expect(defn.only).to eq(%i[index show new])
+      expect(defn.only).to eq(%i[index show new destroy_confirm])
     end
   end
 

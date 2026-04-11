@@ -203,11 +203,11 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
   end
 
   describe "destroy confirmation flow" do
-    it "renders an Alert component when _sw_confirm_delete is set" do
+    it "renders an Alert component when _sw_action is :destroy_confirm" do
       app = build_app_with_state(
         _sw_resource: :post,
-        _sw_action: :index,
-        _sw_confirm_delete: '1'
+        _sw_action: :destroy_confirm,
+        _sw_id: '1'
       ) do
         resource :post, store: FakeStore do
           field :title, :string
@@ -222,8 +222,8 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
     it "calls store.destroy and transitions to :index on confirm" do
       app = build_app_with_state(
         _sw_resource: :post,
-        _sw_action: :index,
-        _sw_confirm_delete: '1'
+        _sw_action: :destroy_confirm,
+        _sw_id: '1'
       ) do
         resource :post, store: FakeStore do
           field :title, :string
@@ -243,14 +243,14 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
 
       expect(FakeStore.all.length).to eq(initial_count - 1)
       expect(app.state[:_sw_action]).to eq(:index)
-      expect(app.state[:_sw_confirm_delete]).to be_nil
+      expect(app.state[:_sw_id]).to be_nil
     end
 
-    it "cancel button clears _sw_confirm_delete without destroying" do
+    it "cancel button navigates to index without destroying" do
       app = build_app_with_state(
         _sw_resource: :post,
-        _sw_action: :index,
-        _sw_confirm_delete: '1'
+        _sw_action: :destroy_confirm,
+        _sw_id: '1'
       ) do
         resource :post, store: FakeStore do
           field :title, :string
@@ -267,7 +267,7 @@ RSpec.describe "Resource::DefaultViews CRUD callbacks (T3)" do
       cancel_callback.call(app.state)
 
       expect(FakeStore.all.length).to eq(initial_count)
-      expect(app.state[:_sw_confirm_delete]).to be_nil
+      expect(app.state[:_sw_action]).to eq(:index)
     end
   end
 end

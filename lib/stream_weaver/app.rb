@@ -159,6 +159,7 @@ module StreamWeaver
     end
 
     def generate
+      rebuild_with_state(@_state)  # pre-populate @route_rules before Sinatra starts
       SinatraApp.create(self)
     end
 

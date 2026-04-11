@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'cgi'
+
 module StreamWeaver
   module Resource
     module DefaultViews
@@ -13,35 +15,23 @@ module StreamWeaver
             s[:_sw_resource] = d.name
           end
 
-          unless d.fields.empty?
-            table(its) do
-              d.fields.each do |field|
-                column field.name, header: field.name.to_s.tr('_', ' ').capitalize
+          unless its.empty?
+            # Table with field columns + inline Actions column (markdown links)
+            table(its, markdown: true) do
+              d.fields.each do |f|
+                # Escape user data so markdown rendering is XSS-safe
+                column f.name, header: f.name.to_s.tr('_', ' ').capitalize do |item|
+                  CGI.escape_html(item[f.name].to_s)
+                end
               end
-            end
-          end
-
-          its.each do |item|
-            hstack do
-              button("View", id: item[:id]) do |s|
-                s[:_sw_action]   = :show
-                s[:_sw_resource] = d.name
-                s[:_sw_id]       = item[:id]
-              end
-              button("Edit", id: "edit_#{item[:id]}") do |s|
-                s[:_sw_action]   = :edit
-                s[:_sw_resource] = d.name
-                s[:_sw_id]       = item[:id]
-              end
-              button("Delete", id: "del_#{item[:id]}", style: :danger) do |s|
-                s[:_sw_confirm_delete] = item[:id]
-                s[:_sw_resource]       = d.name
+              column :_sw_actions, header: '' do |item|
+                eid = CGI.escape(item[:id].to_s)
+                s   = d.singular
+                "[View](/#{s}/#{eid}) [Edit](/#{s}/#{eid}/edit) [Delete](/#{s}/#{eid}/delete)"
               end
             end
           end
         end
-
-        render_destroy_confirm(defn, app)
       end
 
       def self.show(defn, app, item)
@@ -65,14 +55,13 @@ module StreamWeaver
                 s[:_sw_id]       = it[:id]
               end
               button("Delete", style: :danger) do |s|
-                s[:_sw_confirm_delete] = it[:id]
-                s[:_sw_resource]       = d.name
+                s[:_sw_action]   = :destroy_confirm
+                s[:_sw_resource] = d.name
+                # _sw_id already set
               end
             end
           end
         end
-
-        render_destroy_confirm(defn, app)
       end
 
       def self.new(defn, app, _data)
@@ -156,29 +145,30 @@ module StreamWeaver
         end
       end
 
-      def self.render_destroy_confirm(defn, app)
-        id = app.state[:_sw_confirm_delete]
-        return unless id
+      def self.destroy_confirm(defn, app, item)
+        return if item.nil?
 
-        app.instance_exec(defn, id) do |d, confirm_id|
+        app.instance_exec(defn, item) do |d, it|
+          first_field = d.fields.first
+          title_value = first_field ? it[first_field.name] : it[:id]
+
           alert(variant: :warning) do
-            text "Delete this #{d.singular}? This cannot be undone."
+            text "Delete \"#{title_value}\"? This cannot be undone."
             hstack do
               button("Confirm Delete", style: :danger) do |s|
-                d.store.destroy(confirm_id)
-                s[:_sw_confirm_delete] = nil
-                s[:_sw_action]         = :index
-                s[:_sw_resource]       = d.name
-                s[:_sw_id]             = nil
+                d.store.destroy(it[:id])
+                s[:_sw_action]   = :index
+                s[:_sw_resource] = d.name
+                s[:_sw_id]       = nil
               end
               button("Cancel") do |s|
-                s[:_sw_confirm_delete] = nil
+                s[:_sw_action]   = :index
+                s[:_sw_resource] = d.name
               end
             end
           end
         end
       end
-      private_class_method :render_destroy_confirm
     end
   end
 end

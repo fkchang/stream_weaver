@@ -99,7 +99,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
       end.not_to raise_error
     end
 
-    it "renders action buttons (View/Edit/Delete) for each item" do
+    it "renders a Table component with an actions column (markdown links)" do
       app = build_app_with_state(_sw_resource: :post, _sw_action: :index) do
         resource :post, store: FakeStoreForViews do
           field :title, :string
@@ -107,12 +107,18 @@ RSpec.describe "Resource::DefaultViews (T3)" do
       end
 
       all_components = flatten_components(app.components)
-      buttons = all_components.select { |c| c.is_a?(StreamWeaver::Components::Button) }
-      labels = buttons.map { |b| b.instance_variable_get(:@label) }
+      tables = all_components.select { |c| c.is_a?(StreamWeaver::Components::Table) }
+      expect(tables).not_to be_empty
 
-      expect(labels).to include("View")
-      expect(labels).to include("Edit")
-      expect(labels).to include("Delete")
+      actions_col = tables.first.columns.find { |col| col.key == :_sw_actions }
+      expect(actions_col).not_to be_nil
+
+      # Actions column should produce markdown link text for a sample item
+      sample_item = { id: '1', title: 'Test' }
+      cell_text = actions_col.extract_value(sample_item)
+      expect(cell_text).to include("[View]")
+      expect(cell_text).to include("[Edit]")
+      expect(cell_text).to include("[Delete]")
     end
   end
 
