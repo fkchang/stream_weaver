@@ -21,8 +21,6 @@ Use terminal for: requirements questions, conceptual A/B text choices, tradeoff 
 
 **NEVER** run `ruby app.rb` or `streamweaver <file.rb>` for each visual question in a conversation. This creates orphaned processes, port conflicts, and multiple browser windows. The correct approach is **canvas-push** — it updates a single persistent window throughout the conversation.
 
-The only exception: launching **one** standalone app file for full-width layout needs (see Layout section). One launch, then update-in-place. Not one per question.
-
 If you find yourself launching a new server for each update, stop. Use `canvas-push` instead.
 
 ## Mode: Canvas-Push
@@ -57,24 +55,13 @@ Tell the user: "Take a look at [url printed by StreamWeaver] and let me know wha
 
 ## Layout
 
-**Canvas sessions default to the centered 900px card container** — there is no `--layout` flag for `canvas` or `panel` commands.
-
-For most brainstorming comparisons (A/B options, side-by-side mockups), 900px is sufficient. Use `columns widths: ['50%', '50%']` to fill the available width.
-
-**For truly full-width layout** (dashboards, wide tables, broad mockups): launch a standalone app file — the one case where a standalone is correct:
-
-```ruby
-# brainstorm_wide.rb — launch once, update via live session or reload
-app "Brainstorm", layout: :fluid do
-  # :default (900px) | :wide (1100px) | :full (1400px) | :fluid (100%)
-  columns widths: ['33%', '33%', '34%'] do
-    # ...
-  end
-end
-```
+Canvas sessions default to **`:fluid` (full viewport width)** — the best choice for side-by-side comparisons. Override with `--layout=` if you need a narrower centered card:
 
 ```bash
-streamweaver brainstorm_wide.rb
+streamweaver panel brainstorm                    # fluid (default, full-width)
+streamweaver panel brainstorm --layout=default   # 900px centered card
+streamweaver panel brainstorm --layout=wide      # 1100px
+streamweaver panel brainstorm --layout=full      # 1400px
 ```
 
 ## The Loop
@@ -157,4 +144,4 @@ status_dot :green, "Active"
 - `theme: :light` unrecognized — omit, defaults to `:default`
 - StreamWeaver auto-selects an available port (not always 4567) — capture the URL from stdout
 - The browser tab opens automatically on `streamweaver panel` — no need to navigate manually
-- Canvas sessions default to 900px centered card — not `layout: :fluid`; no `--layout` CLI flag exists
+- Canvas sessions default to `:fluid` (full-width) — use `--layout=default` if you want the 900px centered card
