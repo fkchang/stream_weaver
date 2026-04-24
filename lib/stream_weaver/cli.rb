@@ -1724,10 +1724,11 @@ module StreamWeaver
       puts ""
       puts "StreamWeaver setup complete!"
       puts ""
-      puts "In Claude Code, you can now:"
-      puts "  - Use /streamweaver-panel skill for panel workflow guidance"
-      puts "  - Use /streamweaver-visual-companion skill for brainstorming sessions"
-      puts "  - Run `streamweaver panel` without permission prompts"
+      puts "Skills installed (~/.claude/skills/):"
+      puts "  panel             → streamweaver-panel.md"
+      puts "  visual-companion  → symlink → gem (auto-updates with gem)"
+      puts ""
+      puts "Run: streamweaver panel <name>  to start a visual companion session."
     end
 
     # Bring terminal back to front after browser auto-closes
