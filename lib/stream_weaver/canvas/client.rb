@@ -221,9 +221,22 @@ module StreamWeaver
         def stop_bridge
           return false unless bridge_running?
 
-          pid = File.read(pid_file_path).strip.to_i
-          Process.kill('TERM', pid)
-          sleep 0.5
+          info = read_bridge_info
+          if info && info[:port]
+            require 'net/http'
+            begin
+              Net::HTTP.start('127.0.0.1', info[:port], open_timeout: 2, read_timeout: 2) do |http|
+                http.post('/shutdown', '')
+              end
+              sleep 0.5
+            rescue StandardError
+              # HTTP shutdown failed — fall back to SIGTERM
+              pid = info[:pid] || File.read(pid_file_path)[/pid=(\d+)/, 1]&.to_i
+              Process.kill('TERM', pid) if pid
+              sleep 0.5
+            end
+          end
+
           cleanup_stale_files
           true
         rescue Errno::ESRCH

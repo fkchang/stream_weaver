@@ -89,6 +89,12 @@ module StreamWeaver
         }.to_json
       end
 
+      post '/shutdown' do
+        content_type :json
+        Thread.new { sleep 0.1; exit(0) }
+        { status: 'shutting_down' }.to_json
+      end
+
       # List all sessions
       get '/sessions' do
         content_type :json
@@ -199,7 +205,7 @@ module StreamWeaver
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
             <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
           </head>
-          <body class="sw-theme-default">
+          <body class="sw-theme-default sw-layout-#{session.layout}">
             <div id="app-container" #{container_attrs(session.state, adapter)}>
               #{initial_content}
             </div>
@@ -371,13 +377,16 @@ module StreamWeaver
             color: var(--sw-color-text);
           }
           #app-container {
-            max-width: 800px;
             margin: 0 auto;
             background: var(--sw-color-bg-card);
             border-radius: var(--sw-radius-md);
             padding: var(--sw-spacing-lg);
             box-shadow: var(--sw-shadow-sm);
           }
+          body.sw-layout-default #app-container { max-width: 900px; }
+          body.sw-layout-wide    #app-container { max-width: 1100px; }
+          body.sw-layout-full    #app-container { max-width: 1400px; }
+          body.sw-layout-fluid   #app-container { max-width: 100%; }
           h1, h2, h3, h4, h5, h6 { margin: 0 0 var(--sw-spacing-md) 0; line-height: 1.3; }
           h1 { font-size: 2rem; }
           h2 { font-size: 1.5rem; }

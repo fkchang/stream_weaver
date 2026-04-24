@@ -6,12 +6,16 @@ module StreamWeaver
   module Canvas
     # Represents a single canvas session with its state and WebSocket connections.
     class Session
-      attr_reader :name, :state, :websockets, :created_at
+      VALID_LAYOUTS = %i[default wide full fluid].freeze
+
+      attr_reader :name, :state, :websockets, :created_at, :layout
       attr_accessor :html, :html_version, :pane_id
 
       # @param name [String] Session name
-      def initialize(name)
+      # @param layout [Symbol] Layout mode: :default (900px), :wide (1100px), :full (1400px), :fluid (100%)
+      def initialize(name, layout: :fluid)
         @name = name
+        @layout = VALID_LAYOUTS.include?(layout) ? layout : :fluid
         @state = {}
         @websockets = []
         @created_at = Time.now

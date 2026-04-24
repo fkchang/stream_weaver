@@ -1042,10 +1042,15 @@ module StreamWeaver
 
     # Create or connect to a canvas session
     def self.canvas_session(args)
+      layout = :fluid
+      args = args.dup
+      if (i = args.index { |a| a.start_with?('--layout=') })
+        layout = args.delete_at(i).split('=', 2).last.to_sym
+      end
       session_name = args.first
 
       unless session_name
-        $stderr.puts "Usage: streamweaver canvas <session-name>"
+        $stderr.puts "Usage: streamweaver canvas [--layout=fluid|full|wide|default] <session-name>"
         exit 1
       end
 
@@ -1057,7 +1062,7 @@ module StreamWeaver
 
       # Create session
       response = Canvas::Client.send_message(
-        Canvas::Protocol::Messages.create(session_name)
+        Canvas::Protocol::Messages.create(session_name, layout: layout)
       )
 
       if response && response[:type] == 'ready'
@@ -1484,6 +1489,8 @@ module StreamWeaver
 
       debug = ENV['DEBUG_PANEL']
       fresh = args.include?('--fresh') || args.include?('-f')
+      layout_arg = args.find { |a| a.start_with?('--layout=') }
+      layout = layout_arg ? layout_arg.split('=', 2).last.to_sym : :fluid
       args = args.reject { |a| a.start_with?('-') }
 
       session_name = args.first || "panel-#{SecureRandom.hex(4)}"
@@ -1502,7 +1509,7 @@ module StreamWeaver
       # Create session
       $stderr.puts "[DEBUG] Creating session..." if debug
       response = Canvas::Client.send_message(
-        Canvas::Protocol::Messages.create(session_name)
+        Canvas::Protocol::Messages.create(session_name, layout: layout)
       )
       $stderr.puts "[DEBUG] Response: #{response.inspect}" if debug
 
