@@ -1667,27 +1667,33 @@ module StreamWeaver
         skill_dir = File.join(Dir.pwd, '.claude', 'skills')
       end
 
-      skill_path = File.join(skill_dir, 'streamweaver-panel.md')
-
-      # Create directory if needed
       FileUtils.mkdir_p(skill_dir)
 
-      # Write skill file
-      File.write(skill_path, SKILL_CONTENT)
+      # Panel skill (inline content, written as a flat .md file)
+      panel_path = File.join(skill_dir, 'streamweaver-panel.md')
+      File.write(panel_path, SKILL_CONTENT)
+
+      # Visual companion skill (lives in gem, installed as symlink so gem updates propagate)
+      gem_skill_src = File.expand_path(
+        File.join(File.dirname(__FILE__), 'skills', 'streamweaver-visual-companion', 'SKILL.md')
+      )
+      companion_dir = File.join(skill_dir, 'streamweaver-visual-companion')
+      companion_path = File.join(companion_dir, 'SKILL.md')
+      FileUtils.mkdir_p(companion_dir)
+      FileUtils.ln_sf(gem_skill_src, companion_path)
 
       location = global ? "global (~/.claude/skills/)" : "project (.claude/skills/)"
-      puts "StreamWeaver panel skill installed to #{location}"
-      puts "Path: #{skill_path}"
+      puts "StreamWeaver skills installed to #{location}"
+      puts "  streamweaver-panel.md          (panel workflow reference)"
+      puts "  streamweaver-visual-companion/ (brainstorming companion, symlinked from gem)"
       puts ""
-      puts "Claude Code will now know how to use StreamWeaver panels."
+      puts "Claude Code will now know how to use StreamWeaver panels and the visual companion."
     end
 
     # One-command setup for Claude Code integration
     # Adds bash permissions and installs the panel skill globally
     def self.setup
       settings_path = File.expand_path('~/.claude/settings.json')
-      skill_dir = File.expand_path('~/.claude/skills')
-      skill_path = File.join(skill_dir, 'streamweaver-panel.md')
 
       # Step 1: Add bash permissions to settings.json
       settings = if File.exist?(settings_path)
@@ -1712,18 +1718,15 @@ module StreamWeaver
       puts "Added bash permission: #{permission}"
       puts "  Path: #{settings_path}"
 
-      # Step 2: Install skill globally
-      FileUtils.mkdir_p(skill_dir)
-      File.write(skill_path, SKILL_CONTENT)
-      puts ""
-      puts "Installed panel skill"
-      puts "  Path: #{skill_path}"
+      # Step 2: Install skills globally
+      install_skill(['--global'])
 
       puts ""
       puts "StreamWeaver setup complete!"
       puts ""
       puts "In Claude Code, you can now:"
-      puts "  - Use /panel skill for panel workflow guidance"
+      puts "  - Use /streamweaver-panel skill for panel workflow guidance"
+      puts "  - Use /streamweaver-visual-companion skill for brainstorming sessions"
       puts "  - Run `streamweaver panel` without permission prompts"
     end
 
