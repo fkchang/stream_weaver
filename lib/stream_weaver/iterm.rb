@@ -67,27 +67,30 @@ module StreamWeaver
 
       def check_availability
         return false unless RbConfig::CONFIG["host_os"].match?(/darwin/)
+        # Fast check: ITERM_SESSION_ID is set when running inside iTerm2.
+        # Avoids the slow ITerm2.connect call (which spawns a Python subprocess
+        # and can hang for seconds when the Python API is slow to initialize).
+        return false unless ENV['ITERM_SESSION_ID']
 
         require "iterm2"
-        with_timeout(3, default: false) do
-          ITerm2.connect(app_name: APP_NAME) { true }
-        end
+        true
       rescue LoadError
-        false
-      rescue ITerm2::Error
         false
       end
 
       def connect(&) = ITerm2.connect(app_name: APP_NAME, &)
 
       def split_browser_pane(url, horizontal: false)
-        connect do |c|
-          c.split_pane(
-            current_session_guid,
-            vertical: !horizontal,
-            profile_name: "Web Browser",
-            profile_customizations: { "Initial URL" => url }
-          )
+        guid = current_session_guid or return nil
+        with_timeout(8, default: nil) do
+          connect do |c|
+            c.split_pane(
+              guid,
+              vertical: !horizontal,
+              profile_name: "Web Browser",
+              profile_customizations: { "Initial URL" => url }
+            )
+          end
         end
       rescue ITerm2::Error
         nil
