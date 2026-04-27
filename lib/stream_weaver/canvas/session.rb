@@ -8,7 +8,7 @@ module StreamWeaver
     class Session
       VALID_LAYOUTS = %i[default wide full fluid].freeze
 
-      attr_reader :name, :state, :websockets, :created_at, :layout
+      attr_reader :name, :state, :websockets, :created_at, :layout, :dsl
       attr_accessor :html, :html_version, :pane_id
 
       # @param name [String] Session name
@@ -21,6 +21,7 @@ module StreamWeaver
         @created_at = Time.now
         @html = nil
         @html_version = 0
+        @dsl = nil
         @pending_toasts = []
         @pane_id = nil
         @mutex = Mutex.new
@@ -31,6 +32,14 @@ module StreamWeaver
       def set_html(content)
         @html = content
         @html_version += 1
+      end
+
+      # Set the raw DSL for this session. Called by Bridge#handle_push only on
+      # successful render. Failed renders preserve the last good DSL so the
+      # user can still save it.
+      # @param content [String] Raw DSL source
+      def set_dsl(content)
+        @dsl = content
       end
 
       # Update session state

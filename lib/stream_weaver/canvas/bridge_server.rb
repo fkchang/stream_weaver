@@ -7,6 +7,7 @@ require 'fileutils'
 require_relative 'protocol'
 require_relative 'session'
 require_relative 'bridge'
+require_relative 'doc_store'
 
 # Load StreamWeaver core for adapter and views
 require_relative '../adapter/base'
@@ -128,6 +129,29 @@ module StreamWeaver
           version: session.html_version,
           toasts: session.pop_toasts
         }.to_json
+      end
+
+      # Save the session's last-good DSL as a persistent canvas doc (Tier 2).
+      # Body: {"name": "<doc-name>"}; ".rb" is added/normalized by DocStore.
+      post '/canvas/:name/save-doc' do
+        content_type :json
+        session_name = params[:name]
+        session = self.class.bridge.get_session(session_name)
+
+        halt 404, { ok: false, error: "Session not found: #{session_name}" }.to_json unless session
+        halt 422, { ok: false, error: "No DSL stored for session #{session_name}" }.to_json if session.dsl.nil?
+
+        body = JSON.parse(request.body.read, symbolize_names: true) rescue {}
+        doc_name = body[:name]
+
+        begin
+          path = StreamWeaver::Canvas::DocStore.save(doc_name, session.dsl)
+          { ok: true, path: path }.to_json
+        rescue ArgumentError => e
+          halt 422, { ok: false, error: e.message }.to_json
+        rescue StandardError => e
+          halt 500, { ok: false, error: e.message }.to_json
+        end
       end
 
       # Receive events from browser (fallback for WebSocket)

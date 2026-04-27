@@ -126,6 +126,9 @@ module StreamWeaver
         if result.error
           { type: 'push_error', message: result.error }
         else
+          # Persist raw DSL only on successful render so a later failed push
+          # doesn't clobber the user's last-good content.
+          session.set_dsl(dsl)
           { type: 'push_ok' }
         end
       end
