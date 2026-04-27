@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'cgi'
 require 'sinatra/base'
 
 module StreamWeaver
@@ -41,6 +42,19 @@ module StreamWeaver
         def size
           @files.size
         end
+      end
+
+      def self.render_dsl(dsl)
+        mini_app = StreamWeaver::App.new('reader')
+        mini_app.instance_eval(dsl)
+        adapter = StreamWeaver::Adapter::AlpineJS.new(
+          url_prefix: '/canvas/reader',
+          mode: :websocket
+        )
+        StreamWeaver::Views::AppContentView.new(mini_app, {}, adapter, false).call
+      rescue ScriptError, StandardError => e
+        "<div style='color:red;padding:1rem;font-family:monospace'>" \
+          "<strong>DSL error:</strong> #{CGI.escapeHTML(e.message)}</div>"
       end
     end
   end

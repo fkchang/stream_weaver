@@ -74,3 +74,18 @@ RSpec.describe StreamWeaver::Canvas::Reader::FileList do
     end
   end
 end
+
+RSpec.describe StreamWeaver::Canvas::Reader do
+  describe '.render_dsl' do
+    it 'returns HTML string for valid DSL' do
+      html = described_class.render_dsl("header1 'Hello'")
+      expect(html).to include('Hello')
+      expect(html).to be_a(String)
+    end
+
+    it 'returns error HTML for invalid DSL without raising' do
+      html = described_class.render_dsl("this is not valid !@#")
+      expect(html).to include('error')
+    end
+  end
+end
