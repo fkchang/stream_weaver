@@ -587,6 +587,55 @@ stacked_bar_chart data: [
 
 **Common options:** `data:`, `file:`, `path:`, `title:`, `height:`, `colors:`, `show_legend:`
 
+## Mermaid Diagrams
+
+Renders Mermaid.js diagrams. Mermaid.js 11 (ESM) is loaded lazily from CDN — only injected when a `mermaid` component is present on the page.
+
+```ruby
+# Basic — any valid Mermaid diagram type
+mermaid <<~MERMAID
+  graph LR
+    A[Start] --> B{Decision}
+    B -- Yes --> C[Ship it]
+    B -- No  --> D[Debug]
+    D --> A
+MERMAID
+
+# zoom: true — adds +/−/reset buttons and Ctrl+scroll zoom
+mermaid diagram_code, zoom: true
+
+# compact: true — reduced padding for embedding inside a card
+card do
+  mermaid diagram_code, compact: true
+end
+
+# layout: :elk — ELK layout engine (better for dense graphs, loads separately from CDN)
+mermaid diagram_code, layout: :elk
+
+# theme_vars: — override Mermaid themeVariables per diagram
+mermaid diagram_code, theme_vars: {
+  primaryColor: "#6366f1",
+  primaryTextColor: "#ffffff",
+  primaryBorderColor: "#4f46e5",
+  lineColor: "#6366f1"
+}
+```
+
+**Options:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `zoom:` | Boolean | `false` | Adds zoom/pan controls (+/−/reset) and Ctrl+scroll |
+| `compact:` | Boolean | `false` | Reduces padding — use when embedding inside a card |
+| `layout:` | Symbol | `:default` | Layout engine: `:default` (Dagre) or `:elk` (ELK) |
+| `theme_vars:` | Hash | `nil` | Per-diagram Mermaid `themeVariables` overrides |
+
+**Supported diagram types:** flowchart, sequence, pie, gantt, gitgraph, classDiagram, stateDiagram, erDiagram, and any other type supported by Mermaid.js 11.
+
+**Theme awareness:** Mermaid diagrams automatically re-render when the page theme changes (dark/light). Use `theme_vars:` for brand-specific color overrides.
+
+**Examples:** `examples/components/mermaid_demo.rb` (all options), `examples/canvas/mermaid_canvas_demo.sh` (canvas-push).
+
 ## Educational Content (Glossary/Tooltips)
 
 ```ruby

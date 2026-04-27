@@ -613,6 +613,8 @@ module StreamWeaver
                   } else if (msg.type === 'toast') {
                     showToast(msg.message, msg.variant, msg.duration);
                   } else if (msg.type === 'closed') {
+                    const _cc = document.getElementById('app-container');
+                    if (_cc) _cc.innerHTML = '<div style="text-align:center;padding:60px;color:#374151;"><div style="font-size:3rem;margin-bottom:16px;">✓</div><h2 style="margin:0 0 12px">Session Complete</h2><p style="color:#666;margin:0">This StreamWeaver canvas session has closed.</p></div>';
                     ws.close();
                   }
                 };
