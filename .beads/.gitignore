@@ -56,6 +56,10 @@ dolt-server.activity
 # Backup data (auto-exported JSONL, local-only)
 backup/
 
+# Issue state — managed in Dolt (the source of truth), not in git.
+# Auto-staged by bd hooks; ignoring it keeps feature commits clean.
+issues.jsonl
+
 # Per-project environment file (Dolt connection config, GH#2520)
 .env
 
