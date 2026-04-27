@@ -1129,6 +1129,7 @@ module StreamWeaver
         exit 1
       else
         puts "Pushed to #{session_name}"
+        record_push_history(session_name, dsl)
       end
     rescue Canvas::Client::NotRunningError => e
       $stderr.puts "Error: #{e.message}"
@@ -1136,6 +1137,33 @@ module StreamWeaver
     rescue Canvas::Client::ConnectionError => e
       $stderr.puts "Error: #{e.message}"
       exit 1
+    end
+
+    # Auto-save a successful canvas-push to ephemeral history (Tier 1).
+    # Runs cleanup lazily, once per CLI process. Never re-raises -- a history
+    # failure must not make a successful push look broken.
+    def self.record_push_history(session_name, dsl)
+      require_relative 'canvas/history'
+      history_cleanup_once!
+      saved_path = Canvas::History.record(session_name, dsl)
+      $stderr.puts "  saved: #{saved_path}"
+    rescue ArgumentError => e
+      # Bad session name slipped through -- push already succeeded.
+      $stderr.puts "Warning: history save skipped (#{e.message})"
+    rescue StandardError => e
+      $stderr.puts "Warning: history save failed (#{e.message})"
+    end
+
+    # Run History.cleanup at most once per CLI process. Errors are swallowed
+    # (warned to stderr) and the flag is still set so we don't retry on the
+    # next push within the same process.
+    def self.history_cleanup_once!
+      return if @history_cleaned
+
+      @history_cleaned = true
+      Canvas::History.cleanup
+    rescue StandardError => e
+      $stderr.puts "Warning: history cleanup failed: #{e.message}"
     end
 
     # Show a toast notification on a canvas session (doesn't replace main content)
