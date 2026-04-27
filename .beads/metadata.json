@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "stream_weaver",
+  "project_id": "943d45dd-3988-482e-9d86-2e7cfe2bb504"
+}
