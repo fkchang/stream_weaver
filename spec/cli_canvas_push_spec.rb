@@ -131,6 +131,19 @@ RSpec.describe StreamWeaver::CLI do
       end
     end
 
+    context 'when the bridge raises a not-running error' do
+      before do
+        allow(StreamWeaver::Canvas::Client).to receive(:send_message)
+          .and_raise(StreamWeaver::Canvas::Client::NotRunningError, 'bridge not running')
+      end
+
+      it 'does NOT save to history' do
+        expect { capture_io { described_class.canvas_push([session_name]) } }
+          .to raise_error(SystemExit)
+        expect(Dir.glob(File.join(@history_root, session_name, '*.rb'))).to be_empty
+      end
+    end
+
     context 'when History.record raises (e.g. invalid session name)' do
       before do
         allow(StreamWeaver::Canvas::Client).to receive(:send_message).and_return(nil)
