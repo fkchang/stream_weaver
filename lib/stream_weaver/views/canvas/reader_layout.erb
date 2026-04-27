@@ -4,35 +4,63 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>canvas-read</title>
+
+  <%# StreamWeaver component styles (CSS vars, typography, sw-* classes) %>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { display: flex; height: 100vh; overflow: hidden; font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0; }
+    <%= @sw_styles %>
+  </style>
+
+  <%# Override body to flex layout for the two-pane shell %>
+  <style>
+    html, body { height: 100%; overflow: hidden; margin: 0; padding: 0; display: flex; }
+    body { font-family: system-ui, sans-serif; background: #f3f4f6; }
 
     /* Sidebar */
-    #sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid #2d3748; overflow-y: auto; display: flex; flex-direction: column; }
-    #sidebar h2 { padding: 0.75rem 1rem; font-size: 0.7rem; text-transform: uppercase; letter-spacing: .08em; color: #718096; border-bottom: 1px solid #2d3748; }
-    .dir-header { padding: 0.4rem 1rem; font-size: 0.75rem; color: #a0aec0; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 0.4rem; }
-    .dir-header:hover { background: #1a202c; }
+    #sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid #d1d5db; overflow-y: auto;
+               display: flex; flex-direction: column; background: #f9fafb; }
+    #sidebar h2 { padding: 0.75rem 1rem; font-size: 0.7rem; text-transform: uppercase;
+                  letter-spacing: .08em; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
+    .dir-header { padding: 0.4rem 1rem; font-size: 0.75rem; color: #4b5563; cursor: pointer;
+                  user-select: none; display: flex; align-items: center; gap: 0.4rem; }
+    .dir-header:hover { background: #e5e7eb; }
     .dir-arrow { font-size: 0.6rem; transition: transform 0.15s; }
     .dir-files { list-style: none; }
     .dir-files.collapsed { display: none; }
-    .dir-files li a { display: block; padding: 0.35rem 1rem 0.35rem 1.75rem; font-size: 0.8rem; color: #a0aec0; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .dir-files li a:hover { background: #1a202c; color: #e2e8f0; }
-    .dir-files li a.active { background: #2d3748; color: #63b3ed; font-weight: 600; }
+    .dir-files li a { display: block; padding: 0.35rem 1rem 0.35rem 1.75rem; font-size: 0.8rem;
+                      color: #4b5563; text-decoration: none; white-space: nowrap;
+                      overflow: hidden; text-overflow: ellipsis; }
+    .dir-files li a:hover { background: #e5e7eb; color: #111827; }
+    .dir-files li a.active { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
 
-    /* Main */
+    /* Main pane */
     #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    #content { flex: 1; overflow-y: auto; padding: 1.5rem; }
+    #content { flex: 1; overflow-y: auto; padding: 0; background: var(--sw-color-bg, #f8f8f8); }
+    #content > * { max-width: none; }
 
     /* Nav bar */
-    #nav { border-top: 1px solid #2d3748; padding: 0.5rem 1rem; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-    #nav button { background: #2d3748; color: #e2e8f0; border: none; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
-    #nav button:hover { background: #4a5568; }
+    #nav { border-top: 1px solid #e5e7eb; padding: 0.5rem 1rem; display: flex;
+           align-items: center; justify-content: space-between; flex-shrink: 0;
+           background: #f9fafb; }
+    #nav button { background: #e5e7eb; color: #374151; border: none; padding: 0.3rem 0.8rem;
+                  border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+    #nav button:hover { background: #d1d5db; }
     #nav button:disabled { opacity: 0.35; cursor: default; }
-    #nav .counter { font-size: 0.8rem; color: #718096; }
+    #nav .counter { font-size: 0.8rem; color: #6b7280; }
   </style>
+
+  <%# CDN dependencies for StreamWeaver components %>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+
+  <%# Mermaid zoom/pan engine — inlined so swMermaidInit() is available before Alpine fires %>
+  <script><%= @mermaid_zoom_js %></script>
+  <%# Kick off mermaid CDN preload immediately (same pattern as bridge server) %>
+  <script>if (window.swMermaidPreload) window.swMermaidPreload();</script>
 </head>
-<body>
+<body class="sw-theme-default sw-layout-fluid">
 
 <nav id="sidebar">
   <h2>Files</h2>

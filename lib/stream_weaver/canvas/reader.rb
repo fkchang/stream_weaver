@@ -77,10 +77,13 @@ module StreamWeaver
         path  = list&.at(index)
         halt 404, 'File not found' unless path
 
+        require 'stream_weaver/canvas/bridge_server'
         dsl = File.read(path)
         @content_html  = Reader.render_dsl(dsl)
         @file_list     = list
         @current_index = index
+        @sw_styles     = StreamWeaver::Canvas::BridgeServer::SW_STYLES
+        @mermaid_zoom_js = File.read(File.expand_path('../assets/js/sw-mermaid-zoom.js', __dir__))
         erb :reader_layout, layout: false
       end
 

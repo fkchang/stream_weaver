@@ -28,7 +28,7 @@ module StreamWeaver
     class BridgeServer < Sinatra::Base
       SOCKET_PATH = File.expand_path('~/.streamweaver/canvas.sock')
       PID_FILE_PATH = File.expand_path('~/.streamweaver/canvas.pid')
-      DEFAULT_PORT = 4568
+      DEFAULT_PORT = 4700
 
       class << self
         attr_accessor :bridge, :unix_server, :claude_connections, :port
@@ -204,6 +204,10 @@ module StreamWeaver
             <!-- Highlight.js for syntax highlighting -->
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
             <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+            <!-- Mermaid zoom/pan engine — always present so canvas-push with mermaid works on first push -->
+            <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-mermaid-zoom.js'))}</script>
+            <!-- Kick off CDN fetch immediately so mermaid is ready before first push arrives -->
+            <script>if (window.swMermaidPreload) window.swMermaidPreload();</script>
           </head>
           <body class="sw-theme-default sw-layout-#{session.layout}">
             <div id="app-container" #{container_attrs(session.state, adapter)}>
@@ -221,8 +225,10 @@ module StreamWeaver
         <<~JS
           (function() {
             let currentVersion = #{current_version};
+            let sessionClosed = false;
             const pollUrl = '/canvas/#{session_name}/poll';
             const container = document.getElementById('app-container');
+            const closedHtml = '<div style="text-align:center;padding:60px;color:#374151;"><div style="font-size:3rem;margin-bottom:16px;">✓</div><h2 style="margin:0 0 12px">Session Complete</h2><p style="color:#666;margin:0">This StreamWeaver canvas session has closed.</p></div>';
 
             // Shared state for coordinating poll updates with showFeedback.
             // When showFeedback shows a spinner, it records the version at that
@@ -276,7 +282,13 @@ module StreamWeaver
             async function poll() {
               try {
                 const resp = await fetch(pollUrl);
-                if (!resp.ok) return;
+                if (!resp.ok) {
+                  if (resp.status === 404 && !sessionClosed) {
+                    sessionClosed = true;
+                    container.innerHTML = closedHtml;
+                  }
+                  return;
+                }
 
                 const data = await resp.json();
 
@@ -301,6 +313,9 @@ module StreamWeaver
                   if (window.Alpine) {
                     Alpine.initTree(container);
                   }
+
+                  // Initialize mermaid diagrams (swMermaidInit is idempotent via data-sw-mermaid-done guard)
+                  if (window.swMermaidInit) window.swMermaidInit();
 
                   // Apply syntax highlighting and initialize charts after DOM update
                   setTimeout(() => {
@@ -339,8 +354,7 @@ module StreamWeaver
         JS
       end
 
-      def canvas_styles
-        <<~CSS
+      SW_STYLES = <<~CSS
           /* CSS Variables */
           :root {
             --sw-color-primary: #c2410c;
@@ -825,7 +839,10 @@ module StreamWeaver
             border: 1px solid #fca5a5;
           }
         CSS
-      end
+
+      def self.sw_styles = SW_STYLES
+
+      def canvas_styles = SW_STYLES
 
       def container_attrs(state, adapter)
         attrs = adapter.container_attributes(state)
