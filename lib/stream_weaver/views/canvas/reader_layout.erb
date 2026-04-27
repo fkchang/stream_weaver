@@ -64,16 +64,15 @@
 
 <nav id="sidebar">
   <h2>Files</h2>
-  <% @file_list.groups.each do |dir, files| %>
+  <% @file_list.indexed_groups.each do |dir, entries| %>
     <% dir_label = File.basename(dir) %>
     <div class="dir-section">
       <div class="dir-header" onclick="toggleDir(this)">
         <span class="dir-arrow">▼</span>
-        <span title="<%= dir %>">📁 <%= dir_label %></span>
+        <span title="<%= dir %>"><%= dir_label %></span>
       </div>
       <ul class="dir-files">
-        <% files.each do |filepath| %>
-          <% idx = @file_list.files.index(filepath) %>
+        <% entries.each do |filepath, idx| %>
           <li>
             <a href="/?file=<%= idx %>"
                class="<%= idx == @current_index ? 'active' : '' %>"

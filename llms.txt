@@ -163,6 +163,13 @@ md "**Bold** and *italic* markdown"
 header "Section Title"        # h2
 header1 "Page Title"          # h1
 header3 "Subsection"          # h3
+
+# Mermaid diagrams — Mermaid.js loaded lazily from CDN
+mermaid "graph LR; A-->B"                          # basic
+mermaid diagram_code, zoom: true                   # zoom/pan controls
+mermaid diagram_code, compact: true                # reduced padding (use inside card)
+mermaid diagram_code, layout: :elk                 # ELK layout engine for dense graphs
+mermaid diagram_code, theme_vars: { primaryColor: "#6366f1" }  # custom colors
 ```
 
 ### CRITICAL: `text` Does NOT Render Markdown
@@ -493,6 +500,7 @@ streamweaver canvas-close "$SESSION"
 | `streamweaver canvas-push SESSION` | Push DSL content (stdin or `<<'RUBY'`) |
 | `streamweaver canvas-wait SESSION` | Wait for button click, return JSON |
 | `streamweaver canvas-close SESSION` | Close the canvas session |
+| `streamweaver canvas-read FILE [FILE\|DIR ...]` | Browse saved canvas DSL files in a local viewer (sidebar + prev/next nav) |
 
 ### Important Behavior
 
@@ -514,6 +522,9 @@ columns widths: ['50%', '50%'] do
   column { checkbox :extra, "Extra option" }
 end
 button "Submit"  # Returns JSON when clicked
+
+# Mermaid diagrams work in canvas-push too
+mermaid "graph LR; A-->B", zoom: true
 ```
 
 ---

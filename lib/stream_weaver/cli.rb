@@ -1318,9 +1318,6 @@ module StreamWeaver
 
       port = StreamWeaver::Canvas::Reader.find_available_port
       StreamWeaver::Canvas::Reader.set :port, port
-      StreamWeaver::Canvas::Reader.set :bind, '127.0.0.1'
-      StreamWeaver::Canvas::Reader.set :server, :puma
-      StreamWeaver::Canvas::Reader.set :logging, false
 
       url = "http://127.0.0.1:#{port}/?file=0"
       puts "canvas-read  #{file_list.size} file(s)  →  #{url}"

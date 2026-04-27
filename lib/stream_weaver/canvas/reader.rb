@@ -3,6 +3,7 @@
 require 'cgi'
 require 'socket'
 require 'sinatra/base'
+require 'stream_weaver/canvas/bridge_server'
 
 module StreamWeaver
   module Canvas
@@ -36,6 +37,10 @@ module StreamWeaver
           @files.group_by { |f| File.dirname(f) }
         end
 
+        def indexed_groups
+          @indexed_groups ||= @files.each_with_index.group_by { |f, _| File.dirname(f) }
+        end
+
         def at(index)
           @files[index]
         end
@@ -43,6 +48,16 @@ module StreamWeaver
         def size
           @files.size
         end
+      end
+
+      MERMAID_ZOOM_JS = File.read(File.expand_path('../assets/js/sw-mermaid-zoom.js', __dir__))
+      private_constant :MERMAID_ZOOM_JS
+
+      configure do
+        set :views,   File.expand_path('../views/canvas', __dir__)
+        set :bind,    '127.0.0.1'
+        set :server,  :puma
+        set :logging, false
       end
 
       class << self
@@ -59,11 +74,10 @@ module StreamWeaver
             return port
           rescue Errno::EADDRINUSE
             port += 1
+            raise "No available port found starting from #{start}" if port > start + 100
           end
         end
       end
-
-      set :views, File.expand_path('../views/canvas', __dir__)
 
       get '/health' do
         'ok'
@@ -77,13 +91,12 @@ module StreamWeaver
         path  = list&.at(index)
         halt 404, 'File not found' unless path
 
-        require 'stream_weaver/canvas/bridge_server'
         dsl = File.read(path)
-        @content_html  = Reader.render_dsl(dsl)
-        @file_list     = list
-        @current_index = index
-        @sw_styles     = StreamWeaver::Canvas::BridgeServer::SW_STYLES
-        @mermaid_zoom_js = File.read(File.expand_path('../assets/js/sw-mermaid-zoom.js', __dir__))
+        @content_html    = Reader.render_dsl(dsl)
+        @file_list       = list
+        @current_index   = index
+        @sw_styles       = StreamWeaver::Canvas::BridgeServer::SW_STYLES
+        @mermaid_zoom_js = MERMAID_ZOOM_JS
         erb :reader_layout, layout: false
       end
 

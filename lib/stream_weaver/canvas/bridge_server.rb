@@ -196,7 +196,7 @@ module StreamWeaver
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>StreamWeaver Canvas: #{session_name}</title>
             <style>
-              #{canvas_styles}
+              #{SW_STYLES}
             </style>
             #{adapter.cdn_scripts.join("\n")}
             <!-- Chart.js for charts -->
@@ -839,10 +839,6 @@ module StreamWeaver
             border: 1px solid #fca5a5;
           }
         CSS
-
-      def self.sw_styles = SW_STYLES
-
-      def canvas_styles = SW_STYLES
 
       def container_attrs(state, adapter)
         attrs = adapter.container_attributes(state)
