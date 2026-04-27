@@ -1,4 +1,93 @@
-<%= @content_html %>
-<% @file_list.files.each do |f| %>
-<a href="/?file=<%= @file_list.files.index(f) %>"><%= File.basename(f, '.rb') %></a>
-<% end %>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>canvas-read</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { display: flex; height: 100vh; overflow: hidden; font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0; }
+
+    /* Sidebar */
+    #sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid #2d3748; overflow-y: auto; display: flex; flex-direction: column; }
+    #sidebar h2 { padding: 0.75rem 1rem; font-size: 0.7rem; text-transform: uppercase; letter-spacing: .08em; color: #718096; border-bottom: 1px solid #2d3748; }
+    .dir-header { padding: 0.4rem 1rem; font-size: 0.75rem; color: #a0aec0; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 0.4rem; }
+    .dir-header:hover { background: #1a202c; }
+    .dir-arrow { font-size: 0.6rem; transition: transform 0.15s; }
+    .dir-files { list-style: none; }
+    .dir-files.collapsed { display: none; }
+    .dir-files li a { display: block; padding: 0.35rem 1rem 0.35rem 1.75rem; font-size: 0.8rem; color: #a0aec0; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dir-files li a:hover { background: #1a202c; color: #e2e8f0; }
+    .dir-files li a.active { background: #2d3748; color: #63b3ed; font-weight: 600; }
+
+    /* Main */
+    #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #content { flex: 1; overflow-y: auto; padding: 1.5rem; }
+
+    /* Nav bar */
+    #nav { border-top: 1px solid #2d3748; padding: 0.5rem 1rem; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    #nav button { background: #2d3748; color: #e2e8f0; border: none; padding: 0.3rem 0.8rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+    #nav button:hover { background: #4a5568; }
+    #nav button:disabled { opacity: 0.35; cursor: default; }
+    #nav .counter { font-size: 0.8rem; color: #718096; }
+  </style>
+</head>
+<body>
+
+<nav id="sidebar">
+  <h2>Files</h2>
+  <% @file_list.groups.each do |dir, files| %>
+    <% dir_label = File.basename(dir) %>
+    <div class="dir-section">
+      <div class="dir-header" onclick="toggleDir(this)">
+        <span class="dir-arrow">▼</span>
+        <span title="<%= dir %>">📁 <%= dir_label %></span>
+      </div>
+      <ul class="dir-files">
+        <% files.each do |filepath| %>
+          <% idx = @file_list.files.index(filepath) %>
+          <li>
+            <a href="/?file=<%= idx %>"
+               class="<%= idx == @current_index ? 'active' : '' %>"
+               title="<%= filepath %>">
+              <%= File.basename(filepath, '.rb') %>
+            </a>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+</nav>
+
+<div id="main">
+  <div id="content">
+    <%= @content_html %>
+  </div>
+  <div id="nav">
+    <% prev_idx = @current_index - 1 %>
+    <% next_idx = @current_index + 1 %>
+    <button onclick="location.href='/?file=<%= prev_idx %>'"
+            <%= prev_idx < 0 ? 'disabled' : '' %>>◀ Prev</button>
+    <span class="counter"><%= @current_index + 1 %> of <%= @file_list.size %></span>
+    <button onclick="location.href='/?file=<%= next_idx %>'"
+            <%= next_idx >= @file_list.size ? 'disabled' : '' %>>Next ▶</button>
+  </div>
+</div>
+
+<script>
+  function toggleDir(header) {
+    const ul = header.nextElementSibling;
+    const arrow = header.querySelector('.dir-arrow');
+    ul.classList.toggle('collapsed');
+    arrow.style.transform = ul.classList.contains('collapsed') ? 'rotate(-90deg)' : '';
+  }
+
+  document.addEventListener('keydown', (e) => {
+    const cur = <%= @current_index %>;
+    const max = <%= @file_list.size - 1 %>;
+    if (e.key === 'ArrowLeft' && cur > 0)   location.href = '/?file=' + (cur - 1);
+    if (e.key === 'ArrowRight' && cur < max) location.href = '/?file=' + (cur + 1);
+  });
+</script>
+</body>
+</html>
