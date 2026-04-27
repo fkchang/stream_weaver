@@ -34,11 +34,12 @@ module StreamWeaver
       # Clean up session files older than 7 days on startup
       cutoff = Time.now - (7 * 86_400)
       Dir.glob("#{SW_SESSION_DIR}/session_*").each { |f| ::File.delete(f) if ::File.mtime(f) < cutoff rescue nil }
-      use StreamWeaver::FileSession, path: SW_SESSION_DIR, expire_after: 86_400
+      use StreamWeaver::FileSession, path: SW_SESSION_DIR, expire_after: 86_400, same_site: :lax
       $stderr.puts "[SW] Sessions: file (#{SW_SESSION_DIR})"
     else
       enable :sessions
       set :session_secret, SW_SESSION_SECRET
+      set :sessions, same_site: :lax
       $stderr.puts "[SW] Sessions: cookie (4KB limit — set SW_SESSION_STORE=file to remove limit)"
     end
 
