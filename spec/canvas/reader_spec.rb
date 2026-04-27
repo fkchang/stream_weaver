@@ -2,6 +2,8 @@
 
 require 'spec_helper'
 require 'tmpdir'
+require 'fileutils'
+require 'rack/test'
 require 'stream_weaver/canvas/reader'
 
 RSpec.describe StreamWeaver::Canvas::Reader::FileList do
@@ -86,6 +88,66 @@ RSpec.describe StreamWeaver::Canvas::Reader do
     it 'returns error HTML for invalid DSL without raising' do
       html = described_class.render_dsl("this is not valid !@#")
       expect(html).to include('error')
+    end
+  end
+end
+
+RSpec.describe StreamWeaver::Canvas::Reader, type: :request do
+  include Rack::Test::Methods
+
+  before(:all) do
+    @dir = Dir.mktmpdir
+    File.write(File.join(@dir, 'doc1.rb'), "header1 'Doc One'")
+    File.write(File.join(@dir, 'doc2.rb'), "header1 'Doc Two'")
+    StreamWeaver::Canvas::Reader.configure_files!(
+      StreamWeaver::Canvas::Reader::FileList.build([@dir])
+    )
+  end
+
+  after(:all) { FileUtils.rm_rf(@dir) }
+
+  def app = StreamWeaver::Canvas::Reader
+
+  describe 'GET /' do
+    it 'redirects to ?file=0' do
+      get '/'
+      expect(last_response.status).to eq(302)
+      expect(last_response.headers['Location']).to include('file=0')
+    end
+  end
+
+  describe 'GET /?file=0' do
+    it 'returns 200 with doc1 content' do
+      get '/?file=0'
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to include('Doc One')
+    end
+
+    it 'includes sidebar with both filenames' do
+      get '/?file=0'
+      expect(last_response.body).to include('doc1')
+      expect(last_response.body).to include('doc2')
+    end
+  end
+
+  describe 'GET /?file=1' do
+    it 'returns doc2 content' do
+      get '/?file=1'
+      expect(last_response.body).to include('Doc Two')
+    end
+  end
+
+  describe 'GET /health' do
+    it 'returns 200' do
+      get '/health'
+      expect(last_response.status).to eq(200)
+    end
+  end
+
+  describe 'GET /?file=99' do
+    it 'returns 404' do
+      get '/?file=99'
+      expect(last_response.status).to eq(404)
     end
   end
 end

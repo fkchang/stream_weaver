@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'cgi'
+require 'socket'
 require 'sinatra/base'
 
 module StreamWeaver
@@ -42,6 +43,45 @@ module StreamWeaver
         def size
           @files.size
         end
+      end
+
+      class << self
+        attr_reader :file_list
+
+        def configure_files!(list)
+          @file_list = list
+        end
+
+        def find_available_port(start = 4800)
+          port = start
+          loop do
+            TCPServer.new('127.0.0.1', port).close
+            return port
+          rescue Errno::EADDRINUSE
+            port += 1
+          end
+        end
+      end
+
+      set :views, File.expand_path('../views/canvas', __dir__)
+
+      get '/health' do
+        'ok'
+      end
+
+      get '/' do
+        return redirect '/?file=0' unless params.key?('file')
+
+        index = params[:file].to_i
+        list  = self.class.file_list
+        path  = list&.at(index)
+        halt 404, 'File not found' unless path
+
+        dsl = File.read(path)
+        @content_html  = Reader.render_dsl(dsl)
+        @file_list     = list
+        @current_index = index
+        erb :reader_layout, layout: false
       end
 
       def self.render_dsl(dsl)

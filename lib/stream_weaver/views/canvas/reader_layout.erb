@@ -1,0 +1,4 @@
+<%= @content_html %>
+<% @file_list.files.each do |f| %>
+<a href="/?file=<%= @file_list.files.index(f) %>"><%= File.basename(f, '.rb') %></a>
+<% end %>
