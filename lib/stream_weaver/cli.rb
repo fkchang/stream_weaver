@@ -611,6 +611,7 @@ module StreamWeaver
           streamweaver canvas-reset --all         Reset all sessions
           streamweaver canvas-list                List canvas sessions
           streamweaver canvas-stop                Stop the canvas bridge
+          streamweaver canvas-read <file|dir> [...]  Browse canvas DSL docs in a local viewer
 
         Canvas Examples:
           # Create session and open browser
