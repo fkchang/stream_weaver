@@ -11,13 +11,15 @@ module StreamWeaver
     # override exists so specs (and ad-hoc tooling) can redirect writes away
     # from the user's real home directory.
     #
-    # Session names containing path separators or '..' are rejected with
+    # Session names are validated against an allowlist (alnum + . _ -, must
+    # start with alnum) and an explicit '..'-substring check. Bad names raise
     # ArgumentError -- raising rather than sanitizing keeps the contract
     # explicit and avoids silently storing under an unexpected directory.
     module History
-      MAX_AGE_DAYS = 7
-      DEFAULT_ROOT = File.expand_path('~/.streamweaver/history')
-      INVALID_NAME = %r{[/\\]|\A\s*\z|\A\.\.?\z}
+      MAX_AGE_DAYS    = 7
+      MAX_AGE_SECONDS = MAX_AGE_DAYS * 86_400
+      DEFAULT_ROOT    = File.expand_path('~/.streamweaver/history')
+      VALID_NAME      = /\A[A-Za-z0-9][A-Za-z0-9._-]*\z/
 
       module_function
 
@@ -28,6 +30,9 @@ module StreamWeaver
       # Writes dsl to <root>/<session>/<timestamp>.rb and returns the path.
       # Appends a numeric suffix on collision so back-to-back writes within
       # the same second don't clobber each other.
+      #
+      # Assumes a single-process caller per session: concurrent writes within
+      # the same second can race between the unique_path lookup and File.write.
       def record(session, dsl)
         validate_session!(session)
         dir = File.join(root, session)
@@ -45,7 +50,7 @@ module StreamWeaver
         base = root
         return unless Dir.exist?(base)
 
-        cutoff = Time.now - (MAX_AGE_DAYS * 86_400)
+        cutoff = Time.now - MAX_AGE_SECONDS
 
         Dir.children(base).each do |session|
           session_dir = File.join(base, session)
@@ -60,8 +65,9 @@ module StreamWeaver
       end
 
       def validate_session!(session)
-        raise ArgumentError, "invalid session name: #{session.inspect}" \
-          if !session.is_a?(String) || session.match?(INVALID_NAME)
+        return if session.is_a?(String) && session.match?(VALID_NAME) && !session.include?('..')
+
+        raise ArgumentError, "invalid session name: #{session.inspect}"
       end
       private_class_method :validate_session!
 

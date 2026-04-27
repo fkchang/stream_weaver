@@ -7,12 +7,14 @@ require 'stream_weaver/canvas/history'
 
 RSpec.describe StreamWeaver::Canvas::History do
   around do |ex|
+    prev = ENV['STREAMWEAVER_HISTORY_ROOT']
     Dir.mktmpdir do |d|
       ENV['STREAMWEAVER_HISTORY_ROOT'] = d
       @root = d
       ex.run
-      ENV.delete('STREAMWEAVER_HISTORY_ROOT')
     end
+  ensure
+    ENV['STREAMWEAVER_HISTORY_ROOT'] = prev
   end
 
   describe '.record' do
@@ -56,9 +58,21 @@ RSpec.describe StreamWeaver::Canvas::History do
         .to raise_error(ArgumentError)
     end
 
+    it 'rejects session names containing .. as a substring' do
+      expect { described_class.record('foo..bar', 'x') }
+        .to raise_error(ArgumentError)
+      expect { described_class.record('..foo', 'x') }
+        .to raise_error(ArgumentError)
+    end
+
     it 'rejects empty or blank session names' do
       expect { described_class.record('', 'x') }.to raise_error(ArgumentError)
       expect { described_class.record('   ', 'x') }.to raise_error(ArgumentError)
+    end
+
+    it 'accepts well-formed session names (alnum, dot, underscore, dash)' do
+      expect { described_class.record('brainstorm', 'x') }.not_to raise_error
+      expect { described_class.record('auth-flow.v2_1', 'x') }.not_to raise_error
     end
   end
 
@@ -105,10 +119,6 @@ RSpec.describe StreamWeaver::Canvas::History do
       missing = File.join(@root, 'does-not-exist-subdir')
       ENV['STREAMWEAVER_HISTORY_ROOT'] = missing
       expect { described_class.cleanup }.not_to raise_error
-    end
-
-    it 'uses MAX_AGE_DAYS = 7' do
-      expect(described_class::MAX_AGE_DAYS).to eq(7)
     end
   end
 
