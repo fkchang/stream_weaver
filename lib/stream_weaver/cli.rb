@@ -72,6 +72,8 @@ module StreamWeaver
         canvas_reset(args)
       when 'canvas-stop'
         canvas_stop
+      when 'canvas-read'
+        canvas_read(args)
       # High-level canvas helpers
       when 'pick'
         canvas_pick(args)
@@ -1296,6 +1298,38 @@ module StreamWeaver
       end
     end
 
+    def self.canvas_read(args)
+      if args.empty?
+        $stderr.puts "Usage: streamweaver canvas-read <file|dir> [file|dir ...]"
+        exit 1
+      end
+
+      require_relative 'canvas/reader'
+
+      begin
+        file_list = StreamWeaver::Canvas::Reader::FileList.build(args)
+      rescue StreamWeaver::Canvas::Reader::NoFilesError => e
+        $stderr.puts "Error: #{e.message}"
+        exit 1
+      end
+
+      StreamWeaver::Canvas::Reader.configure_files!(file_list)
+
+      port = StreamWeaver::Canvas::Reader.find_available_port
+      StreamWeaver::Canvas::Reader.set :port, port
+      StreamWeaver::Canvas::Reader.set :bind, '127.0.0.1'
+      StreamWeaver::Canvas::Reader.set :server, :puma
+      StreamWeaver::Canvas::Reader.set :logging, false
+
+      url = "http://127.0.0.1:#{port}/?file=0"
+      puts "canvas-read  #{file_list.size} file(s)  →  #{url}"
+      puts "Ctrl-C to stop"
+
+      Thread.new { sleep 0.8; open_browser(url) }
+
+      StreamWeaver::Canvas::Reader.run!
+    end
+
     def self.canvas_reset(args)
       reset_all = args.include?('--all') || args.include?('-a')
       session_name = args.reject { |a| a.start_with?('-') }.first
@@ -1545,17 +1579,18 @@ module StreamWeaver
           when :browser
             puts "Canvas '#{session_name}' ready"
             puts "Browser opened in split pane"
-          when :terminal
-            puts "Canvas '#{session_name}' ready"
-            puts "Split pane created - open #{url} in a browser"
+            puts "URL: #{url}"
           else
+            # Split pane unavailable or failed — open external browser (Forrest's Law)
             puts "Canvas '#{session_name}' ready at #{url}"
+            puts "(Opening browser...)"
+            system("open", url)
           end
-          puts ""
-          puts "URL (if browser didn't open): #{url}"
         else
+          # iTerm2 not available — open external browser (Forrest's Law)
           puts "Canvas '#{session_name}' ready at #{url}"
-          puts "(iTerm2 not detected - open URL manually for side-by-side workflow)"
+          puts "(iTerm2 not available — opening browser...)"
+          system("open", url)
         end
 
         puts ""
