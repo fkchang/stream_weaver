@@ -1328,12 +1328,10 @@ module StreamWeaver
     end
 
     def self.canvas_read(args)
-      if args.empty?
-        $stderr.puts "Usage: streamweaver canvas-read <file|dir> [file|dir ...]"
-        exit 1
-      end
-
       require_relative 'canvas/reader'
+      require_relative 'canvas/doc_store'
+
+      args = canvas_read_default_args if args.empty?
 
       begin
         file_list = StreamWeaver::Canvas::Reader::FileList.build(args)
@@ -1354,6 +1352,21 @@ module StreamWeaver
       Thread.new { sleep 0.8; open_browser(url) }
 
       StreamWeaver::Canvas::Reader.run!
+    end
+
+    # Resolves the no-arg default for `streamweaver canvas-read`. Returns the
+    # docs/streamweaver_canvas/ directory if it exists and contains .rb files;
+    # otherwise prints helpful usage and exits.
+    def self.canvas_read_default_args
+      default_path = StreamWeaver::Canvas::DocStore.path
+      if File.directory?(default_path) && Dir.glob(File.join(default_path, '*.rb')).any?
+        puts "canvas-read  using default: #{default_path}"
+        [default_path]
+      else
+        $stderr.puts "Usage: streamweaver canvas-read <file|dir> [file|dir ...]"
+        $stderr.puts "       streamweaver canvas-read   (no args; defaults to #{default_path} if it has *.rb files)"
+        exit 1
+      end
     end
 
     def self.canvas_reset(args)
