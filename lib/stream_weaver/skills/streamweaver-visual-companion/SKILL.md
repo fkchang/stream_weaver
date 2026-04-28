@@ -72,7 +72,64 @@ streamweaver panel brainstorm --layout=full      # 1400px
 4. Push updated content or next question
 5. Repeat until done
 
+Every push is auto-saved to ephemeral history (see "Persisting Visual Docs" below). The user can promote any state to a permanent doc with the in-canvas Save-as-doc button — that's their action, not yours.
+
 For explicit option selection (optional): add a `radio_group` + `button`, then use `canvas-wait brainstorm` to block until they click. Returns JSON with selection.
+
+## Persisting Visual Docs
+
+Every canvas session has two tiers of persistence — both work without any action from you.
+
+### Tier 1: Auto-saved history (always-on)
+
+Every `streamweaver canvas-push` call automatically writes the DSL to `~/.streamweaver/history/<session>/<YYYYMMDD_HHMMSS>.rb`. The CLI prints the saved path on stderr:
+
+```
+$ streamweaver canvas-push brainstorm <<'RUBY' ... RUBY
+  saved: /Users/.../streamweaver/history/brainstorm/20260428_153012.rb
+Pushed to brainstorm
+```
+
+You don't have to ask the user, configure anything, or run a separate save command. The history is the project's safety net — entries older than 7 days are auto-cleaned. **Never in git, never noisy.** It's the user's "I forgot to save that good diagram from yesterday" insurance.
+
+### Tier 2: Persistent project docs (user-driven)
+
+Each canvas page has a floating **💾 Save as doc** button in the bottom-right. The user clicks it, names the doc (pre-filled with `<session>-YYYYMMDD-HHMM`), and the DSL is written to:
+
+- `<git_root>/docs/streamweaver_canvas/<name>.rb` if invoked inside a git repo
+- `~/.streamweaver/canvas/<name>.rb` otherwise
+
+These are the *intentional* keep-forever artifacts that get committed to the repo and shared with teammates.
+
+**Important:** Saving is a user action, not yours. Don't try to "save the canvas" yourself unless the user explicitly asks. If the user says "save this as X" and the button isn't easy to reach, you can fall back to:
+
+```bash
+curl -sX POST "http://localhost:<bridge-port>/canvas/<session>/save-doc" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"<doc-name>"}'
+```
+
+The bridge port is shown in `streamweaver canvas-list` output.
+
+### Browsing saved docs
+
+`streamweaver canvas-read` with no arguments opens the project's `docs/streamweaver_canvas/` directory in a local viewer. The user just runs:
+
+```bash
+streamweaver canvas-read
+# canvas-read  using default: <git_root>/docs/streamweaver_canvas
+# → opens browser with sidebar listing every saved doc
+```
+
+If the user asks "show me what we saved," that's the command. No paths needed.
+
+To browse the *history* tier (auto-saved snapshots), pass it explicitly:
+
+```bash
+streamweaver canvas-read ~/.streamweaver/history/brainstorm/
+```
+
+A combined view (history + docs visible together in one viewer) is on the roadmap (`6m8`, `q4y` in beads).
 
 ## Returning to Terminal
 
@@ -138,10 +195,25 @@ badge "New", color: :green
 status_dot :green, "Active"
 ```
 
+## How `streamweaver panel` Opens the Browser
+
+**You don't need to detect the terminal or call any helper scripts.** `streamweaver panel <session>` figures out the best experience automatically:
+
+- **In iTerm2:** opens as a vertical split pane next to the terminal so the canvas lives alongside the conversation. This is the ideal UX — the user sees diagrams without leaving the terminal context.
+- **Anywhere else (Terminal.app, VSCode terminal, kitty, alacritty, tmux, SSH, Linux):** opens in the default system browser (a new tab/window) and prints the URL.
+
+Either way the URL is printed in stdout so the user has a fallback.
+
+**Anti-patterns to avoid:**
+- Don't run `python` scripts to drive iTerm — the gem uses `~/work/iterm2_ruby` (Ruby) and the CLI handles invocation.
+- Don't try to `osascript`/AppleScript the iTerm split yourself — `streamweaver panel` already does this through the iTerm2 Ruby API.
+- Don't open the browser with a shell `open` / `xdg-open` after `streamweaver panel` — it already opened one (or split into one). Doing so creates duplicates.
+
+If you specifically need the browser opened externally even when iTerm is available (e.g., for screen sharing on a separate display), that's a feature request — file a bd issue rather than working around it in the skill.
+
 ## Known Gotchas
 
 - `spacer` and `divider` don't exist — use `div(style: "height:Npx")`
 - `theme: :light` unrecognized — omit, defaults to `:default`
 - StreamWeaver auto-selects an available port (not always 4567) — capture the URL from stdout
-- The browser tab opens automatically on `streamweaver panel` — no need to navigate manually
 - Canvas sessions default to `:fluid` (full-width) — use `--layout=default` if you want the 900px centered card
