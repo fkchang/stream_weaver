@@ -77,15 +77,16 @@ State write → only observers of that key re-render. Surgical DOM updates.
 ## Phase 1: Whole-Block Re-Execution
 
 ### Goal
-Port as many existing StreamWeaver examples as possible. Prove the build pipeline. Validate DSL compatibility.
+Prove the build pipeline with the two simplest existing examples (`hello_world`, `todo_list`). Validate DSL compatibility. Expand to more examples once the pipeline works.
 
 ### How it works
 
 1. `Adapter::Opal` implements the same interface as `Adapter::AlpineJS`
-2. DSL methods call `OpalHtmlBuilder` (a minimal tag helper) instead of Phlex
-3. State is a plain Ruby hash held in an `OpalRuntime` object
-4. On any state change (input event, button click): re-run entire DSL block → produce HTML string → `morphdom.js` patches the DOM
-5. Event listeners are re-attached after each morph
+2. A new **browser-only entrypoint** (`lib/stream_weaver/opal_entry.rb`) requires only Opal-safe files — no Sinatra, Phlex, AlpineJS adapter, iTerm, or service client
+3. `OpalRuntime` holds the state hash, the DSL block proc, and the callback registry
+4. On page load: run the DSL block → `OpalRenderer` accumulates HTML → inject into DOM
+5. On state change (input, button): re-run DSL block → new HTML → `morphdom.js` patches DOM
+6. **Callback registry**: `OpalRuntime` maintains a `Hash` of `dom_id → Ruby proc`. When an input fires `oninput` or a button fires `onclick`, the JS bridge looks up the proc and calls it. This is how button blocks and on_change callbacks survive DOM re-renders.
 
 ### OpalRenderer — replaces ComponentRenderer, not just the adapter
 
@@ -134,6 +135,10 @@ end
 
 `OpalRenderer` is the view object passed to every component's `render(view, state)`. The adapter methods receive it and call its tag helpers to accumulate HTML. `ComponentRenderer` (Phlex) is only used in server mode.
 
+**Scope of Phlex emulation:** Components also call tag methods directly on `view` outside the adapter (`view.p`, `view.span`, `view.h4`, `view.hr`, `view.ul`, `view.li`, `view.strong`, etc.). `OpalRenderer` must implement the full set of tag methods used anywhere in `components.rb` — this is not limited to the methods the adapter calls. The Opal compatibility spike (below) should enumerate the complete set by grepping `view\.[a-z]` in `components.rb`.
+
+**Top-level shell:** `lib/stream_weaver/views.rb` owns the page shell (doctype, `<head>`, theme CSS, fonts, script injection). In Opal mode, a separate `OpalShell` class generates the `index.html` at build time — it is not compiled into `app.js`. `OpalShell` is called by `OpalBuilder`, not by the runtime.
+
 ### Build pipeline
 
 ```bash
@@ -154,24 +159,21 @@ Deploy `dist/` to GitHub Pages or any static host.
 
 `Adapter::Base` defines 42 `render_*` methods. Phase 1 only needs the subset used by the simple examples. Non-implemented methods raise `NotImplementedError` (already the `Base` default), which is acceptable for Phase 1.
 
-**Must implement for Phase 1:**
+**Must implement for Phase 1 (`hello_world` + `todo_list`):**
 
-| Method | Used by |
-|---|---|
-| `render_header` | hello_world, todo_list, most examples |
-| `render_text_field` | hello_world, todo_list, form_demo |
-| `render_checkbox` | hello_world |
-| `render_button` | todo_list, form_demo |
-| `render_div` | todo_list (container) |
-| `render_markdown` | markdown_demo, md() calls |
-| `render_card` | dashboard_components |
-| `render_vstack` / `render_hstack` | layout examples |
-| `render_select` | form_demo |
-| `render_table` | data display examples |
-| `render_cdn_scripts` | page bootstrap (morphdom.js inclusion) |
-| `render_text` | plain text components |
+| Method | Used by | Note |
+|---|---|---|
+| `render_header` | hello_world, todo_list | adapter method exists |
+| `render_text_field` | hello_world, todo_list | adapter method exists |
+| `render_checkbox` | hello_world | adapter method exists |
+| `render_button` | todo_list | adapter method exists |
+| `render_div` | todo_list (container) | adapter method exists |
+| `render_markdown` | `md()` calls | adapter method exists |
+| `render_cdn_scripts` | page bootstrap | generates morphdom CDN link |
 
-**Deferred (raise NotImplementedError):** tabs, breadcrumbs, mermaid, chartjs, design_deck, slide_container, sidebar_toc, pipeline, kpi_dashboard, and all visual/presentation components.
+**Note:** `render_card` and `render_text` are NOT adapter methods — `Card` and `Text` components render directly in the component class body using `view.*` tag calls. They are covered by `OpalRenderer`'s Phlex tag emulation, not by the adapter.
+
+**Deferred (raise NotImplementedError for now):** vstack, hstack, select, table, tabs, breadcrumbs, mermaid, chartjs, design_deck, and all visual/presentation components. Expand as more examples are ported.
 
 Apps that use `feed`, `streamer`, `service_client` (server-push features) are out of scope for Opal — they require a server by definition.
 
@@ -237,16 +239,22 @@ end
 
 ### Explicit watch (edge cases)
 
-For side effects that don't map to DOM re-rendering:
+For side effects that don't map to DOM re-rendering. The block receives no arguments — read from state directly:
 
 ```ruby
 app "MMA Tracker" do
-  watch(:current_student) do |student|
-    # Only persists to Supabase when student changes, not on every render
-    supabase.upsert("students", student)
+  watch(:current_student) do
+    # Fires only when state[:current_student] changes
+    supabase.upsert("students", state[:current_student])
   end
 end
 ```
+
+### Known ReactiveState limitations (deferred to later phases)
+
+- **In-place mutations are invisible:** `state[:todos] << item` and `state[:todos].delete_at(i)` mutate the Array without triggering `[]=`. Phase 1 (whole-block re-execution) is immune since the block always re-runs. Phase 2 workaround: require that array/hash mutations go through `state[:todos] = state[:todos].dup << item`, or wrap values in a deep-observable proxy (later work).
+- **Observer clearing:** The current design clears observers after each write and re-registers them on next render. This breaks if two state keys are read by the same observer and one fires before a re-render re-registers. A subscriber list with stable IDs (instead of clear-on-fire) is the correct fix — deferred to Phase 2 implementation work.
+- **No DOM lifecycle:** Observers for removed DOM subtrees accumulate. A cleanup hook (called by morphdom's `onBeforeElUpdated`) is needed to deregister stale observers. Deferred to Phase 2.
 
 ---
 
@@ -278,9 +286,11 @@ This ships in Phase 2. Phase 1 apps are single-page (no sub-routes needed for he
 
 ### Phase 1
 - `streamweaver opal-build hello_world.rb` produces a working `dist/index.html`
-- At least 5 existing examples port with zero DSL changes
+- `hello_world` and `todo_list` run correctly in the browser with zero DSL changes
+- Buttons and text fields work (callback registry wires correctly)
 - `dist/` deploys to GitHub Pages and works in Chrome/Safari/Firefox
 - No server process needed at runtime
+- (Stretch) 2–3 additional examples port once the two above work
 
 ### Phase 2
 - `ReactiveState` passes isolated unit tests (observable hash behavior)
@@ -292,14 +302,14 @@ This ships in Phase 2. Phase 1 apps are single-page (no sub-routes needed for he
 
 ## Required Spike (Before Phase 1 Begins)
 
-**Opal compatibility check** — all StreamWeaver lib files use `# frozen_string_literal: true` and Ruby 3.x syntax (pattern matching, endless ranges, numbered block params). Opal's Ruby compatibility is not complete. Before writing `Adapter::Opal`, run a spike:
+**Opal compatibility + require tree spike** — this is the first task of Phase 1. Its output defines what is actually buildable.
 
-1. Add `opal` to the Gemfile
-2. Attempt to compile `lib/stream_weaver/display_dsl.rb` and `lib/stream_weaver/components.rb` via `Opal::Builder`
-3. Document which constructs fail (frozen strings, `pp`, `Kernel#caller`, etc.)
-4. The spike output is the compatibility constraint list that Phase 1 must work within
-
-This spike is the first task of Phase 1 — its output may narrow or expand the component compatibility list above.
+1. Add `opal` to the Gemfile (development group)
+2. Create `lib/stream_weaver/opal_entry.rb` — a browser-only entrypoint that requires only Opal-safe files. `lib/stream_weaver.rb` eagerly loads Sinatra, Phlex, AlpineJS adapter, `iterm`, `service`, `service_client`, `admin`, `cli` — none of these can compile under Opal. The spike maps which files are safe vs. server-only.
+3. Attempt to compile `opal_entry.rb` (which includes `display_dsl.rb`, `components.rb`, `app.rb` minus server deps) via `Opal::Builder`
+4. Document which constructs fail: `frozen_string_literal`, `pp`, `Kernel#caller`, pattern matching syntax, etc.
+5. Check `kramdown` (used by `Adapter::AlpineJS` for Markdown rendering) — if it doesn't compile under Opal, `render_markdown` must use a JS Markdown library (e.g., `marked.js`) called via `opal-browser`'s JS interop instead.
+6. The spike output is the compatibility constraint list that Phase 1 must work within and may narrow the component compatibility table above.
 
 ## Open Questions
 
