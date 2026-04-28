@@ -237,11 +237,148 @@ module StreamWeaver
             <div id="app-container" #{container_attrs(session.state, adapter)}>
               #{initial_content}
             </div>
+            #{save_doc_widget(session_name)}
             <script>
               #{polling_script(session_name, session.html_version)}
             </script>
           </body>
           </html>
+        HTML
+      end
+
+      # Floating "Save as doc" button + Alpine.js modal that POSTs the
+      # session's last-good DSL to /canvas/:name/save-doc, promoting it from
+      # ephemeral history to docs/streamweaver_canvas/<name>.rb.
+      def save_doc_widget(session_name)
+        <<~HTML
+          <style>
+            [x-cloak] { display: none !important; }
+            .sw-save-doc-btn {
+              position: fixed; bottom: 1rem; right: 1rem; z-index: 50;
+              background: var(--sw-color-primary, #1f6feb); color: #fff;
+              border: none; border-radius: 999px; padding: 0.55rem 1rem;
+              font-size: 0.85rem; font-weight: 600; cursor: pointer;
+              box-shadow: 0 6px 16px rgba(28,25,23,0.18);
+              opacity: 0.85; transition: opacity 120ms ease, transform 120ms ease;
+            }
+            .sw-save-doc-btn:hover { opacity: 1; transform: translateY(-1px); }
+            .sw-save-doc-modal {
+              position: fixed; inset: 0; z-index: 60;
+              background: rgba(15, 17, 23, 0.45);
+              display: flex; align-items: center; justify-content: center;
+            }
+            .sw-save-doc-dialog {
+              background: #fff; border-radius: 8px; padding: 1.5rem;
+              width: min(440px, 90vw); box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+              font-family: 'Source Sans 3', system-ui, sans-serif;
+            }
+            .sw-save-doc-dialog h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; }
+            .sw-save-doc-dialog p.hint {
+              margin: 0 0 1rem 0; color: #6b7280; font-size: 0.85rem;
+            }
+            .sw-save-doc-dialog input[type=text] {
+              width: 100%; padding: 0.55rem 0.75rem;
+              border: 1px solid #d1d5db; border-radius: 5px;
+              font-size: 0.95rem; font-family: ui-monospace, monospace;
+              box-sizing: border-box;
+            }
+            .sw-save-doc-dialog input[type=text]:focus {
+              outline: 2px solid var(--sw-color-primary, #1f6feb); outline-offset: -1px;
+              border-color: transparent;
+            }
+            .sw-save-doc-error {
+              margin-top: 0.75rem; padding: 0.5rem 0.75rem;
+              background: #fee2e2; color: #991b1b; border-radius: 4px;
+              font-size: 0.85rem;
+            }
+            .sw-save-doc-success {
+              margin-top: 0.75rem; padding: 0.5rem 0.75rem;
+              background: #dcfce7; color: #166534; border-radius: 4px;
+              font-size: 0.85rem; word-break: break-all;
+            }
+            .sw-save-doc-actions {
+              display: flex; justify-content: flex-end; gap: 0.5rem;
+              margin-top: 1rem;
+            }
+            .sw-save-doc-actions button {
+              padding: 0.45rem 1rem; border-radius: 5px;
+              font-size: 0.9rem; cursor: pointer; border: 1px solid transparent;
+            }
+            .sw-save-doc-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+            .sw-save-doc-cancel { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
+            .sw-save-doc-cancel:hover:not(:disabled) { background: #e5e7eb; }
+            .sw-save-doc-save {
+              background: var(--sw-color-primary, #1f6feb); color: #fff;
+            }
+            .sw-save-doc-save:hover:not(:disabled) { filter: brightness(1.05); }
+          </style>
+          <div x-data="{
+            open: false,
+            name: '',
+            saving: false,
+            savedPath: null,
+            error: null,
+            defaultName() {
+              const d = new Date();
+              const pad = n => String(n).padStart(2, '0');
+              const ymd = d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate());
+              const hm = pad(d.getHours()) + pad(d.getMinutes());
+              return '#{session_name}-' + ymd + '-' + hm;
+            },
+            openDialog() {
+              this.error = null; this.savedPath = null;
+              this.name = this.defaultName();
+              this.open = true;
+              this.$nextTick(() => this.$refs.input && this.$refs.input.select());
+            },
+            async save() {
+              if (this.saving) return;
+              this.saving = true; this.error = null;
+              try {
+                const res = await fetch('/canvas/#{session_name}/save-doc', {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({name: this.name})
+                });
+                const data = await res.json();
+                if (res.ok && data.ok) {
+                  this.savedPath = data.path;
+                  setTimeout(() => { this.open = false; }, 1800);
+                } else {
+                  this.error = data.error || ('HTTP ' + res.status);
+                }
+              } catch (e) {
+                this.error = e.message;
+              } finally {
+                this.saving = false;
+              }
+            }
+          }" @keydown.escape.window="open = false">
+            <button class="sw-save-doc-btn" @click="openDialog()" title="Save this canvas as a persistent doc">
+              💾 Save as doc
+            </button>
+            <div x-show="open" x-cloak class="sw-save-doc-modal" @click.self="open = false">
+              <div class="sw-save-doc-dialog" @click.stop>
+                <h3>Save canvas as doc</h3>
+                <p class="hint">Writes to <code>docs/streamweaver_canvas/&lt;name&gt;.rb</code> (or <code>~/.streamweaver/canvas/</code> outside a git repo).</p>
+                <input type="text" x-model="name" x-ref="input"
+                       @keydown.enter.prevent="save()"
+                       :disabled="saving"
+                       placeholder="my-canvas-doc">
+                <div x-show="error" x-text="error" class="sw-save-doc-error"></div>
+                <div x-show="savedPath" class="sw-save-doc-success">
+                  ✓ Saved to <code x-text="savedPath"></code>
+                </div>
+                <div class="sw-save-doc-actions">
+                  <button class="sw-save-doc-cancel" @click="open = false" :disabled="saving">Cancel</button>
+                  <button class="sw-save-doc-save" @click="save()" :disabled="saving">
+                    <span x-show="!saving">Save</span>
+                    <span x-show="saving">Saving...</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         HTML
       end
 
