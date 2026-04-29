@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
 require 'cgi'
+require 'json'
 require 'socket'
 require 'sinatra/base'
 require 'stream_weaver/canvas/bridge_server'
+require 'stream_weaver/canvas/doc_store'
 
 module StreamWeaver
   module Canvas
@@ -111,9 +113,39 @@ module StreamWeaver
         @content_html    = Reader.render_dsl(dsl)
         @file_list       = list
         @current_index   = index
+        @current_file    = path
         @sw_styles       = StreamWeaver::Canvas::BridgeServer::SW_STYLES
         @mermaid_zoom_js = MERMAID_ZOOM_JS
         erb :reader_layout, layout: false
+      end
+
+      # Promote a history snapshot to a persistent canvas doc (Tier 2).
+      # Body: {"file": <integer-index>, "name": "<doc-name>"}.
+      # Mirrors BridgeServer's /canvas/:name/save-doc contract: 200 on success,
+      # 422 on bad index / bad name, 404 when no list configured, 500 otherwise.
+      post '/save-doc' do
+        content_type :json
+        list = self.class.file_list
+        halt 404, { ok: false, error: 'No file list configured' }.to_json unless list
+
+        body  = JSON.parse(request.body.read, symbolize_names: true) rescue {}
+        index = body[:file]
+        name  = body[:name]
+
+        file_path = list.at(index.to_i) if index.is_a?(Integer) || index.respond_to?(:to_i)
+        unless file_path && File.exist?(file_path)
+          halt 422, { ok: false, error: "File index out of range: #{index.inspect}" }.to_json
+        end
+
+        dsl = File.read(file_path)
+        begin
+          saved_path = StreamWeaver::Canvas::DocStore.save(name, dsl)
+          { ok: true, path: saved_path }.to_json
+        rescue ArgumentError => e
+          halt 422, { ok: false, error: e.message }.to_json
+        rescue StandardError => e
+          halt 500, { ok: false, error: e.message }.to_json
+        end
       end
 
       def self.render_dsl(dsl)
