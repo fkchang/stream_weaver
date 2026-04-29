@@ -9,6 +9,7 @@ require_relative "stream_weaver/display_dsl"
 require_relative "stream_weaver/app"
 require_relative "stream_weaver/components"
 require_relative "stream_weaver/adapter/base"
+# Phase 1 placeholders — implemented in subsequent tasks:
 require_relative "stream_weaver/adapter/opal"
 require_relative "stream_weaver/opal/renderer"
 require_relative "stream_weaver/opal/runtime"
