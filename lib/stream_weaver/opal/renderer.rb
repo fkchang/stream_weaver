@@ -45,9 +45,10 @@ module StreamWeaver
 
       def attrs_to_html(attrs)
         return "" if attrs.empty?
-        " " + attrs.map do |k, v|
+        " " + attrs.filter_map do |k, v|
+          next if v == false
           key = k.to_s.tr("_", "-")
-          v == true ? key : "#{key}=\"#{v}\""
+          v == true ? key : "#{key}=\"#{html_escape(v.to_s)}\""
         end.join(" ")
       end
 

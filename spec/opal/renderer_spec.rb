@@ -53,6 +53,18 @@ RSpec.describe StreamWeaver::Opal::OpalRenderer do
       renderer.hr(class: "divider")
       expect(renderer.to_html).to eq('<hr class="divider">')
     end
+
+    it "omits attributes with false values" do
+      renderer.input(type: "checkbox", disabled: false)
+      expect(renderer.to_html).to eq('<input type="checkbox">')
+    end
+  end
+
+  describe "#attrs_to_html" do
+    it "escapes double quotes in attribute values" do
+      renderer.div(title: 'Say "hello"') { }
+      expect(renderer.to_html).to eq('<div title="Say &quot;hello&quot;"></div>')
+    end
   end
 
   describe "#plain" do
