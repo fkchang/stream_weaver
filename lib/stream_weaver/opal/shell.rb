@@ -5,6 +5,7 @@ module StreamWeaver
     class OpalShell
       MORPHDOM_CDN = "https://unpkg.com/morphdom@2.7.4/dist/morphdom.min.js"
 
+      # title and app_js are build-time developer-supplied values — not user input. No escaping applied.
       def self.render(title: "StreamWeaver App", app_js: "app.js")
         <<~HTML
           <!DOCTYPE html>
