@@ -11,9 +11,9 @@ module StreamWeaver
       class NoFilesError < StandardError; end
 
       class FileList
-        attr_reader :files
+        attr_reader :files, :history_roots
 
-        def self.build(args)
+        def self.build(args, history_roots: [])
           files = args.flat_map do |arg|
             if File.directory?(arg)
               Dir.glob(File.join(arg, '*.rb')).sort
@@ -26,11 +26,12 @@ module StreamWeaver
 
           raise NoFilesError, "No .rb files found in: #{args.join(', ')}" if files.empty?
 
-          new(files)
+          new(files, history_roots: history_roots)
         end
 
-        def initialize(files)
+        def initialize(files, history_roots: [])
           @files = files
+          @history_roots = history_roots.map { |p| File.expand_path(p) }
         end
 
         def groups
@@ -39,6 +40,21 @@ module StreamWeaver
 
         def indexed_groups
           @indexed_groups ||= @files.each_with_index.group_by { |f, _| File.dirname(f) }
+        end
+
+        # True when dir is the same as a history root or sits underneath one.
+        def history_dir?(dir)
+          @history_roots.any? { |r| dir == r || dir.start_with?(r + '/') }
+        end
+
+        # Sidebar splits: docs (explicit args) render above, history (auto-collected
+        # snapshots from ~/.streamweaver/history/) renders below collapsed.
+        def docs_groups
+          indexed_groups.reject { |dir, _| history_dir?(dir) }
+        end
+
+        def history_groups
+          indexed_groups.select { |dir, _| history_dir?(dir) }
         end
 
         def at(index)

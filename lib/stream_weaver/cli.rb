@@ -1330,11 +1330,15 @@ module StreamWeaver
     def self.canvas_read(args)
       require_relative 'canvas/reader'
       require_relative 'canvas/doc_store'
+      require_relative 'canvas/history'
 
-      args = canvas_read_default_args if args.empty?
+      history_roots = []
+      if args.empty?
+        args, history_roots = canvas_read_default_args
+      end
 
       begin
-        file_list = StreamWeaver::Canvas::Reader::FileList.build(args)
+        file_list = StreamWeaver::Canvas::Reader::FileList.build(args, history_roots: history_roots)
       rescue StreamWeaver::Canvas::Reader::NoFilesError => e
         $stderr.puts "Error: #{e.message}"
         exit 1
@@ -1354,19 +1358,33 @@ module StreamWeaver
       StreamWeaver::Canvas::Reader.run!
     end
 
-    # Resolves the no-arg default for `streamweaver canvas-read`. Returns the
-    # docs/streamweaver_canvas/ directory if it exists and contains .rb files;
-    # otherwise prints helpful usage and exits.
+    # Resolves the no-arg default for `streamweaver canvas-read`. Returns
+    # [args, history_roots] where args is the list of directories/files for
+    # FileList.build and history_roots tags ~/.streamweaver/history/ paths so
+    # the sidebar can render them in a separate collapsed section.
     def self.canvas_read_default_args
-      default_path = StreamWeaver::Canvas::DocStore.path
-      if File.directory?(default_path) && Dir.glob(File.join(default_path, '*.rb')).any?
-        puts "canvas-read  using default: #{default_path}"
-        [default_path]
-      else
+      docs_path    = StreamWeaver::Canvas::DocStore.path
+      history_root = StreamWeaver::Canvas::History.root
+
+      has_docs   = File.directory?(docs_path) && Dir.glob(File.join(docs_path, '*.rb')).any?
+      session_dirs = Dir.glob(File.join(history_root, '*/')).map { |d| d.sub(%r{/\z}, '') }.sort
+
+      args = []
+      args << docs_path if has_docs
+      args.concat(session_dirs)
+
+      if args.empty?
         $stderr.puts "Usage: streamweaver canvas-read <file|dir> [file|dir ...]"
-        $stderr.puts "       streamweaver canvas-read   (no args; defaults to #{default_path} if it has *.rb files)"
+        $stderr.puts "       streamweaver canvas-read   (no args; defaults to #{docs_path} + ~/.streamweaver/history/)"
         exit 1
       end
+
+      summary = []
+      summary << "docs: #{docs_path}" if has_docs
+      summary << "history: #{session_dirs.size} session(s)" if session_dirs.any?
+      puts "canvas-read  using default — #{summary.join(', ')}"
+
+      [args, [history_root]]
     end
 
     def self.canvas_reset(args)

@@ -15,14 +15,20 @@ require 'stream_weaver/canvas/doc_store'
 RSpec.describe StreamWeaver::CLI do
   describe '.canvas_read with no args' do
     around do |ex|
-      prev = ENV['STREAMWEAVER_DOC_ROOT']
-      Dir.mktmpdir do |d|
-        ENV['STREAMWEAVER_DOC_ROOT'] = d
-        @doc_root = d
-        ex.run
+      prev_doc  = ENV['STREAMWEAVER_DOC_ROOT']
+      prev_hist = ENV['STREAMWEAVER_HISTORY_ROOT']
+      Dir.mktmpdir do |doc_d|
+        Dir.mktmpdir do |hist_d|
+          ENV['STREAMWEAVER_DOC_ROOT']     = doc_d
+          ENV['STREAMWEAVER_HISTORY_ROOT'] = hist_d
+          @doc_root     = doc_d
+          @history_root = hist_d
+          ex.run
+        end
       end
     ensure
-      ENV['STREAMWEAVER_DOC_ROOT'] = prev
+      ENV['STREAMWEAVER_DOC_ROOT']     = prev_doc
+      ENV['STREAMWEAVER_HISTORY_ROOT'] = prev_hist
     end
 
     before do
@@ -76,14 +82,19 @@ RSpec.describe StreamWeaver::CLI do
 
   describe '.canvas_read with explicit args (regression)' do
     around do |ex|
-      prev = ENV['STREAMWEAVER_DOC_ROOT']
-      Dir.mktmpdir do |d|
-        ENV['STREAMWEAVER_DOC_ROOT'] = d
-        @doc_root = d
-        ex.run
+      prev_doc  = ENV['STREAMWEAVER_DOC_ROOT']
+      prev_hist = ENV['STREAMWEAVER_HISTORY_ROOT']
+      Dir.mktmpdir do |doc_d|
+        Dir.mktmpdir do |hist_d|
+          ENV['STREAMWEAVER_DOC_ROOT']     = doc_d
+          ENV['STREAMWEAVER_HISTORY_ROOT'] = hist_d
+          @doc_root = doc_d
+          ex.run
+        end
       end
     ensure
-      ENV['STREAMWEAVER_DOC_ROOT'] = prev
+      ENV['STREAMWEAVER_DOC_ROOT']     = prev_doc
+      ENV['STREAMWEAVER_HISTORY_ROOT'] = prev_hist
     end
 
     before do
