@@ -52,6 +52,12 @@ RSpec.describe StreamWeaver::Adapter::Opal do
       adapter.render_checkbox(view, :agree, "I agree", {}, { agree: true })
       expect(view.to_html).to include("checked")
     end
+
+    it "omits checked attribute when state is false" do
+      adapter.render_checkbox(view, :agree, "I agree", {}, { agree: false })
+      # Must not match ' checked' (with space) to avoid false positive from 'this.checked' in handler
+      expect(view.to_html).not_to include(' checked')
+    end
   end
 
   describe "#render_button" do
