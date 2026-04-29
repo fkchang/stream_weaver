@@ -11,3 +11,7 @@ gem "iterm2_ruby", path: File.expand_path("~/work/iterm2_ruby")
 gem "rake", "~> 13.0"
 
 gem "rspec", "~> 3.0"
+
+group :development do
+  gem "opal", "~> 1.8"
+end
