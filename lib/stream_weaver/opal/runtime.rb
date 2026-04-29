@@ -56,6 +56,7 @@ module StreamWeaver
         # :nocov:
       end
 
+      # :nocov:
       def js_start
         html = render_html
         patch_dom(html)
@@ -70,6 +71,7 @@ module StreamWeaver
         update_state(key, value)
         patch_dom(render_html)
       end
+      # :nocov:
 
       private
 

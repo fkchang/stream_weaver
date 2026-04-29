@@ -46,10 +46,15 @@ RSpec.describe StreamWeaver::Opal::OpalRuntime do
   end
 
   describe "#render_html" do
-    it "returns an HTML string" do
-      runtime.set_block { }  # empty block — no DSL calls
-      allow(runtime).to receive(:render_html).and_return("<div></div>")
-      expect(runtime.render_html).to be_a(String)
+    it "raises NotImplementedError" do
+      expect { runtime.render_html }.to raise_error(NotImplementedError, /render_html/)
+    end
+
+    it "clears the callback registry before raising" do
+      runtime.register_callback("btn-x") { }
+      expect { runtime.render_html }.to raise_error(NotImplementedError)
+      # callbacks must be cleared even though render_html raises
+      expect(runtime.instance_variable_get(:@callbacks)).to be_empty
     end
   end
 end
