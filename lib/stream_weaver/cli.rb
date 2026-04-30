@@ -552,6 +552,7 @@ module StreamWeaver
           streamweaver stop                   Stop the background service
           streamweaver status                 Show service status
           streamweaver llm                    Output LLM documentation
+          streamweaver opal-build <app.rb> [--output DIR]  Build a static Opal app to dist/
           streamweaver --help                 Show this help
           streamweaver --version              Show version
 
@@ -968,13 +969,22 @@ module StreamWeaver
     # Build a StreamWeaver app to a static HTML/JS bundle via Opal
     # Usage: streamweaver opal-build <app.rb> [--output DIR]
     def self.opal_build(args)
-      require 'stream_weaver/opal/builder'
+      require_relative 'opal/builder'
       file = args.shift
       unless file && File.exist?(file)
-        puts "Usage: streamweaver opal-build <app.rb> [--output DIR]"
+        $stderr.puts "Usage: streamweaver opal-build <app.rb> [--output DIR]"
         exit 1
       end
-      output_dir = args.include?('--output') ? args[args.index('--output') + 1] : 'dist'
+      output_dir = if args.include?('--output')
+        val = args[args.index('--output') + 1]
+        unless val && !val.start_with?('--')
+          $stderr.puts "Error: --output requires a directory argument"
+          exit 1
+        end
+        val
+      else
+        'dist'
+      end
       StreamWeaver::Opal::OpalBuilder.build(file, output_dir: output_dir)
       puts "Built to #{output_dir}/"
       puts "Open #{output_dir}/index.html in a browser or deploy to GitHub Pages."
