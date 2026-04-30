@@ -77,6 +77,11 @@ RSpec.describe StreamWeaver::Opal::OpalRenderer do
       renderer.plain("<script>alert(1)</script>")
       expect(renderer.to_html).to include("&lt;script&gt;")
     end
+
+    it "escapes single quotes in plain text" do
+      renderer.plain("it's here")
+      expect(renderer.to_html).to include("it&#39;s")
+    end
   end
 
   describe "#raw" do

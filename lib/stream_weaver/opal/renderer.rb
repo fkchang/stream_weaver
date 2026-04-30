@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "cgi"
+
 module StreamWeaver
   module Opal
     class OpalRenderer
@@ -61,9 +63,7 @@ module StreamWeaver
         end.join(" ")
       end
 
-      def html_escape(str)
-        str.gsub("&", "&amp;").gsub("<", "&lt;").gsub(">", "&gt;").gsub('"', "&quot;")
-      end
+      def html_escape(str) = CGI.escapeHTML(str.to_s)
     end
   end
 end
