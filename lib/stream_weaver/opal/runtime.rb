@@ -46,32 +46,17 @@ module StreamWeaver
         renderer.to_html
       end
 
-      # In Opal only: expose self to JS as window.SWRuntime
-      def self.expose_to_js(instance)
-        # :nocov:
-        return unless defined?(::Opal)
-        %x{
-          window.SWRuntime = {
-            start: function() { #{instance.js_start} },
-            invoke: function(id) { #{instance.js_invoke(`id`)} },
-            update: function(key, val) { #{instance.js_update(`key`, `val`)} }
-          };
-        }
-        # :nocov:
-      end
-
       # :nocov:
-      def js_start
-        html = render_html
-        patch_dom(html)
+      def render_and_patch
+        patch_dom(render_html)
       end
 
-      def js_invoke(dom_id)
+      def invoke_and_patch(dom_id)
         invoke_callback(dom_id)
         patch_dom(render_html)
       end
 
-      def js_update(key, value)
+      def update_and_patch(key, value)
         update_state(key, value)
         patch_dom(render_html)
       end

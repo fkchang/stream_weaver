@@ -21,12 +21,13 @@ RSpec.describe StreamWeaver::Adapter::Opal do
   end
 
   describe "#render_text_field" do
-    it "renders an input with name and oninput handler" do
+    it "renders an input with data-sw-update attribute" do
       adapter.render_text_field(view, :name, {}, state)
       html = view.to_html
       expect(html).to include('name="name"')
       expect(html).to include('type="text"')
-      expect(html).to include("SWRuntime.update")
+      expect(html).to include('data-sw-update="name"')
+      expect(html).not_to include("oninput")
     end
 
     it "sets value from state" do
@@ -55,18 +56,24 @@ RSpec.describe StreamWeaver::Adapter::Opal do
 
     it "omits checked attribute when state is false" do
       adapter.render_checkbox(view, :agree, "I agree", {}, { agree: false })
-      # Must not match ' checked' (with space) to avoid false positive from 'this.checked' in handler
       expect(view.to_html).not_to include(' checked')
+    end
+
+    it "uses data-sw-toggle attribute instead of inline JS" do
+      adapter.render_checkbox(view, :agree, "I agree", {}, state)
+      html = view.to_html
+      expect(html).to include('data-sw-toggle="agree"')
+      expect(html).not_to include("onchange")
     end
   end
 
   describe "#render_button" do
-    it "renders a button element with onclick" do
+    it "renders a button with data-sw-invoke attribute" do
       adapter.render_button(view, "btn-1", "Click me", {})
       html = view.to_html
       expect(html).to include("Click me")
-      expect(html).to include("SWRuntime.invoke")
-      expect(html).to include("btn-1")
+      expect(html).to include('data-sw-invoke="btn-1"')
+      expect(html).not_to include("onclick")
     end
   end
 

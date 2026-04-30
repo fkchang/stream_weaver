@@ -26,31 +26,28 @@ module StreamWeaver
 
       # Overrides Base
       def render_text_field(view, key, options, state)
-        value = state[key] || ""
-        placeholder = options[:placeholder] || ""
         view.input(
           type: "text",
           name: key.to_s,
-          value: value,
-          placeholder: placeholder,
-          oninput: "SWRuntime.update('#{key}', this.value)"
+          value: state[key] || "",
+          placeholder: options[:placeholder] || "",
+          data_sw_update: key.to_s
         )
       end
 
       # Overrides Base
       def render_checkbox(view, key, label, _options, state)
-        checked = state[key] ? " checked" : ""
         view.raw(
           "<label>" \
           "<input type=\"checkbox\" name=\"#{key}\" " \
-          "onchange=\"SWRuntime.update('#{key}', this.checked)\"#{checked}> " \
+          "data-sw-toggle=\"#{key}\"#{state[key] ? ' checked' : ''}> " \
           "#{CGI.escapeHTML(label.to_s)}</label>"
         )
       end
 
       # Overrides Base — 5 args: (view, button_id, label, options, modal_context)
       def render_button(view, button_id, label, _options, _modal_context = nil)
-        view.button(onclick: "SWRuntime.invoke('#{button_id}')") { view.plain(label.to_s) }
+        view.button(data_sw_invoke: button_id) { view.plain(label.to_s) }
       end
 
       # Overrides Base — morphdom.js comes from OpalShell, nothing to emit here

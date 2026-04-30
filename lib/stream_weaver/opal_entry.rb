@@ -13,6 +13,7 @@ require "stream_weaver/adapter/base"
 require "stream_weaver/adapter/opal"
 require "stream_weaver/opal/renderer"
 require "stream_weaver/opal/runtime"
+require "stream_weaver/opal/bridge"
 
 # Opal-specific patches: fix methods that break in the browser.
 
@@ -20,25 +21,34 @@ require "stream_weaver/opal/runtime"
 # In Opal, source_location returns nil (no source maps in compiled JS).
 # Override button in App to use a counter-based stable_id instead.
 module StreamWeaver
-  class App
-    # Opal: source_location is nil — use counter-based IDs.
-    # NOTE: the id: keyword is not incorporated into the stable_id here (known Phase 1 limitation).
-    # Apps that use button "Label", id: loop_var will get position-based IDs instead.
-    def button(label, id: nil, **options, &block)
-      @button_counter += 1
-      stable_id = id ? "opal_#{id}" : "opal_#{@button_counter}"
-      options[:modal_context] = @modal_context if @modal_context
-      @components << Components::Button.new(label, stable_id, **options, &block)
+  module Opal
+    module AppButtonPatch
+      # Opal: source_location is nil — use counter-based IDs.
+      def button(label, id: nil, **options, &block)
+        @button_counter += 1
+        stable_id = id ? "opal_#{id}" : "opal_#{@button_counter}"
+        options[:modal_context] = @modal_context if @modal_context
+        @components << Components::Button.new(label, stable_id, **options, &block)
+      end
     end
   end
 end
+StreamWeaver::App.prepend StreamWeaver::Opal::AppButtonPatch
 
 # Opal-mode global `app` helper — replaces the Sinatra-wired StreamWeaver.app.
-# Creates an OpalRuntime with the DSL block and exposes it to JS as SWRuntime.
-def app(title, **_opts, &block)
-  adapter = StreamWeaver::Adapter::Opal.new
-  runtime = StreamWeaver::Opal::OpalRuntime.new(adapter: adapter)
-  runtime.set_block(&block)
-  StreamWeaver::Opal::OpalRuntime.expose_to_js(runtime)
-  runtime
+# Creates an OpalRuntime with the DSL block, installs delegated event listeners
+# via OpalBridge, and returns the runtime.
+module StreamWeaver
+  module Opal
+    module Kernel
+      def app(title, **_opts, &block)
+        adapter = Adapter::Opal.new
+        runtime = OpalRuntime.new(adapter: adapter)
+        runtime.set_block(&block)
+        OpalBridge.new(runtime).install
+        runtime
+      end
+    end
+  end
 end
+include StreamWeaver::Opal::Kernel
