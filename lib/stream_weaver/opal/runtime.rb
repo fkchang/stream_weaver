@@ -30,16 +30,20 @@ module StreamWeaver
       end
 
       def render_html
-        # IMPORTANT: Read lib/stream_weaver/app.rb before implementing this method.
-        # The block is the same block passed to `app "Title" do...end`. It must be
-        # executed in a context where `state`, `text_field`, `button`, etc. are all
-        # available as methods — exactly as App does server-side.
-        #
-        # The exact implementation depends on how App executes the block — check
-        # app.rb first, then model this after it. The test below uses an empty block
-        # so it passes regardless of context; Task 7 (integration) validates the real DSL.
         @callbacks.clear
-        raise NotImplementedError, "implement render_html using App's block execution pattern"
+
+        # Build the App context the same way App#rebuild_with_state does:
+        # create an App with the stored block, rebuild it with current state,
+        # then render each component using OpalRenderer.
+        app = StreamWeaver::App.new("__opal__", &@block)
+        app.rebuild_with_state(@state)
+
+        # Register button callbacks so JS SWRuntime.invoke(id) can execute them
+        register_component_callbacks(app.components)
+
+        renderer = OpalRenderer.new(@adapter, @state)
+        app.components.each { |c| c.render(renderer, @state) }
+        renderer.to_html
       end
 
       # In Opal only: expose self to JS as window.SWRuntime
@@ -74,6 +78,21 @@ module StreamWeaver
       # :nocov:
 
       private
+
+      def register_component_callbacks(components)
+        Array(components).each do |c|
+          if c.is_a?(StreamWeaver::Components::Button)
+            btn = c
+            @callbacks[btn.id] = ->(state) { btn.execute(state) }
+          end
+          if c.respond_to?(:children) && c.children
+            register_component_callbacks(c.children)
+          end
+          if c.respond_to?(:footer_component) && c.footer_component&.children
+            register_component_callbacks(c.footer_component.children)
+          end
+        end
+      end
 
       def patch_dom(html)
         # :nocov:

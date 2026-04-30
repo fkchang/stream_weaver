@@ -46,15 +46,50 @@ RSpec.describe StreamWeaver::Opal::OpalRuntime do
   end
 
   describe "#render_html" do
-    it "raises NotImplementedError" do
-      expect { runtime.render_html }.to raise_error(NotImplementedError, /render_html/)
+    it "returns an HTML string when block is set" do
+      runtime.set_block { }  # empty block — no components
+      result = runtime.render_html
+      expect(result).to be_a(String)
     end
 
-    it "clears the callback registry before raising" do
+    it "clears the callback registry before rendering" do
       runtime.register_callback("btn-x") { }
-      expect { runtime.render_html }.to raise_error(NotImplementedError)
-      # callbacks must be cleared even though render_html raises
-      expect(runtime.instance_variable_get(:@callbacks)).to be_empty
+      runtime.set_block { }
+      runtime.render_html
+      # btn-x is gone (re-registered only for components actually in the new render)
+      expect(runtime.instance_variable_get(:@callbacks)).not_to have_key("btn-x")
+    end
+
+    it "renders DSL components from the block" do
+      runtime.set_block do
+        header1 "Hello from Opal"
+      end
+      html = runtime.render_html
+      expect(html).to include("<h1>")
+      expect(html).to include("Hello from Opal")
+    end
+
+    it "registers button callbacks so invoke_callback can execute them" do
+      called = false
+      runtime.set_block do
+        button "Click me" do |_state|
+          called = true
+        end
+      end
+      runtime.render_html
+      btn_id = runtime.instance_variable_get(:@callbacks).keys.first
+      expect(btn_id).not_to be_nil
+      runtime.invoke_callback(btn_id)
+      expect(called).to be true
+    end
+
+    it "reflects current state in rendered output" do
+      runtime.set_block do
+        text_field :name, placeholder: "Enter your name"
+      end
+      runtime.update_state(:name, "Alice")
+      html = runtime.render_html
+      expect(html).to include("Alice")
     end
   end
 end

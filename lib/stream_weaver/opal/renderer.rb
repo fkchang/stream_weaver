@@ -11,13 +11,22 @@ module StreamWeaver
         @output = []
       end
 
-      # Block tags — open tag, yield, close tag
+      # Block tags — open tag, yield, close tag.
+      # If the block returns a String and nothing was added to @output inside the block,
+      # treat the return value as plain text (mirrors Phlex behavior for simple text blocks).
       %w[div span p ul ol li h1 h2 h3 h4 h5 h6 form label select textarea
          nav header footer main section article aside table thead tbody tr th td
          button fieldset legend details summary strong em a].each do |tag|
         define_method(tag) do |**attrs, &block|
           @output << "<#{tag}#{attrs_to_html(attrs)}>"
-          block&.call
+          if block
+            before_len = @output.length
+            result = block.call
+            # If block didn't add anything (returned a string), emit it as plain text
+            if @output.length == before_len && result.is_a?(String)
+              @output << html_escape(result)
+            end
+          end
           @output << "</#{tag}>"
         end
       end
