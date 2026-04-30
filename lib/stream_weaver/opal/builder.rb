@@ -25,14 +25,18 @@ module StreamWeaver
 
         # Step 2: Include Opal stdlib modules required by StreamWeaver.
         # digest comes from our stubs/ directory (not in Opal stdlib).
-        ["set", "cgi", "json", "digest"].each { |lib| builder.build(lib) rescue nil }
+        ["set", "cgi", "json", "digest"].each do |lib|
+          builder.build(lib)
+        rescue => e
+          warn "[OpalBuilder] Could not build stdlib '#{lib}': #{e.message}"
+        end
 
         # Step 3: Compile StreamWeaver's browser-only require tree.
         # This registers all StreamWeaver modules so they're available when the
         # user app's `require 'stream_weaver/opal_entry'` executes at runtime.
         builder.build("stream_weaver/opal_entry")
 
-        # Step 3: Compile the user app.
+        # Step 4: Compile the user app.
         # Strip require_relative and require 'stream_weaver' lines — everything is
         # already bundled by the opal_entry step above. Also strip the `App.run!`
         # guard since there's no ARGV in the browser.

@@ -21,15 +21,12 @@ require "stream_weaver/opal/runtime"
 # Override button in App to use a counter-based stable_id instead.
 module StreamWeaver
   class App
+    # Opal: source_location is nil — use counter-based IDs.
+    # NOTE: the id: keyword is not incorporated into the stable_id here (known Phase 1 limitation).
+    # Apps that use button "Label", id: loop_var will get position-based IDs instead.
     def button(label, id: nil, **options, &block)
-      if block
-        # Opal: source_location is nil — fall back to counter-based ID
-        @button_counter += 1
-        stable_id = "opal_#{@button_counter}"
-      else
-        @button_counter += 1
-        stable_id = @button_counter.to_s
-      end
+      @button_counter += 1
+      stable_id = id ? "opal_#{id}" : "opal_#{@button_counter}"
       options[:modal_context] = @modal_context if @modal_context
       @components << Components::Button.new(label, stable_id, **options, &block)
     end
