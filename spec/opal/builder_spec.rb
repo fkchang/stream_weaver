@@ -8,7 +8,6 @@ RSpec.describe StreamWeaver::Opal::OpalBuilder do
   describe ".build" do
     let(:app_content) do
       <<~RUBY
-        require 'stream_weaver/opal_entry'
         app "Test" do
           text "hello"
         end
