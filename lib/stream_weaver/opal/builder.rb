@@ -6,53 +6,78 @@ require_relative "shell"
 module StreamWeaver
   module Opal
     class OpalBuilder
+      # Convenience entry point
       def self.build(app_file, output_dir: "dist", title: nil)
-        FileUtils.mkdir_p(output_dir)
+        new(app_file, output_dir: output_dir, title: title).call
+      end
 
-        title ||= File.basename(app_file, ".rb").tr("_-", " ").split.map(&:capitalize).join(" ")
+      def initialize(app_file, output_dir: "dist", title: nil)
+        @app_file   = app_file
+        @output_dir = output_dir
+        @title      = title || derive_title
+        @lib_root   = File.expand_path(File.join(__dir__, "../.."))
+        @stubs_root = File.join(__dir__, "stubs")
+      end
 
-        # Build the Opal runtime + StreamWeaver + user app into a single JS bundle.
-        # lib_root = lib/ directory; stubs_root = lib/stream_weaver/opal/stubs/
-        # Stubs must be added first so they shadow any Opal stdlib for missing modules.
-        lib_root   = File.expand_path(File.join(__dir__, "../.."))
-        stubs_root = File.join(__dir__, "stubs")
-        builder = ::Opal::Builder.new(missing_require_severity: :ignore)
-        builder.append_paths(stubs_root)  # stubs shadow Opal stdlib for digest etc.
-        builder.append_paths(lib_root)
+      def call
+        FileUtils.mkdir_p(@output_dir)
+        write_app_js
+        copy_morphdom
+        write_index_html
+      end
 
-        # Step 1: Include the Opal core runtime (sets up the global Opal object)
-        builder.build("opal")
+      private
 
-        # Step 2: Include Opal stdlib modules required by StreamWeaver.
-        # digest comes from our stubs/ directory (not in Opal stdlib).
-        ["set", "cgi", "json", "digest"].each do |lib|
+      def write_app_js
+        File.write(output_path("app.js"), compile.to_s)
+      end
+
+      def copy_morphdom
+        src = File.join(@stubs_root, "morphdom.min.js")
+        FileUtils.cp(src, output_path("morphdom.min.js")) if File.exist?(src)
+      end
+
+      def write_index_html
+        morphdom_js = File.exist?(output_path("morphdom.min.js")) ? "morphdom.min.js" : nil
+        File.write(output_path("index.html"),
+          OpalShell.render(title: @title, app_js: "app.js", morphdom_js: morphdom_js))
+      end
+
+      def compile
+        builder = build_opal_bundle
+        builder.build_str(stripped_source, File.basename(@app_file))
+      end
+
+      def build_opal_bundle
+        ::Opal::Builder.new(missing_require_severity: :ignore).tap do |b|
+          b.append_paths(@stubs_root)
+          b.append_paths(@lib_root)
+          b.build("opal")
+          build_stdlib(b)
+          b.build("stream_weaver/opal_entry")
+        end
+      end
+
+      def build_stdlib(builder)
+        %w[set cgi json digest].each do |lib|
           builder.build(lib)
         rescue => e
           warn "[OpalBuilder] Could not build stdlib '#{lib}': #{e.message}"
         end
+      end
 
-        # Step 3: Compile StreamWeaver's browser-only require tree.
-        # This registers all StreamWeaver modules so they're available when the
-        # user app's `require 'stream_weaver/opal_entry'` executes at runtime.
-        builder.build("stream_weaver/opal_entry")
-
-        # Step 4: Compile the user app.
-        # Strip require_relative and require 'stream_weaver' lines — everything is
-        # already bundled by the opal_entry step above. Also strip the `App.run!`
-        # guard since there's no ARGV in the browser.
-        app_source = File.read(app_file)
+      def stripped_source
+        File.read(@app_file)
           .gsub(/^\s*require_relative\s+['"][^'"]+['"]\s*$/, "")
           .gsub(/^\s*require\s+['"]stream_weaver['"]\s*$/, "")
-        source = builder.build_str(app_source, File.basename(app_file))
+      end
 
-        # Copy morphdom from our stubs so the bundle works without CDN access
-        morphdom_src = File.join(stubs_root, "morphdom.min.js")
-        morphdom_dest = File.join(output_dir, "morphdom.min.js")
-        FileUtils.cp(morphdom_src, morphdom_dest) if File.exist?(morphdom_src)
-        morphdom_js = File.exist?(morphdom_dest) ? "morphdom.min.js" : nil
+      def output_path(filename)
+        File.join(@output_dir, filename)
+      end
 
-        File.write(File.join(output_dir, "app.js"), source.to_s)
-        File.write(File.join(output_dir, "index.html"), OpalShell.render(title: title, app_js: "app.js", morphdom_js: morphdom_js))
+      def derive_title
+        File.basename(@app_file, ".rb").tr("_-", " ").split.map(&:capitalize).join(" ")
       end
     end
   end
