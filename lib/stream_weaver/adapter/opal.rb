@@ -37,12 +37,11 @@ module StreamWeaver
 
       # Overrides Base
       def render_checkbox(view, key, label, _options, state)
-        view.raw(
-          "<label>" \
-          "<input type=\"checkbox\" name=\"#{key}\" " \
-          "data-sw-toggle=\"#{key}\"#{state[key] ? ' checked' : ''}> " \
-          "#{CGI.escapeHTML(label.to_s)}</label>"
-        )
+        view.label do
+          view.input(type: "checkbox", name: key.to_s,
+                     data_sw_toggle: key.to_s, checked: state[key] ? true : false)
+          view.plain(" #{label}")
+        end
       end
 
       # Overrides Base — 5 args: (view, button_id, label, options, modal_context)

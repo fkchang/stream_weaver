@@ -5,6 +5,7 @@ require 'net/http'
 require 'json'
 require 'uri'
 require 'fileutils'
+require_relative 'opal/builder'
 
 module StreamWeaver
   # Command-line interface for StreamWeaver service
@@ -969,7 +970,6 @@ module StreamWeaver
     # Build a StreamWeaver app to a static HTML/JS bundle via Opal
     # Usage: streamweaver opal-build <app.rb> [--output DIR]
     def self.opal_build(args)
-      require_relative 'opal/builder'
       file = args.shift
       unless file && File.exist?(file)
         $stderr.puts "Usage: streamweaver opal-build <app.rb> [--output DIR]"
