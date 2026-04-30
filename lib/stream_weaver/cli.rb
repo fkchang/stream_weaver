@@ -81,6 +81,8 @@ module StreamWeaver
         canvas_confirm(args)
       when 'panel'
         panel(args)
+      when 'opal-build'
+        opal_build(args)
       when 'install-skill'
         install_skill(args)
       when 'setup'
@@ -957,6 +959,25 @@ module StreamWeaver
       $stderr.puts "Template error: #{e.message}"
       $stderr.puts e.backtrace.first(5).join("\n") if ENV['DEBUG']
       exit 1
+    end
+
+    # =========================================
+    # Opal Build Command
+    # =========================================
+
+    # Build a StreamWeaver app to a static HTML/JS bundle via Opal
+    # Usage: streamweaver opal-build <app.rb> [--output DIR]
+    def self.opal_build(args)
+      require 'stream_weaver/opal/builder'
+      file = args.shift
+      unless file && File.exist?(file)
+        puts "Usage: streamweaver opal-build <app.rb> [--output DIR]"
+        exit 1
+      end
+      output_dir = args.include?('--output') ? args[args.index('--output') + 1] : 'dist'
+      StreamWeaver::Opal::OpalBuilder.build(file, output_dir: output_dir)
+      puts "Built to #{output_dir}/"
+      puts "Open #{output_dir}/index.html in a browser or deploy to GitHub Pages."
     end
 
     private
