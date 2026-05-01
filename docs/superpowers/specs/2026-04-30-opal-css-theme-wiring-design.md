@@ -38,6 +38,8 @@ StreamWeaver::Theme::Presets.get(:editorial)                 # Hash or nil
 StreamWeaver::Theme::Presets.available                       # [:editorial, :technical, ...]
 StreamWeaver::Theme::Presets.generate_preset_css(:editorial) # CSS string; "" for unknown
 StreamWeaver::Theme::Presets.google_fonts_url(preset_hash)   # Google Fonts URL string
+# Note: Theme.google_fonts_url(*families_array) also exists but takes string family names,
+# not a preset hash. Always use Theme::Presets.google_fonts_url for preset-based URLs.
 
 # Dark mode
 StreamWeaver::Theme::AutoMode.inline_script  # JS string; provides swToggleTheme()
@@ -257,7 +259,7 @@ A Phase 1 `hello_world` app built with this change will look like its server-ren
 - writes `sw-theme.css` to output dir
 - `sw-theme.css` contains `visual_skills_css` content
 - `sw-theme.css` contains animation CSS content
-- with `theme: :editorial`, `sw-theme.css` contains editorial font-family declaration
+- with `theme: :editorial`, `sw-theme.css` contains `"Instrument Serif"` (editorial display font — unique identifier for the preset CSS being applied)
 - with unknown theme, warns to stderr and still writes sw-theme.css (without preset CSS)
 
 **`spec/opal/shell_spec.rb`** — add:
