@@ -1170,6 +1170,13 @@ module StreamWeaver
       def render(view, state)
         view.adapter.render_modal(view, self, state)
       end
+
+      def register_callbacks(registry)
+        return unless footer_component
+        # footer_component (ModalFooter) is not in children — traverse its children explicitly.
+        # ModalFooter is a plain container; its children are the interactive components (buttons).
+        Array(footer_component.children).each { |c| c.register_callbacks(registry) }
+      end
     end
 
     # ModalFooter component - footer section with action buttons

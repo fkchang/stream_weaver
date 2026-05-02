@@ -953,6 +953,30 @@ RSpec.describe StreamWeaver::Components do
     end
   end
 
+  describe StreamWeaver::Components::Modal do
+    describe "#register_callbacks" do
+      it "registers footer children's callbacks" do
+        modal = described_class.new(:confirm, title: "Confirm")
+        footer = StreamWeaver::Components::ModalFooter.new
+        action = ->(state) { state[:confirmed] = true }
+        btn = StreamWeaver::Components::Button.new("OK", "modal_ok", &action)
+        footer.children << btn
+        modal.footer_component = footer
+
+        registry = {}
+        modal.register_callbacks(registry)
+        expect(registry).to have_key(btn.id)
+      end
+
+      it "is a no-op when footer_component is nil" do
+        modal = described_class.new(:info, title: "Info")
+        registry = {}
+        expect { modal.register_callbacks(registry) }.not_to raise_error
+        expect(registry).to be_empty
+      end
+    end
+  end
+
   describe StreamWeaver::Components::Table do
     describe "#key" do
       it "returns the first positional arg (the state key)" do
