@@ -914,4 +914,42 @@ RSpec.describe StreamWeaver::Components do
       end
     end
   end
+
+  describe StreamWeaver::Components::Tabs do
+    def make_tabs(key, n_tabs)
+      tabs = described_class.new(key)
+      n_tabs.times do |i|
+        tab = StreamWeaver::Components::Tab.new("Tab #{i}")
+        tabs.instance_variable_get(:@children) << tab
+      end
+      tabs
+    end
+
+    describe "#register_callbacks" do
+      it "registers one callback per tab under key_tab_N keys" do
+        tabs = make_tabs(:view, 3)
+        registry = {}
+        tabs.register_callbacks(registry)
+        expect(registry.keys).to eq(["view_tab_0", "view_tab_1", "view_tab_2"])
+      end
+
+      it "callback sets state[key] to tab index" do
+        tabs = make_tabs(:view, 2)
+        registry = {}
+        tabs.register_callbacks(registry)
+        state = {}
+        registry["view_tab_1"].call(state)
+        expect(state[:view]).to eq(1)
+      end
+
+      it "uses symbol key in state (not string)" do
+        tabs = make_tabs(:panel, 2)
+        registry = {}
+        tabs.register_callbacks(registry)
+        state = {}
+        registry["panel_tab_0"].call(state)
+        expect(state).to have_key(:panel)
+      end
+    end
+  end
 end

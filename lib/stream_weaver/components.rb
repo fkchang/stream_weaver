@@ -954,6 +954,12 @@ module StreamWeaver
       def render(view, state)
         view.adapter.render_tabs(view, self, state)
       end
+
+      def register_callbacks(registry)
+        children.each_with_index do |_tab, index|
+          registry["#{@key}_tab_#{index}"] = ->(state) { state[@key] = index }
+        end
+      end
     end
 
     # Tab component - individual tab within a Tabs container
