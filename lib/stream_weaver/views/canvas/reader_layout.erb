@@ -54,10 +54,11 @@
     #nav { border-top: 1px solid #e5e7eb; padding: 0.5rem 1rem; display: flex;
            align-items: center; justify-content: space-between; flex-shrink: 0;
            background: #f9fafb; }
-    #nav button { background: #e5e7eb; color: #374151; border: none; padding: 0.3rem 0.8rem;
-                  border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
-    #nav button:hover { background: #d1d5db; }
-    #nav button:disabled { opacity: 0.35; cursor: default; }
+    #nav .nav-link { background: #e5e7eb; color: #374151; border: none; padding: 0.3rem 0.8rem;
+                     border-radius: 4px; cursor: pointer; font-size: 0.8rem;
+                     text-decoration: none; display: inline-block; }
+    #nav .nav-link:hover { background: #d1d5db; color: #111827; }
+    #nav .nav-link--disabled { opacity: 0.35; cursor: default; pointer-events: none; }
     #nav .counter { font-size: 0.8rem; color: #6b7280; }
   </style>
 
@@ -73,7 +74,9 @@
   <%# Kick off mermaid CDN preload immediately (same pattern as bridge server) %>
   <script>if (window.swMermaidPreload) window.swMermaidPreload();</script>
 </head>
-<body class="sw-theme-default sw-layout-fluid">
+<body class="sw-theme-default sw-layout-fluid"
+      hx-boost="true" hx-target="#content" hx-select="#content" hx-swap="innerHTML"
+      hx-select-oob="#nav">
 
 <%
   docs_groups    = @file_list.docs_groups
@@ -147,11 +150,17 @@
   <div id="nav">
     <% prev_idx = @current_index - 1 %>
     <% next_idx = @current_index + 1 %>
-    <button onclick="location.href='/?file=<%= prev_idx %>'"
-            <%= prev_idx < 0 ? 'disabled' : '' %>>◀ Prev</button>
+    <% if prev_idx >= 0 %>
+      <a href="/?file=<%= prev_idx %>" class="nav-link" data-nav="prev">◀ Prev</a>
+    <% else %>
+      <span class="nav-link nav-link--disabled">◀ Prev</span>
+    <% end %>
     <span class="counter"><%= @current_index + 1 %> of <%= @file_list.size %></span>
-    <button onclick="location.href='/?file=<%= next_idx %>'"
-            <%= next_idx >= @file_list.size ? 'disabled' : '' %>>Next ▶</button>
+    <% if next_idx < @file_list.size %>
+      <a href="/?file=<%= next_idx %>" class="nav-link" data-nav="next">Next ▶</a>
+    <% else %>
+      <span class="nav-link nav-link--disabled">Next ▶</span>
+    <% end %>
   </div>
 </div>
 
@@ -169,11 +178,13 @@
     header.classList.toggle('expanded');
   }
 
+  // Keyboard arrows trigger Prev/Next anchors so they go through htmx
+  // (preserving sidebar state). The anchors handle their own enabled/disabled
+  // state via the [data-nav] selector — disabled state is rendered as <span>
+  // (no [data-nav]) so the click finds nothing.
   document.addEventListener('keydown', (e) => {
-    const cur = <%= @current_index %>;
-    const max = <%= @file_list.size - 1 %>;
-    if (e.key === 'ArrowLeft' && cur > 0)   location.href = '/?file=' + (cur - 1);
-    if (e.key === 'ArrowRight' && cur < max) location.href = '/?file=' + (cur + 1);
+    if (e.key === 'ArrowLeft')  document.querySelector('[data-nav="prev"]')?.click();
+    if (e.key === 'ArrowRight') document.querySelector('[data-nav="next"]')?.click();
   });
 </script>
 

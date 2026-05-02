@@ -150,4 +150,33 @@ RSpec.describe StreamWeaver::Canvas::Reader, type: :request do
       expect(last_response.status).to eq(404)
     end
   end
+
+  # Sidebar state preservation: hx-boost on body intercepts <a> clicks and
+  # swaps only #content (+ #nav out-of-band). Without these attributes every
+  # click does a full reload, collapsing the History accordion.
+  describe 'htmx-boosted navigation' do
+    it 'declares hx-boost on the body so anchor clicks become AJAX swaps' do
+      get '/?file=0'
+      body = last_response.body
+      expect(body).to match(/<body[^>]*hx-boost="true"/)
+      expect(body).to match(/<body[^>]*hx-target="#content"/)
+      expect(body).to match(/<body[^>]*hx-select="#content"/)
+      expect(body).to match(/<body[^>]*hx-select-oob="#nav"/)
+    end
+
+    it 'renders Prev/Next as <a> tags so hx-boost intercepts them' do
+      get '/?file=0'
+      body = last_response.body
+      # First file: Prev is disabled (span), Next is anchor
+      expect(body).to match(/<span class="nav-link nav-link--disabled">◀ Prev<\/span>/)
+      expect(body).to match(%r{<a href="/\?file=1" class="nav-link" data-nav="next">Next})
+    end
+
+    it 'disables Next on the last file via <span>, not <a>' do
+      get '/?file=1'
+      body = last_response.body
+      expect(body).to match(/<span class="nav-link nav-link--disabled">Next ▶<\/span>/)
+      expect(body).to match(%r{<a href="/\?file=0" class="nav-link" data-nav="prev">◀ Prev})
+    end
+  end
 end
