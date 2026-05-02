@@ -529,6 +529,73 @@ mermaid "graph LR; A-->B", zoom: true
 
 ---
 
+## Canvas Persistence (Two-Tier)
+
+Every `canvas-push` is auto-saved. The user can promote a snapshot to a permanent doc with one click. Both tiers Just Work — you don't need to ask, you don't need to drive a save.
+
+| Tier | Path | Origin | Git? |
+|---|---|---|---|
+| 1 (history) | `~/.streamweaver/history/<session>/<YYYYMMDD_HHMMSS>.rb` | every `canvas-push`, automatic, 7-day cleanup | NO |
+| 2 (docs) | `<git_root>/docs/streamweaver_canvas/<name>.rb` | floating 💾 button in canvas, or curl POST | YES (intentional) |
+
+**For Claude:** if the user says "save this canvas as X", point at the floating Save-as-doc button (bottom-right of the canvas) — they click it, name it, done. Don't reinvent the save flow. As a fallback for non-canvas contexts:
+
+```bash
+curl -sX POST "http://localhost:<bridge-port>/canvas/<session>/save-doc" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"<doc-name>"}'
+```
+
+**Browsing saved docs:** `streamweaver canvas-read` with no arguments opens the project's `docs/streamweaver_canvas/` directory in a viewer with two sidebar sections:
+- **Docs** (expanded) — explicit saves
+- **History** (collapsed by default) — every auto-saved snapshot, browseable retroactively
+
+History entries also show a 💾 button so the user can promote any past snapshot to a doc without re-pushing.
+
+## Hotwire-Style Navigation Pattern
+
+Layouts with sidebars (or any persistent client-side UI) MUST preserve state across navigation. Full page reloads collapse accordions, scroll-jump, and reset client state. The pattern, on the canvas-read layout, is the reference implementation:
+
+```erb
+<body hx-boost="true"
+      hx-target="#content"
+      hx-select="#content"
+      hx-select-oob="#nav"
+      hx-swap="innerHTML">
+  <nav id="sidebar"> <!-- preserved across navigations --> </nav>
+  <div id="main">
+    <div id="content"> <%= @content_html %> </div>
+    <div id="nav"> <!-- prev/next/counter, OOB-swapped --> </div>
+  </div>
+</body>
+```
+
+Rules for any new layout following this pattern:
+
+1. **Navigation links must be `<a href>`** — `hx-boost` only intercepts anchor clicks. NEVER `<button onclick="location.href=...">`.
+2. **Disabled state renders as `<span>`**, not `<a>` — anchors don't have a real disabled state.
+3. **Keyboard shortcuts call `.click()` on the existing anchor** rather than mutating `location.href`.
+4. **Read current state from the URL at click time**, not from server-baked JS variables — after htmx swaps the page hasn't reloaded; baked variables are stale.
+5. **Update active-link highlights via `htmx:afterSwap` listener** that reads the URL and toggles `.active` (the sidebar isn't re-rendered, so the server-rendered class is stale).
+
+Reference: `lib/stream_weaver/views/canvas/reader_layout.erb`.
+
+**Future direction:** once Idiomorph (bd `stream_weaver-2ds`) lands, the OOB and active-class boilerplate goes away — morph diffs the rendered HTML and surgically updates only what changed, including class attributes. See `docs/streamweaver-frontend-vision.md` for the full thesis.
+
+## Repo Conventions (Anti-Patterns That Cause Churn)
+
+Common failure modes when LLMs build StreamWeaver apps. Avoid these.
+
+- **Don't launch new servers per visual question.** Use `streamweaver canvas-push` to update a single persistent canvas. Multiple `streamweaver run app.rb` invocations create orphaned processes and port conflicts.
+- **Don't write Python helper scripts.** `streamweaver panel <session>` already detects iTerm vs. other terminals and opens the right thing. Ruby-first; iTerm2 control via `~/work/iterm2_ruby` if needed at all.
+- **Don't search `~`.** It's 2/3 of the home disk. Target `~/work/<project>` or use `uregistry locate <name>`.
+- **Don't `text "**markdown**"`.** `text` does not render markdown — use `md`.
+- **Don't use `spacer` or `divider`.** They don't exist — use `div(style: "height:Npx")`.
+- **Don't `<button onclick="location.href=...">` for navigation.** Bypasses htmx, full page reload, loses sidebar state. Use `<a href>` so `hx-boost` intercepts.
+- **Don't use positional URL indexes** like `?file=2` for shareable resources. Use Rails-style resource URLs (`/docs/:name`, `/history/:session/:timestamp`) — see `route_by` and `resource` (above) and bd `stream_weaver-9ei` for the canvas-read migration.
+- **Don't pass `theme: :light`.** Unrecognized — defaults to `:default`, just omit.
+- **Don't assume port 4567.** StreamWeaver finds a free port, may be 4568+. Read the actual URL from stdout or `streamweaver canvas-list`.
+
 ## Detailed Documentation
 
 For comprehensive reference, see these docs:
@@ -541,6 +608,7 @@ For comprehensive reference, see these docs:
 | `docs/architecture/how_streamweaver_works.md` | Internal architecture, event flow |
 | `docs/routing.md` | URL routing: `route_by`, `route_with`, parameterized paths, edit routes |
 | `docs/crud-patterns.md` | CRUD: create/edit/delete modals, URL-addressable edit pages, store adapters |
+| `docs/streamweaver-frontend-vision.md` | Strategic direction: htmx + Alpine + Idiomorph as a Hotwire-equivalent stack for Ruby devs |
 
 ## Live Streaming with `every` Timers
 
@@ -693,3 +761,42 @@ end.run!
 9. **Using buttons to simulate selection** - Don't set `state[:x] = index` in button callbacks to track which option is selected. Use `select :key, choices, submit: false` or `radio_group :key, choices` instead. Buttons are for actions, not selection state.
 10. **Storing array indices in state** - Indices break when lists change. Store the string name/label and resolve to index at action time.
 11. **Long lists without scroll** - Use `scroll_box(max_height: "400px") do...end` to constrain list height. See `docs/form-patterns.md` for all canonical patterns.
+
+---
+
+## Opal Mode — Static Browser Apps
+
+StreamWeaver apps can be compiled to static JavaScript and deployed without a server via `streamweaver opal-build`.
+
+### Build command
+
+```bash
+streamweaver opal-build app.rb              # outputs to dist/
+streamweaver opal-build app.rb --output /my/dir
+```
+
+Produces `dist/index.html` + `dist/app.js` + `dist/morphdom.min.js`. Deploy `dist/` to GitHub Pages or any static host.
+
+### What works in Opal mode
+
+- `app`, `header`, `text_field`, `checkbox`, `button`, `md`, `div` — all Phase 1 components
+- State is fully in-browser (no server round-trips)
+- Button callbacks via data attributes + delegated event listeners
+- Reactivity: whole-block re-execution + morphdom DOM patching
+
+### What doesn't work in Opal mode (Phase 1)
+
+- `feed`, `streamer`, `service_client` — require a server by definition
+- `form_block` — deferred
+- `mermaid`, `chartjs`, `tabs`, `table` — not yet implemented in Adapter::Opal
+
+### Key files
+
+| File | Role |
+|---|---|
+| `lib/stream_weaver/opal_entry.rb` | Browser-only require tree |
+| `lib/stream_weaver/opal/renderer.rb` | String-accumulating view (replaces Phlex) |
+| `lib/stream_weaver/opal/runtime.rb` | State + callback registry |
+| `lib/stream_weaver/opal/bridge.rb` | Wires Ruby to window.SWRuntime |
+| `lib/stream_weaver/opal/builder.rb` | Opal compilation pipeline |
+| `lib/stream_weaver/adapter/opal.rb` | Render methods for browser |
