@@ -20,6 +20,36 @@ RSpec.describe StreamWeaver::Components do
       component = described_class.new
       expect(component.children).to eq([])
     end
+
+    describe "#register_callbacks" do
+      it "is a no-op — leaves registry unchanged" do
+        registry = {}
+        described_class.new.register_callbacks(registry)
+        expect(registry).to be_empty
+      end
+    end
+  end
+
+  describe StreamWeaver::Components::Button do
+    describe "#register_callbacks" do
+      it "registers @action under id" do
+        action = ->(state) { state[:clicked] = true }
+        btn = described_class.new("Click me", "btn_1", &action)
+        registry = {}
+        btn.register_callbacks(registry)
+        expect(registry).to have_key(btn.id)
+        state = {}
+        registry[btn.id].call(state)
+        expect(state[:clicked]).to be true
+      end
+
+      it "skips registration when no block given" do
+        btn = described_class.new("Label", "btn_2")
+        registry = {}
+        btn.register_callbacks(registry)
+        expect(registry).to be_empty
+      end
+    end
   end
 
   describe StreamWeaver::Components::TextField do

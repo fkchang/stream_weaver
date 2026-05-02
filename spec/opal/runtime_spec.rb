@@ -45,6 +45,25 @@ RSpec.describe StreamWeaver::Opal::OpalRuntime do
     end
   end
 
+  describe "#register_component_callbacks" do
+    it "uses the register_callbacks protocol, not is_a? checks" do
+      action = ->(state) { state[:hit] = true }
+      btn = StreamWeaver::Components::Button.new("Go", "test_btn", &action)
+      runtime.register_component_callbacks([btn])
+      runtime.invoke_callback(btn.id)
+      expect(runtime.state[:hit]).to be true
+    end
+
+    it "traverses children recursively via Base#children" do
+      inner_action = ->(state) { state[:inner] = true }
+      inner_btn = StreamWeaver::Components::Button.new("Inner", "inner_btn", &inner_action)
+      wrapper = double("wrapper", register_callbacks: nil, children: [inner_btn])
+      runtime.register_component_callbacks([wrapper])
+      runtime.invoke_callback(inner_btn.id)
+      expect(runtime.state[:inner]).to be true
+    end
+  end
+
   describe "#render_html" do
     it "returns an HTML string when block is set" do
       runtime.set_block { }  # empty block — no components

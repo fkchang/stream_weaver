@@ -52,6 +52,15 @@ module StreamWeaver
       def children
         []
       end
+
+      # Register interactive callbacks with the given registry.
+      # Default: no-op — most components have no callbacks.
+      # Interactive components override this to self-register.
+      #
+      # @param registry [Hash] Mutable hash mapping dom_id => callable
+      def register_callbacks(registry)
+        # Default: no interactive callbacks. Override in interactive components.
+      end
     end
 
     # TextField component for single-line text input
@@ -139,6 +148,10 @@ module StreamWeaver
 
       def id
         @button_id
+      end
+
+      def register_callbacks(registry)
+        registry[id] = @action if @action
       end
     end
 
