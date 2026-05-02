@@ -131,6 +131,23 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'promote-from-history' do
       expect(html).to include("'/save-doc'")
       expect(html).to match(/file:\s*1\b/)
     end
+
+    # Regression for the q4y rendering bug: `name: <%= default_name.to_json %>`
+    # rendered literal `"` characters inside the x-data attribute, prematurely
+    # closing the attribute and leaking the openDialog/save body as page text.
+    # Symptom: dialog buttons inert + raw JS visible above the sidebar.
+    #
+    # The check below requires that openDialog() AND async save() both appear
+    # within a single `[^"]*?` window starting at `<div x-data="` — i.e. with
+    # no intervening `"`. If the attribute closes early on an unescaped `"`,
+    # the non-greedy match cannot bridge across the closing `"` and the test
+    # fails immediately.
+    it 'keeps the openDialog/save body inside the x-data attribute (not leaking as text)' do
+      match = html.match(/<div\s+x-data="([^"]*?openDialog\(\).*?async save\(\)[^"]*?)"/m)
+      expect(match).not_to be_nil,
+        'x-data attribute did not contain openDialog() and save() as expected — ' \
+        'it likely closed prematurely on an internal double-quote'
+    end
   end
 
   describe 'GET / for a docs file' do

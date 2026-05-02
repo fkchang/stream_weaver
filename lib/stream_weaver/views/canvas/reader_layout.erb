@@ -244,7 +244,7 @@
   </style>
   <div x-data="{
     open: false,
-    name: <%= default_name.to_json %>,
+    name: '<%= ERB::Util.h(default_name) %>',
     file: <%= @current_index %>,
     saving: false,
     savedPath: null,
