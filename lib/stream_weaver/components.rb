@@ -587,6 +587,10 @@ module StreamWeaver
     class Table < Base
       attr_reader :columns
 
+      def key
+        @data
+      end
+
       def initialize(data = nil, headers: nil, rows: nil, file: nil, path: nil,
                      striped: false, bordered: false, hoverable: true, compact: false,
                      sortable: false, sticky_header: false, markdown: false, caption: nil,
@@ -630,6 +634,23 @@ module StreamWeaver
       def render(view, state)
         resolved = resolve_data(state)
         view.adapter.render_table(view, resolved[:headers], resolved[:rows], table_options, state)
+      end
+
+      def register_callbacks(registry)
+        # Sort is client-side only. Only supported when @data is a Symbol (state-bound key).
+        # Direct-data tables (headers:/rows: without state key) cannot sort — @data would be nil.
+        # Server-paginated sort requires app-level state + re-query; this only sorts in-memory rows.
+        return unless @sortable && @data.is_a?(Symbol)
+        Array(@headers).each_with_index do |_, col_index|
+          registry["#{key}_sort_#{col_index}"] = ->(state) {
+            if state["#{key}_sort_col"] == col_index
+              state["#{key}_sort_dir"] = state["#{key}_sort_dir"] == :asc ? :desc : :asc
+            else
+              state["#{key}_sort_col"] = col_index
+              state["#{key}_sort_dir"] = :asc
+            end
+          }
+        end
       end
 
       private
@@ -725,6 +746,7 @@ module StreamWeaver
 
       def table_options
         @options.merge(
+          key: @data,
           striped: @striped,
           bordered: @bordered,
           hoverable: @hoverable,

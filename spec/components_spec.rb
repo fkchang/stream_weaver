@@ -952,4 +952,77 @@ RSpec.describe StreamWeaver::Components do
       end
     end
   end
+
+  describe StreamWeaver::Components::Table do
+    describe "#key" do
+      it "returns the first positional arg (the state key)" do
+        table = described_class.new(:users)
+        expect(table.key).to eq(:users)
+      end
+
+      it "returns nil when no positional arg given" do
+        table = described_class.new(headers: ["A"], rows: [["a"]])
+        expect(table.key).to be_nil
+      end
+    end
+
+    describe "#register_callbacks" do
+      it "registers N sort callbacks when sortable: true and @data is Symbol" do
+        table = described_class.new(:scores, headers: ["Name", "Score"], rows: [], sortable: true)
+        registry = {}
+        table.register_callbacks(registry)
+        expect(registry.keys).to eq(["scores_sort_0", "scores_sort_1"])
+      end
+
+      it "skips registration when sortable: false" do
+        table = described_class.new(:scores, headers: ["Name"], rows: [], sortable: false)
+        registry = {}
+        table.register_callbacks(registry)
+        expect(registry).to be_empty
+      end
+
+      it "skips registration when @data is not a Symbol (direct-data table)" do
+        table = described_class.new(headers: ["Name"], rows: [["Alice"]], sortable: true)
+        registry = {}
+        table.register_callbacks(registry)
+        expect(registry).to be_empty
+      end
+
+      it "sort callback sets sort_col to column index and sort_dir to :asc" do
+        table = described_class.new(:scores, headers: ["Name", "Score"], rows: [], sortable: true)
+        registry = {}
+        table.register_callbacks(registry)
+        state = {}
+        registry["scores_sort_1"].call(state)
+        expect(state["scores_sort_col"]).to eq(1)
+        expect(state["scores_sort_dir"]).to eq(:asc)
+      end
+
+      it "sort callback toggles direction when same column clicked again" do
+        table = described_class.new(:scores, headers: ["Name"], rows: [], sortable: true)
+        registry = {}
+        table.register_callbacks(registry)
+        state = { "scores_sort_col" => 0, "scores_sort_dir" => :asc }
+        registry["scores_sort_0"].call(state)
+        expect(state["scores_sort_dir"]).to eq(:desc)
+      end
+
+      it "two tables generate non-colliding callback keys" do
+        t1 = described_class.new(:users, headers: ["Name"], rows: [], sortable: true)
+        t2 = described_class.new(:orders, headers: ["Item"], rows: [], sortable: true)
+        r1, r2 = {}, {}
+        t1.register_callbacks(r1)
+        t2.register_callbacks(r2)
+        expect(r1.keys).to eq(["users_sort_0"])
+        expect(r2.keys).to eq(["orders_sort_0"])
+      end
+    end
+
+    describe "table_options includes :key" do
+      it "includes the state key for adapter sort state lookups" do
+        table = described_class.new(:users, headers: ["Name"], rows: [])
+        expect(table.send(:table_options)[:key]).to eq(:users)
+      end
+    end
+  end
 end
