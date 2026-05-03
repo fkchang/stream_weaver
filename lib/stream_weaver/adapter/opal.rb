@@ -91,7 +91,9 @@ module StreamWeaver
 
         wrapper_style = options[:sticky_header] ? "max-height:400px;overflow-y:auto;" : nil
 
-        view.div(class: css_classes.join(" "), style: wrapper_style) do
+        attrs = { class: css_classes.join(" ") }
+        attrs[:style] = wrapper_style if wrapper_style
+        view.div(**attrs) do
           view.table do
             view.thead do
               view.tr do

@@ -640,8 +640,10 @@ module StreamWeaver
         # Sort is client-side only. Only supported when @data is a Symbol (state-bound key).
         # Direct-data tables (headers:/rows: without state key) cannot sort — @data would be nil.
         # Server-paginated sort requires app-level state + re-query; this only sorts in-memory rows.
+        # Sort state uses string keys to avoid collision with update_state, which symbolizes all keys.
         return unless @sortable && @data.is_a?(Symbol)
-        Array(@headers).each_with_index do |_, col_index|
+        col_count = @headers ? @headers.length : Array(@columns).length
+        col_count.times do |col_index|
           registry["#{key}_sort_#{col_index}"] = ->(state) {
             if state["#{key}_sort_col"] == col_index
               state["#{key}_sort_dir"] = state["#{key}_sort_dir"] == :asc ? :desc : :asc

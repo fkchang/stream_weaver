@@ -62,6 +62,19 @@ RSpec.describe StreamWeaver::Opal::OpalRuntime do
       runtime.invoke_callback(inner_btn.id)
       expect(runtime.state[:inner]).to be true
     end
+
+    it "registers footer button callbacks via Modal#register_callbacks" do
+      confirmed = false
+      btn = StreamWeaver::Components::Button.new("OK", "ok_btn") { |_state| confirmed = true }
+      footer = StreamWeaver::Components::ModalFooter.new
+      footer.children << btn
+      modal = StreamWeaver::Components::Modal.new(:confirm)
+      modal.footer_component = footer
+
+      runtime.register_component_callbacks([modal])
+      runtime.invoke_callback(btn.id)
+      expect(confirmed).to be true
+    end
   end
 
   describe "#render_html" do

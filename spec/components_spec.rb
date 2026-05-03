@@ -1040,6 +1040,14 @@ RSpec.describe StreamWeaver::Components do
         expect(r1.keys).to eq(["users_sort_0"])
         expect(r2.keys).to eq(["orders_sort_0"])
       end
+
+      it "registers sort callbacks for column-DSL tables (when @headers is nil)" do
+        table = described_class.new(:reports, sortable: true)
+        table.instance_variable_set(:@columns, [double("col1"), double("col2")])
+        registry = {}
+        table.register_callbacks(registry)
+        expect(registry.keys).to eq(["reports_sort_0", "reports_sort_1"])
+      end
     end
 
     describe "table_options includes :key" do
