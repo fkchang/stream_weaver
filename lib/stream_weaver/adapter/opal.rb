@@ -72,6 +72,57 @@ module StreamWeaver
           end
         end
       end
+
+      # Not in Base — defined fresh here
+      def render_table(view, headers, rows, options, state)
+        key       = options[:key]
+        sort_col  = state["#{key}_sort_col"]
+        sort_dir  = (state["#{key}_sort_dir"] || :asc).to_sym
+
+        if options[:sortable] && sort_col
+          rows = rows.sort_by { |row| row[sort_col].to_s }
+          rows = rows.reverse if sort_dir == :desc
+        end
+
+        css_classes = ["sw-table"]
+        css_classes << "sw-table--striped"    if options[:striped]
+        css_classes << "sw-table--bordered"   if options[:bordered]
+        css_classes << "sw-table--scrollable" if options[:scrollable]
+
+        wrapper_style = options[:sticky_header] ? "max-height:400px;overflow-y:auto;" : nil
+
+        view.div(class: css_classes.join(" "), style: wrapper_style) do
+          view.table do
+            view.thead do
+              view.tr do
+                headers.each_with_index do |header, index|
+                  if options[:sortable]
+                    indicator = if sort_col == index
+                      sort_dir == :asc ? " ↑" : " ↓"
+                    else
+                      ""
+                    end
+                    view.th do
+                      view.button(data_sw_invoke: "#{key}_sort_#{index}") do
+                        view.plain("#{header}#{indicator}")
+                      end
+                    end
+                  else
+                    view.th { view.plain(header.to_s) }
+                  end
+                end
+              end
+            end
+            view.tbody do
+              rows.each do |row|
+                view.tr do
+                  Array(row).each { |cell| view.td { view.plain(cell.to_s) } }
+                end
+              end
+            end
+          end
+        end
+      end
     end
   end
 end

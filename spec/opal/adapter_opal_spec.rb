@@ -154,4 +154,90 @@ RSpec.describe StreamWeaver::Adapter::Opal do
       expect(buttons[2]).to include("sw-tabs__tab--active")
     end
   end
+
+  describe "#render_table" do
+    let(:headers) { ["Name", "Score"] }
+    let(:rows)    { [["Alice", 90], ["Bob", 75], ["Carol", 85]] }
+    let(:options) { { key: :scores, sortable: false, striped: false, bordered: false,
+                      scrollable: false, sticky_header: false } }
+
+    def render_table(opts_override = {}, state_override = {})
+      adapter.render_table(view, headers, rows, options.merge(opts_override), state.merge(state_override))
+    end
+
+    it "emits a .sw-table wrapper div" do
+      render_table
+      expect(view.to_html).to include('class="sw-table"')
+    end
+
+    it "emits header cells as plain th when not sortable" do
+      render_table
+      html = view.to_html
+      expect(html).to include("<th>Name</th>")
+      expect(html).to include("<th>Score</th>")
+      expect(html).not_to include("data-sw-invoke")
+    end
+
+    it "emits th buttons with data-sw-invoke when sortable: true" do
+      render_table(sortable: true)
+      html = view.to_html
+      expect(html).to include('data-sw-invoke="scores_sort_0"')
+      expect(html).to include('data-sw-invoke="scores_sort_1"')
+    end
+
+    it "adds sw-table--striped class when striped: true" do
+      render_table(striped: true)
+      expect(view.to_html).to include("sw-table--striped")
+    end
+
+    it "adds sw-table--bordered class when bordered: true" do
+      render_table(bordered: true)
+      expect(view.to_html).to include("sw-table--bordered")
+    end
+
+    it "adds sw-table--scrollable class when scrollable: true" do
+      render_table(scrollable: true)
+      expect(view.to_html).to include("sw-table--scrollable")
+    end
+
+    it "sorts rows ascending by sort_col when sort state present" do
+      render_table(
+        { sortable: true },
+        { "scores_sort_col" => 0, "scores_sort_dir" => :asc }
+      )
+      html = view.to_html
+      alice_pos = html.index("Alice")
+      bob_pos   = html.index("Bob")
+      carol_pos = html.index("Carol")
+      expect(alice_pos).to be < bob_pos
+      expect(bob_pos).to be < carol_pos
+    end
+
+    it "reverses sort when sort_dir is :desc" do
+      render_table(
+        { sortable: true },
+        { "scores_sort_col" => 0, "scores_sort_dir" => :desc }
+      )
+      html = view.to_html
+      alice_pos = html.index("Alice")
+      carol_pos = html.index("Carol")
+      expect(carol_pos).to be < alice_pos
+    end
+
+    it "emits sort indicator on active column" do
+      render_table(
+        { sortable: true },
+        { "scores_sort_col" => 0, "scores_sort_dir" => :asc }
+      )
+      expect(view.to_html).to include("↑")
+    end
+
+    it "emits ↓ when sort_dir is :desc" do
+      render_table(
+        { sortable: true },
+        { "scores_sort_col" => 0, "scores_sort_dir" => :desc }
+      )
+      expect(view.to_html).to include("↓")
+    end
+  end
 end
