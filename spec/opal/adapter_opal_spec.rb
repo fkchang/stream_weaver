@@ -98,4 +98,60 @@ RSpec.describe StreamWeaver::Adapter::Opal do
       expect(view.to_html).to eq("")
     end
   end
+
+  describe "#render_tabs" do
+    def make_tabs(key, labels)
+      tabs = StreamWeaver::Components::Tabs.new(key)
+      labels.each do |label|
+        tab = StreamWeaver::Components::Tab.new(label)
+        tabs.instance_variable_get(:@children) << tab
+      end
+      tabs
+    end
+
+    it "emits .sw-tabs wrapper" do
+      tabs = make_tabs(:view, ["A", "B"])
+      adapter.render_tabs(view, tabs, {})
+      expect(view.to_html).to include('class="sw-tabs')
+    end
+
+    it "includes variant class" do
+      tabs = StreamWeaver::Components::Tabs.new(:view, variant: :pills)
+      adapter.render_tabs(view, tabs, {})
+      expect(view.to_html).to include("sw-tabs--pills")
+    end
+
+    it "defaults to sw-tabs--line when no variant given (Tabs constructor default)" do
+      tabs = StreamWeaver::Components::Tabs.new(:view)
+      adapter.render_tabs(view, tabs, {})
+      expect(view.to_html).to include("sw-tabs--line")
+    end
+
+    it "emits .sw-tabs__nav with a button per tab" do
+      tabs = make_tabs(:view, ["Alpha", "Beta"])
+      adapter.render_tabs(view, tabs, {})
+      html = view.to_html
+      expect(html).to include('data-sw-invoke="view_tab_0"')
+      expect(html).to include('data-sw-invoke="view_tab_1"')
+      expect(html).to include("Alpha")
+      expect(html).to include("Beta")
+    end
+
+    it "marks tab 0 active by default when state key absent" do
+      tabs = make_tabs(:view, ["X", "Y"])
+      adapter.render_tabs(view, tabs, {})
+      expect(view.to_html).to include("sw-tabs__tab--active")
+    end
+
+    it "marks the correct tab active based on state" do
+      tabs = make_tabs(:view, ["X", "Y", "Z"])
+      adapter.render_tabs(view, tabs, { view: 2 })
+      html = view.to_html
+      # Count active markers — exactly one
+      expect(html.scan("sw-tabs__tab--active").length).to eq(1)
+      # The third button gets the active class
+      buttons = html.scan(/class="sw-tabs__tab[^"]*"/)
+      expect(buttons[2]).to include("sw-tabs__tab--active")
+    end
+  end
 end

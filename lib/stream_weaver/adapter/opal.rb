@@ -52,6 +52,26 @@ module StreamWeaver
       # Overrides Base — morphdom.js comes from OpalShell, nothing to emit here
       def render_cdn_scripts(_view)
       end
+
+      # Not in Base — defined fresh here
+      def render_tabs(view, component, state)
+        active_index = state[component.key] || 0
+        view.div(class: "sw-tabs sw-tabs--#{component.variant || 'line'}") do
+          view.div(class: "sw-tabs__nav") do
+            component.children.each_with_index do |tab, index|
+              active_class = index == active_index ? " sw-tabs__tab--active" : ""
+              view.button(
+                class: "sw-tabs__tab#{active_class}",
+                data_sw_invoke: "#{component.key}_tab_#{index}"
+              ) { view.plain(tab.label) }
+            end
+          end
+          view.div(class: "sw-tabs__content") do
+            active_tab = component.children[active_index]
+            Array(active_tab&.children).each { |c| c.render(view, state) }
+          end
+        end
+      end
     end
   end
 end
