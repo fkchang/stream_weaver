@@ -24,17 +24,19 @@ module StreamWeaver
         morphdom_src = morphdom_js || MORPHDOM_CDN
         marked_src   = marked_js   || MARKED_CDN
 
-        # Build optional head lines in FOUC-safe order.
-        optional_head = []
-        optional_head << "    <script>#{dark_mode_script}</script>" if dark_mode_script
-        if google_fonts_url
-          optional_head << '    <link rel="preconnect" href="https://fonts.googleapis.com">'
-          optional_head << '    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-          optional_head << "    <link rel=\"stylesheet\" href=\"#{google_fonts_url}\">"
-        end
-        optional_head << "    <link rel=\"stylesheet\" href=\"#{theme_css}\">" if theme_css
+        google_fonts_tags = google_fonts_url && [
+          '    <link rel="preconnect" href="https://fonts.googleapis.com">',
+          '    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+          "    <link rel=\"stylesheet\" href=\"#{google_fonts_url}\">"
+        ]
 
-        optional_section = optional_head.empty? ? "" : optional_head.join("\n") + "\n"
+        optional_head = [
+          (dark_mode_script && "    <script>#{dark_mode_script}</script>"),
+          *google_fonts_tags,
+          (theme_css && "    <link rel=\"stylesheet\" href=\"#{theme_css}\">")
+        ].compact
+
+        optional_section = optional_head.empty? ? "" : "#{optional_head.join("\n")}\n"
 
         <<~HTML
           <!DOCTYPE html>
