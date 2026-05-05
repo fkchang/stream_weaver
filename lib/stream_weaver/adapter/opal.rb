@@ -127,6 +127,19 @@ module StreamWeaver
         end
       end
 
+      # Not in Base — defined fresh here
+      def render_theme_preset(view, component, state)
+      end
+
+      # Not in Base — defined fresh here
+      def render_theme_toggle(view, component, state)
+        view.button(data_sw_action: "toggle-theme") { view.plain("🌓") }
+      end
+
+      # Not in Base — defined fresh here
+      def render_theme_switcher(view, component, state)
+      end
+
       private
 
       if RUBY_ENGINE == "opal"

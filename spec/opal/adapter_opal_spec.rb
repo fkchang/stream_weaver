@@ -240,4 +240,30 @@ RSpec.describe StreamWeaver::Adapter::Opal do
       expect(view.to_html).to include("↓")
     end
   end
+
+  describe "#render_theme_preset" do
+    it "renders nothing — preset CSS vars in dist/sw-theme.css" do
+      component = double("ThemePreset")
+      adapter.render_theme_preset(view, component, state)
+      expect(view.to_html).to eq("")
+    end
+  end
+
+  describe "#render_theme_toggle" do
+    it "emits a button with data-sw-action='toggle-theme'" do
+      component = double("ThemeToggle")
+      adapter.render_theme_toggle(view, component, state)
+      html = view.to_html
+      expect(html).to include('data-sw-action="toggle-theme"')
+      expect(html).to include("🌓")
+    end
+  end
+
+  describe "#render_theme_switcher" do
+    it "renders nothing — deferred to Phase 3" do
+      component = double("ThemeSwitcher")
+      adapter.render_theme_switcher(view, component, state)
+      expect(view.to_html).to eq("")
+    end
+  end
 end
