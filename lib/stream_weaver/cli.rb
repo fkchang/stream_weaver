@@ -968,11 +968,11 @@ module StreamWeaver
     # =========================================
 
     # Build a StreamWeaver app to a static HTML/JS bundle via Opal
-    # Usage: streamweaver opal-build <app.rb> [--output DIR]
+    # Usage: streamweaver opal-build <app.rb> [--output DIR] [--theme PRESET]
     def self.opal_build(args)
       file = args.shift
       unless file && File.exist?(file)
-        $stderr.puts "Usage: streamweaver opal-build <app.rb> [--output DIR]"
+        $stderr.puts "Usage: streamweaver opal-build <app.rb> [--output DIR] [--theme PRESET]"
         exit 1
       end
       output_dir = if args.include?('--output')
@@ -985,7 +985,10 @@ module StreamWeaver
       else
         'dist'
       end
-      StreamWeaver::Opal::OpalBuilder.build(file, output_dir: output_dir)
+      theme = if args.include?('--theme')
+        args[args.index('--theme') + 1]
+      end
+      StreamWeaver::Opal::OpalBuilder.build(file, output_dir: output_dir, theme: theme)
       puts "Built to #{output_dir}/"
       puts "Open #{output_dir}/index.html in a browser or deploy to GitHub Pages."
     end
