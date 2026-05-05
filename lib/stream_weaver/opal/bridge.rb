@@ -21,6 +21,12 @@ module StreamWeaver
                 var el = e.target.closest('[data-sw-invoke]');
                 if (el) #{runtime.invoke_and_patch(`el.dataset.swInvoke`)};
               });
+              document.addEventListener('click', function(e) {
+                var el = e.target.closest('[data-sw-action]');
+                if (el && el.dataset.swAction === 'toggle-theme') {
+                  if (typeof swToggleTheme === 'function') swToggleTheme();
+                }
+              });
               document.addEventListener('input', function(e) {
                 var key = e.target.dataset && e.target.dataset.swUpdate;
                 if (key) #{runtime.update_and_patch(`key`, `e.target.value`)};
