@@ -2,19 +2,22 @@
 require "fileutils"
 require "opal"
 require_relative "shell"
+require_relative "../css"
+require_relative "../theme"
 
 module StreamWeaver
   module Opal
     class OpalBuilder
       # Convenience entry point
-      def self.build(app_file, output_dir: "dist", title: nil)
-        new(app_file, output_dir: output_dir, title: title).call
+      def self.build(app_file, output_dir: "dist", title: nil, theme: nil)
+        new(app_file, output_dir: output_dir, title: title, theme: theme).call
       end
 
-      def initialize(app_file, output_dir: "dist", title: nil)
+      def initialize(app_file, output_dir: "dist", title: nil, theme: nil)
         @app_file   = app_file
         @output_dir = output_dir
         @title      = title || derive_title
+        @theme      = theme
         @lib_root   = File.expand_path(File.join(__dir__, "../.."))
         @stubs_root = File.join(__dir__, "stubs")
       end
@@ -24,6 +27,7 @@ module StreamWeaver
         write_app_js
         copy_morphdom
         copy_marked
+        write_theme_css
         write_index_html
       end
 
@@ -43,11 +47,40 @@ module StreamWeaver
         FileUtils.cp(src, output_path("marked.umd.js")) if File.exist?(src)
       end
 
+      def write_theme_css
+        css = StreamWeaver::CSS.full_stylesheet
+        css += "\n" + StreamWeaver::Theme.visual_skills_css
+        css += "\n" + StreamWeaver::CSS.animation_css
+        if @theme
+          unless StreamWeaver::Theme::Presets.get(@theme.to_sym)
+            warn "[OpalBuilder] Unknown theme preset: #{@theme}"
+          end
+          css += "\n" + StreamWeaver::Theme::Presets.generate_preset_css(@theme.to_sym)
+        end
+        File.write(output_path("sw-theme.css"), css)
+      end
+
       def write_index_html
         morphdom_js = File.exist?(output_path("morphdom.min.js")) ? "morphdom.min.js" : nil
         marked_js   = File.exist?(output_path("marked.umd.js"))   ? "marked.umd.js"   : nil
         File.write(output_path("index.html"),
-          OpalShell.render(title: @title, app_js: "app.js", morphdom_js: morphdom_js, marked_js: marked_js))
+          OpalShell.render(
+            title: @title,
+            app_js: "app.js",
+            morphdom_js: morphdom_js,
+            marked_js: marked_js,
+            theme_css: File.exist?(output_path("sw-theme.css")) ? "sw-theme.css" : nil,
+            google_fonts_url: google_fonts_url_for_build,
+            dark_mode_script: StreamWeaver::Theme::AutoMode.inline_script
+          ))
+      end
+
+      def google_fonts_url_for_build
+        if @theme && (preset = StreamWeaver::Theme::Presets.get(@theme.to_sym))
+          StreamWeaver::Theme::Presets.google_fonts_url(preset)
+        else
+          "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap"
+        end
       end
 
       def compile
