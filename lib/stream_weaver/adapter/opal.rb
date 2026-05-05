@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# backtick_javascript: true
 
 require "cgi"
 
@@ -21,7 +22,7 @@ module StreamWeaver
 
       # Not in Base — defined fresh here
       def render_markdown(view, content, _state)
-        view.div(class: "sw-markdown") { view.raw(content.to_s) }
+        view.div(class: "sw-markdown") { view.raw(md_to_html(content.to_s)) }
       end
 
       # Overrides Base
@@ -123,6 +124,19 @@ module StreamWeaver
               end
             end
           end
+        end
+      end
+
+      private
+
+      if RUBY_ENGINE == "opal"
+        def md_to_html(text)
+          %x{ return marked.parse(#{text}) }
+        end
+      else
+        def md_to_html(text)
+          require "kramdown"
+          Kramdown::Document.new(text, input: "GFM", hard_wrap: false).to_html
         end
       end
     end

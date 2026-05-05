@@ -23,6 +23,7 @@ module StreamWeaver
         FileUtils.mkdir_p(@output_dir)
         write_app_js
         copy_morphdom
+        copy_marked
         write_index_html
       end
 
@@ -37,10 +38,16 @@ module StreamWeaver
         FileUtils.cp(src, output_path("morphdom.min.js")) if File.exist?(src)
       end
 
+      def copy_marked
+        src = File.join(@stubs_root, "marked.umd.js")
+        FileUtils.cp(src, output_path("marked.umd.js")) if File.exist?(src)
+      end
+
       def write_index_html
         morphdom_js = File.exist?(output_path("morphdom.min.js")) ? "morphdom.min.js" : nil
+        marked_js   = File.exist?(output_path("marked.umd.js"))   ? "marked.umd.js"   : nil
         File.write(output_path("index.html"),
-          OpalShell.render(title: @title, app_js: "app.js", morphdom_js: morphdom_js))
+          OpalShell.render(title: @title, app_js: "app.js", morphdom_js: morphdom_js, marked_js: marked_js))
       end
 
       def compile

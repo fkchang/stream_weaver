@@ -664,9 +664,8 @@ module StreamWeaver
 
       def raw_data(state)
         return file_data if @file
-        return state[@data] if @data.is_a?(Symbol)
-        return @data if @data
-        # Original API: headers + rows
+        return state[@data] if @data.is_a?(Symbol) && @rows.nil?
+        return @data if @data && !@data.is_a?(Symbol)
         { headers: @headers || [], rows: @rows || [] }
       end
 
