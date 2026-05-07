@@ -30,6 +30,12 @@ RSpec.describe StreamWeaver::Opal::ReactiveState do
       rs[:a] = 1
       expect(rs).to eq({ a: 1 })
     end
+
+    it "equals another ReactiveState with the same data" do
+      rs[:a] = 1
+      other = described_class.new(a: 1)
+      expect(rs).to eq(other)
+    end
   end
 
   describe "#to_h" do
