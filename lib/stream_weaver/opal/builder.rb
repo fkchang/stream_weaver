@@ -71,6 +71,7 @@ module StreamWeaver
             marked_js: marked_js,
             theme_css: File.exist?(output_path("sw-theme.css")) ? "sw-theme.css" : nil,
             google_fonts_url: google_fonts_url_for_build,
+            body_theme: @theme ? "sw-theme-default sw-theme-#{@theme}" : "sw-theme-default",
             dark_mode_script: StreamWeaver::Theme::AutoMode.inline_script
           ))
       end

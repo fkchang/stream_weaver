@@ -19,7 +19,8 @@ module StreamWeaver
         marked_js: nil,
         theme_css: nil,
         google_fonts_url: nil,
-        dark_mode_script: nil
+        dark_mode_script: nil,
+        body_theme: "sw-theme-default"
       )
         morphdom_src = morphdom_js || MORPHDOM_CDN
         marked_src   = marked_js   || MARKED_CDN
@@ -48,7 +49,7 @@ module StreamWeaver
           #{optional_section}    <script src="#{marked_src}"></script>
             <script src="#{morphdom_src}"></script>
           </head>
-          <body>
+          <body class="#{body_theme}">
             <div id="sw-app"></div>
             <script src="#{app_js}"></script>
             <script>
