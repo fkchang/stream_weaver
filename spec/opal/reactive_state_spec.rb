@@ -107,6 +107,12 @@ RSpec.describe StreamWeaver::Opal::ReactiveState do
       rs.track("r0") { rs[:name]; rs[:name] }
       expect(rs.dependencies_for("r0")).to eq([:name])
     end
+
+    it "restores tracking state when the block raises" do
+      expect { rs.track("r0") { raise "boom" } }.to raise_error("boom")
+      rs.track("other") { rs[:after] }
+      expect(rs.dependencies_for("r0")).to be_empty
+    end
   end
 
   describe "#dependencies_for_key (inverse of dependencies_for)" do
@@ -118,6 +124,17 @@ RSpec.describe StreamWeaver::Opal::ReactiveState do
 
     it "returns empty array for a key no region read" do
       expect(rs.dependencies_for_key(:untouched)).to be_empty
+    end
+  end
+
+  describe "#key?" do
+    it "returns true for keys that have been set" do
+      rs[:foo] = "bar"
+      expect(rs.key?(:foo)).to be true
+    end
+
+    it "returns false for absent keys" do
+      expect(rs.key?(:missing)).to be false
     end
   end
 

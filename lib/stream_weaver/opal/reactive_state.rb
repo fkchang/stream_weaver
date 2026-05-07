@@ -35,11 +35,10 @@ module StreamWeaver
       end
 
       def track(region_id)
-        prev      = @tracking
-        @tracking = region_id
-        result    = yield
+        prev, @tracking = @tracking, region_id
+        yield
+      ensure
         @tracking = prev
-        result
       end
 
       def dependencies_for(region_id)
