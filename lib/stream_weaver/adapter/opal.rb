@@ -57,17 +57,17 @@ module StreamWeaver
       # Not in Base — defined fresh here
       def render_tabs(view, component, state)
         active_index = state[component.key] || 0
-        view.div(class: "sw-tabs sw-tabs--#{component.variant || 'line'}") do
-          view.div(class: "sw-tabs__nav") do
+        view.div(class: "sw-tabs sw-tabs-#{component.variant || 'line'}") do
+          view.div(class: "sw-tabs-list") do
             component.children.each_with_index do |tab, index|
-              active_class = index == active_index ? " sw-tabs__tab--active" : ""
+              tab_classes = index == active_index ? "sw-tab-trigger sw-tab-active" : "sw-tab-trigger"
               view.button(
-                class: "sw-tabs__tab#{active_class}",
+                class: tab_classes,
                 data_sw_invoke: "#{component.key}_tab_#{index}"
               ) { view.plain(tab.label) }
             end
           end
-          view.div(class: "sw-tabs__content") do
+          view.div(class: "sw-tab-panel") do
             active_tab = component.children[active_index]
             Array(active_tab&.children).each { |c| c.render(view, state) }
           end
@@ -76,50 +76,55 @@ module StreamWeaver
 
       # Not in Base — defined fresh here
       def render_table(view, headers, rows, options, state)
-        key       = options[:key]
-        sort_col  = state["#{key}_sort_col"]
-        sort_dir  = (state["#{key}_sort_dir"] || :asc).to_sym
+        key      = options[:key]
+        sort_col = state["#{key}_sort_col"]
+        sort_dir = (state["#{key}_sort_dir"] || :asc).to_sym
 
         if options[:sortable] && sort_col
           rows = rows.sort_by { |row| row[sort_col].to_s }
           rows = rows.reverse if sort_dir == :desc
         end
 
-        css_classes = ["sw-table"]
-        css_classes << "sw-table--striped"    if options[:striped]
-        css_classes << "sw-table--bordered"   if options[:bordered]
-        css_classes << "sw-table--scrollable" if options[:scrollable]
+        table_classes = ["sw-table"]
+        table_classes << "sw-table-bordered" if options[:bordered]
 
-        wrapper_style = options[:sticky_header] ? "max-height:400px;overflow-y:auto;" : nil
+        wrapper_attrs = {}
+        if options[:scrollable]
+          wrapper_attrs[:class] = "sw-table--scrollable"
+          wrapper_attrs[:style] = "max-height:400px;overflow:auto;"
+        elsif options[:sticky_header]
+          wrapper_attrs[:style] = "max-height:400px;overflow-y:auto;"
+        end
 
-        attrs = { class: css_classes.join(" ") }
-        attrs[:style] = wrapper_style if wrapper_style
-        view.div(**attrs) do
-          view.table do
+        th_style = "padding:0.75rem 1rem;text-align:left;border-bottom:2px solid var(--sw-color-border,#e0e0e0);font-weight:600;"
+        td_style = "padding:0.75rem 1rem;border-bottom:1px solid var(--sw-color-border,#e0e0e0);"
+
+        view.div(**wrapper_attrs) do
+          view.table(class: table_classes.join(" ")) do
             view.thead do
               view.tr do
                 headers.each_with_index do |header, index|
                   if options[:sortable]
-                    indicator = if sort_col == index
-                      sort_dir == :asc ? " ↑" : " ↓"
-                    else
-                      ""
-                    end
-                    view.th do
+                    indicator = sort_col == index ? (sort_dir == :asc ? " ↑" : " ↓") : ""
+                    view.th(style: th_style + "cursor:pointer;user-select:none;") do
                       view.button(data_sw_invoke: "#{key}_sort_#{index}") do
                         view.plain("#{header}#{indicator}")
                       end
                     end
                   else
-                    view.th { view.plain(header.to_s) }
+                    view.th(style: th_style) { view.plain(header.to_s) }
                   end
                 end
               end
             end
             view.tbody do
-              rows.each do |row|
-                view.tr do
-                  Array(row).each { |cell| view.td { view.plain(cell.to_s) } }
+              rows.each_with_index do |row, idx|
+                row_classes = []
+                row_classes << "sw-row-striped"   if options[:striped] && idx.odd?
+                row_classes << "sw-row-hoverable" if options[:hoverable]
+                tr_attrs = row_classes.any? ? { class: row_classes.join(" ") } : {}
+                view.tr(**tr_attrs) do
+                  Array(row).each { |cell| view.td(style: td_style) { view.plain(cell.to_s) } }
                 end
               end
             end

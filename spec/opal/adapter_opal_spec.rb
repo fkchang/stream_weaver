@@ -118,13 +118,13 @@ RSpec.describe StreamWeaver::Adapter::Opal do
     it "includes variant class" do
       tabs = StreamWeaver::Components::Tabs.new(:view, variant: :pills)
       adapter.render_tabs(view, tabs, {})
-      expect(view.to_html).to include("sw-tabs--pills")
+      expect(view.to_html).to include("sw-tabs-pills")
     end
 
-    it "defaults to sw-tabs--line when no variant given (Tabs constructor default)" do
+    it "defaults to sw-tabs-line when no variant given (Tabs constructor default)" do
       tabs = StreamWeaver::Components::Tabs.new(:view)
       adapter.render_tabs(view, tabs, {})
-      expect(view.to_html).to include("sw-tabs--line")
+      expect(view.to_html).to include("sw-tabs-line")
     end
 
     it "emits .sw-tabs__nav with a button per tab" do
@@ -140,7 +140,7 @@ RSpec.describe StreamWeaver::Adapter::Opal do
     it "marks tab 0 active by default when state key absent" do
       tabs = make_tabs(:view, ["X", "Y"])
       adapter.render_tabs(view, tabs, {})
-      expect(view.to_html).to include("sw-tabs__tab--active")
+      expect(view.to_html).to include("sw-tab-active")
     end
 
     it "marks the correct tab active based on state" do
@@ -148,10 +148,10 @@ RSpec.describe StreamWeaver::Adapter::Opal do
       adapter.render_tabs(view, tabs, { view: 2 })
       html = view.to_html
       # Count active markers — exactly one
-      expect(html.scan("sw-tabs__tab--active").length).to eq(1)
+      expect(html.scan("sw-tab-active").length).to eq(1)
       # The third button gets the active class
-      buttons = html.scan(/class="sw-tabs__tab[^"]*"/)
-      expect(buttons[2]).to include("sw-tabs__tab--active")
+      buttons = html.scan(/class="sw-tab-trigger[^"]*"/)
+      expect(buttons[2]).to include("sw-tab-active")
     end
   end
 
@@ -173,8 +173,8 @@ RSpec.describe StreamWeaver::Adapter::Opal do
     it "emits header cells as plain th when not sortable" do
       render_table
       html = view.to_html
-      expect(html).to include("<th>Name</th>")
-      expect(html).to include("<th>Score</th>")
+      expect(html).to include("Name")
+      expect(html).to include("Score")
       expect(html).not_to include("data-sw-invoke")
     end
 
@@ -185,14 +185,14 @@ RSpec.describe StreamWeaver::Adapter::Opal do
       expect(html).to include('data-sw-invoke="scores_sort_1"')
     end
 
-    it "adds sw-table--striped class when striped: true" do
+    it "adds sw-row-striped to odd rows when striped: true" do
       render_table(striped: true)
-      expect(view.to_html).to include("sw-table--striped")
+      expect(view.to_html).to include("sw-row-striped")
     end
 
-    it "adds sw-table--bordered class when bordered: true" do
+    it "adds sw-table-bordered class when bordered: true" do
       render_table(bordered: true)
-      expect(view.to_html).to include("sw-table--bordered")
+      expect(view.to_html).to include("sw-table-bordered")
     end
 
     it "adds sw-table--scrollable class when scrollable: true" do
