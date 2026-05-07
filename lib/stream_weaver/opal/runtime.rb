@@ -30,7 +30,7 @@ module StreamWeaver
       end
 
       def update_state(key, value)
-        @state[key.to_sym] = value
+        @state[key] = value
       end
 
       def register_callback(dom_id, &proc)
@@ -38,8 +38,7 @@ module StreamWeaver
       end
 
       def invoke_callback(dom_id)
-        cb = @callbacks[dom_id]
-        cb&.call(@state)
+        @callbacks[dom_id]&.call(@state)
       end
 
       def register_start_hook(block)
@@ -74,6 +73,7 @@ module StreamWeaver
         @sync_rendering = true
         html = render_html
         patch_dom(html)
+      ensure
         @sync_rendering = false
         fire_start_hooks_once
       end
@@ -81,16 +81,16 @@ module StreamWeaver
       def invoke_and_patch(dom_id)
         @sync_rendering = true
         invoke_callback(dom_id)
-        html = render_html
-        patch_dom(html)
+        patch_dom(render_html)
+      ensure
         @sync_rendering = false
       end
 
       def update_and_patch(key, value)
         @sync_rendering = true
         update_state(key, value)
-        html = render_html
-        patch_dom(html)
+        patch_dom(render_html)
+      ensure
         @sync_rendering = false
       end
 
@@ -114,6 +114,8 @@ module StreamWeaver
       end
 
       def schedule_rerender
+        # State mutations during a sync render are dropped — app blocks should not
+        # write state as a side effect of building the view.
         return if @sync_rendering || @rerender_pending
         @rerender_pending = true
         runtime = self
