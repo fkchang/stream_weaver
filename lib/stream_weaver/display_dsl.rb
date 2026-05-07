@@ -628,5 +628,8 @@ module StreamWeaver
       @components = parent_components
       component
     end
+
+    def watch(key, &block); end
+    def on_start(&block); end
   end
 end
