@@ -124,4 +124,79 @@ RSpec.describe StreamWeaver::Opal::OpalRuntime do
       expect(html).to include("Alice")
     end
   end
+
+  describe "#watch wiring (S5 — search triggers side effect)" do
+    it "fires a watch callback when the watched key changes via update_state" do
+      fired_with = nil
+      runtime.state.watch(:search) do |val|
+        fired_with = val
+        runtime.state[:results] = ["result:#{val}"]
+      end
+
+      runtime.update_state("search", "ruby")
+      expect(fired_with).to eq("ruby")
+      expect(runtime.state[:results]).to eq(["result:ruby"])
+    end
+
+    it "does not fire watch callback when value is unchanged" do
+      calls = 0
+      runtime.state[:search] = "same"
+      runtime.state.watch(:search) { calls += 1 }
+      runtime.update_state("search", "same")
+      expect(calls).to eq(0)
+    end
+  end
+
+  describe "#on_start wiring (S6 — run once)" do
+    it "registers start hooks and marks them as pending" do
+      hook_ran = false
+      runtime.register_start_hook(-> { hook_ran = true })
+      expect(runtime.instance_variable_get(:@start_hooks_fired)).to be false
+      expect(runtime.instance_variable_get(:@start_hooks).length).to eq(1)
+    end
+
+    it "does not register hooks after start_hooks_fired" do
+      runtime.instance_variable_set(:@start_hooks_fired, true)
+      runtime.register_start_hook(-> { raise "should not register" })
+      expect(runtime.instance_variable_get(:@start_hooks).length).to eq(0)
+    end
+  end
+
+  describe "#watchers_initialized? (watcher accumulation guard)" do
+    it "starts false" do
+      expect(runtime.watchers_initialized?).to be false
+    end
+
+    it "becomes true after render_html runs" do
+      runtime.set_block { text "hello" }
+      runtime.render_html
+      expect(runtime.watchers_initialized?).to be true
+    end
+
+    it "remains true on subsequent render_html calls" do
+      runtime.set_block { text "hello" }
+      runtime.render_html
+      runtime.render_html
+      expect(runtime.watchers_initialized?).to be true
+    end
+  end
+
+  describe "#schedule_rerender guard" do
+    it "does not set rerender_pending when sync_rendering is true" do
+      runtime.instance_variable_set(:@sync_rendering, true)
+      runtime.schedule_rerender
+      expect(runtime.instance_variable_get(:@rerender_pending)).to be false
+    end
+
+    it "sets rerender_pending to true when not sync_rendering" do
+      # On MRI, %x{setTimeout...#{perform_async_render}} evaluates the Ruby
+      # interpolation synchronously, resetting @rerender_pending to false.
+      # Stub perform_async_render to observe the flag as set by schedule_rerender.
+      allow(runtime).to receive(:perform_async_render)
+      runtime.instance_variable_set(:@sync_rendering, false)
+      runtime.instance_variable_set(:@rerender_pending, false)
+      runtime.schedule_rerender
+      expect(runtime.instance_variable_get(:@rerender_pending)).to be true
+    end
+  end
 end
