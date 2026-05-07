@@ -35,6 +35,26 @@ module StreamWeaver
 end
 StreamWeaver::App.prepend StreamWeaver::Opal::AppButtonPatch
 
+module StreamWeaver
+  module Opal
+    module AppReactivePatch
+      def watch(key, &block)
+        rt = OpalRuntime.current
+        return unless rt && !rt.watchers_initialized?
+        rt.state.watch(key) do |val|
+          block.call(val)
+          rt.schedule_rerender
+        end
+      end
+
+      def on_start(&block)
+        OpalRuntime.current&.register_start_hook(block)
+      end
+    end
+  end
+end
+StreamWeaver::App.prepend StreamWeaver::Opal::AppReactivePatch
+
 # Opal-mode global `app` helper — replaces the Sinatra-wired StreamWeaver.app.
 # Creates an OpalRuntime with the DSL block, installs delegated event listeners
 # via OpalBridge, and returns the runtime.
