@@ -1,0 +1,274 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+# Builds dist/react_patterns/index.html — a static showcase of all 9 React-comparison scenarios.
+# Usage: bundle exec ruby bin/build_scenarios [--rebuild]
+
+require "fileutils"
+require "cgi"
+
+ROOT        = File.expand_path("..", __dir__)
+SRC_DIR     = File.join(ROOT, "examples/opal/scenarios")
+DIST_DIR    = File.join(ROOT, "dist/scenarios")
+OUTPUT_DIR  = File.join(ROOT, "dist/react_patterns")
+OUTPUT_HTML = File.join(OUTPUT_DIR, "index.html")
+REBUILD     = ARGV.include?("--rebuild")
+
+SCENARIO_META = {
+  "s1" => {
+    react_hook: "useState + useMemo",
+    tagline:    "Inline computation — no hooks, no memoization annotation needed"
+  },
+  "s2" => {
+    react_hook: "useMemo([query])",
+    tagline:    "Derived list, computed fresh on every render — no cache layer required"
+  },
+  "s3" => {
+    react_hook: "Lifting state / prop drilling",
+    tagline:    "Sibling coordination through shared runtime state, not a parent component"
+  },
+  "s4" => {
+    react_hook: "Context API + useReducer",
+    tagline:    "Global cart state any widget can read or mutate — no Provider required"
+  },
+  "s5" => {
+    react_hook: "useEffect([dep])",
+    tagline:    "watch(:key) fires exactly when that key changes — dependency array implicit"
+  },
+  "s6" => {
+    react_hook: "useEffect(fn, [])",
+    tagline:    "on_start fires once after first render — async fetch pattern"
+  },
+  "s7" => {
+    react_hook: "useReducer / step machine",
+    tagline:    "case/when replaces dispatch + reducer — just Ruby control flow"
+  },
+  "s8" => {
+    react_hook: "useMemo([a, b, c])",
+    tagline:    "Three inputs → one derived value, recomputed on each render"
+  },
+  "s9" => {
+    react_hook: "Context API (multi-widget)",
+    tagline:    "Multiple widgets share one state key — no Provider, no Consumer"
+  }
+}.freeze
+
+def parse_scenario(file)
+  lines = File.readlines(file)
+  title = sw_note = nil
+
+  lines.each do |line|
+    next unless line.start_with?("# ")
+    content = line[2..].strip
+    title   = content if content.match?(/^S\d+:/)
+    sw_note = content.sub("StreamWeaver: ", "") if content.start_with?("StreamWeaver:")
+  end
+
+  code = lines.reject { |l| l.strip == "# frozen_string_literal: true" }.join.strip
+  { title: title, sw_note: sw_note, code: code }
+end
+
+def build_opal(id, src)
+  dist = File.join(DIST_DIR, id)
+  index = File.join(dist, "index.html")
+  if File.exist?(index) && !REBUILD
+    puts "  [skip]  #{id} — already built"
+    return
+  end
+  puts "  [build] #{id}..."
+  system("bundle exec streamweaver opal-build #{src} --output #{dist}") ||
+    abort("opal-build failed for #{id}")
+end
+
+def iframe_src(id)
+  "../../scenarios/#{id}/index.html"
+end
+
+def scenario_section(s)
+  encoded_code = CGI.escapeHTML(s[:code])
+  <<~HTML
+    <section class="scenario" id="#{s[:id]}">
+      <div class="scenario-header">
+        <h2>#{CGI.escapeHTML(s[:title] || s[:id].upcase)}</h2>
+        <div class="hooks-badge">React: <code>#{CGI.escapeHTML(s[:react_hook])}</code></div>
+        <p class="tagline">#{CGI.escapeHTML(s[:tagline])}</p>
+      </div>
+      <div class="scenario-body">
+        <div class="code-panel">
+          <pre><code class="language-ruby">#{encoded_code}</code></pre>
+        </div>
+        <div class="demo-panel">
+          <iframe src="#{iframe_src(s[:id])}" title="#{CGI.escapeHTML(s[:title] || s[:id])}"></iframe>
+        </div>
+      </div>
+    </section>
+  HTML
+end
+
+FileUtils.mkdir_p(OUTPUT_DIR)
+
+scenarios = Dir.glob(File.join(SRC_DIR, "s*.rb")).sort.map do |src|
+  id     = File.basename(src, ".rb").split("_").first
+  meta   = SCENARIO_META[id] || {}
+  parsed = parse_scenario(src)
+  build_opal(id, src)
+  { id: id, src: src, **parsed, **meta }
+end
+
+sections = scenarios.map { |s| scenario_section(s) }.join("\n")
+
+nav_links = scenarios.map { |s|
+  label = (s[:title] || s[:id]).split(":").first.strip
+  %(<a href="##{s[:id]}">#{CGI.escapeHTML(label)}</a>)
+}.join("\n        ")
+
+html = <<~HTML
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamWeaver vs React — Pattern Comparison</title>
+
+    <!-- Prism.js for Ruby syntax highlighting (CDN, no extra gems) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-ruby.min.js" defer></script>
+
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #0f1117;
+        color: #e2e8f0;
+        line-height: 1.6;
+      }
+
+      header {
+        background: #1a1d2e;
+        border-bottom: 1px solid #2d3148;
+        padding: 2rem;
+        text-align: center;
+      }
+      header h1 { font-size: 2rem; color: #818cf8; margin-bottom: 0.5rem; }
+      header p  { color: #94a3b8; font-size: 1.05rem; }
+
+      nav {
+        background: #1a1d2e;
+        border-bottom: 1px solid #2d3148;
+        padding: 0.75rem 2rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.5rem;
+        justify-content: center;
+      }
+      nav a {
+        color: #818cf8;
+        text-decoration: none;
+        font-size: 0.875rem;
+        opacity: 0.8;
+      }
+      nav a:hover { opacity: 1; text-decoration: underline; }
+
+      main { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+
+      .scenario {
+        margin-bottom: 4rem;
+        border: 1px solid #2d3148;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #141624;
+      }
+
+      .scenario-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #2d3148;
+        background: #1a1d2e;
+      }
+      .scenario-header h2 { font-size: 1.25rem; color: #c7d2fe; margin-bottom: 0.4rem; }
+
+      .hooks-badge {
+        display: inline-block;
+        background: #312e81;
+        color: #a5b4fc;
+        border-radius: 6px;
+        padding: 0.2rem 0.6rem;
+        font-size: 0.8rem;
+        margin-bottom: 0.5rem;
+      }
+      .hooks-badge code { background: none; color: inherit; font-size: inherit; }
+
+      .tagline { color: #94a3b8; font-size: 0.9rem; }
+
+      .scenario-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        min-height: 420px;
+      }
+
+      .code-panel {
+        border-right: 1px solid #2d3148;
+        overflow: auto;
+      }
+      .code-panel pre {
+        margin: 0;
+        height: 100%;
+        border-radius: 0;
+      }
+      .code-panel pre code {
+        font-size: 0.82rem;
+        line-height: 1.55;
+      }
+
+      .demo-panel {
+        background: #fff;
+      }
+      .demo-panel iframe {
+        width: 100%;
+        height: 100%;
+        min-height: 420px;
+        border: none;
+        display: block;
+      }
+
+      @media (max-width: 900px) {
+        .scenario-body { grid-template-columns: 1fr; }
+        .code-panel { border-right: none; border-bottom: 1px solid #2d3148; }
+        .demo-panel iframe { min-height: 340px; }
+      }
+
+      footer {
+        text-align: center;
+        padding: 2rem;
+        color: #475569;
+        font-size: 0.85rem;
+        border-top: 1px solid #2d3148;
+      }
+    </style>
+  </head>
+  <body>
+
+  <header>
+    <h1>StreamWeaver vs React</h1>
+    <p>9 canonical patterns — each demonstrating how StreamWeaver's reactive runtime replaces a React hook</p>
+  </header>
+
+  <nav>
+    #{nav_links}
+  </nav>
+
+  <main>
+  #{sections}
+  </main>
+
+  <footer>
+    Generated by <code>bin/build_scenarios</code> · StreamWeaver #{Time.now.strftime("%Y-%m-%d")}
+  </footer>
+
+  </body>
+  </html>
+HTML
+
+File.write(OUTPUT_HTML, html)
+puts "\nWrote #{OUTPUT_HTML}"
+puts "Open: open #{OUTPUT_HTML}"
