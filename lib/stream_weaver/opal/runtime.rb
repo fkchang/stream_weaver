@@ -21,6 +21,7 @@ module StreamWeaver
         @watchers_initialized = false
         @sync_rendering       = false
         @rerender_pending     = false
+        @state.on_any_change { schedule_rerender }
       end
 
       def watchers_initialized? = @watchers_initialized
@@ -158,6 +159,7 @@ module StreamWeaver
         # write state as a side effect of building the view.
         return if @sync_rendering || @rerender_pending
         @rerender_pending = true
+        return unless RUBY_ENGINE == "opal"
         runtime = self
         # :nocov:
         %x{

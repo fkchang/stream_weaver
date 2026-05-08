@@ -27,13 +27,22 @@ module StreamWeaver
 
       # Overrides Base
       def render_text_field(view, key, options, state)
-        view.input(
-          type: "text",
-          name: key.to_s,
-          value: state[key] || "",
-          placeholder: options[:placeholder] || "",
-          data_sw_update: key.to_s
-        )
+        label_text = options[:label]
+        input_type = (options[:type] || :text).to_s
+        if label_text
+          view.div(style: "margin-bottom:8px") do
+            view.label(style: "display:block;font-weight:500;margin-bottom:4px") { view.plain(label_text) }
+            view.input(
+              type: input_type, name: key.to_s, value: state[key] || "",
+              placeholder: options[:placeholder] || "", data_sw_update: key.to_s
+            )
+          end
+        else
+          view.input(
+            type: input_type, name: key.to_s, value: state[key] || "",
+            placeholder: options[:placeholder] || "", data_sw_update: key.to_s
+          )
+        end
       end
 
       # Overrides Base
@@ -52,6 +61,10 @@ module StreamWeaver
 
       # Overrides Base — morphdom.js comes from OpalShell, nothing to emit here
       def render_cdn_scripts(_view)
+      end
+
+      def render_badge(view, component, _state)
+        view.span(class: "sw-badge sw-badge-#{component.variant} sw-badge-#{component.size}") { view.plain(component.text) }
       end
 
       # Not in Base — defined fresh here

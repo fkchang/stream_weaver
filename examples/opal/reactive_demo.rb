@@ -46,14 +46,21 @@ app "Reactive Demo" do
   # ── S6: on_start — runs once after first render ───────────────────
   card do
     header2 "on_start Demo"
+    md "**on_start** fires exactly once after the first render — like `useEffect(fn, [])` in React. Watch for the 'Loading...' state to briefly appear, then swap to real data after 800ms."
     state[:items] = state[:items] || []
     on_start do
-      state[:items] = ["Loaded Item A", "Loaded Item B", "Loaded Item C"]
+      # Simulated async fetch with visible delay — real apps use fetch_json()
+      %x{
+        setTimeout(function() {
+          #{state[:items] = ["Loaded Item A", "Loaded Item B", "Loaded Item C"]};
+        }, 800);
+      }
     end
 
     if state[:items].empty?
       text "Loading..."
     else
+      badge "Loaded via on_start", color: :green
       state[:items].each { |item| text item }
     end
   end
