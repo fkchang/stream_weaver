@@ -199,4 +199,26 @@ RSpec.describe StreamWeaver::Opal::OpalRuntime do
       expect(runtime.instance_variable_get(:@rerender_pending)).to be true
     end
   end
+
+  describe "granular region wrappers (Step 2)" do
+    it "wraps each top-level component in sw-region-N div" do
+      runtime.set_block do
+        text "first"
+        text "second"
+      end
+      html = runtime.render_html
+      expect(html).to include('id="sw-region-0"')
+      expect(html).to include('id="sw-region-1"')
+    end
+
+    it "populates track_map after render — region reads state key" do
+      runtime.set_block do
+        text state[:name].to_s
+      end
+      runtime.state[:name] = "Alice"
+      runtime.render_html
+      deps = runtime.state.dependencies_for("sw-region-0")
+      expect(deps).to include(:name)
+    end
+  end
 end

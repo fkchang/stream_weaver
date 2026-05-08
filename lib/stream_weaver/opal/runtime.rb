@@ -49,15 +49,30 @@ module StreamWeaver
         @callbacks.clear
         OpalRuntime.current = self
 
+        # First pass: build components and determine count (no tracking yet)
         app = StreamWeaver::App.new("__opal__", &@block)
         app.rebuild_with_state(@state)
         @watchers_initialized = true
+        n = app.components.length
 
         register_component_callbacks(app.components)
 
-        renderer = OpalRenderer.new(@adapter, @state)
-        app.components.each { |c| c.render(renderer, @state) }
-        renderer.to_html
+        # Second pass: render each component inside its own track region.
+        # rebuild_with_state is called inside each track block so that state
+        # reads in the DSL block (e.g. `text state[:name].to_s`) are recorded
+        # against the correct region_id.
+        parts = (0...n).map do |i|
+          region_html = @state.track("sw-region-#{i}") do
+            scoped_app = StreamWeaver::App.new("__opal__", &@block)
+            scoped_app.rebuild_with_state(@state)
+            component = scoped_app.components[i]
+            sub = OpalRenderer.new(@adapter, @state)
+            component.render(sub, @state) if component
+            sub.to_html
+          end
+          "<div id=\"sw-region-#{i}\">#{region_html}</div>"
+        end
+        parts.join
       ensure
         OpalRuntime.current = nil
       end
@@ -89,9 +104,31 @@ module StreamWeaver
       def update_and_patch(key, value)
         @sync_rendering = true
         update_state(key, value)
-        patch_dom(render_html)
+        affected_regions = @state.dependencies_for_key(key.to_sym)
+        if affected_regions.empty?
+          patch_dom(render_html)
+        else
+          html = render_html
+          patch_regions(affected_regions, html)
+        end
       ensure
         @sync_rendering = false
+      end
+
+      def patch_regions(region_ids, full_html)
+        # :nocov:
+        region_ids.each do |region_id|
+          %x{
+            var parser = new DOMParser();
+            var doc = parser.parseFromString('<div id="sw-app">' + #{full_html} + '</div>', 'text/html');
+            var newRegion = doc.getElementById(#{region_id});
+            var oldRegion = document.getElementById(#{region_id});
+            if (newRegion && oldRegion) {
+              morphdom(oldRegion, newRegion);
+            }
+          }
+        end
+        # :nocov:
       end
 
       def fire_start_hooks_once
