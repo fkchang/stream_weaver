@@ -11,5 +11,7 @@ app "S2 — Search-Filtered List" do
   items  = query.empty? ? fruits : fruits.select { |f| f.downcase.include?(query) }
 
   text "#{items.size} of #{fruits.size} shown"
-  items.each { |fruit| text fruit }
+  div do
+    items.each { |fruit| text fruit }
+  end
 end

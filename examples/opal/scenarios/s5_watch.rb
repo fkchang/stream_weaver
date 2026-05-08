@@ -14,5 +14,7 @@ app "S5 — Watch: Side Effect on State Change" do
 
   results = state[:results] || %w[Apple Apricot Avocado Banana Blueberry Cherry Cranberry Date Elderberry Fig Grape Kiwi Lemon Lime Mango]
   text "#{results.size} results"
-  results.each { |r| text r }
+  div do
+    results.each { |r| text r }
+  end
 end

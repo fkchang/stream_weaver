@@ -146,6 +146,24 @@ module StreamWeaver
       end
 
       # Not in Base — defined fresh here
+      def render_columns(view, widths, children, _options, state)
+        view.div(class: "sw-columns", style: "display:flex;gap:var(--sw-spacing-lg,1rem);") do
+          children.each_with_index do |column, index|
+            column.width = widths&.[](index)
+            column.render(view, state)
+          end
+        end
+      end
+
+      # Not in Base — defined fresh here
+      def render_column(view, width, children, _options, state)
+        style = width ? "flex:1 1 #{width};min-width:0;" : "flex:1 1 0;min-width:0;"
+        view.div(class: "sw-column", style: style) do
+          children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # Not in Base — defined fresh here
       def render_theme_preset(view, component, state)
       end
 

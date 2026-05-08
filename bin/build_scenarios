@@ -80,7 +80,7 @@ def build_opal(id, src)
 end
 
 def iframe_src(id)
-  "../../scenarios/#{id}/index.html"
+  "../scenarios/#{id}/index.html"
 end
 
 def scenario_section(s)
