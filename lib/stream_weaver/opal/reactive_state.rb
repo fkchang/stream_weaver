@@ -41,6 +41,10 @@ module StreamWeaver
         @tracking = prev
       end
 
+      def reset_tracking
+        @track_map.clear
+      end
+
       def dependencies_for(region_id)
         @track_map.each_with_object([]) { |(key, ids), arr| arr << key if ids.include?(region_id) }
       end

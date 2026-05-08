@@ -47,6 +47,7 @@ module StreamWeaver
 
       def render_html
         @callbacks.clear
+        @state.reset_tracking
         OpalRuntime.current = self
 
         # First pass: build components and determine count (no tracking yet)
@@ -61,6 +62,8 @@ module StreamWeaver
         # rebuild_with_state is called inside each track block so that state
         # reads in the DSL block (e.g. `text state[:name].to_s`) are recorded
         # against the correct region_id.
+        # DSL-time reads (state[:key] inside the app block) happen during rebuild_with_state,
+        # so we re-build once per region inside track() to attribute reads to the correct region.
         parts = (0...n).map do |i|
           region_html = @state.track("sw-region-#{i}") do
             scoped_app = StreamWeaver::App.new("__opal__", &@block)
@@ -117,17 +120,17 @@ module StreamWeaver
 
       def patch_regions(region_ids, full_html)
         # :nocov:
-        region_ids.each do |region_id|
-          %x{
-            var parser = new DOMParser();
-            var doc = parser.parseFromString('<div id="sw-app">' + #{full_html} + '</div>', 'text/html');
-            var newRegion = doc.getElementById(#{region_id});
-            var oldRegion = document.getElementById(#{region_id});
-            if (newRegion && oldRegion) {
-              morphdom(oldRegion, newRegion);
-            }
+        %x{
+          var parser = new DOMParser();
+          var doc = parser.parseFromString('<div id="sw-app">' + #{full_html} + '</div>', 'text/html');
+          var ids = #{region_ids};
+          for (var i = 0; i < ids.length; i++) {
+            var id = ids[i];
+            var newRegion = doc.getElementById(id);
+            var oldRegion = document.getElementById(id);
+            if (newRegion && oldRegion) { morphdom(oldRegion, newRegion); }
           }
-        end
+        }
         # :nocov:
       end
 

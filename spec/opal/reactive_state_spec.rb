@@ -115,6 +115,15 @@ RSpec.describe StreamWeaver::Opal::ReactiveState do
     end
   end
 
+  describe "#reset_tracking" do
+    it "clears all recorded dependencies" do
+      rs.track("r0") { rs[:name] }
+      rs.reset_tracking
+      expect(rs.dependencies_for("r0")).to be_empty
+      expect(rs.dependencies_for_key(:name)).to be_empty
+    end
+  end
+
   describe "#dependencies_for_key (inverse of dependencies_for)" do
     it "returns region IDs that read the given key" do
       rs.track("region-0") { rs[:name] }

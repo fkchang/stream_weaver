@@ -220,5 +220,14 @@ RSpec.describe StreamWeaver::Opal::OpalRuntime do
       deps = runtime.state.dependencies_for("sw-region-0")
       expect(deps).to include(:name)
     end
+
+    it "clears stale tracking entries on each render" do
+      runtime.set_block { text state[:name].to_s }
+      runtime.state[:name] = "Alice"
+      runtime.render_html
+      runtime.render_html  # second render should re-populate, not accumulate
+      deps = runtime.state.dependencies_for("sw-region-0")
+      expect(deps.count(:name)).to eq(1)
+    end
   end
 end
