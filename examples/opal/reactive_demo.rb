@@ -49,12 +49,7 @@ app "Reactive Demo" do
     md "**on_start** fires exactly once after the first render — like `useEffect(fn, [])` in React. Watch for the 'Loading...' state to briefly appear, then swap to real data after 800ms."
     state[:items] = state[:items] || []
     on_start do
-      # Simulated async fetch with visible delay — real apps use fetch_json()
-      %x{
-        setTimeout(function() {
-          #{state[:items] = ["Loaded Item A", "Loaded Item B", "Loaded Item C"]};
-        }, 800);
-      }
+      after(0.8) { state[:items] = ["Loaded Item A", "Loaded Item B", "Loaded Item C"] }
     end
 
     if state[:items].empty?

@@ -631,5 +631,8 @@ module StreamWeaver
 
     def watch(key, &block); end
     def on_start(&block); end
+    def after(seconds, &block); end
+    def every(seconds, &block); end
+    def defer(&block); end
   end
 end

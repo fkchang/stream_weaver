@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+# backtick_javascript: true
 # Browser-only require tree. Does NOT require Sinatra, Phlex, AlpineJS,
 # iTerm, service, service_client, admin, streamer, feed, or cli.
 
@@ -49,6 +50,32 @@ module StreamWeaver
 
       def on_start(&block)
         OpalRuntime.current&.register_start_hook(block)
+      end
+
+      def after(seconds, &block)
+        return unless RUBY_ENGINE == "opal"
+        ms = (seconds * 1000).to_i
+        cb = block
+        # :nocov:
+        %x{ setTimeout(function() { #{cb.call} }, #{ms}) }
+        # :nocov:
+      end
+
+      def every(seconds, &block)
+        return unless RUBY_ENGINE == "opal"
+        ms = (seconds * 1000).to_i
+        cb = block
+        # :nocov:
+        %x{ setInterval(function() { #{cb.call} }, #{ms}) }
+        # :nocov:
+      end
+
+      def defer(&block)
+        return unless RUBY_ENGINE == "opal"
+        cb = block
+        # :nocov:
+        %x{ setTimeout(function() { #{cb.call} }, 0) }
+        # :nocov:
       end
     end
   end
