@@ -1474,7 +1474,22 @@ module StreamWeaver
         gap_value = spacing_to_css(component.gap)
         styles = ["gap: #{gap_value};"]
 
-        if component.columns.is_a?(Array)
+        # Named template-areas mode
+        if component.template_areas
+          areas_css = component.template_areas.map { |row| %("#{row}") }.join(" ")
+          styles << "grid-template-areas: #{areas_css};"
+          styles << "grid-template-rows: #{component.template_rows};"    if component.template_rows
+          styles << "grid-template-columns: #{component.template_columns};" if component.template_columns
+        # Explicit template hash: { rows: ..., columns: ... }
+        elsif component.template
+          styles << "grid-template-rows: #{component.template[:rows]};"       if component.template[:rows]
+          styles << "grid-template-columns: #{component.template[:columns]};" if component.template[:columns]
+        # Loose individual row/column strings
+        elsif component.template_rows || component.template_columns
+          styles << "grid-template-rows: #{component.template_rows};"       if component.template_rows
+          styles << "grid-template-columns: #{component.template_columns};" if component.template_columns
+        # Responsive array or plain integer column count (original behaviour)
+        elsif component.columns.is_a?(Array)
           cols_sm = component.columns[0] || 1
           cols_md = component.columns[1] || cols_sm
           cols_lg = component.columns[2] || cols_md
@@ -1493,12 +1508,55 @@ module StreamWeaver
           ) do
             component.children.each { |child| child.render(view, state) }
           end
+          return
         else
           styles << "grid-template-columns: repeat(#{component.columns}, 1fr);"
+        end
 
-          view.div(class: css_classes.join(" "), style: styles.join(" ")) do
-            component.children.each { |child| child.render(view, state) }
-          end
+        view.div(class: css_classes.join(" "), style: styles.join(" ")) do
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      def render_grid_area(view, component, state)
+        css_classes = ["sw-grid-area"]
+        css_classes << component.options[:class] if component.options[:class]
+        style = "grid-area: #{component.area_name};"
+        view.div(class: css_classes.join(" "), style: style) do
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      def render_sticky(view, component, state)
+        css_classes = ["sw-sticky"]
+        css_classes << component.options[:class] if component.options[:class]
+        parts = ["position: sticky;"]
+        parts << "top: #{component.top}px;"      if component.top
+        parts << "bottom: #{component.bottom}px;" if component.bottom
+        parts << "left: #{component.left}px;"    if component.left
+        parts << "right: #{component.right}px;"  if component.right
+        parts << "z-index: #{component.z_index};" if component.z_index
+        view.div(class: css_classes.join(" "), style: parts.join(" ")) do
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      def render_overlay(view, component, state)
+        css_classes = ["sw-overlay"]
+        css_classes << component.options[:class] if component.options[:class]
+        parts = ["position: absolute;", "z-index: #{component.z};"]
+        parts << "pointer-events: #{component.pointer_events};" if component.pointer_events
+        view.div(class: css_classes.join(" "), style: parts.join(" ")) do
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      def render_fullbleed(view, component, state)
+        css_classes = ["sw-fullbleed"]
+        css_classes << component.options[:class] if component.options[:class]
+        style = "width: 100%; max-width: none; margin-left: calc(-1 * var(--sw-spacing-xl, 0)); margin-right: calc(-1 * var(--sw-spacing-xl, 0));"
+        view.div(class: css_classes.join(" "), style: style) do
+          component.children.each { |child| child.render(view, state) }
         end
       end
 

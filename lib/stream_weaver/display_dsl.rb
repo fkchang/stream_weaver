@@ -46,8 +46,8 @@ module StreamWeaver
       with_container(Components::HStack.new(spacing: spacing, align: align, justify: justify, divider: divider, **options), &block)
     end
 
-    def grid(columns: 3, gap: :md, **options, &block)
-      with_container(Components::Grid.new(columns: columns, gap: gap, **options), &block)
+    def grid(columns: 3, gap: :md, template: nil, template_areas: nil, template_rows: nil, template_columns: nil, **options, &block)
+      with_container(Components::Grid.new(columns: columns, gap: gap, template: template, template_areas: template_areas, template_rows: template_rows, template_columns: template_columns, **options), &block)
     end
 
     def columns(widths: nil, **options, &block)
@@ -60,6 +60,22 @@ module StreamWeaver
 
     def scroll_box(max_height: "300px", **options, &block)
       with_container(Components::ScrollBox.new(max_height: max_height, **options), &block)
+    end
+
+    def grid_area(name, **options, &block)
+      with_container(Components::GridArea.new(name, **options), &block)
+    end
+
+    def sticky(top: nil, bottom: nil, left: nil, right: nil, z_index: nil, **options, &block)
+      with_container(Components::Sticky.new(top: top, bottom: bottom, left: left, right: right, z_index: z_index, **options), &block)
+    end
+
+    def overlay(z: 1, pointer_events: nil, **options, &block)
+      with_container(Components::Overlay.new(z: z, pointer_events: pointer_events, **options), &block)
+    end
+
+    def fullbleed(**options, &block)
+      with_container(Components::Fullbleed.new(**options), &block)
     end
 
     def collapsible(label, expanded: false, **options, &block)

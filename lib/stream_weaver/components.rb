@@ -26,6 +26,45 @@ module StreamWeaver
 
     # Base component class that all components inherit from
     class Base
+      # Class-level macro: declare inline CSS for this component.
+      # Multiple calls accumulate; all strings are emitted once per class per page.
+      #
+      # @example
+      #   css ".my-banner { color: red }"
+      def self.css(string)
+        @component_css_strings ||= []
+        @component_css_strings << string
+      end
+
+      # Class-level macro: declare a CSS file to serve alongside this component.
+      # The file is served via the /sw-asset/ route (registered once at declaration time).
+      #
+      # @param path [String] Absolute path to the CSS file
+      def self.css_path(path)
+        @component_css_path = path
+        ComponentAssets.register_file(path)
+      end
+
+      # Class-level macro: declare a JS file to serve alongside this component.
+      #
+      # @param path [String] Absolute path to the JS file
+      def self.js_path(path)
+        @component_js_path = path
+        ComponentAssets.register_file(path)
+      end
+
+      def self.component_css_strings
+        @component_css_strings || []
+      end
+
+      def self.component_css_path
+        @component_css_path
+      end
+
+      def self.component_js_path
+        @component_js_path
+      end
+
       def initialize(**options)
         @options = options
       end
@@ -405,18 +444,90 @@ module StreamWeaver
 
     # Grid component for responsive grid layouts
     class Grid < Base
-      attr_reader :columns, :gap, :options
+      attr_reader :columns, :gap, :template, :template_areas, :template_rows, :template_columns, :options
       attr_accessor :children
 
-      def initialize(columns: 3, gap: :md, **options)
+      def initialize(columns: 3, gap: :md, template: nil, template_areas: nil, template_rows: nil, template_columns: nil, **options)
         @columns = columns
         @gap = gap
+        @template = template
+        @template_areas = template_areas
+        @template_rows = template_rows
+        @template_columns = template_columns
         @options = options
         @children = []
       end
 
       def render(view, state)
         view.adapter.render_grid(view, self, state)
+      end
+    end
+
+    # GridArea — sets grid-area on its container div, for use inside named-area grids.
+    class GridArea < Base
+      attr_reader :area_name, :options
+      attr_accessor :children
+
+      def initialize(area_name, **options)
+        @area_name = area_name.to_s
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_grid_area(view, self, state)
+      end
+    end
+
+    # Sticky — wraps content in a position:sticky container.
+    class Sticky < Base
+      attr_reader :top, :bottom, :left, :right, :z_index, :options
+      attr_accessor :children
+
+      def initialize(top: nil, bottom: nil, left: nil, right: nil, z_index: nil, **options)
+        @top    = top
+        @bottom = bottom
+        @left   = left
+        @right  = right
+        @z_index = z_index
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_sticky(view, self, state)
+      end
+    end
+
+    # Overlay — wraps content in a position:absolute overlay.
+    class Overlay < Base
+      attr_reader :z, :pointer_events, :options
+      attr_accessor :children
+
+      def initialize(z: 1, pointer_events: nil, **options)
+        @z = z
+        @pointer_events = pointer_events
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_overlay(view, self, state)
+      end
+    end
+
+    # Fullbleed — escapes parent max-width constraints for a full-width region.
+    class Fullbleed < Base
+      attr_reader :options
+      attr_accessor :children
+
+      def initialize(**options)
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_fullbleed(view, self, state)
       end
     end
 

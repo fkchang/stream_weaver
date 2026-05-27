@@ -14,9 +14,9 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs
+    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :layout_slots
 
-    def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], &block)
+    def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], &block)
       @title = title
       @layout = layout
       @theme = validate_theme(theme)
@@ -28,6 +28,7 @@ module StreamWeaver
       @button_counter = 0
       @scripts = scripts
       @stylesheets = stylesheets
+      @fonts = fonts
       @transient_keys = Set.new
       @timers = []
       @favicon_value = nil
@@ -39,6 +40,7 @@ module StreamWeaver
       @route_rules   = []  # Array<RouteRule> — persistent, never cleared in rebuild
       @resource_defs = {}  # name(sym) → ResourceDefinition — persistent
 
+      @layout_slots = {}
       components.each { |mod| singleton_class.include(mod) }
     end
 
@@ -136,9 +138,22 @@ module StreamWeaver
     def rebuild_with_state(current_state)
       @_state = current_state
       @components = []
+      @layout_slots = {}
       @button_counter = 0
       instance_eval(&@block)
       @timers_frozen = true
+    end
+
+    # Capture DSL components for a named layout slot.
+    # Components in a slot are rendered outside #app-container (static chrome).
+    #
+    # @param name [Symbol] Slot identifier (:header, :sidebar_left, :footer, etc.)
+    def layout_slot(name, &block)
+      @layout_slots[name] ||= []
+      parent_components = @components
+      @components = @layout_slots[name]
+      instance_eval(&block) if block
+      @components = parent_components
     end
 
     # Find a component by its key (for callback execution)

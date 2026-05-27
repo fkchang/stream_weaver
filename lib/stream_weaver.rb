@@ -7,7 +7,11 @@ require_relative "stream_weaver/utils"
 require_relative "stream_weaver/adapter/base"
 require_relative "stream_weaver/adapter/alpinejs"
 require_relative "stream_weaver/theme"
+require_relative "stream_weaver/component_assets"
+require_relative "stream_weaver/fonts"
 require_relative "stream_weaver/display_dsl"
+require_relative "stream_weaver/component_registry"
+require_relative "stream_weaver/layout_registry"
 require_relative "stream_weaver/app"
 require_relative "stream_weaver/components"
 require_relative "stream_weaver/views"
@@ -76,8 +80,8 @@ module StreamWeaver
   end
 
   # Global app helper method for DSL
-  def self.app(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], &block)
-    app = App.new(title, layout: layout, theme: theme, theme_overrides: theme_overrides, components: components, scripts: scripts, stylesheets: stylesheets, &block)
+  def self.app(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], &block)
+    app = App.new(title, layout: layout, theme: theme, theme_overrides: theme_overrides, components: components, scripts: scripts, stylesheets: stylesheets, fonts: fonts, &block)
     sinatra_app = app.generate
     @last_generated_app = sinatra_app
     sinatra_app
@@ -85,6 +89,6 @@ module StreamWeaver
 end
 
 # Global helper method (exported to main namespace)
-def app(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], &block)
-  StreamWeaver.app(title, layout: layout, theme: theme, theme_overrides: theme_overrides, components: components, scripts: scripts, stylesheets: stylesheets, &block)
+def app(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], &block)
+  StreamWeaver.app(title, layout: layout, theme: theme, theme_overrides: theme_overrides, components: components, scripts: scripts, stylesheets: stylesheets, fonts: fonts, &block)
 end

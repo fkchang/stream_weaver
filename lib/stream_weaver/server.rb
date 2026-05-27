@@ -201,6 +201,20 @@ module StreamWeaver
         ""
       end
 
+      # Serve component-scoped asset files registered via css_path/js_path class macros.
+      # Only files whose absolute path was explicitly registered are served (no traversal).
+      get '/sw-asset/:key/:filename' do
+        abs_path = StreamWeaver::ComponentAssets.resolve_file(params[:key])
+        halt 404 unless abs_path && File.exist?(abs_path)
+        halt 404 unless File.basename(abs_path) == params[:filename]
+        content_type case File.extname(abs_path)
+                     when ".css" then "text/css"
+                     when ".js"  then "application/javascript"
+                     else             "application/octet-stream"
+                     end
+        File.read(abs_path)
+      end
+
       # Define routes
       get '/' do
         # For agentic mode, always start with fresh state

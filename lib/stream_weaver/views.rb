@@ -48,6 +48,9 @@ module StreamWeaver
               script(src: src)
             end
 
+            # Component-scoped CSS/JS (declared via css/css_path/js_path class macros)
+            render_component_assets
+
             # Chart.js CDN - only load when charts are present
             if @app.has_charts?
               script(src: "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js")
@@ -63,10 +66,14 @@ module StreamWeaver
               @adapter.render_routing_scripts(self)
             end
 
-            # Google Fonts: Source Sans 3 + Crimson Pro (for document theme)
+            # Google Fonts: Source Sans 3 + Crimson Pro (for document theme) + any app-declared fonts
             link(rel: "preconnect", href: "https://fonts.googleapis.com")
             link(rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "anonymous")
             link(rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap")
+            if @app.fonts.any?
+              custom_href = Fonts.google_fonts_href(@app.fonts)
+              link(rel: "stylesheet", href: custom_href) if custom_href
+            end
             style do
               raw(safe(<<~CSS))
                 /* ===========================================
@@ -3094,10 +3101,15 @@ module StreamWeaver
             # Theme overrides as inline CSS
             render_theme_overrides if @app.theme_overrides.any?
 
-            h1 { @app.title }
-            # Merge adapter-specific container attributes with container id
-            div(id: "app-container", **@adapter.container_attributes(@state)) do
-              render_components
+            layout_entry = StreamWeaver::LayoutRegistry[@app.layout]
+            if layout_entry&.dig(:exclusive) && layout_entry[:render_block]
+              instance_exec(&layout_entry[:render_block])
+            else
+              h1 { @app.title }
+              # Merge adapter-specific container attributes with container id
+              div(id: "app-container", **@adapter.container_attributes(@state)) do
+                render_components
+              end
             end
           end
         end
@@ -3129,10 +3141,19 @@ module StreamWeaver
         end
       end
 
-      # Generate body classes for layout and theme
+      # Generate body classes for layout and theme.
+      # Exclusive layouts supply their own body_classes; the sw-layout-* class is omitted.
       def body_classes
         effective_theme = @session_theme || @app.theme
-        "sw-layout-#{@app.layout} sw-theme-#{effective_theme}"
+        theme_class = "sw-theme-#{effective_theme}"
+
+        layout_entry = StreamWeaver::LayoutRegistry[@app.layout]
+        if layout_entry&.dig(:exclusive)
+          extra = layout_entry[:body_classes].join(" ")
+          [extra, theme_class].reject(&:empty?).join(" ")
+        else
+          "sw-layout-#{@app.layout} #{theme_class}"
+        end
       end
 
       # Get the effective theme (session override or app default)
@@ -3165,6 +3186,47 @@ module StreamWeaver
 
         style do
           raw(safe(custom_theme.to_css))
+        end
+      end
+
+      # Emit CSS/JS declared via the css/css_path/js_path class macros on component classes.
+      # Deduped by component class so multiple instances only emit their assets once.
+      # Also collects from layout slots and emits the layout's own css_path if registered.
+      def render_component_assets
+        all_components = @app.components + (@app.layout_slots || {}).values.flatten
+
+        # Layout-level CSS file
+        layout_entry = StreamWeaver::LayoutRegistry[@app.layout]
+        if layout_entry&.dig(:css_path)
+          path = layout_entry[:css_path]
+          key  = ComponentAssets.file_key(path)
+          link(rel: "stylesheet", href: "/sw-asset/#{key}/#{File.basename(path)}")
+        end
+
+        css_strings, css_paths, js_paths = ComponentAssets.collect(all_components)
+
+        css_strings.each { |css| style { raw(safe(css)) } }
+        css_paths.each do |path|
+          key = ComponentAssets.file_key(path)
+          link(rel: "stylesheet", href: "/sw-asset/#{key}/#{File.basename(path)}")
+        end
+        js_paths.each do |path|
+          key = ComponentAssets.file_key(path)
+          script(src: "/sw-asset/#{key}/#{File.basename(path)}")
+        end
+      end
+
+      # Render all components in a named layout slot.
+      # Used inside register_layout render blocks.
+      def render_slot(name)
+        ((@app.layout_slots || {})[name] || []).each { |c| c.render(self, @state) }
+      end
+
+      # Emit the main reactive content region (#app-container).
+      # Use this inside a register_layout render block to place the reactive app content.
+      def main_content_region
+        div(id: "app-container", **@adapter.container_attributes(@state)) do
+          render_components
         end
       end
     end
