@@ -2979,13 +2979,22 @@ module StreamWeaver
       # Keep in sync with .sw-annotated-code__line line-height in annotated_code_css.
       # Also load-bearing for alignment: white-space:pre (no-wrap) ensures each logical line == 1 visual row.
       ANNOTATED_CODE_LINE_HEIGHT_EM = 1.5
+      # Note text (0.8125rem) at line-height 1.4, expressed in component em units (base 0.875rem).
+      ANNOTATION_NOTE_LINE_HEIGHT_EM = (0.8125 / 0.875 * 1.4).round(4)
+      # Conservative char/line estimate for the annotation note area (~150px at 13px font).
+      ANNOTATION_CHARS_PER_LINE = 18
+      # Min gap between adjacent annotation bubbles.
+      ANNOTATION_GAP_EM = 0.375
 
       # Renders a side-by-side annotated code layout.
-      # Left pane: code with line gutter; right pane: annotation bubbles aligned to target lines.
-      # Annotated lines get a left-border highlight. Annotations use min-height slots to prevent overlap.
+      # Left pane: code with line gutter; right pane: annotation bubbles in flex column.
+      # Push-down layout: each bubble starts at max(natural_top, prev_bottom + gap), so
+      # long notes never overlap the next bubble regardless of wrapping.
       def render_annotated_code(view, component, state)
         inject_prism_cdn(view)
         inject_annotated_code_css(view)
+
+        annotation_margins = compute_annotation_margins(component.annotations)
 
         view.div(class: "sw-annotated-code") do
           view.div(class: "sw-annotated-code__code-pane") do
@@ -3003,18 +3012,34 @@ module StreamWeaver
           end
 
           view.div(class: "sw-annotated-code__panel") do
-            component.annotations.each do |ann|
-              top_offset = ((ann.line - 1) * ANNOTATED_CODE_LINE_HEIGHT_EM).round(3)
+            annotation_margins.each do |(ann, margin_top)|
               view.div(
                 class: "sw-annotated-code__annotation",
                 "data-line": ann.line.to_s,
-                style: "top: #{top_offset}em;"
+                style: "margin-top: #{margin_top}em;"
               ) do
                 view.span(class: "sw-annotated-code__annotation-line") { view.plain(ann.line.to_s) }
                 view.span(class: "sw-annotated-code__annotation-note") { view.plain(ann.note) }
               end
             end
           end
+        end
+      end
+
+      # Push-down layout: returns [[annotation, margin_top_em], ...] for annotations
+      # sorted by line number. Each annotation is placed at max(natural_top, prev_bottom + gap),
+      # preventing overlap even when notes wrap to multiple lines.
+      def compute_annotation_margins(annotations)
+        prev_bottom = 0.0
+        annotations.sort_by(&:line).map do |ann|
+          natural_top = (ann.line - 1) * ANNOTATED_CODE_LINE_HEIGHT_EM
+          top = [natural_top, prev_bottom].max
+          margin_top = (top - prev_bottom).round(3)
+
+          note_lines = (ann.note.length.to_f / ANNOTATION_CHARS_PER_LINE).ceil.clamp(1, 20)
+          prev_bottom = top + note_lines * ANNOTATION_NOTE_LINE_HEIGHT_EM + ANNOTATION_GAP_EM
+
+          [ann, margin_top]
         end
       end
 
@@ -3240,19 +3265,19 @@ module StreamWeaver
           }
 
           .sw-annotated-code__panel {
-            position: relative;
             width: 14rem;
             flex-shrink: 0;
-            border-left: 1px solid var(--sw-border, #e0e0e0);
-            background: var(--sw-surface-2, #f9fafb);
+            border-left: 1px solid #3a3c3e;
+            background: #252729;
             padding: 0.75rem 0;
+            display: flex;
+            flex-direction: column;
+            overflow-x: clip;
           }
 
           .sw-annotated-code__annotation {
-            position: absolute;
-            left: 0.5rem;
-            right: 0.5rem;
-            min-height: 1.5em;
+            flex-shrink: 0;
+            padding: 0 0.5rem;
             display: flex;
             align-items: flex-start;
             gap: 0.25rem;
@@ -3263,23 +3288,15 @@ module StreamWeaver
             width: 1.25rem;
             font-size: 0.6875rem;
             font-weight: 700;
-            color: var(--sw-accent, #2563eb);
+            color: #6eb6f0;
             flex-shrink: 0;
             padding-top: 0.125rem;
           }
 
           .sw-annotated-code__annotation-note {
             font-size: 0.8125rem;
-            color: var(--sw-text, #111111);
+            color: #c5c8c6;
             line-height: 1.4;
-          }
-
-          html.dark .sw-annotated-code__panel {
-            background: var(--sw-surface-2, oklch(0.18 0 0));
-          }
-
-          html.dark .sw-annotated-code__annotation-note {
-            color: var(--sw-text, #e5e7eb);
           }
         CSS
       end
