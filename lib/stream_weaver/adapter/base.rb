@@ -483,6 +483,11 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_timeline_event"
       end
 
+      # Render a wireframe surface block with raw HTML content
+      def render_wireframe_block(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_wireframe_block"
+      end
+
       protected
 
       # Convert spacing symbol to CSS value

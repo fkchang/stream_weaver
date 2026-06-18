@@ -491,6 +491,20 @@ module StreamWeaver
       end
     end
 
+    # Render a wireframe surface block with raw HTML.
+    # CSS tokens (--wf-ink, --wf-muted, etc.) and helper classes
+    # (.wf-card, .wf-pill, .wf-muted, button.primary) are automatically
+    # scoped to .sw-wireframe-surface.
+    #
+    # @param html [String] Raw HTML fragment to render inside the wireframe surface
+    # @param surface [String] Surface type: browser, desktop, mobile, popover, panel
+    #
+    # @example
+    #   wireframe_block(html: '<h1>Login</h1><button class="primary">Sign in</button>')
+    def wireframe_block(html: "", surface: "browser", **options)
+      @components << Components::WireframeBlock.new(html: html, surface: surface, **options)
+    end
+
     # Render side-by-side comparison panels.
     # Use `before { ... }` and `after { ... }` named blocks inside
     # to populate each panel.

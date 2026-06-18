@@ -5710,6 +5710,15 @@ module StreamWeaver
         end
       end
 
+      def render_wireframe_block(view, component, state)
+        view.div(
+          class: "sw-wireframe-surface sw-wireframe-surface--#{component.surface}",
+          "data-surface" => component.surface
+        ) do
+          view.raw(view.safe(component.html))
+        end
+      end
+
       # =========================================
       # Layout components rendering (Cabinet Control style)
       # =========================================
