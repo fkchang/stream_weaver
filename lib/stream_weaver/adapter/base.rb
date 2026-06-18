@@ -391,6 +391,10 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_decision"
       end
 
+      def render_annotated_code(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_annotated_code"
+      end
+
       # =========================================
       # Design Deck component rendering (T7)
       # =========================================

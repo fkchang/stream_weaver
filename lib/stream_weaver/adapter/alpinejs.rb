@@ -2972,6 +2972,52 @@ module StreamWeaver
         end
       end
 
+      # =========================================
+      # AnnotatedCode rendering
+      # =========================================
+
+      # Keep in sync with .sw-annotated-code__line line-height in annotated_code_css.
+      # Also load-bearing for alignment: white-space:pre (no-wrap) ensures each logical line == 1 visual row.
+      ANNOTATED_CODE_LINE_HEIGHT_EM = 1.5
+
+      # Renders a side-by-side annotated code layout.
+      # Left pane: code with line gutter; right pane: annotation bubbles aligned to target lines.
+      # Annotated lines get a left-border highlight. Annotations use min-height slots to prevent overlap.
+      def render_annotated_code(view, component, state)
+        inject_prism_cdn(view)
+        inject_annotated_code_css(view)
+
+        view.div(class: "sw-annotated-code") do
+          view.div(class: "sw-annotated-code__code-pane") do
+            view.pre(class: "sw-annotated-code__pre") do
+              component.lines.each_with_index do |line_text, idx|
+                line_num = idx + 1
+                highlighted = component.annotated_lines.include?(line_num)
+                line_class = highlighted ? "sw-annotated-code__line sw-annotated-code__line--highlighted" : "sw-annotated-code__line"
+                view.span(class: line_class, "data-line": line_num.to_s) do
+                  view.span(class: "sw-annotated-code__gutter") { view.plain(line_num.to_s) }
+                  view.code(class: component.language_class) { view.plain(line_text) }
+                end
+              end
+            end
+          end
+
+          view.div(class: "sw-annotated-code__panel") do
+            component.annotations.each do |ann|
+              top_offset = ((ann.line - 1) * ANNOTATED_CODE_LINE_HEIGHT_EM).round(3)
+              view.div(
+                class: "sw-annotated-code__annotation",
+                "data-line": ann.line.to_s,
+                style: "top: #{top_offset}em;"
+              ) do
+                view.span(class: "sw-annotated-code__annotation-line") { view.plain(ann.line.to_s) }
+                view.span(class: "sw-annotated-code__annotation-note") { view.plain(ann.note) }
+              end
+            end
+          end
+        end
+      end
+
       def render_comparison(view, component, state)
         inject_comparison_css(view)
 
@@ -3119,6 +3165,121 @@ module StreamWeaver
             color: var(--sw-accent, #60a5fa);
             background: color-mix(in oklch, var(--sw-accent, #60a5fa) 15%, var(--sw-surface, oklch(0.205 0 0)));
             border-color: color-mix(in oklch, var(--sw-accent, #60a5fa) 35%, transparent);
+          }
+        CSS
+      end
+
+      def inject_annotated_code_css(view)
+        return if view.instance_variable_get(:@_annotated_code_css_injected)
+
+        view.instance_variable_set(:@_annotated_code_css_injected, true)
+        view.style { view.raw(view.safe(annotated_code_css)) }
+      end
+
+      def annotated_code_css
+        <<~CSS
+          /* ===========================================
+             AnnotatedCode Styles (sw- prefix)
+             =========================================== */
+          .sw-annotated-code {
+            display: flex;
+            gap: 0;
+            border: 1px solid var(--sw-border, #e0e0e0);
+            border-radius: var(--sw-radius-md, 6px);
+            overflow: hidden;
+            margin: 0.75rem 0;
+            background: var(--sw-surface, #1d1f21);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.875rem;
+          }
+
+          .sw-annotated-code__code-pane {
+            flex: 1 1 0;
+            overflow: auto;
+            min-width: 0;
+          }
+
+          .sw-annotated-code__pre {
+            margin: 0;
+            padding: 0.75rem 0;
+            background: transparent;
+            white-space: pre;
+          }
+
+          .sw-annotated-code__line {
+            display: flex;
+            align-items: stretch;
+            line-height: 1.5em;
+            min-height: 1.5em;
+            padding: 0 0.75rem 0 0;
+          }
+
+          .sw-annotated-code__line--highlighted {
+            background: color-mix(in oklch, var(--sw-accent, #2563eb) 12%, transparent);
+            border-left: 3px solid var(--sw-accent, #2563eb);
+          }
+
+          .sw-annotated-code__gutter {
+            display: inline-block;
+            width: 2.5rem;
+            padding: 0 0.75rem;
+            text-align: right;
+            color: var(--sw-text-dim, #6b7280);
+            user-select: none;
+            flex-shrink: 0;
+          }
+
+          .sw-annotated-code__line code {
+            flex: 1;
+            background: transparent;
+            color: inherit;
+            padding: 0;
+            font-size: inherit;
+            font-family: inherit;
+            white-space: pre;
+          }
+
+          .sw-annotated-code__panel {
+            position: relative;
+            width: 14rem;
+            flex-shrink: 0;
+            border-left: 1px solid var(--sw-border, #e0e0e0);
+            background: var(--sw-surface-2, #f9fafb);
+            padding: 0.75rem 0;
+          }
+
+          .sw-annotated-code__annotation {
+            position: absolute;
+            left: 0.5rem;
+            right: 0.5rem;
+            min-height: 1.5em;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.25rem;
+          }
+
+          .sw-annotated-code__annotation-line {
+            display: inline-block;
+            width: 1.25rem;
+            font-size: 0.6875rem;
+            font-weight: 700;
+            color: var(--sw-accent, #2563eb);
+            flex-shrink: 0;
+            padding-top: 0.125rem;
+          }
+
+          .sw-annotated-code__annotation-note {
+            font-size: 0.8125rem;
+            color: var(--sw-text, #111111);
+            line-height: 1.4;
+          }
+
+          html.dark .sw-annotated-code__panel {
+            background: var(--sw-surface-2, oklch(0.18 0 0));
+          }
+
+          html.dark .sw-annotated-code__annotation-note {
+            color: var(--sw-text, #e5e7eb);
           }
         CSS
       end

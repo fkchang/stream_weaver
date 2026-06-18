@@ -505,6 +505,18 @@ module StreamWeaver
       @components << Components::WireframeBlock.new(html: html, surface: surface, **options)
     end
 
+    # Render a code block with line-number-pinned annotation bubbles in a side panel.
+    # Uses Prism.js for syntax highlighting (loaded once per page).
+    # Layout: code pane left, annotation panel right — annotations aligned to their target lines.
+    # Annotated lines receive a subtle left-border highlight. Close annotations stack without overlap.
+    # See +Components::AnnotatedCode+ for behaviour notes on per-line highlighting limits.
+    def annotated_code(language: nil, annotations: [], **options, &block)
+      component = Components::AnnotatedCode.new(language: language, annotations: annotations, **options)
+      component.code = block ? instance_exec(&block) : ""
+      @components << component
+      component
+    end
+
     # Render side-by-side comparison panels.
     # Use `before { ... }` and `after { ... }` named blocks inside
     # to populate each panel.
