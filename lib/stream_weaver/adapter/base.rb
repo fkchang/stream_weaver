@@ -492,6 +492,10 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_wireframe_block"
       end
 
+      def render_wireframe(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_wireframe"
+      end
+
       def render_diff_block(view, component, state)
         raise NotImplementedError, "#{self.class} must implement #render_diff_block"
       end

@@ -6030,6 +6030,25 @@ module StreamWeaver
         end
       end
 
+      def render_wireframe(view, component, state)
+        inject_wireframe_css(view)
+        unless view.instance_variable_get(:@_wireframe_chrome_css_injected)
+          view.instance_variable_set(:@_wireframe_chrome_css_injected, true)
+          view.style { view.raw(view.safe(wireframe_chrome_css)) }
+        end
+        view.div(
+          class: "sw-wireframe sw-wireframe--#{component.surface}",
+          "data-surface" => component.surface
+        ) do
+          view.div(class: "sw-wireframe-chrome") do
+            render_wireframe_chrome_bar(view, component.surface)
+          end
+          view.div(class: "sw-wireframe-surface sw-wireframe-body") do
+            view.raw(view.safe(component.html))
+          end
+        end
+      end
+
       def inject_wireframe_css(view)
         return if view.instance_variable_get(:@_wireframe_css_injected)
 
@@ -6125,6 +6144,191 @@ module StreamWeaver
             opacity: 0.88;
           }
         CSS
+      end
+
+      def wireframe_chrome_css
+        <<~CSS
+          /* =============================================
+             StreamWeaver Wireframe Device Chrome
+             Visual device frames for each surface type
+             ============================================= */
+
+          .sw-wireframe {
+            display: inline-flex;
+            flex-direction: column;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1.5px solid var(--wf-line, #d1d5db);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+            background: var(--wf-paper, #fafafa);
+            width: 100%;
+          }
+
+          .sw-wireframe-body {
+            flex: 1;
+            overflow: auto;
+            padding: 16px;
+          }
+
+          /* Chrome bar shared base */
+          .sw-wireframe-chrome {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            background: var(--wf-card, #f3f4f6);
+            border-bottom: 1.5px solid var(--wf-line, #d1d5db);
+            flex-shrink: 0;
+          }
+
+          /* Browser chrome: traffic dots + address bar */
+          .sw-wireframe--browser .sw-wireframe-chrome {
+            min-height: 28px;
+          }
+
+          .sw-wireframe-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            flex-shrink: 0;
+          }
+
+          .sw-wireframe-dot--red   { background: #ff5f57; }
+          .sw-wireframe-dot--amber { background: #ffbd2e; }
+          .sw-wireframe-dot--green { background: #28c840; }
+
+          .sw-wireframe-addressbar {
+            flex: 1;
+            height: 16px;
+            border-radius: 4px;
+            background: var(--wf-paper, #fafafa);
+            border: 1px solid var(--wf-line, #d1d5db);
+            margin-left: 4px;
+          }
+
+          /* Desktop chrome: title bar with traffic lights */
+          .sw-wireframe--desktop .sw-wireframe-chrome {
+            min-height: 28px;
+          }
+
+          .sw-wireframe-title {
+            flex: 1;
+            text-align: center;
+            font-size: 11px;
+            color: var(--wf-muted, #6b7280);
+            font-weight: 500;
+            letter-spacing: 0.02em;
+          }
+
+          /* Mobile/phone chrome: status bar */
+          .sw-wireframe--mobile .sw-wireframe-chrome,
+          .sw-wireframe--phone .sw-wireframe-chrome {
+            min-height: 20px;
+            padding: 3px 10px;
+            justify-content: space-between;
+          }
+
+          .sw-wireframe-statusbar-time {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--wf-ink, #1a1a2e);
+          }
+
+          .sw-wireframe-statusbar-icons {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+          }
+
+          .sw-wireframe-statusbar-icon {
+            width: 12px;
+            height: 7px;
+            border-radius: 1px;
+            background: var(--wf-ink, #1a1a2e);
+            opacity: 0.7;
+          }
+
+          /* Tablet chrome: status bar (wider) */
+          .sw-wireframe--tablet .sw-wireframe-chrome {
+            min-height: 22px;
+            padding: 4px 12px;
+            justify-content: space-between;
+          }
+
+          /* Popover/card/widget chrome: compact header strip */
+          .sw-wireframe--popover .sw-wireframe-chrome,
+          .sw-wireframe--card .sw-wireframe-chrome,
+          .sw-wireframe--widget .sw-wireframe-chrome {
+            min-height: 20px;
+            padding: 4px 10px;
+          }
+
+          .sw-wireframe--popover,
+          .sw-wireframe--card,
+          .sw-wireframe--widget {
+            width: auto;
+            min-width: 180px;
+            max-width: 360px;
+            border-radius: 6px;
+          }
+
+          /* Panel chrome: sidebar/inspector strip */
+          .sw-wireframe--panel .sw-wireframe-chrome {
+            min-height: 24px;
+            padding: 4px 10px;
+            border-bottom: 1.5px solid var(--wf-line, #d1d5db);
+          }
+
+          .sw-wireframe-panel-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--wf-muted, #6b7280);
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+          }
+
+          html.dark .sw-wireframe {
+            border-color: var(--wf-line, #334155);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.30);
+          }
+
+          html.dark .sw-wireframe-chrome {
+            background: var(--wf-card, #1e293b);
+            border-bottom-color: var(--wf-line, #334155);
+          }
+
+          html.dark .sw-wireframe-addressbar {
+            background: var(--wf-paper, #0f172a);
+            border-color: var(--wf-line, #334155);
+          }
+        CSS
+      end
+
+      def render_wireframe_chrome_bar(view, surface)
+        case surface
+        when "browser"
+          render_traffic_dots(view)
+          view.div(class: "sw-wireframe-addressbar")
+        when "desktop"
+          render_traffic_dots(view)
+          view.span(class: "sw-wireframe-title") { view.plain("Untitled") }
+        when "mobile", "phone", "tablet"
+          icon_count = surface == "tablet" ? 2 : 3
+          view.span(class: "sw-wireframe-statusbar-time") { view.plain("9:41") }
+          view.div(class: "sw-wireframe-statusbar-icons") do
+            icon_count.times { view.span(class: "sw-wireframe-statusbar-icon") }
+          end
+        when "popover", "card", "widget"
+          render_traffic_dots(view)
+        when "panel"
+          view.span(class: "sw-wireframe-panel-title") { view.plain("PANEL") }
+        end
+      end
+
+      def render_traffic_dots(view)
+        %w[red amber green].each do |color|
+          view.span(class: "sw-wireframe-dot sw-wireframe-dot--#{color}")
+        end
       end
 
       # =========================================

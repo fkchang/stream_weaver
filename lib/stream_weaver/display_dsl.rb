@@ -505,6 +505,22 @@ module StreamWeaver
       @components << Components::WireframeBlock.new(html: html, surface: surface, **options)
     end
 
+    # Render an HTML mockup wrapped in device chrome matching the surface type.
+    # Accepts a block that returns the HTML string to display inside the chrome frame.
+    # CSS tokens (--wf-ink, --wf-muted, etc.) and helper classes apply inside the frame.
+    #
+    # @param surface [Symbol, String] Device surface: :browser, :desktop, :mobile, :phone,
+    #   :tablet, :popover, :card, :widget, :panel
+    #
+    # @example
+    #   wireframe(surface: :browser) do
+    #     "<h1>Login</h1><button class='primary'>Sign in</button>"
+    #   end
+    def wireframe(surface: :browser, **options, &block)
+      html = block ? instance_exec(&block).to_s : ""
+      @components << Components::Wireframe.new(html: html, surface: surface, **options)
+    end
+
     # Render a code block with line-number-pinned annotation bubbles in a side panel.
     # Uses Prism.js for syntax highlighting (loaded once per page).
     # Layout: code pane left, annotation panel right — annotations aligned to their target lines.
