@@ -3214,6 +3214,7 @@ module StreamWeaver
             overflow: hidden;
             margin: 0.75rem 0;
             background: var(--sw-surface, #1d1f21);
+            color: #c5c8c6;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
             font-size: 0.875rem;
           }
@@ -3229,11 +3230,11 @@ module StreamWeaver
             padding: 0.75rem 0;
             background: transparent;
             white-space: pre;
+            overflow-x: auto;
           }
 
           .sw-annotated-code__line {
-            display: flex;
-            align-items: stretch;
+            display: block;
             line-height: 1.5em;
             min-height: 1.5em;
             padding: 0 0.75rem 0 0;
@@ -3251,11 +3252,9 @@ module StreamWeaver
             text-align: right;
             color: var(--sw-text-dim, #6b7280);
             user-select: none;
-            flex-shrink: 0;
           }
 
           .sw-annotated-code__line code {
-            flex: 1;
             background: transparent;
             color: inherit;
             padding: 0;
