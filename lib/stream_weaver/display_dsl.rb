@@ -517,6 +517,35 @@ module StreamWeaver
       component
     end
 
+    def diff(language: nil, **options, &block)
+      component = Components::DiffBlock.new(language: language, **options)
+      @components << component
+      return component unless block
+
+      builder = DiffBlockBuilder.new
+      builder.instance_eval(&block)
+      component.before_code = builder.before_code
+      component.after_code  = builder.after_code
+      component
+    end
+
+    class DiffBlockBuilder
+      attr_reader :before_code, :after_code
+
+      def initialize
+        @before_code = ""
+        @after_code  = ""
+      end
+
+      def before(&block)
+        @before_code = block.call.to_s
+      end
+
+      def after(&block)
+        @after_code = block.call.to_s
+      end
+    end
+
     # Render side-by-side comparison panels.
     # Use `before { ... }` and `after { ... }` named blocks inside
     # to populate each panel.

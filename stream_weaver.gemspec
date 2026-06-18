@@ -41,6 +41,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "kramdown-parser-gfm", "~> 1.1"
   spec.add_dependency "ostruct"  # Explicit dep for Ruby 3.5+ compatibility
   spec.add_dependency "iterm2_ruby", "~> 0.1"  # iTerm2 browser pane API (macOS only)
+  spec.add_dependency "diffy", "~> 3.4"         # Unified diff generation for DiffBlock
 
   # Development dependencies
   spec.add_development_dependency "rack-test", "~> 2.1"
