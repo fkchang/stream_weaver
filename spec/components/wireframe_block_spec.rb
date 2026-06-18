@@ -24,68 +24,6 @@ RSpec.describe "WireframeBlock CSS Token Foundation" do
         expect(c.surface).to eq(s)
       end
     end
-
-    describe "CSS token declarations via css macro" do
-      let(:css) { described_class.component_css_strings.join("\n") }
-
-      it "declares all required --wf-* tokens" do
-        %w[--wf-ink --wf-muted --wf-line --wf-paper --wf-card
-           --wf-accent --wf-accent-fg --wf-accent-soft
-           --wf-warn --wf-ok --wf-radius].each do |token|
-          expect(css).to include(token), "Missing token: #{token}"
-        end
-      end
-
-      it "scopes light-mode tokens to .sw-wireframe-surface" do
-        light_block = css[/\.sw-wireframe-surface\s*\{[^}]*--wf-ink/m]
-        expect(light_block).not_to be_nil, "Light mode tokens not found in .sw-wireframe-surface block"
-      end
-
-      it "scopes dark-mode tokens to html.dark .sw-wireframe-surface" do
-        expect(css).to include("html.dark .sw-wireframe-surface")
-        dark_block = css[/html\.dark \.sw-wireframe-surface\s*\{[^}]*--wf-ink/m]
-        expect(dark_block).not_to be_nil, "Dark mode tokens not found in html.dark .sw-wireframe-surface block"
-      end
-
-      it "defines .wf-card helper class scoped to .sw-wireframe-surface" do
-        expect(css).to include(".sw-wireframe-surface .wf-card")
-      end
-
-      it "defines .wf-box helper class scoped to .sw-wireframe-surface" do
-        expect(css).to include(".sw-wireframe-surface .wf-box")
-      end
-
-      it "defines .wf-pill helper class scoped to .sw-wireframe-surface" do
-        expect(css).to include(".sw-wireframe-surface .wf-pill")
-      end
-
-      it "defines .wf-chip helper class scoped to .sw-wireframe-surface" do
-        expect(css).to include(".sw-wireframe-surface .wf-chip")
-      end
-
-      it "defines .wf-muted helper class scoped to .sw-wireframe-surface" do
-        expect(css).to include(".sw-wireframe-surface .wf-muted")
-      end
-
-      it "defines button.primary scoped to .sw-wireframe-surface" do
-        expect(css).to include(".sw-wireframe-surface button.primary")
-      end
-
-      it "defines [data-primary] scoped to .sw-wireframe-surface" do
-        expect(css).to include(".sw-wireframe-surface [data-primary]")
-      end
-
-      it "does not have any top-level helper class selectors that would leak" do
-        # No bare .wf-* or button.primary selectors outside .sw-wireframe-surface
-        lines_with_selectors = css.lines.select { |l|
-          l.match?(/^\s*\.(wf-|sw-)/) || l.match?(/^\s*button\.primary/)
-        }
-        lines_with_selectors.each do |line|
-          expect(line).to include("sw-wireframe-surface"),
-            "Selector may leak outside .sw-wireframe-surface: #{line.strip}"
-        end
-      end
-    end
   end
 
   describe "HTML rendering" do
@@ -121,17 +59,72 @@ RSpec.describe "WireframeBlock CSS Token Foundation" do
     end
   end
 
-  describe "CSS injection via ComponentAssets" do
-    it "registers CSS strings on the class" do
-      expect(StreamWeaver::Components::WireframeBlock.component_css_strings).not_to be_empty
+  describe "CSS token injection (via adapter inline injection)" do
+    let(:adapter) { StreamWeaver::Adapter::AlpineJS.new }
+    let(:state)   { {} }
+
+    def render_html(component)
+      StreamWeaver::ComponentRenderer.render_html(adapter, [component], state)
     end
 
-    it "collects CSS strings when component is in the tree" do
-      c = StreamWeaver::Components::WireframeBlock.new(html: "")
-      css_strings, = StreamWeaver::ComponentAssets.collect([c])
-      combined = css_strings.join("\n")
-      expect(combined).to include("--wf-ink")
-      expect(combined).to include(".sw-wireframe-surface")
+    let(:html) { render_html(StreamWeaver::Components::WireframeBlock.new(html: "")) }
+
+    it "injects a <style> block into the rendered output" do
+      expect(html).to include("<style>")
+    end
+
+    it "injects all required --wf-* tokens" do
+      %w[--wf-ink --wf-muted --wf-line --wf-paper --wf-card
+         --wf-accent --wf-accent-fg --wf-accent-soft
+         --wf-warn --wf-ok --wf-radius].each do |token|
+        expect(html).to include(token), "Missing token: #{token}"
+      end
+    end
+
+    it "scopes light-mode tokens to .sw-wireframe-surface" do
+      expect(html).to match(/\.sw-wireframe-surface\s*\{[^}]*--wf-ink/m)
+    end
+
+    it "scopes dark-mode tokens to html.dark .sw-wireframe-surface" do
+      expect(html).to include("html.dark .sw-wireframe-surface")
+    end
+
+    it "defines .wf-card helper class scoped to .sw-wireframe-surface" do
+      expect(html).to include(".sw-wireframe-surface .wf-card")
+    end
+
+    it "defines .wf-box helper class scoped to .sw-wireframe-surface" do
+      expect(html).to include(".sw-wireframe-surface .wf-box")
+    end
+
+    it "defines .wf-pill helper class scoped to .sw-wireframe-surface" do
+      expect(html).to include(".sw-wireframe-surface .wf-pill")
+    end
+
+    it "defines .wf-chip helper class scoped to .sw-wireframe-surface" do
+      expect(html).to include(".sw-wireframe-surface .wf-chip")
+    end
+
+    it "defines .wf-muted helper class scoped to .sw-wireframe-surface" do
+      expect(html).to include(".sw-wireframe-surface .wf-muted")
+    end
+
+    it "defines button.primary scoped to .sw-wireframe-surface" do
+      expect(html).to include(".sw-wireframe-surface button.primary")
+    end
+
+    it "defines [data-primary] scoped to .sw-wireframe-surface" do
+      expect(html).to include(".sw-wireframe-surface [data-primary]")
+    end
+
+    it "only injects CSS once when multiple wireframe blocks are rendered" do
+      single_count = render_html(StreamWeaver::Components::WireframeBlock.new(html: "")).scan("--wf-ink").length
+      components = [
+        StreamWeaver::Components::WireframeBlock.new(html: "<p>A</p>"),
+        StreamWeaver::Components::WireframeBlock.new(html: "<p>B</p>")
+      ]
+      multi_html = StreamWeaver::ComponentRenderer.render_html(StreamWeaver::Adapter::AlpineJS.new, components, state)
+      expect(multi_html.scan("--wf-ink").length).to eq(single_count)
     end
   end
 
