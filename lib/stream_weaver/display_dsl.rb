@@ -458,6 +458,39 @@ module StreamWeaver
       @components << Components::ImplementationMap.new(files: files, **options)
     end
 
+    # Render an architecture decision block with labeled option cards.
+    # The block is evaluated in DecisionBuilder scope — only `option(...)` is valid inside it.
+    # Other DSL helpers (text, mermaid, etc.) are not available inside the block.
+    #
+    # @param question [String] The decision question shown as a heading
+    # @yield Block of `option(id:, label:, detail:, recommended:)` calls
+    #
+    # @example
+    #   decision(question: "Which database?") do
+    #     option(id: :pg, label: "PostgreSQL", detail: "Full ACID", recommended: true)
+    #     option(id: :sqlite, label: "SQLite", detail: "Zero-dep")
+    #   end
+    def decision(question:, **options, &block)
+      component = Components::Decision.new(question: question, **options)
+      @components << component
+      if block
+        builder = DecisionBuilder.new(component)
+        builder.instance_eval(&block)
+      end
+      component
+    end
+
+    # Builder context for decision component's option calls
+    class DecisionBuilder
+      def initialize(component)
+        @component = component
+      end
+
+      def option(id:, label:, detail:, recommended: false)
+        @component.add_option(id: id, label: label, detail: detail, recommended: recommended)
+      end
+    end
+
     # Render side-by-side comparison panels.
     # Use `before { ... }` and `after { ... }` named blocks inside
     # to populate each panel.

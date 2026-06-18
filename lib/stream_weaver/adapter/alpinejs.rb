@@ -2950,6 +2950,28 @@ module StreamWeaver
         end
       end
 
+      def render_decision(view, component, state)
+        inject_decision_css(view)
+
+        view.div(class: "sw-decision", role: "group") do
+          view.h3(class: "sw-decision__question") { view.plain(component.question) }
+          view.div(class: "sw-decision__options") do
+            component.options.each do |opt|
+              modifier = opt.recommended ? "recommended" : "muted"
+              view.div(class: "sw-decision__option sw-decision__option--#{modifier}") do
+                view.div(class: "sw-decision__option-header") do
+                  view.span(class: "sw-decision__option-label") { view.plain(opt.label) }
+                  if opt.recommended
+                    view.span(class: "sw-decision__badge") { view.plain("Recommended") }
+                  end
+                end
+                view.div(class: "sw-decision__option-detail") { view.plain(opt.detail) }
+              end
+            end
+          end
+        end
+      end
+
       def render_comparison(view, component, state)
         inject_comparison_css(view)
 
@@ -3003,6 +3025,102 @@ module StreamWeaver
 
         view.instance_variable_set(:@_impl_map_css_injected, true)
         view.style { view.raw(view.safe(implementation_map_css)) }
+      end
+
+      def inject_decision_css(view)
+        return if view.instance_variable_get(:@_decision_css_injected)
+
+        view.instance_variable_set(:@_decision_css_injected, true)
+        view.style { view.raw(view.safe(decision_css)) }
+      end
+
+      def decision_css
+        <<~CSS
+          /* ===========================================
+             Decision Block Styles (sw- prefix)
+             =========================================== */
+          .sw-decision {
+            margin: 1rem 0;
+          }
+
+          .sw-decision__question {
+            font-size: 1.0625rem;
+            font-weight: 600;
+            color: var(--sw-text, #111111);
+            margin: 0 0 0.75rem 0;
+          }
+
+          .sw-decision__options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+          }
+
+          .sw-decision__option {
+            flex: 1 1 14rem;
+            border: 1px solid var(--sw-border, #e0e0e0);
+            border-radius: var(--sw-radius-md, 6px);
+            background: var(--sw-surface, #ffffff);
+            padding: 0.875rem 1rem;
+          }
+
+          .sw-decision__option--recommended {
+            border-color: var(--sw-accent, #2563eb);
+            background: color-mix(in oklch, var(--sw-accent, #2563eb) 5%, var(--sw-surface, #ffffff));
+          }
+
+          .sw-decision__option--muted {
+            opacity: 0.65;
+          }
+
+          .sw-decision__option-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin-bottom: 0.375rem;
+          }
+
+          .sw-decision__option-label {
+            font-weight: 600;
+            font-size: 0.9375rem;
+            color: var(--sw-text, #111111);
+          }
+
+          .sw-decision__badge {
+            font-size: 0.6875rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--sw-accent, #2563eb);
+            background: color-mix(in oklch, var(--sw-accent, #2563eb) 12%, var(--sw-surface, #ffffff));
+            border: 1px solid color-mix(in oklch, var(--sw-accent, #2563eb) 30%, transparent);
+            border-radius: var(--sw-radius-sm, 4px);
+            padding: 0.125rem 0.5rem;
+            white-space: nowrap;
+          }
+
+          .sw-decision__option-detail {
+            font-size: 0.875rem;
+            color: var(--sw-text-dim, #555555);
+            line-height: 1.5;
+          }
+
+          html.dark .sw-decision__option {
+            background: var(--sw-surface, oklch(0.205 0 0));
+          }
+
+          html.dark .sw-decision__option--recommended {
+            background: color-mix(in oklch, var(--sw-accent, #60a5fa) 10%, var(--sw-surface, oklch(0.205 0 0)));
+            border-color: var(--sw-accent, #60a5fa);
+          }
+
+          html.dark .sw-decision__badge {
+            color: var(--sw-accent, #60a5fa);
+            background: color-mix(in oklch, var(--sw-accent, #60a5fa) 15%, var(--sw-surface, oklch(0.205 0 0)));
+            border-color: color-mix(in oklch, var(--sw-accent, #60a5fa) 35%, transparent);
+          }
+        CSS
       end
 
       def sidebar_toc_css

@@ -387,6 +387,10 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_implementation_map"
       end
 
+      def render_decision(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_decision"
+      end
+
       # =========================================
       # Design Deck component rendering (T7)
       # =========================================
