@@ -383,6 +383,10 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_comparison"
       end
 
+      def render_implementation_map(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_implementation_map"
+      end
+
       # =========================================
       # Design Deck component rendering (T7)
       # =========================================

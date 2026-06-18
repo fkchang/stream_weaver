@@ -2932,7 +2932,24 @@ module StreamWeaver
         end
       end
 
-      # Render side-by-side comparison panels.
+      def render_implementation_map(view, component, state)
+        inject_implementation_map_css(view)
+
+        view.div(class: "sw-impl-map") do
+          view.dl(class: "sw-impl-map__list") do
+            component.files.each do |entry|
+              view.div(class: "sw-impl-map__entry") do
+                view.dt(class: "sw-impl-map__path") do
+                  view.span(class: "sw-impl-map__icon", "aria-hidden" => "true") { view.plain("📄") }
+                  view.code { view.plain(entry[:path]) }
+                end
+                view.dd(class: "sw-impl-map__note") { view.plain(entry[:note]) }
+              end
+            end
+          end
+        end
+      end
+
       def render_comparison(view, component, state)
         inject_comparison_css(view)
 
@@ -2979,6 +2996,13 @@ module StreamWeaver
 
         view.instance_variable_set(:@_comparison_css_injected, true)
         view.style { view.raw(view.safe(comparison_css)) }
+      end
+
+      def inject_implementation_map_css(view)
+        return if view.instance_variable_get(:@_impl_map_css_injected)
+
+        view.instance_variable_set(:@_impl_map_css_injected, true)
+        view.style { view.raw(view.safe(implementation_map_css)) }
       end
 
       def sidebar_toc_css
@@ -3143,6 +3167,16 @@ module StreamWeaver
             background: color-mix(in oklch, #7c3aed 6%, var(--sw-surface, #ffffff));
           }
 
+          .sw-callout--decision {
+            border-left-color: #b45309;
+            background: color-mix(in oklch, #b45309 6%, var(--sw-surface, #ffffff));
+          }
+
+          .sw-callout--risk {
+            border-left-color: #dc2626;
+            background: color-mix(in oklch, #dc2626 10%, var(--sw-surface, #ffffff));
+          }
+
           /* Dark mode adjustments */
           html.dark .sw-callout {
             background: color-mix(in oklch, var(--sw-info) 8%, var(--sw-surface, oklch(0.205 0 0)));
@@ -3161,6 +3195,12 @@ module StreamWeaver
           }
           html.dark .sw-callout--tip {
             background: color-mix(in oklch, #a78bfa 8%, var(--sw-surface, oklch(0.205 0 0)));
+          }
+          html.dark .sw-callout--decision {
+            background: color-mix(in oklch, #fbbf24 8%, var(--sw-surface, oklch(0.205 0 0)));
+          }
+          html.dark .sw-callout--risk {
+            background: color-mix(in oklch, #f87171 10%, var(--sw-surface, oklch(0.205 0 0)));
           }
         CSS
       end
@@ -3215,6 +3255,79 @@ module StreamWeaver
             .sw-comparison {
               flex-direction: column;
             }
+          }
+        CSS
+      end
+
+      def implementation_map_css
+        <<~CSS
+          /* ===========================================
+             ImplementationMap Styles (sw- prefix)
+             =========================================== */
+          .sw-impl-map {
+            max-height: 32rem;
+            overflow-y: auto;
+            border: 1px solid var(--sw-border, #e0e0e0);
+            border-radius: var(--sw-radius-md, 6px);
+            background: var(--sw-surface, #ffffff);
+            margin: 0.75rem 0;
+          }
+
+          .sw-impl-map__list {
+            margin: 0;
+            padding: 0;
+          }
+
+          .sw-impl-map__entry {
+            display: flex;
+            align-items: baseline;
+            gap: 1rem;
+            padding: 0.5rem 1rem;
+            border-bottom: 1px solid var(--sw-border, #e0e0e0);
+          }
+
+          .sw-impl-map__entry:last-child {
+            border-bottom: none;
+          }
+
+          .sw-impl-map__path {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            font-size: 0.875rem;
+          }
+
+          .sw-impl-map__path code {
+            font-family: var(--sw-font-mono, ui-monospace, monospace);
+            font-size: 0.8125rem;
+            color: var(--sw-accent, #2563eb);
+            background: color-mix(in oklch, var(--sw-accent, #2563eb) 8%, var(--sw-surface, #ffffff));
+            padding: 0.125rem 0.375rem;
+            border-radius: var(--sw-radius-sm, 4px);
+          }
+
+          .sw-impl-map__icon {
+            font-size: 0.875rem;
+            flex-shrink: 0;
+          }
+
+          .sw-impl-map__note {
+            flex: 1;
+            min-width: 0;
+            margin: 0;
+            font-size: 0.875rem;
+            color: var(--sw-text-dim, #555555);
+            line-height: 1.5;
+          }
+
+          html.dark .sw-impl-map {
+            background: var(--sw-surface, oklch(0.205 0 0));
+          }
+
+          html.dark .sw-impl-map__path code {
+            background: color-mix(in oklch, var(--sw-accent, #60a5fa) 12%, var(--sw-surface, oklch(0.205 0 0)));
+            color: var(--sw-accent, #60a5fa);
           }
         CSS
       end

@@ -447,6 +447,17 @@ module StreamWeaver
       with_container(Components::Callout.new(variant: variant, title: title, **options), &block)
     end
 
+    # Render a file-path-to-rationale mapping for pre-flight planning.
+    #
+    # @param files [Array<Hash>] Array of {path:, note:} hashes
+    # @example
+    #   implementation_map(files: [
+    #     { path: "lib/foo.rb", note: "Add the new method" }
+    #   ])
+    def implementation_map(files: [], **options)
+      @components << Components::ImplementationMap.new(files: files, **options)
+    end
+
     # Render side-by-side comparison panels.
     # Use `before { ... }` and `after { ... }` named blocks inside
     # to populate each panel.
