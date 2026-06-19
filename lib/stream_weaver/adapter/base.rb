@@ -500,6 +500,10 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_diff_block"
       end
 
+      def render_api_endpoint(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_api_endpoint"
+      end
+
       protected
 
       # Convert spacing symbol to CSS value

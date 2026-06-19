@@ -562,6 +562,15 @@ module StreamWeaver
       end
     end
 
+    def api_endpoint(method:, path:, description: nil, params: [], response: {}, **options)
+      component = Components::ApiEndpoint.new(
+        method: method, path: path, description: description,
+        params: params, response: response, **options
+      )
+      @components << component
+      component
+    end
+
     # Render side-by-side comparison panels.
     # Use `before { ... }` and `after { ... }` named blocks inside
     # to populate each panel.

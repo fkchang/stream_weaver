@@ -3176,6 +3176,209 @@ module StreamWeaver
         CSS
       end
 
+      def render_api_endpoint(view, component, state)
+        inject_api_endpoint_css(view)
+
+        view.div(class: "sw-api-endpoint") do
+          view.div(class: "sw-api-endpoint__header") do
+            view.span(class: "sw-api-endpoint__method",
+                      style: "background:#{component.badge_color}") do
+              view.plain(component.http_method)
+            end
+            view.span(class: "sw-api-endpoint__path") { view.plain(component.path) }
+          end
+
+          view.p(class: "sw-api-endpoint__description") { view.plain(component.description) } if component.description?
+
+          if component.params?
+            view.div(class: "sw-api-endpoint__section") do
+              view.p(class: "sw-api-endpoint__section-title") { view.plain("Parameters") }
+              view.table(class: "sw-api-endpoint__table") do
+                view.thead do
+                  view.tr do
+                    view.th { view.plain("Name") }
+                    view.th { view.plain("Type") }
+                    view.th { view.plain("Required") }
+                  end
+                end
+                view.tbody do
+                  component.params.each do |param|
+                    name     = (param[:name]     || param["name"]     || "").to_s
+                    type     = (param[:type]     || param["type"]     || "").to_s
+                    required = param.fetch(:required) { param.fetch("required", false) }
+                    view.tr do
+                      view.td(class: "sw-api-endpoint__param-name") { view.plain(name) }
+                      view.td(class: "sw-api-endpoint__param-type") { view.plain(type) }
+                      view.td(class: "sw-api-endpoint__param-required") do
+                        view.plain(required ? "yes" : "no")
+                      end
+                    end
+                  end
+                end
+              end
+            end
+          end
+
+          if component.response?
+            view.div(class: "sw-api-endpoint__section") do
+              view.p(class: "sw-api-endpoint__section-title") { view.plain("Response") }
+              view.div(class: "sw-api-endpoint__response") do
+                view.pre(class: "sw-api-endpoint__response-pre") do
+                  lines = component.response.map { |k, v| "  #{k}: #{v}" }.join("\n")
+                  view.plain("{\n#{lines}\n}")
+                end
+              end
+            end
+          end
+        end
+      end
+
+      def inject_api_endpoint_css(view)
+        return if view.instance_variable_get(:@_api_endpoint_css_injected)
+
+        view.instance_variable_set(:@_api_endpoint_css_injected, true)
+        view.style { view.raw(view.safe(api_endpoint_css)) }
+      end
+
+      def api_endpoint_css
+        <<~CSS
+          /* -- ApiEndpoint -- */
+          .sw-api-endpoint {
+            border: 1px solid var(--sw-border, #e0e0e0);
+            border-radius: var(--sw-radius-md, 6px);
+            overflow: hidden;
+            margin: 0.75rem 0;
+            background: var(--sw-surface, #ffffff);
+            font-size: 0.875rem;
+          }
+
+          .sw-api-endpoint__header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.6rem 1rem;
+            background: color-mix(in oklch, var(--sw-surface, #f8f9fa) 60%, #000 5%);
+            border-bottom: 1px solid var(--sw-border, #e0e0e0);
+          }
+
+          .sw-api-endpoint__method {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            color: #ffffff;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            flex-shrink: 0;
+          }
+
+          .sw-api-endpoint__path {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.9rem;
+            color: var(--sw-text, #111111);
+            word-break: break-all;
+          }
+
+          .sw-api-endpoint__description {
+            padding: 0.6rem 1rem 0;
+            color: var(--sw-text-dim, #6b7280);
+            font-size: 0.875rem;
+            margin: 0;
+          }
+
+          .sw-api-endpoint__section {
+            padding: 0.75rem 1rem;
+            border-top: 1px solid var(--sw-border, #e0e0e0);
+          }
+
+          .sw-api-endpoint__section-title {
+            font-weight: 600;
+            font-size: 0.75rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--sw-text-dim, #6b7280);
+            margin: 0 0 0.5rem;
+          }
+
+          .sw-api-endpoint__table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8125rem;
+          }
+
+          .sw-api-endpoint__table th {
+            text-align: left;
+            padding: 0.3rem 0.5rem;
+            font-weight: 600;
+            color: var(--sw-text-dim, #6b7280);
+            border-bottom: 1px solid var(--sw-border, #e0e0e0);
+          }
+
+          .sw-api-endpoint__table td {
+            padding: 0.3rem 0.5rem;
+            border-bottom: 1px solid color-mix(in oklch, var(--sw-border, #e0e0e0) 50%, transparent);
+            color: var(--sw-text, #111111);
+          }
+
+          .sw-api-endpoint__param-name {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-weight: 500;
+          }
+
+          .sw-api-endpoint__param-type {
+            color: var(--sw-accent-b, #7c3aed);
+          }
+
+          .sw-api-endpoint__param-required {
+            color: var(--sw-text-dim, #6b7280);
+            font-size: 0.75rem;
+          }
+
+          .sw-api-endpoint__response {
+            background: color-mix(in oklch, var(--sw-surface, #f8f9fa) 60%, #000 3%);
+            border-radius: 4px;
+            overflow: hidden;
+          }
+
+          .sw-api-endpoint__response-pre {
+            margin: 0;
+            padding: 0.6rem 0.75rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.8125rem;
+            color: var(--sw-text, #111111);
+            white-space: pre;
+            overflow-x: auto;
+          }
+
+          html.dark .sw-api-endpoint {
+            background: var(--sw-surface, #1d1f21);
+            border-color: var(--sw-border, #374151);
+          }
+
+          html.dark .sw-api-endpoint__header {
+            background: color-mix(in oklch, #1d1f21 80%, #000 20%);
+            border-color: var(--sw-border, #374151);
+          }
+
+          html.dark .sw-api-endpoint__path {
+            color: var(--sw-text, #e5e7eb);
+          }
+
+          html.dark .sw-api-endpoint__table td {
+            color: var(--sw-text, #e5e7eb);
+          }
+
+          html.dark .sw-api-endpoint__response {
+            background: color-mix(in oklch, #1d1f21 80%, #000 20%);
+          }
+
+          html.dark .sw-api-endpoint__response-pre {
+            color: var(--sw-text, #e5e7eb);
+          }
+        CSS
+      end
+
       def render_comparison(view, component, state)
         inject_comparison_css(view)
 
