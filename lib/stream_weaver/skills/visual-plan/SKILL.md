@@ -193,6 +193,7 @@ The user sees live status without having to ask. The plan evolves from "what wil
 
 ## Known Gotchas
 
+- **`undefined method` errors on new components** — the canvas bridge may be an orphaned process from a previous session running older code. Fix: `streamweaver canvas-stop && streamweaver panel plan`. The fresh bridge picks up the latest gem code.
 - `spacer` and `divider` don't exist — use `div(style: "height:Npx")`
 - `text` does not render markdown — use `md` for bold/italic/links
 - `decision` block scope: only `option(...)` calls are valid inside it — other DSL methods throw
