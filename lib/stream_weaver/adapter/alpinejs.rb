@@ -2124,6 +2124,11 @@ module StreamWeaver
       def render_theme_preset(view, component, state)
         preset = component.preset
 
+        if preset[:sketch]
+          inject_sketch_mode(view)
+          return
+        end
+
         # Inject Google Fonts <link>
         fonts_url = StreamWeaver::Theme::Presets.google_fonts_url(preset)
         view.link(rel: "stylesheet", href: fonts_url)
@@ -2138,6 +2143,69 @@ module StreamWeaver
           animations_css = StreamWeaver::Theme::Presets.animations_css
           view.style { view.raw(view.safe(animations_css)) }
         end
+      end
+
+      def inject_sketch_mode(view)
+        return if view.instance_variable_get(:@_sketch_injected)
+
+        view.instance_variable_set(:@_sketch_injected, true)
+
+        # Caveat hand-drawn font from Google Fonts (Excalifont-style, or similar)
+        view.link(
+          rel: "stylesheet",
+          href: "https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&display=swap"
+        )
+
+        # rough.js CDN for hand-drawn border treatment
+        view.script(src: "https://cdn.jsdelivr.net/npm/roughjs@4/bundled/rough.js")
+
+        # Sketch mode CSS: hand-drawn font scoped to wireframe surfaces only
+        view.style { view.raw(view.safe(sketch_mode_css)) }
+
+        # Sketch mode JS: set data-sketch on body + roughify wireframe surfaces
+        view.script { view.raw(view.safe(sketch_mode_js)) }
+      end
+
+      def sketch_mode_css
+        <<~CSS
+          /* StreamWeaver Sketch Mode — scoped to .sw-wireframe-surface only */
+          body[data-sketch] .sw-wireframe-surface,
+          body[data-sketch] .sw-wireframe-surface * {
+            font-family: 'Caveat', cursive;
+          }
+        CSS
+      end
+
+      def sketch_mode_js
+        <<~JS
+          document.addEventListener('DOMContentLoaded', function() {
+            document.body.setAttribute('data-sketch', '');
+            if (typeof rough === 'undefined') return;
+            document.querySelectorAll('.sw-wireframe-surface').forEach(function(el) {
+              roughifyElement(el);
+            });
+          });
+
+          function roughifyElement(el) {
+            el.style.position = 'relative';
+            var rect = el.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;overflow:visible;z-index:0';
+            svg.setAttribute('width', rect.width);
+            svg.setAttribute('height', rect.height);
+            var rc = rough.svg(svg);
+            var ink = getComputedStyle(el).getPropertyValue('--wf-ink').trim() || '#1a1a2e';
+            var node = rc.rectangle(2, 2, rect.width - 4, rect.height - 4, {
+              roughness: 2.5,
+              stroke: ink,
+              strokeWidth: 1.5,
+              fill: 'none'
+            });
+            svg.appendChild(node);
+            el.insertBefore(svg, el.firstChild);
+          }
+        JS
       end
 
       # =========================================

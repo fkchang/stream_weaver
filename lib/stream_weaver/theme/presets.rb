@@ -268,13 +268,65 @@ module StreamWeaver
         }
       }.freeze
 
+      # Sketch preset: hand-drawn wireframe aesthetic
+      # Caveat (Google Fonts hand-drawn), rough.js borders via JS, Excalifont-style
+      # Special preset — renderer bypasses normal body-level font injection
+      # to keep non-wireframe content unaffected (C7).
+      SKETCH = {
+        name: :sketch,
+        label: "Sketch",
+        description: "Hand-drawn wireframe aesthetic with rough.js borders and hand-drawn font",
+        sketch: true,
+        fonts: {
+          display: "'Caveat', cursive",
+          body: "'Caveat', cursive",
+          mono: "monospace"
+        },
+        google_fonts: ["Caveat:wght@400;500;600;700"],
+        colors: {
+          light: {
+            bg: "#fafafa",
+            surface: "#ffffff",
+            surface_elevated: "#f5f5f5",
+            border: "#d1d5db",
+            text: "#1a1a2e",
+            text_dim: "#6b7280",
+            accent: "#3b82f6",
+            node_a: "#3b82f6",
+            node_b: "#10b981",
+            node_c: "#8b5cf6",
+            success: "#16a34a",
+            warning: "#d97706",
+            error: "#dc2626",
+            info: "#2563eb"
+          },
+          dark: {
+            bg: "#1a1a2e",
+            surface: "#16213e",
+            surface_elevated: "#0f3460",
+            border: "#374151",
+            text: "#f1f5f9",
+            text_dim: "#94a3b8",
+            accent: "#60a5fa",
+            node_a: "#60a5fa",
+            node_b: "#34d399",
+            node_c: "#a78bfa",
+            success: "#22c55e",
+            warning: "#fbbf24",
+            error: "#f87171",
+            info: "#60a5fa"
+          }
+        }
+      }.freeze
+
       # Registry of all available presets
       REGISTRY = {
         editorial: EDITORIAL,
         technical: TECHNICAL,
         warm: WARM,
         minimal: MINIMAL,
-        terminal: TERMINAL
+        terminal: TERMINAL,
+        sketch: SKETCH
       }.freeze
 
       # Get a preset by name

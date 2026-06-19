@@ -163,6 +163,67 @@ RSpec.describe "Wireframe Component with Device Chrome" do
     end
   end
 
+  describe "Sketch mode (theme_preset :sketch)" do
+    def render_sketch_page
+      app = StreamWeaver::App.new("Sketch Test") do
+        theme_preset :sketch
+        wireframe(surface: :browser) { "<h1>Mockup</h1>" }
+        text "Regular content"
+      end
+      app.rebuild_with_state({})
+      StreamWeaver::ComponentRenderer.render_html(adapter, app.components, state)
+    end
+
+    it "accepts :sketch as a valid theme_preset argument" do
+      expect { StreamWeaver::Components::ThemePreset.new(:sketch) }.not_to raise_error
+    end
+
+    it "loads rough.js CDN when sketch preset is used" do
+      html = render_sketch_page
+      expect(html).to include("roughjs")
+    end
+
+    it "loads Caveat (hand-drawn font) from Google Fonts" do
+      html = render_sketch_page
+      expect(html).to include("fonts.googleapis.com")
+      expect(html).to include("Caveat")
+    end
+
+    it "injects sketch mode CSS scoped to .sw-wireframe-surface" do
+      html = render_sketch_page
+      expect(html).to include("sw-wireframe-surface")
+      expect(html).to include("Caveat")
+    end
+
+    it "sets data-sketch on body via injected JS" do
+      html = render_sketch_page
+      expect(html).to include("data-sketch")
+    end
+
+    it "JS calls roughifyElement on .sw-wireframe-surface elements" do
+      html = render_sketch_page
+      expect(html).to include(".sw-wireframe-surface")
+      expect(html).to include("roughifyElement")
+    end
+
+    it "does not inject global body font-family (non-wireframe content unaffected)" do
+      html = render_sketch_page
+      # The sketch CSS must scope font to wireframe surface, not body globally
+      expect(html).not_to include("body {\n  font-family: 'Caveat'")
+      expect(html).not_to match(/body\s*\{\s*\n?\s*font-family:\s*'Caveat'/)
+    end
+
+    it "does not duplicate rough.js injection for multiple theme_preset calls" do
+      app = StreamWeaver::App.new("Dupe Test") do
+        theme_preset :sketch
+        theme_preset :sketch
+      end
+      app.rebuild_with_state({})
+      html = StreamWeaver::ComponentRenderer.render_html(adapter, app.components, state)
+      expect(html.scan("roughjs").length).to eq(1)
+    end
+  end
+
   describe "DisplayDSL#wireframe" do
     it "is available as a DSL method" do
       app = StreamWeaver::App.new("Test") do

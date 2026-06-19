@@ -7,13 +7,13 @@ RSpec.describe "Theme Presets + Typography + Animations (T15)" do
 
   describe StreamWeaver::Theme::Presets do
     describe ".available" do
-      it "returns 5 presets" do
-        expect(described_class.available.length).to eq(5)
+      it "returns 6 presets" do
+        expect(described_class.available.length).to eq(6)
       end
 
       it "includes all expected preset names" do
         expect(described_class.available).to contain_exactly(
-          :editorial, :technical, :warm, :minimal, :terminal
+          :editorial, :technical, :warm, :minimal, :terminal, :sketch
         )
       end
     end
@@ -150,6 +150,27 @@ RSpec.describe "Theme Presets + Typography + Animations (T15)" do
       end
     end
 
+    describe "sketch preset" do
+      let(:preset) { described_class.get(:sketch) }
+
+      it "is registered" do
+        expect(preset).not_to be_nil
+      end
+
+      it "has sketch flag set to true" do
+        expect(preset[:sketch]).to be true
+      end
+
+      it "uses a hand-drawn font (Caveat)" do
+        expect(preset[:fonts][:display]).to include("Caveat")
+        expect(preset[:fonts][:body]).to include("Caveat")
+      end
+
+      it "includes Caveat in google_fonts" do
+        expect(preset[:google_fonts].first).to include("Caveat")
+      end
+    end
+
     # =========================================
     # Google Fonts URL generation
     # =========================================
@@ -265,7 +286,7 @@ RSpec.describe "Theme Presets + Typography + Animations (T15)" do
     # =========================================
 
     describe "preset data-only constraint" do
-      it "all 5 presets contain only data, not rendering logic" do
+      it "all presets contain only data, not rendering logic" do
         StreamWeaver::Theme::Presets::REGISTRY.each do |name, preset|
           expect(preset).to be_a(Hash), "#{name} is not a Hash"
           expect(preset).to have_key(:name)
@@ -302,7 +323,7 @@ RSpec.describe "Theme Presets + Typography + Animations (T15)" do
       expect { described_class.new(:nonexistent) }.to raise_error(ArgumentError, /Unknown theme preset/)
     end
 
-    %i[editorial technical warm minimal terminal].each do |name|
+    %i[editorial technical warm minimal terminal sketch].each do |name|
       it "accepts :#{name} preset" do
         component = described_class.new(name)
         expect(component.preset_name).to eq(name)
