@@ -416,6 +416,83 @@ module StreamWeaver
                 }
 
                 /* ===========================================
+                   Theme: Doc (Anthropic-artifact editorial)
+                   Compact editorial — Charter serif headers, system sans body
+                   =========================================== */
+                body.sw-theme-doc {
+                  --sw-font-display: Charter, 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif;
+                  --sw-font-body: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+                  --sw-font-family: var(--sw-font-body);
+                  --sw-font-mono: 'SFMono-Regular', 'SF Mono', 'Cascadia Code', Menlo, 'Courier New', monospace;
+                  --sw-font-size-base: 15px;
+                  --sw-font-size-sm: 13px;
+                  --sw-font-size-lg: 17px;
+                  --sw-font-size-xl: 22px;
+                  --sw-line-height: 1.65;
+
+                  /* Colors — artifact-exact palette */
+                  --sw-color-primary: #1E4ED8;
+                  --sw-color-primary-hover: #1a3fb0;
+                  --sw-color-primary-light: #EEF2FF;
+                  --sw-color-primary-glow: rgba(30, 78, 216, 0.1);
+
+                  --sw-color-text: #181714;
+                  --sw-color-text-muted: #6B6860;
+                  --sw-color-text-light: #A09D96;
+                  --sw-color-bg: #F5F4EF;
+                  --sw-color-bg-card: #EDECE6;
+                  --sw-color-bg-elevated: #ECEAE3;
+                  --sw-color-border: #E0DED6;
+                  --sw-color-border-strong: #C8C6BE;
+                  --sw-color-border-focus: var(--sw-color-primary);
+
+                  --sw-color-secondary: #6B6860;
+                  --sw-color-secondary-hover: #4a4845;
+
+                  --sw-color-accent: #1E4ED8;
+                  --sw-color-accent-light: #EEF2FF;
+
+                  /* Spacing — compact editorial */
+                  --sw-spacing-xs: 0.25rem;
+                  --sw-spacing-sm: 0.5rem;
+                  --sw-spacing-md: 1rem;
+                  --sw-spacing-lg: 1.5rem;
+                  --sw-spacing-xl: 2rem;
+                  --sw-spacing-2xl: 3.25rem;
+
+                  /* Border Radius — minimal */
+                  --sw-radius-sm: 2px;
+                  --sw-radius-md: 4px;
+                  --sw-radius-lg: 6px;
+                  --sw-radius-xl: 8px;
+
+                  /* Shadows — near-flat */
+                  --sw-shadow-sm: none;
+                  --sw-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.04);
+                  --sw-shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.06);
+                  --sw-shadow-xl: 0 4px 8px rgba(0, 0, 0, 0.08);
+                  --sw-shadow-inner: none;
+
+                  /* Card — no accent left border */
+                  --sw-card-border-left: none;
+
+                  --sw-term-color: var(--sw-color-accent);
+                  --sw-term-bg-hover: var(--sw-color-accent-light);
+                }
+
+                /* Doc theme — serif section headers at artifact-exact size */
+                body.sw-theme-doc h2 {
+                  font-family: var(--sw-font-display);
+                  font-size: 1.45rem;
+                }
+
+                /* Doc theme — compact 52px section gap matching artifact */
+                body.sw-theme-doc section,
+                body.sw-theme-doc .section {
+                  margin-bottom: 52px;
+                }
+
+                /* ===========================================
                    Base Styles
                    =========================================== */
                 *, *::before, *::after {

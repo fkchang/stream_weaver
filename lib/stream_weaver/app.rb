@@ -10,7 +10,7 @@ module StreamWeaver
     include DisplayDSL
 
     # Built-in themes (custom themes checked via StreamWeaver.theme_exists?)
-    BUILT_IN_THEMES = [:default, :dashboard, :document, :dark].freeze
+    BUILT_IN_THEMES = [:default, :dashboard, :document, :dark, :doc].freeze
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
