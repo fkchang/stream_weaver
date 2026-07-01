@@ -1140,7 +1140,7 @@ module StreamWeaver
                   headers.each_with_index do |header, col_idx|
                     col = columns[col_idx]
                     align = col&.align || :left
-                    th_style = "padding: #{options[:compact] ? '0.5rem' : '0.75rem'} 1rem; text-align: #{align}; border-bottom: 2px solid var(--sw-color-border, #e0e0e0); font-weight: 600;"
+                    th_style = "padding: #{options[:compact] ? '0.5rem' : '0.75rem'} 1rem; text-align: #{align}; border-bottom: 2px solid var(--sw-color-border, #e0e0e0); font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--sw-color-text-dim, var(--sw-color-text-muted, #6B6860));"
                     th_style += " cursor: pointer; user-select: none;" if options[:sortable]
 
                     th_attrs = { style: th_style }
@@ -1195,6 +1195,9 @@ module StreamWeaver
                     cell_style = "padding: #{options[:compact] ? '0.5rem' : '0.75rem'} 1rem; text-align: #{align}; border-bottom: 1px solid var(--sw-color-border, #e0e0e0);"
                     if options[:bordered]
                       cell_style += " border: 1px solid var(--sw-color-border, #e0e0e0);"
+                    end
+                    if col_idx.zero?
+                      cell_style += " color: var(--sw-color-accent, #1E4ED8); font-family: var(--sw-font-mono, monospace); font-size: .8rem;"
                     end
 
                     # Apply column style if defined

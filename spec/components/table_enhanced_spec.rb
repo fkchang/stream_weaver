@@ -46,6 +46,28 @@ RSpec.describe StreamWeaver::Components::Table do
     end
   end
 
+  describe "header caps and first-column accent styling" do
+    it "renders th with uppercase, letter-spacing, and dim color" do
+      html = render_table_html
+      expect(html).to include("text-transform: uppercase")
+      expect(html).to include("letter-spacing: .07em")
+      expect(html).to include("--sw-color-text-dim")
+      expect(html).to include("--sw-color-text-muted")
+    end
+
+    it "renders first column cells in accent monospace" do
+      html = render_table_html
+      expect(html).to include("var(--sw-color-accent, #1E4ED8)")
+      expect(html).to include("var(--sw-font-mono, monospace)")
+    end
+
+    it "does not apply accent monospace styling to non-first columns" do
+      html = render_table_html
+      age_cell = html[/<td[^>]*>30<\/td>/]
+      expect(age_cell).not_to include("--sw-color-accent")
+    end
+  end
+
   describe "sticky_header option" do
     it "adds sw-table--sticky-header class when true" do
       html = render_table_html(sticky_header: true)
