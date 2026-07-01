@@ -194,6 +194,21 @@ module StreamWeaver
           spacing_md: "1.5rem",
           card_border_left: "none"
         }
+      },
+      doc: {
+        name: "Doc",
+        description: "Compact Editorial",
+        variables: {
+          font_display: "Charter, 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif",
+          font_body: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif",
+          font_size_base: "15px",
+          line_height: "1.65",
+          color_primary: "#1E4ED8",
+          color_bg: "#F5F4EF",
+          color_text: "#181714",
+          spacing_md: "1rem",
+          card_border_left: "none"
+        }
       }
     }.freeze
 

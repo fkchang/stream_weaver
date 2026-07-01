@@ -50,3 +50,12 @@ examples_playground/
 
 # bv (beads viewer) local config and caches
 .bv/
+
+# tyrion worktree state
+.tyrion/
+
+# Personal content — sanitize before committing (contains travel/location details)
+docs/reference/travel-state-prd.artifact.html
+docs/sw-doc-parity-checkpoint.md
+examples/components/prd_demo.rb
+examples/components/prd_dsl.rb

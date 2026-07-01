@@ -63,6 +63,16 @@ RSpec.describe "Callout Component (T11)" do
         expect(c.icon).not_to be_nil
       end
 
+      it "returns decision icon for :decision" do
+        c = described_class.new(variant: :decision)
+        expect(c.icon).to eq("⚖️")
+      end
+
+      it "returns risk icon for :risk" do
+        c = described_class.new(variant: :risk)
+        expect(c.icon).to eq("\u{1F53A}")
+      end
+
       it "returns different icons for different variants" do
         icons = StreamWeaver::Components::Callout::VARIANTS.map do |v|
           described_class.new(variant: v).icon
@@ -96,6 +106,16 @@ RSpec.describe "Callout Component (T11)" do
       it "returns sw-callout--tip for :tip" do
         c = described_class.new(variant: :tip)
         expect(c.variant_class).to eq("sw-callout--tip")
+      end
+
+      it "returns sw-callout--decision for :decision" do
+        c = described_class.new(variant: :decision)
+        expect(c.variant_class).to eq("sw-callout--decision")
+      end
+
+      it "returns sw-callout--risk for :risk" do
+        c = described_class.new(variant: :risk)
+        expect(c.variant_class).to eq("sw-callout--risk")
       end
     end
   end

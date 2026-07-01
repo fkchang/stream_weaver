@@ -383,6 +383,16 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_comparison"
       end
 
+      # Render a document-level header (eyebrow + serif title + meta pills)
+      def render_doc_header(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_doc_header"
+      end
+
+      # Render a numbered section eyebrow + h2 heading pair
+      def render_doc_section_header(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_doc_section_header"
+      end
+
       def render_implementation_map(view, component, state)
         raise NotImplementedError, "#{self.class} must implement #render_implementation_map"
       end

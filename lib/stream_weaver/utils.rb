@@ -12,9 +12,9 @@ module StreamWeaver
       return "just now" if seconds < 5
 
       case seconds
-      when ...60    then "#{seconds}s ago"
-      when ...3600  then "#{seconds / 60}m ago"
-      when ...86400 then "#{seconds / 3600}h ago"
+      when 0..59    then "#{seconds}s ago"
+      when 60..3599 then "#{seconds / 60}m ago"
+      when 3600..86399 then "#{seconds / 3600}h ago"
       else               "#{seconds / 86400}d ago"
       end
     end

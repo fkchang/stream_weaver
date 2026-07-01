@@ -3468,6 +3468,170 @@ module StreamWeaver
         end
       end
 
+      # =========================================
+      # DocHeader and DocSectionHeader rendering
+      # =========================================
+
+      def render_doc_header(view, component, state)
+        inject_doc_header_css(view)
+
+        view.header(class: "sw-doc-header") do
+          if component.eyebrow
+            view.div(class: "sw-doc-header__eyebrow") { view.plain(component.eyebrow) }
+          end
+          view.h1(class: "sw-doc-header__title") { view.plain(component.title) }
+          unless component.pills.empty?
+            view.div(class: "sw-doc-header__meta") do
+              component.pills.each do |pill|
+                if pill.is_a?(Hash)
+                  variant = pill[:variant] || :default
+                  view.span(class: "sw-doc-header__pill sw-doc-header__pill--#{variant}") do
+                    view.plain(pill[:text].to_s)
+                  end
+                else
+                  view.span(class: "sw-doc-header__meta-item") { view.plain(pill.to_s) }
+                end
+              end
+            end
+          end
+        end
+      end
+
+      def render_doc_section_header(view, component, state)
+        inject_doc_header_css(view)
+
+        attrs = { class: "sw-doc-section-header" }
+        attrs[:id] = component.anchor_id if component.anchor_id
+        view.div(**attrs) do
+          view.div(class: "sw-doc-section-header__eyebrow") { view.plain(component.number) }
+          view.h2(class: "sw-doc-section-header__title") { view.plain(component.title) }
+        end
+      end
+
+      def inject_doc_header_css(view)
+        return if view.instance_variable_get(:@_doc_header_css_injected)
+
+        view.instance_variable_set(:@_doc_header_css_injected, true)
+        view.style { view.raw(view.safe(doc_header_css)) }
+      end
+
+      DOC_HEADER_CSS = <<~CSS
+        /* ===========================================
+           DocHeader & DocSectionHeader (sw- prefix)
+           =========================================== */
+
+        /* Suppress the StreamWeaver app shell h1 — doc_header is the title */
+        body:has(.sw-doc-header) > h1 {
+          display: none;
+        }
+
+        /* Tighten body top padding when doc_header takes over the page header role */
+        body:has(.sw-doc-header) {
+          padding-top: 3rem;
+        }
+        .sw-doc-header {
+          border-bottom: 1px solid var(--sw-border, #e0e0e0);
+          padding: 2.5rem 0 2rem;
+          margin-bottom: 2.5rem;
+        }
+
+        .sw-doc-header__eyebrow {
+          font-family: var(--sw-font-mono, 'SFMono-Regular', 'Cascadia Code', monospace);
+          font-size: 0.69rem;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--sw-text-dim, #6b6860);
+          margin-bottom: 0.75rem;
+        }
+
+        .sw-doc-header__title {
+          font-family: Charter, 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif;
+          font-size: 2rem;
+          font-weight: 400;
+          line-height: 1.2;
+          color: var(--sw-text, #141413);
+          margin-bottom: 1.25rem;
+        }
+
+        .sw-doc-header__meta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem 1.25rem;
+          font-size: 0.8125rem;
+          color: var(--sw-text-dim, #6b6860);
+          align-items: center;
+        }
+
+        .sw-doc-header__meta-item {
+          display: inline;
+        }
+
+        .sw-doc-header__pill {
+          display: inline-flex;
+          align-items: center;
+          font-size: 0.69rem;
+          font-weight: 500;
+          letter-spacing: 0.04em;
+          padding: 2px 8px;
+          border-radius: 3px;
+        }
+
+        .sw-doc-header__pill--default {
+          background: color-mix(in oklch, var(--sw-info, #2563eb) 12%, transparent);
+          color: var(--sw-info, #2563eb);
+        }
+
+        .sw-doc-header__pill--warn {
+          background: color-mix(in oklch, var(--sw-warning, #d97706) 12%, transparent);
+          color: color-mix(in oklch, var(--sw-warning, #d97706) 80%, #000);
+        }
+
+        .sw-doc-header__pill--good {
+          background: color-mix(in oklch, var(--sw-success, #16a34a) 12%, transparent);
+          color: color-mix(in oklch, var(--sw-success, #16a34a) 80%, #000);
+        }
+
+        /* Section eyebrow */
+        .sw-doc-section-header {
+          margin-bottom: 1rem;
+        }
+
+        .sw-doc-section-header__eyebrow {
+          font-family: var(--sw-font-mono, 'SFMono-Regular', 'Cascadia Code', monospace);
+          font-size: 0.66rem;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: var(--sw-text-dim, #a09d96);
+          margin-bottom: 0.625rem;
+          display: flex;
+          align-items: center;
+          gap: 0.625rem;
+        }
+
+        .sw-doc-section-header__eyebrow::after {
+          content: '';
+          flex: 1;
+          height: 1px;
+          background: var(--sw-border, #e0e0e0);
+        }
+
+        /* Use high specificity to beat body.sw-theme-document h2 rules */
+        .sw-doc-section-header > .sw-doc-section-header__title {
+          font-family: Charter, 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif;
+          font-size: 1.4rem;
+          font-weight: 400;
+          line-height: 1.25;
+          color: var(--sw-text, #141413);
+          margin: 0;
+          padding-bottom: 0;
+          border-bottom: none;
+        }
+      CSS
+
+      def doc_header_css
+        DOC_HEADER_CSS
+      end
+
       # -- T11 CSS/JS injection helpers --
 
       def inject_sidebar_toc_assets(view)
@@ -3715,21 +3879,30 @@ module StreamWeaver
             z-index: 10;
           }
 
+          .sw-sidebar-toc__nav {
+            counter-reset: sw-toc-counter;
+          }
+
           /* Desktop: vertical sidebar */
           @media (min-width: 1000px) {
             .sw-sidebar-toc {
-              width: 170px;
-              max-height: calc(100vh - 2rem);
-              overflow-y: auto;
-              float: left;
-              margin-right: 1.5rem;
-              margin-left: -190px;
+              grid-column: 1;
+              /* Span a large number of implicit rows so the sidebar's grid
+                 area covers the full content height (unknown ahead of time,
+                 since content renders as flat siblings with no wrapper) —
+                 without this, position:sticky only holds within the
+                 sidebar's own (short) auto row. */
+              grid-row: 1 / 9999;
+              align-self: start;
+              top: 2rem;
             }
 
             .sw-sidebar-toc__nav {
               display: flex;
               flex-direction: column;
               gap: 0.25rem;
+              max-height: calc(100vh - 4rem);
+              overflow-y: auto;
             }
           }
 
@@ -3765,7 +3938,10 @@ module StreamWeaver
           }
 
           .sw-sidebar-toc__link {
-            display: block;
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
+            counter-increment: sw-toc-counter;
             padding: 0.375rem 0.75rem;
             font-size: 0.8125rem;
             color: var(--sw-text-dim, #444444);
@@ -3773,6 +3949,14 @@ module StreamWeaver
             border-radius: var(--sw-radius-sm, 4px);
             border-left: 2px solid transparent;
             transition: color 150ms ease-out, background 150ms ease-out, border-color 150ms ease-out;
+          }
+
+          .sw-sidebar-toc__link::before {
+            content: counter(sw-toc-counter, decimal-leading-zero);
+            flex-shrink: 0;
+            font-family: var(--sw-font-mono, 'SFMono-Regular', 'Cascadia Code', monospace);
+            font-size: 0.625rem;
+            color: var(--sw-text-dim, #6b7280);
           }
 
           .sw-sidebar-toc__link:hover {
@@ -3796,6 +3980,53 @@ module StreamWeaver
             .sw-sidebar-toc__link.sw-is-active {
               border-left-color: transparent;
               border-bottom-color: var(--sw-accent, #0d9488);
+            }
+          }
+
+          /* ── Document layout fix ──
+             When sidebar_toc is present:
+             - Expand the body to give the sidebar room
+             - Remove the card chrome from #app-container
+             - Remove top padding (hidden h1 leaves a gap) */
+          @media (min-width: 1000px) {
+            body:has(.sw-sidebar-toc) {
+              max-width: 1200px;
+            }
+
+            body:has(.sw-doc-header) > h1 + #app-container,
+            #app-container:has(.sw-sidebar-toc) {
+              padding-top: 0;
+              box-shadow: none;
+              border: none;
+              background: transparent;
+              border-radius: 0;
+            }
+
+            /* Sidebar + content as a CSS grid (replaces the old
+               float + negative-margin hack, which let the sidebar
+               scroll away instead of staying sticky). #app-container's
+               base rule sets overflow-x: auto for wide tables/code —
+               per spec that forces overflow-y to also compute to auto,
+               turning #app-container into its own scroll container and
+               silently breaking position:sticky for every descendant
+               (this was the actual root cause of the sticky-sidebar bug,
+               independent of the float hack). Restore both axes to
+               visible here so sticky positions relative to the page. */
+            #app-container:has(.sw-sidebar-toc) {
+              --sw-toc-width: 220px;
+              --sw-toc-gap: 2rem;
+              display: grid;
+              overflow: visible;
+              grid-template-columns: var(--sw-toc-width) minmax(0, 1fr);
+              column-gap: var(--sw-toc-gap);
+            }
+
+            /* doc_header stays a normal column-2 grid item (never claims
+               column 1) so it can't block the sidebar's row-span below —
+               it bleeds visually full-width via negative margin instead. */
+            #app-container:has(.sw-sidebar-toc) > .sw-doc-header {
+              margin-left: calc(-1 * (var(--sw-toc-width) + var(--sw-toc-gap)));
+              padding-left: calc(var(--sw-toc-width) + var(--sw-toc-gap));
             }
           }
         CSS

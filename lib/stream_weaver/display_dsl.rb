@@ -431,6 +431,41 @@ module StreamWeaver
       @components << Components::SidebarToc.new(sections: sections, **options)
     end
 
+    # Render a document-level header with eyebrow, serif title, and meta pills.
+    # Used to open PRDs, reports, and long-form explainer documents.
+    #
+    # Pills are an array of mixed items:
+    #   - String → plain meta text (e.g., "June 25, 2026")
+    #   - Hash { text:, variant: } → colored pill — variant: :default (blue), :warn (amber), :good (green)
+    #
+    # @param eyebrow [String, nil] Small all-caps label above the title
+    # @param title [String] Main document title (rendered in serif)
+    # @param pills [Array] Status pills and meta text items
+    #
+    # @example
+    #   doc_header(
+    #     eyebrow: "cultiv-ai · Personal OS",
+    #     title: "Calendar-Driven Travel State",
+    #     pills: [{ text: "Draft" }, "June 25, 2026", "Author: Forrest Chang"]
+    #   )
+    def doc_header(title:, eyebrow: nil, pills: [], **options)
+      @components << Components::DocHeader.new(title: title, eyebrow: eyebrow, pills: pills, **options)
+    end
+
+    # Render a numbered section eyebrow + h2 heading.
+    # The eyebrow is a monospace number with an extending decorative line.
+    # Pass id: to make the section linkable from sidebar_toc.
+    #
+    # @param number [String] Section number label, e.g., "01"
+    # @param title [String] Section heading text
+    # @param id [String, nil] HTML id for TOC anchor linking
+    #
+    # @example
+    #   doc_section_header "01", "Problem Statement", id: "problem"
+    def doc_section_header(number, title, id: nil, **options)
+      @components << Components::DocSectionHeader.new(number, title, id: id, **options)
+    end
+
     # Render a non-dismissible callout box with colored left border.
     # Unlike Alert, Callout is static -- no dismiss button.
     #

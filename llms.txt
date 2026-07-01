@@ -446,7 +446,7 @@ end
 ```ruby
 app "Title",
   layout: :wide,        # :default, :wide, :full, :fluid
-  theme: :dashboard     # :default, :dashboard, :document
+  theme: :dashboard     # :default, :dashboard, :document, :doc (artifact-exact editorial; supports dark via data-sw-theme="dark" on <html>)
 do
   # ...
 end

@@ -52,6 +52,18 @@ MeetingNotesApp.new(meetings: meetings).run!
 
 ---
 
+## vs. "I can show you a mockup, but it's token-intensive"
+
+Ask Claude for a visual and you'll often get something like this:
+
+> Some of what we're working on might be easier to explain if I can show it to you in a web browser. I can put together mockups, layout comparisons, and other visuals as we go. This feature is still new and can be token-intensive. Want to try it? (Requires opening a local URL)
+
+That's an honest warning, not a bug - hand-written HTML/React artifacts *are* token-intensive, so tools built that way have to gate visual explanation behind an expensive, novel, opt-in mode. TypeScript-flavored tooling doesn't have Ruby's sensibilities about generating a lot of interface from a little code.
+
+StreamWeaver's answer: mockups, layout comparisons, and diagrams aren't a special mode you opt into - they're the default, at 5-10x fewer tokens than hand-written markup (see below), and they're **two-way interactive** while a static artifact isn't. Same local-browser mechanism, none of the token tax.
+
+---
+
 ## The Modes
 
 StreamWeaver evolved through real needs, resulting in four modes:

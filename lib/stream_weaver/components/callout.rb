@@ -15,7 +15,7 @@ module StreamWeaver
     #     text "Be careful with this API."
     #   end
     class Callout < Base
-      VARIANTS = %i[info warning success error tip].freeze
+      VARIANTS = %i[info warning success error tip decision risk].freeze
 
       attr_reader :variant, :title
       attr_accessor :children
@@ -34,11 +34,13 @@ module StreamWeaver
       # @return [String] Unicode icon
       def icon
         case @variant
-        when :info    then "\u2139\uFE0F"  # info
-        when :warning then "\u26A0\uFE0F"  # warning
-        when :success then "\u2705"         # check
-        when :error   then "\u274C"         # cross
-        when :tip     then "\u{1F4A1}"      # lightbulb
+        when :info     then "\u2139\uFE0F"  # info
+        when :warning  then "\u26A0\uFE0F"  # warning
+        when :success  then "\u2705"         # check
+        when :error    then "\u274C"         # cross
+        when :tip      then "\u{1F4A1}"      # lightbulb
+        when :decision then "\u2696\uFE0F"  # scales (decision)
+        when :risk     then "\u{1F53A}"  # red triangle up (risk)
         else "\u2139\uFE0F"
         end
       end

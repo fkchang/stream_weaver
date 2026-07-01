@@ -32,6 +32,20 @@ RSpec.describe "Doc theme (sw-theme-doc)" do
     end
   end
 
+  describe "dark mode" do
+    it "doc dark-mode CSS overrides are emitted in the page stylesheet" do
+      a = StreamWeaver::App.new("Title", theme: :doc) {}
+      html = render_app(a)
+      expect(html).to include('html[data-sw-theme="dark"] body.sw-theme-doc {')
+      expect(html).to include("--sw-color-bg: #1A1714")
+      expect(html).to include("--sw-color-bg-card: #232019")
+      expect(html).to include("--sw-color-text: #ECEAE3")
+      expect(html).to include("--sw-color-accent: #6699FF")
+      expect(html).to include("--sw-color-border: #3A352D")
+      expect(html).to include("--sw-color-bg-elevated: #2A251F")
+    end
+  end
+
   describe "theme isolation" do
     it "body class is sw-theme-default when theme: :default — doc class absent" do
       a = StreamWeaver::App.new("Title", theme: :default) {}
@@ -58,6 +72,24 @@ RSpec.describe "Doc theme (sw-theme-doc)" do
       a = StreamWeaver::App.new("Title", theme: :default) {}
       html = render_app(a)
       expect(html).to include("--sw-color-bg: #f8f8f8")
+    end
+  end
+
+  describe "theme registration" do
+    it "is a recognized built-in theme" do
+      expect(StreamWeaver::App::BUILT_IN_THEMES).to include(:doc)
+      expect(StreamWeaver.theme_exists?(:doc)).to be true
+    end
+
+    it "boots an app without falling back to :default" do
+      a = StreamWeaver::App.new("Title", theme: :doc) {}
+      expect(a.theme).to eq(:doc)
+    end
+
+    it "is available to ThemeSwitcher via all_themes_for_switcher" do
+      switcher_entry = StreamWeaver.all_themes_for_switcher.find { |t| t[:id] == :doc }
+      expect(switcher_entry).not_to be_nil
+      expect(switcher_entry[:label]).to eq("Doc")
     end
   end
 end

@@ -134,6 +134,94 @@ RSpec.describe "SidebarToc Component (T11)" do
   end
 
   # =========================================
+  # TOC numbers (CSS counters)
+  # =========================================
+
+  describe "CSS counters for TOC numbering" do
+    let(:adapter) { StreamWeaver::Adapter::AlpineJS.new }
+    let(:css) { adapter.send(:sidebar_toc_css) }
+    let(:sections) do
+      [
+        { id: "s1", label: "Intro" },
+        { id: "s2", label: "Details" }
+      ]
+    end
+
+    it "resets the counter on .sw-sidebar-toc__nav" do
+      expect(css).to match(/\.sw-sidebar-toc__nav\s*\{[^}]*counter-reset:\s*sw-toc-counter/m)
+    end
+
+    it "increments the counter on each .sw-sidebar-toc__link" do
+      expect(css).to match(/\.sw-sidebar-toc__link\s*\{[^}]*counter-increment:\s*sw-toc-counter/m)
+    end
+
+    it "displays a zero-padded number via ::before" do
+      expect(css).to include(".sw-sidebar-toc__link::before")
+      expect(css).to match(/content:\s*counter\(sw-toc-counter,\s*decimal-leading-zero\)/)
+    end
+
+    it "renders the counter number in a mono/faint color, not hardcoded per link" do
+      expect(css).to match(/\.sw-sidebar-toc__link::before\s*\{[^}]*font-family:\s*var\(--sw-font-mono/m)
+      expect(css).to match(/\.sw-sidebar-toc__link::before\s*\{[^}]*color:\s*var\(--sw-text-dim/m)
+    end
+
+    it "is purely presentational — rendered HTML for links is unchanged by the counter CSS" do
+      toc = StreamWeaver::Components::SidebarToc.new(sections: sections)
+      html = StreamWeaver::ComponentRenderer.render_html(adapter, [toc], {})
+      expect(html).to include('href="#s1"')
+      expect(html).to include("Intro")
+      link_texts = html.scan(%r{<a[^>]*class="sw-sidebar-toc__link"[^>]*>(.*?)</a>}m).flatten
+      expect(link_texts).to eq(%w[Intro Details])
+    end
+  end
+
+  # =========================================
+  # Sticky grid layout (replaces float + negative-margin hack)
+  # =========================================
+
+  describe "sticky grid layout" do
+    let(:adapter) { StreamWeaver::Adapter::AlpineJS.new }
+    let(:css) { adapter.send(:sidebar_toc_css) }
+
+    it "does not use the old float + negative-margin hack" do
+      expect(css).not_to match(/float:\s*left/)
+      expect(css).not_to match(/margin-left:\s*-224px/)
+    end
+
+    it "turns the doc container into a grid when sidebar_toc is present" do
+      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*\{[^}]*display:\s*grid/m)
+      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*\{[^}]*grid-template-columns:\s*var\(--sw-toc-width\) minmax\(0,\s*1fr\)/m)
+    end
+
+    it "pins the sidebar to column 1, sticky and self-aligned to start" do
+      expect(css).to match(/\.sw-sidebar-toc\s*\{[^}]*grid-column:\s*1/m)
+      expect(css).to match(/\.sw-sidebar-toc\s*\{[^}]*align-self:\s*start/m)
+      expect(css).to match(/\.sw-sidebar-toc\s*\{[^}]*top:\s*2rem/m)
+    end
+
+    it "bleeds the doc_header full-width via negative margin" do
+      # not grid-column — that would block the sidebar's row-span
+      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*>\s*\.sw-doc-header\s*\{[^}]*margin-left:\s*calc\(-1 \* \(var\(--sw-toc-width\) \+ var\(--sw-toc-gap\)\)\)/m)
+      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*>\s*\.sw-doc-header\s*\{[^}]*padding-left:\s*calc\(var\(--sw-toc-width\) \+ var\(--sw-toc-gap\)\)/m)
+    end
+
+    it "defines --sw-toc-width and --sw-toc-gap as the single source of truth for sidebar sizing" do
+      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*\{[^}]*--sw-toc-width:\s*220px/m)
+      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*\{[^}]*--sw-toc-gap:\s*2rem/m)
+    end
+
+    it "restores overflow to visible on the grid container" do
+      # position:sticky won't position relative to the page otherwise
+      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*\{[^}]*overflow:\s*visible/m)
+    end
+
+    it "preserves the horizontal-bar responsive layout below 1000px" do
+      expect(css).to match(/@media \(max-width:\s*999px\)\s*\{[^@]*\.sw-sidebar-toc\s*\{[^}]*top:\s*0/m)
+      expect(css).to match(/\.sw-sidebar-toc__nav\s*\{[^}]*flex-direction:\s*row/m)
+    end
+  end
+
+  # =========================================
   # DSL integration
   # =========================================
 

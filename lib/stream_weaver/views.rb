@@ -480,6 +480,31 @@ module StreamWeaver
                   --sw-term-bg-hover: var(--sw-color-accent-light);
                 }
 
+                /* Doc theme — dark mode overrides (data-sw-theme="dark" lives on <html>).
+                   Colors only — type/spacing/radius/shadow cascade from the light block above. */
+                html[data-sw-theme="dark"] body.sw-theme-doc {
+                  --sw-color-primary: #6699FF;
+                  --sw-color-primary-hover: #8AB0FF;
+                  --sw-color-primary-light: #1B2740;
+                  --sw-color-primary-glow: rgba(102, 153, 255, 0.15);
+
+                  --sw-color-text: #ECEAE3;
+                  --sw-color-text-muted: #A8A399;
+                  --sw-color-text-light: #716C61;
+                  --sw-color-bg: #1A1714;
+                  --sw-color-bg-card: #232019;
+                  --sw-color-bg-elevated: #2A251F;
+                  --sw-color-border: #3A352D;
+                  --sw-color-border-strong: #4A453B;
+                  --sw-color-border-focus: var(--sw-color-primary);
+
+                  --sw-color-secondary: #A8A399;
+                  --sw-color-secondary-hover: #C5C0B5;
+
+                  --sw-color-accent: #6699FF;
+                  --sw-color-accent-light: #1B2740;
+                }
+
                 /* Doc theme — serif section headers at artifact-exact size */
                 body.sw-theme-doc h2 {
                   font-family: var(--sw-font-display);
