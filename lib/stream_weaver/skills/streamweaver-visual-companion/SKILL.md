@@ -205,7 +205,7 @@ status_dot :green, "Active"
 Either way the URL is printed in stdout so the user has a fallback.
 
 **Anti-patterns to avoid:**
-- Don't run `python` scripts to drive iTerm — the gem uses `~/work/iterm2_ruby` (Ruby) and the CLI handles invocation.
+- Don't run `python` scripts to drive iTerm — the `iterm2_ruby` gem (on RubyGems) drives iTerm natively and the CLI handles invocation.
 - Don't try to `osascript`/AppleScript the iTerm split yourself — `streamweaver panel` already does this through the iTerm2 Ruby API.
 - Don't open the browser with a shell `open` / `xdg-open` after `streamweaver panel` — it already opened one (or split into one). Doing so creates duplicates.
 

@@ -40,10 +40,11 @@ Gem::Specification.new do |spec|
   spec.add_dependency "kramdown", "~> 2.4"
   spec.add_dependency "kramdown-parser-gfm", "~> 1.1"
   spec.add_dependency "ostruct"  # Explicit dep for Ruby 3.5+ compatibility
-  # iterm2_ruby is an OPTIONAL enhancement (iTerm2 split-pane browser on macOS).
+  # iterm2_ruby (https://rubygems.org/gems/iterm2_ruby) is an OPTIONAL enhancement:
+  # iTerm2 split-pane browser panes on macOS, enabled with `gem install iterm2_ruby`.
   # StreamWeaver::ITerm degrades gracefully when it isn't installed — panel/canvas
-  # commands fall back to opening the system browser. Not a runtime dependency so
-  # `gem install stream_weaver` works everywhere.
+  # commands fall back to opening the system browser — so it is intentionally not
+  # a runtime dependency.
   spec.add_dependency "diffy", "~> 3.4"         # Unified diff generation for DiffBlock
 
   # Development dependencies

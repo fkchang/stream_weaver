@@ -3,7 +3,8 @@
 require 'timeout'
 
 module StreamWeaver
-  # iTerm2 integration for panel workflow via the iterm2_ruby gem.
+  # iTerm2 integration for panel workflow via the optional iterm2_ruby gem
+  # (`gem install iterm2_ruby` — https://rubygems.org/gems/iterm2_ruby).
   # Falls back to system browser when iTerm2 API is unavailable.
   class ITerm
     class << self

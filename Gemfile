@@ -5,10 +5,11 @@ source "https://rubygems.org"
 # Specify your gem's dependencies in stream_weaver.gemspec
 gemspec
 
-# Optional iTerm2 split-pane integration — loaded from local path when present
-# (unpublished gem). StreamWeaver::ITerm falls back to the system browser without it.
-iterm2_ruby_path = File.expand_path("~/work/iterm2_ruby")
-gem "iterm2_ruby", path: iterm2_ruby_path if File.directory?(iterm2_ruby_path)
+# Optional iTerm2 split-pane integration (https://rubygems.org/gems/iterm2_ruby).
+# Not a runtime dependency of the stream_weaver gem — end users opt in with
+# `gem install iterm2_ruby`; StreamWeaver::ITerm falls back to the system browser.
+# For local gem development: bundle config local.iterm2_ruby ~/work/iterm2_ruby
+gem "iterm2_ruby", "~> 0.2"
 
 gem "rake", "~> 13.0"
 
