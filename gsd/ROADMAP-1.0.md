@@ -126,6 +126,19 @@ Sinatra again" fixes.
 15. **Token benchmark** — small script + published table: same UI in
     StreamWeaver DSL vs raw HTML vs markdown-equivalent fidelity. This is
     the marketing headline AND a regression guard on DSL verbosity.
+16. **Opal directive — copyable example + docs** — the Opal mode (Phases
+    2a+2b done; 2c ReactiveState and 2d Mermaid/ChartJS queued) becomes
+    useful at 1.0 if a newcomer can copy one polished example, modify it,
+    and ship — pick/finish one compelling scenario (the `dist/` demos are
+    the seed), document the `opal-build` workflow end to end, and cross-link
+    it from the four-modes table as the "client-side Ruby" option.
+17. **Opal vs React benchmark** — extends item 15 with two more axes:
+    (a) authoring token cost — same app written via StreamWeaver+Opal vs
+    idiomatic React (an LLM writes both; count tokens), and (b) library
+    load — bytes shipped to the browser (Opal runtime + morphdom + marked
+    vs react + react-dom + build-toolchain output). Together with item 15
+    this becomes one benchmark suite: tokens-to-author, bytes-to-load,
+    fidelity delivered.
 
 ---
 
