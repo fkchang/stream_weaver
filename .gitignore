@@ -54,6 +54,16 @@ examples_playground/
 # tyrion worktree state
 .tyrion/
 
+# Built Opal/JS artifacts (regenerated via streamweaver opal-build / bin/build_scenarios)
+/dist/
+
+# Personal tooling state (uregistry, serena LSP) — not StreamWeaver
+/.registry/
+/.serena/
+
+# Puma-dev runtime tmp
+/examples/puma_dev/tmp/
+
 # Personal content — sanitize before committing (contains travel/location details)
 docs/reference/travel-state-prd.artifact.html
 docs/sw-doc-parity-checkpoint.md

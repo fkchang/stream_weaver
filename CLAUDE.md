@@ -66,4 +66,23 @@ _Add a brief overview of your project architecture_
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+### Git Hygiene Policy
+
+This repo is destined for **open source release**. Every commit is a candidate for public history — git history cannot be sanitized after the fact without rewriting it.
+
+**Staging rules:**
+
+- NEVER use `git add -A`, `git add .`, or `git add -u`. Stage explicit paths only, and only files you created or intentionally changed for the task at hand.
+- Every staged file must be StreamWeaver-related. Personal tooling state (`.registry/`, `.serena/`, `.beads/`), build artifacts (`dist/`, `*.gem`), and session/agent scratch content stay out (most are gitignored — if you see one in `git status`, add it to `.gitignore` rather than committing it).
+- Do not commit content containing personal info: home directory paths (`/Users/...`), personal emails, employer references, real names of testers/colleagues, travel/location details. Use placeholders or relative paths.
+
+**Enforcement:**
+
+- `bin/check_git_hygiene` runs automatically at pre-commit (chained after the beads block in `.beads/hooks/pre-commit`). It BLOCKS on home paths, personal email, personal-system references, secret-shaped strings, and staged files over 500KB; it WARNS on employer/tester-name references (full pattern list lives in the script itself, which is exempt from its own scan).
+- False positive? Bypass once with `SW_HYGIENE_SKIP=1 git commit ...` — never disable the hook itself.
+- Note: `bd dolt push` in the beads section above is a no-op here — no Dolt remote is configured and Dolt is intentionally not used; beads syncs via `.beads/issues.jsonl` locally.
+
+**Before the public flip (tracked in epic stream_weaver-b9g):**
+
+- Full-history scan for the block patterns (e.g. `gitleaks` or `git log -S`), docs/ cleanup (stream_weaver-wh2), and repo hygiene sweep (stream_weaver-kj0).
+- Decide the public committer identity — history currently uses a work email.

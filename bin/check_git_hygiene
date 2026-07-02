@@ -1,0 +1,68 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Git hygiene gate for StreamWeaver (intended for open source release).
+# Scans STAGED content for personal info, secrets, and oversized files.
+# Wired into pre-commit via .beads/hooks/pre-commit (after the beads block).
+# Bypass a false positive with: SW_HYGIENE_SKIP=1 git commit ...
+# Policy: see "Git Hygiene Policy" in CLAUDE.md.
+
+if ENV["SW_HYGIENE_SKIP"] == "1"
+  warn "check_git_hygiene: skipped via SW_HYGIENE_SKIP=1"
+  exit 0
+end
+
+BLOCK_PATTERNS = {
+  "home directory path"   => %r{/Users/fkchang},
+  "personal email"        => /fchang@hedgeye\.com/,
+  "cultiv-os reference"   => /cultiv-os/,
+  "Anthropic API key"     => /sk-ant-[A-Za-z0-9_-]{10,}/,
+  "AWS access key"        => /AKIA[0-9A-Z]{16}/,
+  "private key block"     => /-----BEGIN [A-Z ]*PRIVATE KEY-----/
+}.freeze
+
+WARN_PATTERNS = {
+  "employer reference"    => /hedgeye/i,
+  "personal name (tester)" => /deming/i
+}.freeze
+
+MAX_FILE_BYTES = 500_000
+
+staged = `git diff --cached --name-only --diff-filter=ACM`.split("\n")
+exit 0 if staged.empty?
+
+blocks = []
+warns = []
+
+staged.each do |path|
+  size = `git cat-file -s :"#{path}" 2>/dev/null`.to_i
+  if size > MAX_FILE_BYTES
+    blocks << "#{path}: staged file is #{size / 1024}KB (limit #{MAX_FILE_BYTES / 1024}KB) — build artifact or asset that belongs in .gitignore?"
+    next
+  end
+
+  content = `git show :"#{path}" 2>/dev/null`
+  next unless content.valid_encoding? # skip binaries
+  next if path == "bin/check_git_hygiene" # this file names its own patterns
+
+  BLOCK_PATTERNS.each do |label, pattern|
+    line_no = content.lines.index { |l| l =~ pattern }
+    blocks << "#{path}:#{line_no + 1}: #{label}" if line_no
+  end
+  WARN_PATTERNS.each do |label, pattern|
+    line_no = content.lines.index { |l| l =~ pattern }
+    warns << "#{path}:#{line_no + 1}: #{label}" if line_no
+  end
+end
+
+warns.each { |w| warn "hygiene WARN:  #{w}" }
+
+unless blocks.empty?
+  blocks.each { |b| warn "hygiene BLOCK: #{b}" }
+  warn ""
+  warn "Commit blocked by bin/check_git_hygiene (repo is destined for open source)."
+  warn "Sanitize the content, or bypass a false positive with SW_HYGIENE_SKIP=1."
+  exit 1
+end
+
+exit 0
