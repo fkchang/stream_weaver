@@ -184,6 +184,29 @@ Feature: Doc Parity — :doc theme, component polish, dark mode, content 1:1
 
   # ── PHASE 7 (post-parity) ──────────────────────────────────────────────────
 
+  Scenario: doc-visual-parity-polish
+    # Intent: Close spacing/density/card-header gaps between our :doc theme render
+    # and the Anthropic artifact, found via direct screenshot comparison.
+    # RIGOR: build -- CSS-only, no new components; verify via side-by-side
+    # screenshot diff against docs/reference/travel-state-prd.artifact.html.
+    # Sequenced before sanitize-prd-content, which requires parity confirmed first.
+    Given the :doc theme render of examples/components/prd_demo.rb visibly diverges
+      from docs/reference/travel-state-prd.artifact.html in code block size,
+      card header treatment, and paragraph spacing density
+    When .sw-code-block__pre wins CSS specificity over Prism's CDN
+      pre[class*="language-"] rule so our compact padding/line-height/font-size apply
+    And .card-header--badged gains a background + border-bottom band matching the
+      artifact's .component-header, with the card's overflow switched from
+      overflow-x:auto to overflow:hidden (scroll moved to .card-body) so the band
+      clips cleanly against the rounded card corners
+    And paragraph margin is tightened from the current spacing-sm+spacing-md stack
+      to match the artifact's flatter ~14px bottom-only rhythm
+    Then a side-by-side screenshot of the Problem Statement, Component 1 card, and
+      Data Model code block sections visually matches the artifact's density and
+      card header treatment
+    And the existing doc-theme-light, doc-theme-dark, and card-header-badge-meta
+      spec suites still pass
+
   Scenario: sanitize-prd-content
     # Intent: Replace personal travel details with neutral placeholder content before committing.
     # Must happen AFTER visual parity is confirmed so we're rewriting a verified good example.

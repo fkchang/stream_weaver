@@ -40,8 +40,8 @@ module StreamWeaver
       # Message factory methods
       module Messages
         # Claude → Bridge: Create a new session
-        def self.create(name, layout: :fluid)
-          { type: 'create', name: name, layout: layout }
+        def self.create(name, layout: :fluid, theme: :default)
+          { type: 'create', name: name, layout: layout, theme: theme }
         end
 
         # Claude → Bridge: Push DSL content to session

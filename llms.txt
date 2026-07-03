@@ -496,11 +496,13 @@ streamweaver canvas-close "$SESSION"
 
 | Command | Purpose |
 |---------|---------|
-| `streamweaver panel SESSION` | Open canvas in iTerm2 split pane |
+| `streamweaver panel SESSION [--layout=LAYOUT] [--theme=THEME] [--fresh]` | Open canvas in iTerm2 split pane |
 | `streamweaver canvas-push SESSION` | Push DSL content (stdin or `<<'RUBY'`) |
 | `streamweaver canvas-wait SESSION` | Wait for button click, return JSON |
 | `streamweaver canvas-close SESSION` | Close the canvas session |
 | `streamweaver canvas-read FILE [FILE\|DIR ...]` | Browse saved canvas DSL files in a local viewer (sidebar + prev/next nav) |
+
+`panel` flags: `--layout=` is one of `default`/`wide`/`full`/`fluid` (default `fluid`). `--theme=` selects any registered theme for the session (default `:default`); e.g. `--theme=doc` renders the canvas in the `:doc` theme, including its dark-mode variant. `--fresh` closes any existing session with the same name before creating a new one.
 
 ### Important Behavior
 

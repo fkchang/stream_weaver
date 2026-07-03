@@ -19,22 +19,23 @@ module StreamWeaver
       #
       # @param meta_colors [Hash] theme-color values for light/dark
       # @return [String] JavaScript code
-      def self.inline_script(meta_colors: { light: "#f8f8f8", dark: "#1a1a1a" })
+      def self.inline_script(meta_colors: { light: "#f8f8f8", dark: "#1a1a1a" }, default_mode: :auto)
         <<~JS
           (function() {
             // sw-theme auto-mode: follows OS prefers-color-scheme with localStorage override
             var STORAGE_KEY = 'sw-theme-preference';
             var META_COLORS = #{meta_colors.to_json};
+            var DEFAULT_MODE = #{default_mode.to_s.to_json};
 
             function getEffectiveTheme() {
-              var stored = localStorage.getItem(STORAGE_KEY);
-              if (stored === 'dark' || stored === 'light') return stored;
+              var pref = localStorage.getItem(STORAGE_KEY) || DEFAULT_MODE;
+              if (pref === 'dark' || pref === 'light') return pref;
               // auto or no preference: follow OS
               return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
             }
 
             function getStoredPreference() {
-              return localStorage.getItem(STORAGE_KEY) || 'auto';
+              return localStorage.getItem(STORAGE_KEY) || DEFAULT_MODE;
             }
 
             function applyTheme(effective) {
@@ -93,10 +94,10 @@ module StreamWeaver
       # Generate the Alpine.js x-data for the theme toggle button
       #
       # @return [String] Alpine.js data expression
-      def self.alpine_data
+      def self.alpine_data(default_mode: :auto)
         <<~JS.gsub(/\s+/, " ").strip
           {
-            preference: (localStorage.getItem('sw-theme-preference') || 'auto'),
+            preference: (localStorage.getItem('sw-theme-preference') || '#{default_mode}'),
             get effective() {
               if (this.preference === 'dark' || this.preference === 'light') return this.preference;
               return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';

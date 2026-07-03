@@ -250,6 +250,15 @@ RSpec.describe "Theme Enhancement + CSS Foundation (T2)" do
         expect(custom).to include("#fff")
         expect(custom).to include("#000")
       end
+
+      it "defaults DEFAULT_MODE to 'auto'" do
+        expect(script).to match(/DEFAULT_MODE = "auto"/)
+      end
+
+      it "accepts a custom default_mode" do
+        custom = described_class.inline_script(default_mode: :light)
+        expect(custom).to match(/DEFAULT_MODE = "light"/)
+      end
     end
 
     describe ".alpine_data" do
@@ -265,6 +274,15 @@ RSpec.describe "Theme Enhancement + CSS Foundation (T2)" do
 
       it "references swToggleTheme" do
         expect(data).to include("swToggleTheme")
+      end
+
+      it "defaults the preference fallback to 'auto'" do
+        expect(data).to include("localStorage.getItem('sw-theme-preference') || 'auto'")
+      end
+
+      it "accepts a custom default_mode" do
+        custom = described_class.alpine_data(default_mode: :dark)
+        expect(custom).to include("localStorage.getItem('sw-theme-preference') || 'dark'")
       end
     end
   end

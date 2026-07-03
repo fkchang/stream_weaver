@@ -23,8 +23,8 @@ module StreamWeaver
       # Create or get an existing session
       # @param name [String] Session name
       # @return [Session]
-      def create_session(name, layout: :fluid)
-        @sessions[name] ||= Session.new(name, layout: layout)
+      def create_session(name, layout: :fluid, theme: :default)
+        @sessions[name] ||= Session.new(name, layout: layout, theme: theme)
       end
 
       # Get a session by name
@@ -53,7 +53,7 @@ module StreamWeaver
       def handle_claude_message(message)
         case message[:type]
         when 'create'
-          handle_create(message[:name], layout: (message[:layout] || :fluid).to_sym)
+          handle_create(message[:name], layout: (message[:layout] || :fluid).to_sym, theme: (message[:theme] || :default).to_sym)
         when 'push'
           handle_push(message[:name], message[:dsl])
         when 'toast'
@@ -100,8 +100,8 @@ module StreamWeaver
 
       private
 
-      def handle_create(name, layout: :fluid)
-        create_session(name, layout: layout)
+      def handle_create(name, layout: :fluid, theme: :default)
+        create_session(name, layout: layout, theme: theme)
         {
           type: 'ready',
           name: name,

@@ -1993,7 +1993,7 @@ module StreamWeaver
         view.div(
           class: "sw-theme-switcher #{position_class}".strip,
           "x-data" => theme_switcher_alpine_data(themes),
-          "x-init" => "$watch('dark', v => { document.documentElement.classList.toggle('dark', v); localStorage.setItem('sw-dark-mode', v) })"
+          "x-init" => "applyDark(dark); $watch('dark', v => { applyDark(v); localStorage.setItem('sw-dark-mode', v) })"
         ) do
           view.button(
             type: "button",
@@ -2053,6 +2053,10 @@ module StreamWeaver
             dark: localStorage.getItem('sw-dark-mode') === 'true' ||
                   (localStorage.getItem('sw-dark-mode') === null &&
                    window.matchMedia('(prefers-color-scheme: dark)').matches),
+            applyDark(v) {
+              document.documentElement.classList.toggle('dark', v);
+              document.documentElement.setAttribute('data-sw-theme', v ? 'dark' : 'light');
+            },
             switchTheme(id) {
               this.open = false;
               document.body.className = document.body.className.replace(/sw-theme-\\w+/, 'sw-theme-' + id);
@@ -2074,7 +2078,7 @@ module StreamWeaver
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_theme_toggle(view, component, state)
-        alpine_data = StreamWeaver::Theme::AutoMode.alpine_data
+        alpine_data = StreamWeaver::Theme::AutoMode.alpine_data(default_mode: component.mode)
 
         view.div(
           class: "sw-theme-toggle",
@@ -2083,7 +2087,7 @@ module StreamWeaver
           view.button(
             type: "button",
             class: "sw-theme-toggle__btn",
-            "aria-label" => "Toggle theme (dark/light/auto)",
+            "aria-label" => "Toggle theme (dark/light/system)",
             "@click" => "toggle()"
           ) do
             # Sun icon (shown in dark mode)
@@ -2107,7 +2111,7 @@ module StreamWeaver
           # Show current mode label
           view.span(
             class: "sw-theme-toggle__label",
-            "x-text" => "preference === 'auto' ? 'Auto' : preference === 'dark' ? 'Dark' : 'Light'"
+            "x-text" => "preference === 'auto' ? 'System' : preference === 'dark' ? 'Dark' : 'Light'"
           )
         end
       end
@@ -7100,14 +7104,18 @@ module StreamWeaver
           .sw-code-block__body {
             margin: 0;
           }
-          .sw-code-block__pre {
+          /* Selector doubled to raise specificity above Prism's runtime-applied
+             pre[class*="language-"] (0,0,1,1) without !important. Prism's JS
+             copies the language-* class from <code> up onto this <pre> at
+             runtime, so the static HTML alone doesn't show the conflict. */
+          .sw-code-block__pre.sw-code-block__pre {
             margin: 0;
-            padding: 0.75rem;
+            padding: 16px 18px;
             font-family: var(--sw-font-mono, monospace);
-            font-size: 0.875rem;
-            line-height: 1.5;
+            font-size: .8rem;
+            line-height: 1.6;
           }
-          .sw-code-block__pre code {
+          .sw-code-block__pre.sw-code-block__pre code {
             font-family: inherit;
           }
           .sw-code-block__truncated {

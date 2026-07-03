@@ -8,14 +8,16 @@ module StreamWeaver
     class Session
       VALID_LAYOUTS = %i[default wide full fluid].freeze
 
-      attr_reader :name, :state, :websockets, :created_at, :layout, :dsl
+      attr_reader :name, :state, :websockets, :created_at, :layout, :dsl, :theme
       attr_accessor :html, :html_version, :pane_id
 
       # @param name [String] Session name
       # @param layout [Symbol] Layout mode: :default (900px), :wide (1100px), :full (1400px), :fluid (100%)
-      def initialize(name, layout: :fluid)
+      # @param theme [Symbol] Theme name (e.g. :default, :doc)
+      def initialize(name, layout: :fluid, theme: :default)
         @name = name
         @layout = VALID_LAYOUTS.include?(layout) ? layout : :fluid
+        @theme = theme
         @state = {}
         @websockets = []
         @created_at = Time.now
@@ -100,7 +102,8 @@ module StreamWeaver
           state: @state,
           websocket_count: @websockets.size,
           created_at: @created_at,
-          pane_id: @pane_id
+          pane_id: @pane_id,
+          theme: @theme
         }
       end
     end

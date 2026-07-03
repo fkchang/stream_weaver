@@ -1616,6 +1616,8 @@ module StreamWeaver
       fresh = args.include?('--fresh') || args.include?('-f')
       layout_arg = args.find { |a| a.start_with?('--layout=') }
       layout = layout_arg ? layout_arg.split('=', 2).last.to_sym : :fluid
+      theme_arg = args.find { |a| a.start_with?('--theme=') }
+      theme = theme_arg ? theme_arg.split('=', 2).last.to_sym : :default
       args = args.reject { |a| a.start_with?('-') }
 
       session_name = args.first || "panel-#{SecureRandom.hex(4)}"
@@ -1634,7 +1636,7 @@ module StreamWeaver
       # Create session
       $stderr.puts "[DEBUG] Creating session..." if debug
       response = Canvas::Client.send_message(
-        Canvas::Protocol::Messages.create(session_name, layout: layout)
+        Canvas::Protocol::Messages.create(session_name, layout: layout, theme: theme)
       )
       $stderr.puts "[DEBUG] Response: #{response.inspect}" if debug
 

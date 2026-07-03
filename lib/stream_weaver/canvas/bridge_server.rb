@@ -12,6 +12,7 @@ require_relative 'doc_store'
 # Load StreamWeaver core for adapter and views
 require_relative '../adapter/base'
 require_relative '../adapter/alpinejs'
+require_relative '../views'
 
 module StreamWeaver
   module Canvas
@@ -222,6 +223,9 @@ module StreamWeaver
             <style>
               #{SW_STYLES}
             </style>
+            <style>#{StreamWeaver::Views::AppView.master_theme_css}</style>
+            <style>#{StreamWeaver::Theme.visual_skills_css}</style>
+            <script>#{StreamWeaver::Theme::AutoMode.inline_script}</script>
             #{adapter.cdn_scripts.join("\n")}
             <!-- Chart.js for charts -->
             <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -233,7 +237,7 @@ module StreamWeaver
             <!-- Kick off CDN fetch immediately so mermaid is ready before first push arrives -->
             <script>if (window.swMermaidPreload) window.swMermaidPreload();</script>
           </head>
-          <body class="sw-theme-default sw-layout-#{session.layout}">
+          <body class="sw-theme-#{session.theme} sw-layout-#{session.layout}">
             <div id="app-container" #{container_attrs(session.state, adapter)}>
               #{initial_content}
             </div>
@@ -516,29 +520,13 @@ module StreamWeaver
       end
 
       SW_STYLES = <<~CSS
-          /* CSS Variables */
-          :root {
-            --sw-color-primary: #c2410c;
-            --sw-color-primary-hover: #9a3412;
-            --sw-color-primary-light: #fff7ed;
-            --sw-color-text: #111111;
-            --sw-color-text-muted: #444444;
-            --sw-color-bg: #f8f8f8;
-            --sw-color-bg-card: #ffffff;
-            --sw-color-bg-elevated: #f3f3f3;
-            --sw-color-border: #e0e0e0;
-            --sw-spacing-xs: 0.5rem;
-            --sw-spacing-sm: 0.75rem;
-            --sw-spacing-md: 1.25rem;
-            --sw-spacing-lg: 2rem;
-            --sw-spacing-xl: 3rem;
-            --sw-radius-sm: 3px;
-            --sw-radius-md: 6px;
-            --sw-radius-lg: 10px;
-            --sw-shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 3px rgba(28, 25, 23, 0.06);
-            --sw-shadow-md: 0 4px 8px -2px rgba(28, 25, 23, 0.08), 0 2px 4px -1px rgba(28, 25, 23, 0.04);
-            --sw-card-border-left: 3px solid var(--sw-color-primary);
-          }
+          /* Note: --sw-color and --sw-spacing family tokens are intentionally
+             NOT declared at :root here -- they come from AppView.master_theme_css's
+             body.sw-theme-{name} block, which is always rendered alongside this
+             constant (see render_canvas_page). A :root-level declaration would be
+             visible to getComputedStyle(document.documentElement), shadowing the
+             body-scoped theme-aware value (and its dark variant) that things like
+             sw-mermaid-zoom.js's getThemeVariables() read directly off <html>. */
 
           /* Base styles */
           *, *::before, *::after { box-sizing: border-box; }
@@ -1014,21 +1002,12 @@ module StreamWeaver
         )
 
         connections = self.class.claude_connections || []
-        puts "[DEBUG] forward_to_claude: #{connections.size} connections, message=#{message.inspect}"
-        STDOUT.flush
 
         # Send to all connected Claude clients
         connections.each do |conn|
-          begin
-            puts "[DEBUG] Writing to connection: #{conn.inspect}"
-            STDOUT.flush
-            conn.write(Protocol.encode(message))
-            puts "[DEBUG] Write successful"
-            STDOUT.flush
-          rescue => e
-            puts "[DEBUG] Write error: #{e.message}"
-            STDOUT.flush
-          end
+          conn.write(Protocol.encode(message))
+        rescue => e
+          warn "canvas: dropped event for #{session_name}: #{e.message}"
         end
       end
 

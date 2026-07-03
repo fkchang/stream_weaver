@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Canvas theme support** - Canvas/panel sessions can now use the `:doc` theme (and any registered theme): `streamweaver panel my-session --theme=doc`. Canvas sessions default to `:default` as before; the canvas page now reuses the same theme CSS (including dark-mode variants) as full-page rendering, so the mermaid dark-mode fix also applies in canvas mode.
+- **`CardHeader` `badge:` / `meta:` options** - `card_header "Title", badge: "C1", meta: "right-aligned text"` renders a mono badge before the title and right-aligned meta text after it, for compact labeled card headers.
 - **Puma-dev support** - Run StreamWeaver apps with memorable URLs like `http://myapp.test`:
   - Detects `PORT` environment variable (set by Puma-dev and PaaS platforms)
   - Skips auto-browser opening when `PORT` is set for on-demand access
@@ -15,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - See [examples/puma_dev/README.md](examples/puma_dev/README.md) for setup guide
 
 ### Fixed
+- **Mermaid diagrams stayed light in dark mode** - Diagrams didn't re-render when the page switched to dark mode, and modern CSS color functions (`oklch()`, `color-mix()`) in theme tokens crashed Mermaid's color parser. Diagrams now re-render on theme change, and colors are resolved through a canvas probe so Mermaid always receives plain `rgb()`.
+- **`theme_toggle` `mode:` was a dead parameter** - `theme_toggle mode: :light` (or `:dark`) had no effect on first-page-load behavior; the page always defaulted to following OS `prefers-color-scheme` regardless of `mode:`. `AutoMode.inline_script`/`.alpine_data` now accept the component's `mode:` as the localStorage-fallback default, so `mode: :light`/`:dark` actually forces that theme until the user toggles.
 - **Puma thread pool exhaustion** - SSE streaming apps could hang when opening multiple browser tabs; increased default Puma thread pool from 5 to 16 to accommodate long-lived SSE connections
 - **Canvas-push error feedback** - DSL errors now reported to stderr with exit code 1, enabling Claude to see and fix syntax errors
 - **Tutorial checkbox syntax** - Fixed incorrect `checkbox :key, label: "text"` to correct `checkbox :key, "text"` in learn.md examples

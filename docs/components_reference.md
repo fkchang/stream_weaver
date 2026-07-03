@@ -153,6 +153,14 @@ card do
     button "Save"
   end
 end
+
+# Card header with badge + right-aligned meta (flex row: badge | title | meta)
+card do
+  card_header "C1 — Title", badge: "C1", meta: "scheduler secretary"
+  card_body do
+    text "Main content goes here"
+  end
+end
 ```
 
 ## Stacking Layouts (VStack / HStack)

@@ -75,7 +75,44 @@ module StreamWeaver
               link(rel: "stylesheet", href: custom_href) if custom_href
             end
             style do
-              raw(safe(<<~CSS))
+              raw(safe(self.class.master_theme_css))
+            end
+
+            # Visual Skills CSS foundation (--sw-* semantic tokens)
+            style do
+              raw(safe(StreamWeaver::Theme.visual_skills_css))
+            end
+
+            # Dark mode: check localStorage / system preference, apply .dark on <html>
+            # Also provides swToggleTheme() / swGetTheme() for auto-mode support
+            script do
+              theme_toggle = @app.components.find { |c| c.is_a?(Components::ThemeToggle) }
+              raw(safe(StreamWeaver::Theme::AutoMode.inline_script(default_mode: theme_toggle&.mode || :auto)))
+            end
+          end
+          body(class: body_classes) do
+            # Custom theme CSS (for registered themes)
+            render_custom_theme_css
+
+            # Theme overrides as inline CSS
+            render_theme_overrides if @app.theme_overrides.any?
+
+            layout_entry = StreamWeaver::LayoutRegistry[@app.layout]
+            if layout_entry&.dig(:exclusive) && layout_entry[:render_block]
+              instance_exec(&layout_entry[:render_block])
+            else
+              h1 { @app.title }
+              # Merge adapter-specific container attributes with container id
+              div(id: "app-container", **@adapter.container_attributes(@state)) do
+                render_components
+              end
+            end
+          end
+        end
+      end
+
+      def self.master_theme_css
+        <<~CSS
                 /* ===========================================
                    shadcn Token Layer
                    Bridge: tokens fall back to --sw-* vars,
@@ -511,10 +548,39 @@ module StreamWeaver
                   font-size: 1.45rem;
                 }
 
-                /* Doc theme — compact 52px section gap matching artifact */
-                body.sw-theme-doc section,
-                body.sw-theme-doc .section {
-                  margin-bottom: 52px;
+                /* Doc apps render flat component lists (no <section> wrappers) —
+                   the section boundary marker is .sw-doc-section-header, so the
+                   artifact's section { margin-bottom: 52px } becomes margin-top here.
+                   Adjacent-sibling margin collapsing yields max(prev, 52px) = 52px,
+                   same effective gap as the artifact. */
+                body.sw-theme-doc .sw-doc-section-header {
+                  margin-top: 52px;
+                }
+
+                /* Doc theme — artifact-exact table density.
+                   render_table hardcodes cell padding as inline style= (specificity 1,0,0,0),
+                   so !important is required; scoping to body.sw-theme-doc keeps every other
+                   theme/app on the shared default (0.75rem 1rem). Artifact rules:
+                   table { font-size: .875rem; } th { padding: 8px 12px; font-size: 11px; }
+                   td { padding: 9px 12px; } */
+                body.sw-theme-doc .sw-table {
+                  font-size: .875rem;
+                }
+                body.sw-theme-doc .sw-table th {
+                  padding: 8px 12px !important;
+                  font-size: 11px;
+                }
+                body.sw-theme-doc .sw-table td {
+                  padding: 9px 12px !important;
+                }
+                body.sw-theme-doc .sw-table td:first-child {
+                  white-space: nowrap;
+                }
+
+                /* callout_css (alpinejs.rb) sets padding non-!important and may be
+                   injected after this block, so !important guarantees the override */
+                body.sw-theme-doc .sw-callout {
+                  padding: 14px 16px !important;
                 }
 
                 /* ===========================================
@@ -628,9 +694,23 @@ module StreamWeaver
                 p {
                   color: var(--sw-color-text-muted);
                   line-height: var(--sw-line-height);
-                  margin: var(--sw-spacing-sm) 0 var(--sw-spacing-md) 0;
+                  margin: 0 0 var(--sw-spacing-md) 0;
                   word-wrap: break-word;
                   overflow-wrap: break-word;
+                }
+
+                ul, ol {
+                  margin: 0 0 var(--sw-spacing-md) 1.25rem;
+                  color: var(--sw-color-text-muted);
+                  line-height: var(--sw-line-height);
+                }
+
+                li {
+                  margin-bottom: 0.3125rem;
+                }
+
+                li:last-child {
+                  margin-bottom: 0;
                 }
 
                 /* Handle long URLs and strings */
@@ -638,6 +718,21 @@ module StreamWeaver
                   word-wrap: break-word;
                   overflow-wrap: break-word;
                   word-break: break-word;
+                }
+
+                /* Inline code -- monospace fonts render optically larger than body
+                   text at the same declared size, so scale down to match */
+                code {
+                  font-size: .825em;
+                  background: var(--sw-surface-elevated, #ECEAE3);
+                  padding: 1px 5px;
+                  border-radius: 3px;
+                }
+
+                pre code, .sw-code-block__pre code {
+                  font-size: inherit;
+                  background: none;
+                  padding: 0;
                 }
 
                 /* Strong text */
@@ -1033,10 +1128,17 @@ module StreamWeaver
                   padding: var(--sw-spacing-lg);
                   margin-bottom: var(--sw-spacing-md);
                   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-                  overflow-x: auto;
+                  overflow: hidden;
                   word-wrap: break-word;
                   overflow-wrap: break-word;
                   max-width: 100%;
+                }
+
+                /* Cards using the header/body sub-component pattern manage their
+                   own padding so the header's shaded band can reach the card's
+                   edges flush against its rounded corners. */
+                .card:has(> .card-header) {
+                  padding: 0;
                 }
 
                 .card h3 {
@@ -1057,9 +1159,42 @@ module StreamWeaver
                   margin: 0;
                 }
 
+                .card-header--badged {
+                  display: flex;
+                  align-items: center;
+                  gap: 12px;
+                  padding: 14px 18px;
+                  background: var(--sw-surface-elevated, #EDECE6);
+                  border-bottom: 1px solid var(--sw-border, #E0DED6);
+                }
+
+                .card-header__badge {
+                  font-family: var(--sw-font-mono, 'SFMono-Regular', 'Cascadia Code', monospace);
+                  font-size: 11px;
+                  font-weight: 600;
+                  color: var(--sw-accent);
+                  background: color-mix(in oklch, var(--sw-accent) 12%, transparent);
+                  padding: 2px 7px;
+                  border-radius: 3px;
+                  flex-shrink: 0;
+                }
+
+                .card-header__title {
+                  font-weight: 600;
+                  font-size: .95rem;
+                }
+
+                .card-header__meta {
+                  font-size: .8rem;
+                  color: var(--sw-text-dim);
+                  margin-left: auto;
+                  white-space: nowrap;
+                }
+
                 .card-body {
                   padding: 1.5rem;
                   padding-top: 0;
+                  overflow-x: auto;
                 }
 
                 .card-body > *:first-child {
@@ -3182,39 +3317,7 @@ module StreamWeaver
                 body.sw-theme-dark .sw-expandable-card--highlight {
                   background: color-mix(in srgb, var(--sw-color-primary, #3b82f6) 8%, var(--sw-color-bg-elevated));
                 }
-              CSS
-            end
-
-            # Visual Skills CSS foundation (--sw-* semantic tokens)
-            style do
-              raw(safe(StreamWeaver::Theme.visual_skills_css))
-            end
-
-            # Dark mode: check localStorage / system preference, apply .dark on <html>
-            # Also provides swToggleTheme() / swGetTheme() for auto-mode support
-            script do
-              raw(safe(StreamWeaver::Theme::AutoMode.inline_script))
-            end
-          end
-          body(class: body_classes) do
-            # Custom theme CSS (for registered themes)
-            render_custom_theme_css
-
-            # Theme overrides as inline CSS
-            render_theme_overrides if @app.theme_overrides.any?
-
-            layout_entry = StreamWeaver::LayoutRegistry[@app.layout]
-            if layout_entry&.dig(:exclusive) && layout_entry[:render_block]
-              instance_exec(&layout_entry[:render_block])
-            else
-              h1 { @app.title }
-              # Merge adapter-specific container attributes with container id
-              div(id: "app-container", **@adapter.container_attributes(@state)) do
-                render_components
-              end
-            end
-          end
-        end
+        CSS
       end
 
       private

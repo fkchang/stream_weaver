@@ -355,17 +355,24 @@ module StreamWeaver
 
       # @param content [String, nil] Optional string content (renders as h4)
       # @param options [Hash] Additional options
+      # @option options [String] :badge Optional badge text (e.g. "C1") rendered before the title
+      # @option options [String] :meta Optional right-aligned meta text
       def initialize(content = nil, **options)
         @content = content
         @options = options
+        @badge = options[:badge]
+        @meta = options[:meta]
         @children = []
       end
 
       def render(view, state)
-        view.div(class: "card-header") do
+        badged = @badge || @meta
+        view.div(class: badged ? "card-header card-header--badged" : "card-header") do
+          view.span(class: "card-header__badge") { @badge } if @badge
           if @content
-            view.h4 { @content }
+            badged ? view.h4(class: "card-header__title") { @content } : view.h4 { @content }
           end
+          view.span(class: "card-header__meta") { @meta } if @meta
           @children.each { |child| child.render(view, state) }
         end
       end
