@@ -73,7 +73,8 @@ streamweaver admin
 
 **Characteristics:**
 - Single server process on port 4575
-- Apps at `/apps/:app_id` URLs
+- Apps at human-readable `/apps/:slug` URLs (e.g. `/apps/sales-dashboard`), derived from the app's declared name
+- Canonical `/apps/:app_id` hex URL always still resolves as a fallback
 - Human-readable aliases like `/tutorial/philosophy`
 - Hot-reload: change file, re-run command
 - Persistent until `streamweaver stop`
@@ -101,9 +102,9 @@ streamweaver admin
 │                    StreamWeaver Service                      │
 │                     (port 4575)                              │
 ├─────────────────────────────────────────────────────────────┤
-│  /apps/a1b2c3d4  →  hello_world.rb                          │
-│  /apps/e5f6g7h8  →  todo_list.rb                            │
-│  /apps/i9j0k1l2  →  form_demo.rb                            │
+│  /apps/hello-world  (a1b2c3d4)  →  hello_world.rb           │
+│  /apps/todo-list    (e5f6g7h8)  →  todo_list.rb             │
+│  /apps/form-demo    (i9j0k1l2)  →  form_demo.rb             │
 │                                                              │
 │  Aliases:                                                    │
 │  /tutorial/philosophy  →  /apps/m3n4o5p6                    │
@@ -117,8 +118,11 @@ streamweaver admin
 
 1. **CLI calls `/load-app`** with file path and optional name/source
 2. **Service evaluates** the Ruby file in isolation
-3. **App gets unique ID** (8-char hash)
-4. **Browser opens** to `/apps/:app_id` or aliased URL
+3. **App gets a unique hex ID** (8-char hash) and a human-readable slug derived
+   from its declared name (falling back to the filename); colliding slugs
+   from different files get a numeric suffix (`-2`, `-3`, ...); re-loading the
+   same file reuses its existing slug
+4. **Browser opens** to `/apps/:slug` (or `/apps/:app_id` / an aliased URL)
 
 ### Aliased URLs
 
