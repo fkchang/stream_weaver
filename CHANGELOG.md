@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-05
+
+### Changed
+- **`iterm2_ruby` is now an optional enhancement, not a runtime dependency** - `gem install stream_weaver` no longer requires it; iTerm2 split-pane browser panes activate when the (now published) `iterm2_ruby` gem is installed (`gem install iterm2_ruby`), otherwise panel/canvas commands fall back to opening the system browser
+
 ### Added
 - **Canvas theme support** - Canvas/panel sessions can now use the `:doc` theme (and any registered theme): `streamweaver panel my-session --theme=doc`. Canvas sessions default to `:default` as before; the canvas page now reuses the same theme CSS (including dark-mode variants) as full-page rendering, so the mermaid dark-mode fix also applies in canvas mode.
 - **`CardHeader` `badge:` / `meta:` options** - `card_header "Title", badge: "C1", meta: "right-aligned text"` renders a mono badge before the title and right-aligned meta text after it, for compact labeled card headers.
@@ -222,5 +227,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation and examples
 - RSpec test suite
 
-[Unreleased]: https://github.com/fkchang/stream_weaver/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/fkchang/stream_weaver/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/fkchang/stream_weaver/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/fkchang/stream_weaver/releases/tag/v0.1.0
