@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Human-readable service-mode URLs** - `streamweaver run <file.rb>` now serves apps at slug URLs like `/apps/sales-dashboard` (derived from the app's declared name, falling back to the filename) instead of opaque hashes. The hex `/apps/:app_id` URL still resolves as a canonical fallback. Slugs that collide across different files get a numeric suffix (`-2`, `-3`, ...); re-loading the same file reuses its existing slug.
+
 ## [0.2.0] - 2026-07-05
 
 ### Changed

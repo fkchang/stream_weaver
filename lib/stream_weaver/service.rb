@@ -41,6 +41,11 @@ module StreamWeaver
         @live_sessions ||= {}
       end
 
+      # { slug => app_id } registry for human-readable /apps/:slug URLs
+      def slug_registry
+        @slug_registry ||= {}
+      end
+
       def get_or_create_live_session(name)
         live_sessions[name] ||= {
           content: {},  # { target => { html:, action:, timestamp: } }
@@ -132,17 +137,65 @@ module StreamWeaver
 
         # Derive name from: explicit name > app title > filename
         app_name = name || streamlit_app.title || File.basename(expanded_path, '.rb')
+        slug = assign_slug(app_id, app_name, expanded_path)
 
         apps[app_id] = {
           app: streamlit_app,
           path: expanded_path,
           name: app_name,
           source: source,
+          slug: slug,
           loaded_at: Time.now,
           last_accessed: Time.now
         }
 
         app_id
+      end
+
+      # Convert a string into a URL-safe slug: lowercase, non-alphanumerics
+      # collapsed to hyphens, leading/trailing hyphens stripped.
+      # @param str [String]
+      # @return [String]
+      def slugify(str)
+        str.to_s.downcase.gsub(/[^a-z0-9]+/, '-').gsub(/\A-+|-+\z/, '')
+      end
+
+      # Assign (or reuse) a human-readable slug for an app_id, derived from the
+      # app's declared name with fallback to the script filename.
+      #
+      # Re-loading the same file reuses its previous slug. A different file
+      # whose derived slug collides with an existing one gets a numeric
+      # suffix (-2, -3, ...).
+      #
+      # @param app_id [String] The app_id being assigned a slug
+      # @param app_name [String] The app's declared/derived name
+      # @param expanded_path [String] Absolute path to the app's file
+      # @return [String] The assigned slug
+      def assign_slug(app_id, app_name, expanded_path)
+        base = slugify(app_name)
+        base = slugify(File.basename(expanded_path, '.rb')) if base.empty?
+        base = 'app' if base.empty?
+
+        slug = base
+        suffix = 2
+        loop do
+          holder_id = slug_registry[slug]
+          holder_entry = holder_id && apps[holder_id]
+          break if holder_entry.nil? || holder_entry[:path] == expanded_path
+          slug = "#{base}-#{suffix}"
+          suffix += 1
+        end
+
+        slug_registry[slug] = app_id
+        slug
+      end
+
+      # Resolve a hex app_id or a human-readable slug to the canonical app_id
+      # @param id_or_slug [String]
+      # @return [String, nil] The canonical app_id, or nil if not found
+      def resolve_app_id(id_or_slug)
+        return id_or_slug if apps.key?(id_or_slug)
+        slug_registry[id_or_slug]
       end
 
       # Remove an app by ID
@@ -405,9 +458,11 @@ module StreamWeaver
         {
           success: true,
           app_id: app_id,
+          slug: app_entry[:slug],
           name: app_entry[:name],
           source: app_entry[:source],
-          url: "/apps/#{app_id}",
+          url: "/apps/#{app_entry[:slug]}",
+          canonical_url: "/apps/#{app_id}",
           aliased_url: aliased
         }.to_json
       rescue => e
@@ -865,10 +920,12 @@ module StreamWeaver
     # =========================================
 
     # Render app main page
+    # Accepts either the canonical hex app_id or its human-readable slug
     get '/apps/:app_id' do
-      app_id = params[:app_id]
-      app_entry = self.class.apps[app_id]
-      halt 404, "App not found: #{app_id}" unless app_entry
+      requested_id = params[:app_id]
+      app_id = self.class.resolve_app_id(requested_id)
+      app_entry = app_id && self.class.apps[app_id]
+      halt 404, "App not found: #{requested_id}" unless app_entry
 
       # Track last access time
       app_entry[:last_accessed] = Time.now
