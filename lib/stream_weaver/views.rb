@@ -513,6 +513,12 @@ module StreamWeaver
                   /* Card — no accent left border */
                   --sw-card-border-left: none;
 
+                  /* Shared-component density tokens — let render_table/callout_css read
+                     theme-owned values via normal CSS cascade instead of !important */
+                  --sw-table-header-padding: 8px 12px;
+                  --sw-table-cell-padding: 9px 12px;
+                  --sw-callout-padding: 14px 16px;
+
                   --sw-term-color: var(--sw-color-accent);
                   --sw-term-bg-hover: var(--sw-color-accent-light);
                 }
@@ -557,30 +563,20 @@ module StreamWeaver
                   margin-top: 52px;
                 }
 
-                /* Doc theme — artifact-exact table density.
-                   render_table hardcodes cell padding as inline style= (specificity 1,0,0,0),
-                   so !important is required; scoping to body.sw-theme-doc keeps every other
-                   theme/app on the shared default (0.75rem 1rem). Artifact rules:
-                   table { font-size: .875rem; } th { padding: 8px 12px; font-size: 11px; }
-                   td { padding: 9px 12px; } */
+                /* render_table/callout_css now read --sw-table-header-padding /
+                   --sw-table-cell-padding / --sw-callout-padding (set in the doc theme
+                   variable block above) via normal CSS custom-property cascade — no
+                   !important needed since it's no longer a specificity fight, just a
+                   token lookup. Remaining rules here are cosmetic details the token
+                   system doesn't cover yet. */
                 body.sw-theme-doc .sw-table {
                   font-size: .875rem;
                 }
                 body.sw-theme-doc .sw-table th {
-                  padding: 8px 12px !important;
                   font-size: 11px;
-                }
-                body.sw-theme-doc .sw-table td {
-                  padding: 9px 12px !important;
                 }
                 body.sw-theme-doc .sw-table td:first-child {
                   white-space: nowrap;
-                }
-
-                /* callout_css (alpinejs.rb) sets padding non-!important and may be
-                   injected after this block, so !important guarantees the override */
-                body.sw-theme-doc .sw-callout {
-                  padding: 14px 16px !important;
                 }
 
                 /* ===========================================

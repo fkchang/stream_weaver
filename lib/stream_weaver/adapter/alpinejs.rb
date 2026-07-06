@@ -1140,7 +1140,8 @@ module StreamWeaver
                   headers.each_with_index do |header, col_idx|
                     col = columns[col_idx]
                     align = col&.align || :left
-                    th_style = "padding: #{options[:compact] ? '0.5rem' : '0.75rem'} 1rem; text-align: #{align}; border-bottom: 2px solid var(--sw-color-border, #e0e0e0); font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--sw-color-text-dim, var(--sw-color-text-muted, #6B6860));"
+                    th_padding = options[:compact] ? "0.5rem 1rem" : "var(--sw-table-header-padding, 0.75rem 1rem)"
+                    th_style = "padding: #{th_padding}; text-align: #{align}; border-bottom: 2px solid var(--sw-color-border, #e0e0e0); font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--sw-color-text-dim, var(--sw-color-text-muted, #6B6860));"
                     th_style += " cursor: pointer; user-select: none;" if options[:sortable]
 
                     th_attrs = { style: th_style }
@@ -1192,7 +1193,8 @@ module StreamWeaver
                   row.each_with_index do |cell, col_idx|
                     col = columns[col_idx]
                     align = col&.align || :left
-                    cell_style = "padding: #{options[:compact] ? '0.5rem' : '0.75rem'} 1rem; text-align: #{align}; border-bottom: 1px solid var(--sw-color-border, #e0e0e0);"
+                    cell_padding = options[:compact] ? "0.5rem 1rem" : "var(--sw-table-cell-padding, 0.75rem 1rem)"
+                    cell_style = "padding: #{cell_padding}; text-align: #{align}; border-bottom: 1px solid var(--sw-color-border, #e0e0e0);"
                     if options[:bordered]
                       cell_style += " border: 1px solid var(--sw-color-border, #e0e0e0);"
                     end
@@ -4047,7 +4049,7 @@ module StreamWeaver
           .sw-callout {
             display: flex;
             gap: 0.75rem;
-            padding: 1rem 1.25rem;
+            padding: var(--sw-callout-padding, 1rem 1.25rem);
             border-radius: var(--sw-radius-md, 6px);
             border-left: 4px solid var(--sw-info, #2563eb);
             background: color-mix(in oklch, var(--sw-info) 6%, var(--sw-surface, #ffffff));
