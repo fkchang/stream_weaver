@@ -1,0 +1,780 @@
+<title>PRD: Calendar-Driven Travel State — aria</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ground:    #F5F4EF;
+    --surface:   #EDECE6;
+    --border:    #E0DED6;
+    --text:      #181714;
+    --mid:       #6B6860;
+    --faint:     #A09D96;
+    --accent:    #1E4ED8;
+    --accent-lt: #EEF2FF;
+    --code-bg:   #ECEAE3;
+    --warn:      #92400E;
+    --warn-bg:   #FEF3C7;
+    --good:      #065F46;
+    --good-bg:   #D1FAE5;
+
+    --serif: Charter, 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif;
+    --sans:  -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+    --mono:  'SFMono-Regular', 'SF Mono', 'Cascadia Code', Menlo, 'Courier New', monospace;
+  }
+
+  html { background: var(--ground); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+
+  /* ── Layout ── */
+  .page { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  .layout { display: grid; grid-template-columns: 1fr; gap: 0; }
+
+  @media (min-width: 900px) {
+    .layout { grid-template-columns: 220px 1fr; gap: 0 56px; align-items: start; }
+    .toc { position: sticky; top: 48px; }
+  }
+
+  /* ── Doc header ── */
+  .doc-header {
+    border-bottom: 1px solid var(--border);
+    padding: 48px 0 32px;
+    margin-bottom: 48px;
+  }
+  .doc-eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--mid);
+    margin-bottom: 12px;
+  }
+  .doc-title {
+    font-family: var(--serif);
+    font-size: 2.2rem;
+    font-weight: 400;
+    line-height: 1.2;
+    text-wrap: balance;
+    color: var(--text);
+    margin-bottom: 20px;
+  }
+  .doc-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    font-size: 13px;
+    color: var(--mid);
+    align-items: center;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: .04em;
+    padding: 3px 9px;
+    border-radius: 3px;
+    background: var(--accent-lt);
+    color: var(--accent);
+  }
+  .pill-warn { background: var(--warn-bg); color: var(--warn); }
+  .pill-good { background: var(--good-bg); color: var(--good); }
+
+  /* ── TOC ── */
+  .toc { padding-top: 4px; }
+  .toc-label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: 12px;
+  }
+  .toc ol { list-style: none; counter-reset: toc-counter; }
+  .toc li { counter-increment: toc-counter; margin-bottom: 1px; }
+  .toc a {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    color: var(--mid);
+    text-decoration: none;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 4px 8px;
+    border-radius: 3px;
+    transition: background .1s, color .1s;
+  }
+  .toc a::before {
+    content: counter(toc-counter, decimal-leading-zero);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--faint);
+    flex-shrink: 0;
+  }
+  .toc a:hover { background: var(--surface); color: var(--text); }
+
+  /* ── Main content ── */
+  .main { min-width: 0; padding-bottom: 80px; }
+
+  section { margin-bottom: 52px; }
+
+  .section-eyebrow {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-eyebrow::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  h2 {
+    font-family: var(--serif);
+    font-size: 1.45rem;
+    font-weight: 400;
+    line-height: 1.25;
+    text-wrap: balance;
+    color: var(--text);
+    margin-bottom: 16px;
+  }
+  h3 {
+    font-family: var(--sans);
+    font-size: .875rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: var(--text);
+    margin: 28px 0 10px;
+  }
+  h4 {
+    font-family: var(--sans);
+    font-size: .925rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 20px 0 8px;
+  }
+  p { margin-bottom: 14px; font-size: .95rem; }
+  p:last-child { margin-bottom: 0; }
+
+  ul, ol { margin: 0 0 14px 20px; font-size: .95rem; }
+  li { margin-bottom: 5px; }
+  li:last-child { margin-bottom: 0; }
+
+  /* ── Callouts ── */
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-lt);
+    padding: 14px 16px;
+    border-radius: 0 4px 4px 0;
+    margin: 20px 0;
+    font-size: .9rem;
+  }
+  .callout strong { color: var(--accent); }
+  .callout-warn { border-color: var(--warn); background: var(--warn-bg); }
+  .callout-warn strong { color: var(--warn); }
+
+  /* ── Code ── */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: .8rem;
+    line-height: 1.6;
+    margin: 16px 0;
+    color: #2D2B26;
+  }
+  code {
+    font-family: var(--mono);
+    font-size: .825em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #2D2B26;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  /* ── Tables ── */
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+  th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--mid);
+    padding: 8px 12px;
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: .8rem; color: var(--accent); white-space: nowrap; }
+
+  /* ── Components ── */
+  .component-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin: 20px 0;
+    overflow: hidden;
+  }
+  .component-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .component-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-lt);
+    padding: 2px 7px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .component-title { font-weight: 600; font-size: .95rem; }
+  .component-sub { font-size: .8rem; color: var(--mid); margin-left: auto; white-space: nowrap; }
+  .component-body { padding: 18px; }
+
+  /* ── Arch diagram ── */
+  .arch {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 24px 0;
+    flex-wrap: wrap;
+  }
+  .arch-node {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 12px 16px;
+    font-size: .82rem;
+    text-align: center;
+    min-width: 130px;
+    flex-shrink: 0;
+  }
+  .arch-node strong { display: block; font-size: .875rem; margin-bottom: 3px; }
+  .arch-node.primary { border-color: var(--accent); background: var(--accent-lt); }
+  .arch-node.primary strong { color: var(--accent); }
+  .arch-arrow {
+    color: var(--faint);
+    font-size: 1.1rem;
+    padding: 0 8px;
+    flex-shrink: 0;
+  }
+  @media (max-width: 640px) {
+    .arch { flex-direction: column; align-items: flex-start; }
+    .arch-arrow { transform: rotate(90deg); padding: 4px 0 4px 20px; }
+  }
+
+  /* ── Success criteria ── */
+  .criteria { list-style: none; margin-left: 0; }
+  .criteria li {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: .9rem;
+  }
+  .criteria li:last-child { border-bottom: none; }
+  .criteria-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    flex-shrink: 0;
+    width: 24px;
+  }
+
+  /* ── OQ ── */
+  .oq { list-style: none; margin-left: 0; }
+  .oq li {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 10px 14px;
+    align-items: start;
+  }
+  .oq li:last-child { border-bottom: none; }
+  .oq-q { font-weight: 600; font-size: .9rem; grid-column: 2; }
+  .oq-a { grid-column: 2; font-size: .875rem; color: var(--mid); }
+  .oq-num { font-family: var(--mono); font-size: 11px; color: var(--faint); grid-row: span 2; padding-top: 2px; }
+
+  /* ── Scope table ── */
+  .scope-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  @media (max-width: 640px) { .scope-grid { grid-template-columns: 1fr; } }
+  .scope-col { border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+  .scope-head {
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .scope-head.in { color: var(--good); }
+  .scope-head.out { color: var(--faint); }
+  .scope-col ul { list-style: none; margin: 0; padding: 12px 14px; }
+  .scope-col li { font-size: .875rem; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .scope-col li:last-child { border-bottom: none; }
+</style>
+
+<div class="page">
+
+  <header class="doc-header">
+    <div class="doc-eyebrow">aria · Personal OS</div>
+    <h1 class="doc-title">Calendar-Driven Travel State</h1>
+    <div class="doc-meta">
+      <span class="pill">Draft</span>
+      <span>June 25, 2026</span>
+      <span>Author: Maya Chen</span>
+      <span>Owner: scheduler secretary + aria_dev</span>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- TOC -->
+    <nav class="toc" aria-label="Table of contents">
+      <div class="toc-label">Contents</div>
+      <ol>
+        <li><a href="#problem">Problem Statement</a></li>
+        <li><a href="#principle">Design Principle</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#c1">Component 1: Enforcement</a></li>
+        <li><a href="#c2">Component 2: Sync Script</a></li>
+        <li><a href="#c3">Component 3: Checkin Gate</a></li>
+        <li><a href="#data-model">Data Model</a></li>
+        <li><a href="#integrations">Integration Points</a></li>
+        <li><a href="#scope">Scope</a></li>
+        <li><a href="#success">Success Criteria</a></li>
+        <li><a href="#open">Open Questions</a></li>
+      </ol>
+    </nav>
+
+    <!-- Main -->
+    <main class="main">
+
+      <!-- Problem -->
+      <section id="problem">
+        <div class="section-eyebrow">01</div>
+        <h2>Problem Statement</h2>
+        <p>During the June 24 daily checkin, the grandmaster analysis fabricated "Austin, Texas" as Maya's location throughout — she was in Frederick, Maryland. The cause was a two-part failure:</p>
+        <ol>
+          <li><code>current-state.yaml</code> didn't exist at checkin time, so Claude had no ground truth</li>
+          <li>Claude pattern-matched "the Rio" (a Maryland venue) against prior journal context that had mentioned Austin, and confabulated a coherent but entirely wrong narrative</li>
+        </ol>
+        <div class="callout callout-warn">
+          <strong>Root cause:</strong> Stale or absent location context causes Claude to infer location from indirect signals. Confident wrong inferences propagate silently through analysis — they don't look uncertain, they look authoritative.
+        </div>
+        <p>The immediate fix (creating <code>current-state.yaml</code> and adding the Ask-Don't-Fabricate directive) addresses the symptom. This PRD addresses the cause: <code>current-state.yaml</code> was created as a manually-maintained file, which will inevitably go stale when juggling 20+ concurrent sessions with no bandwidth to remember to update a doc.</p>
+      </section>
+
+      <!-- Principle -->
+      <section id="principle">
+        <div class="section-eyebrow">02</div>
+        <h2>Design Principle: Calendar Is Truth</h2>
+        <p>Maya already maintains two calendars — Outlook (work PTO, flights, meetings) and Google (family events). These are the existing ground truth for where she is and what she's doing. Rather than maintaining a parallel file, the system should read from what already exists.</p>
+
+        <div class="arch">
+          <div class="arch-node primary">
+            <strong>Calendar</strong>
+            Outlook + Google<br>ground truth
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node">
+            <strong>bin/sync-travel-state</strong>
+            daily derivation
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node">
+            <strong>current-state.yaml</strong>
+            read-only cache
+          </div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node">
+            <strong>Claude sessions</strong>
+            consume, never write
+          </div>
+        </div>
+
+        <p><code>current-state.yaml</code> becomes a derived cache — never hand-edited, always overwritten by the sync script. The daily checkin adds a human confirmation gate to catch calendar errors before they reach analysis.</p>
+
+        <div class="callout">
+          <strong>Process change required:</strong> Driving trips (e.g., Austin) have no flights to detect. The convention is: all travel — personal or work, driving or flying — must have an Outlook PTO block before the system will track it. The cabinet enforces this rather than relying on memory.
+        </div>
+      </section>
+
+      <!-- Architecture -->
+      <section id="architecture">
+        <div class="section-eyebrow">03</div>
+        <h2>Architecture Overview</h2>
+        <p>Three components work together. Each has a single responsibility.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>Responsibility</th>
+                <th>Owner</th>
+                <th>Trigger</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Enforcement</td>
+                <td>Require calendar entry before travel is acknowledged</td>
+                <td>scheduler secretary</td>
+                <td>Any travel mention</td>
+              </tr>
+              <tr>
+                <td>bin/sync-travel-state</td>
+                <td>Read calendars → write current-state.yaml</td>
+                <td>launchd / morning brief</td>
+                <td>Daily 6am + post-checkin</td>
+              </tr>
+              <tr>
+                <td>Checkin gate</td>
+                <td>Human confirms derived state is accurate</td>
+                <td>aria-checkin Step 0</td>
+                <td>Every daily checkin</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Component 1 -->
+      <section id="c1">
+        <div class="section-eyebrow">04</div>
+        <h2>Component 1: Calendar Entry Enforcement</h2>
+
+        <div class="component-card">
+          <div class="component-header">
+            <span class="component-num">C1</span>
+            <span class="component-title">Scheduler Secretary Behavior</span>
+            <span class="component-sub">secretary work cycle + direct requests</span>
+          </div>
+          <div class="component-body">
+            <p>When travel is mentioned in any context — daily checkin narrative, voicenote, direct message to scheduler — the secretary checks for a corresponding calendar entry before acknowledging or routing the trip.</p>
+
+            <h3>Detection Triggers</h3>
+            <ul>
+              <li>User says "I'm going to X" / "we're traveling to X" / "trip to X"</li>
+              <li>Voicenote mentions destination + date range</li>
+              <li>Checkin narrative references upcoming travel not in calendar</li>
+            </ul>
+
+            <h3>Behavior: entry exists</h3>
+            <p>Acknowledge and flag for sync script to pick up at next run. No further action.</p>
+
+            <h3>Behavior: no entry found</h3>
+            <p>Create the calendar entry via <code>aria-outlook</code> or <code>aria-google</code>, confirm with user, then acknowledge. Secretary does <em>not</em> write to <code>current-state.yaml</code> — that is exclusively the sync script's domain.</p>
+
+            <h4>Entry format (Outlook PTO)</h4>
+            <pre>Title:    Maya – PTO [Destination]
+          e.g., "Maya – PTO Maryland"
+               "Maya – PTO Austin"
+Type:     All-day event, multi-day
+Calendar: Outlook personal</pre>
+
+            <h4>Entry format (work travel)</h4>
+            <pre>Title:    [Trip name] e.g., "Meridian Analytics summer trip 2026"
+          Flight events are detected separately; PTO block still required
+Type:     All-day event
+Calendar: Outlook work</pre>
+
+            <h3>Type Inference Rules</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Title pattern</th><th>Inferred type</th></tr></thead>
+                <tbody>
+                  <tr><td>contains "Meridian" / "work" / trip name from work context</td><td>work</td></tr>
+                  <tr><td>"Maya – PTO [Destination]" with no work keywords</td><td>vacation</td></tr>
+                  <tr><td>Flight pair without PTO block (day trip)</td><td>work</td></tr>
+                  <tr><td>Google family calendar multi-day event</td><td>vacation</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Component 2 -->
+      <section id="c2">
+        <div class="section-eyebrow">05</div>
+        <h2>Component 2: bin/sync-travel-state</h2>
+
+        <div class="component-card">
+          <div class="component-header">
+            <span class="component-num">C2</span>
+            <span class="component-title">Calendar Sync Script</span>
+            <span class="component-sub">bin/sync-travel-state · Ruby</span>
+          </div>
+          <div class="component-body">
+            <p>Reads both calendars, derives travel state, overwrites <code>current-state.yaml</code>. Idempotent — safe to run multiple times per day.</p>
+
+            <h3>Calendar Sources</h3>
+            <ul>
+              <li><strong>Outlook</strong> — via <code>aria-outlook calendar list</code>. Reads 60-day window. Detects: PTO all-day events, flight events (title contains "flight" / airline names / airport codes).</li>
+              <li><strong>Google</strong> — via <code>aria-google calendar list</code>. Reads Maya's primary calendar + Sam's shared calendar. Detects: multi-day events (family trips, shared PTO).</li>
+            </ul>
+
+            <h3>Detection Logic</h3>
+            <ul>
+              <li><strong>Active travel:</strong> any PTO event (Outlook) or multi-day non-recurring family event (Google) that spans today's date</li>
+              <li><strong>Upcoming trips:</strong> PTO events or flight pairs within the next 60 days, grouped by date proximity (±2 days = same trip)</li>
+              <li><strong>Trip end date:</strong> last day of PTO block or last flight's arrival date, whichever is later</li>
+              <li><strong>Destination:</strong> parsed from PTO event title suffix or location field, falling back to flight arrival airport city</li>
+            </ul>
+
+            <h3>Schedule</h3>
+            <ul>
+              <li>Daily at 6:00am via launchd (runs before any sessions likely to start)</li>
+              <li>After daily checkin completes (hooked into checkin flow)</li>
+              <li>Manual: <code>bin/sync-travel-state --force</code></li>
+            </ul>
+
+            <h3>Staleness guard</h3>
+            <p>If <code>aria-outlook</code> or <code>aria-google</code> returns an auth error (OAuth expired), the script logs the failure and exits without overwriting the existing file. It emits a warning to the COS inbox. It never writes a stale derivation.</p>
+
+            <pre>bin/sync-travel-state          # normal run
+bin/sync-travel-state --dry-run # print derived state, don't write
+bin/sync-travel-state --force   # run even if synced_at is recent</pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- Component 3 -->
+      <section id="c3">
+        <div class="section-eyebrow">06</div>
+        <h2>Component 3: Checkin Verification Gate</h2>
+
+        <div class="component-card">
+          <div class="component-header">
+            <span class="component-num">C3</span>
+            <span class="component-title">Daily Checkin — Step 0</span>
+            <span class="component-sub">bin/aria-checkin · before form opens</span>
+          </div>
+          <div class="component-body">
+            <p>A brief confirmation step added before the StreamWeaver form opens. Shows derived state and asks for a binary confirm. Catches calendar errors before they flow into analysis.</p>
+
+            <h3>When to show</h3>
+            <ul>
+              <li><code>travel.active: true</code> — confirm travel is still ongoing</li>
+              <li><code>travel.ends</code> is today or yesterday — confirm return status</li>
+              <li><code>synced_at</code> is &gt;24h old — warn and offer to re-sync</li>
+              <li>Upcoming trip starts within 3 days — surface it for awareness</li>
+            </ul>
+
+            <h3>When to skip</h3>
+            <ul>
+              <li><code>travel.active: false</code> and no trip starting within 3 days — no confirmation needed, proceed directly to form</li>
+            </ul>
+
+            <h3>UI behavior</h3>
+            <p>Single yes/no question added to the StreamWeaver form as a pre-flight card. Displayed above the main form sections. Estimated time: 5 seconds.</p>
+
+            <pre>"Derived from calendar: traveling in Maryland through Jun 28.
+Still accurate?"
+→ [Yes, continue] [No, something's wrong]</pre>
+
+            <p>If the user selects "No": display a correction prompt, update the calendar entry (not the yaml directly), trigger <code>bin/sync-travel-state --force</code>, then proceed to the main form with updated context.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Data Model -->
+      <section id="data-model">
+        <div class="section-eyebrow">07</div>
+        <h2>Data Model</h2>
+        <div class="callout">
+          <strong>Do not hand-edit this file.</strong> It is written exclusively by <code>bin/sync-travel-state</code>. Manual edits will be overwritten at next sync. For urgent corrections, update the source calendar entry and run <code>bin/sync-travel-state --force</code>.
+        </div>
+
+        <h3>current-state.yaml schema</h3>
+        <pre># ~/aria-os/current-state.yaml
+# DERIVED FROM CALENDAR — do not hand-edit.
+# Run bin/sync-travel-state to refresh.
+
+synced_at: "2026-06-25T06:00:00-07:00"   # ISO8601, written by sync script
+
+location:
+  current: "Frederick, MD"                # from PTO event location or title suffix
+  home: "Ashland, OR"                      # static — set once in script config
+
+# travel.active is the primary flag all Claude sessions check.
+# true = away from home, any type. Repeating calendar events do not occur.
+travel:
+  active: true
+  type: vacation                          # vacation | work | mixed
+  destination: "Maryland"                 # parsed from calendar
+  ends: "2026-06-28"                      # PTO end date
+  source_event_id: "AAMkADk1..."          # Outlook/Google event ID for traceability
+  source_calendar: outlook                # outlook | google
+
+mode: vacation                            # normal | vacation | work-travel | deadline-crunch
+# Note: deadline-crunch is the only mode not derivable from calendar.
+# It must be set manually via: aria-cabinet cos-state set mode deadline-crunch
+
+mode_implications:
+  hobby_teaching: skip    # auto: true when travel.active is true
+  hobby_training: skip    # auto: true when travel.type is vacation
+  calendar_note: >
+    Repeating events (volunteer tutoring, weekend pottery class, etc.) appear
+    on calendar but do not occur during travel. Do not log absences.
+
+travel_schedule:
+  - destination: "Austin, TX"
+    start: "2026-07-11"
+    end: "2026-07-18"
+    type: vacation
+    source: outlook_pto
+    source_event_id: "BBMkADk2..."
+
+  - destination: "Denver, CO"
+    start: "2026-07-20"
+    end: null                             # return flight not yet booked
+    type: work
+    source: flight_pair
+    flight_departure: "2026-07-20T06:00-04:00"
+    flight_return: null</pre>
+
+        <h3>Non-calendar context (separate file)</h3>
+        <p>Data that cannot be derived from calendar — active work deadlines, upcoming notes — lives in a separate file read by relevant secretaries:</p>
+        <pre># ~/aria-os/cabinet/secretaries/cos/context.yaml
+# Hand-maintained by COS secretary. Not overwritten by sync.
+
+deadline_crunch_status:
+  status: "Board deck due Friday — deprioritizing non-essential secretary work"
+  review_meeting_planned: "2026-06-27"</pre>
+      </section>
+
+      <!-- Integrations -->
+      <section id="integrations">
+        <div class="section-eyebrow">08</div>
+        <h2>Integration Points</h2>
+
+        <h3>Systems that read current-state.yaml</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Consumer</th><th>What it reads</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td>bin/aria-checkin</td><td>travel, mode</td><td>Step 0 verification gate; grandmaster analysis context</td></tr>
+              <tr><td>SessionStart hook</td><td>synced_at, travel.ends</td><td>Staleness warning before any session</td></tr>
+              <tr><td>CLAUDE.md directive</td><td>location.current, travel.active</td><td>Ground truth for location-sensitive reasoning</td></tr>
+              <tr><td>Hobby schedule reasoning</td><td>travel.active, travel.type</td><td>Skip training/teaching when traveling</td></tr>
+              <tr><td>Scheduler secretary</td><td>travel_schedule</td><td>Plan-ahead awareness, avoid scheduling conflicts</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>SessionStart staleness check</h3>
+        <p>Add to the SessionStart hook (alongside <code>bin/aria-session-nudge</code>):</p>
+        <pre>ruby -ryaml -rdate -e '
+  f = File.expand_path("~/aria-os/current-state.yaml")
+  exit unless File.exist?(f)
+  s = YAML.load_file(f)
+  synced = Date.parse(s["synced_at"].to_s.split("T").first) rescue nil
+  if synced && Date.today - synced > 1
+    puts "⚠️  current-state.yaml is stale (#{Date.today - synced}d) — run bin/sync-travel-state"
+  end
+  ends_str = s.dig("travel", "ends")
+  if ends_str && s.dig("travel", "active") && Date.parse(ends_str) < Date.today
+    puts "⚠️  travel.ends (#{ends_str}) is past but travel.active is true — run bin/sync-travel-state"
+  end
+'</pre>
+      </section>
+
+      <!-- Scope -->
+      <section id="scope">
+        <div class="section-eyebrow">09</div>
+        <h2>Scope</h2>
+        <div class="scope-grid">
+          <div class="scope-col">
+            <div class="scope-head in">In Scope</div>
+            <ul>
+              <li>Outlook PTO event detection</li>
+              <li>Google family calendar detection</li>
+              <li>Outlook flight event detection</li>
+              <li>Trip type inference from event titles</li>
+              <li>Destination extraction from title/location field</li>
+              <li>Checkin verification step</li>
+              <li>Scheduler enforcement (require calendar entry)</li>
+              <li>SessionStart staleness warning</li>
+              <li>launchd schedule (6am daily)</li>
+            </ul>
+          </div>
+          <div class="scope-col">
+            <div class="scope-head out">Out of Scope</div>
+            <ul>
+              <li>Sub-day location tracking</li>
+              <li>Multi-timezone handling</li>
+              <li>Historical travel reconstruction</li>
+              <li>Automatic deadline-crunch mode detection</li>
+              <li>Seattle trip (not yet booked — tracks once calendar entry exists)</li>
+              <li>Drive trip detection without PTO block (process rule: add PTO)</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- Success -->
+      <section id="success">
+        <div class="section-eyebrow">10</div>
+        <h2>Success Criteria</h2>
+        <ul class="criteria">
+          <li><span class="criteria-num">SC1</span><span>Zero location fabrications in grandmaster analysis after build — Claude reads ground truth or asks, never infers from indirect signals</span></li>
+          <li><span class="criteria-num">SC2</span><span><code>current-state.yaml</code> reflects accurate travel state without manual updates on ≥90% of travel days</span></li>
+          <li><span class="criteria-num">SC3</span><span>Checkin verification gate catches any remaining discrepancies within 24h</span></li>
+          <li><span class="criteria-num">SC4</span><span>New travel appears in <code>current-state.yaml</code> within 24h of calendar entry creation</span></li>
+          <li><span class="criteria-num">SC5</span><span>Auth failures (OAuth expired) emit a COS inbox warning rather than silently writing stale data</span></li>
+          <li><span class="criteria-num">SC6</span><span>Hobby absence during travel is not logged — no false "missed training" entries accumulate</span></li>
+        </ul>
+      </section>
+
+      <!-- Open Questions -->
+      <section id="open">
+        <div class="section-eyebrow">11</div>
+        <h2>Open Questions</h2>
+        <ul class="oq">
+          <li>
+            <span class="oq-num">Q1</span>
+            <span class="oq-q">aria-google headless auth</span>
+            <span class="oq-a">The sync script runs via launchd (non-interactive). Confirm that aria-google's OAuth token refresh works headlessly. If not, the Google calendar read will silently fail — the script must detect this and fall back to Outlook-only with a warning rather than writing incomplete state.</span>
+          </li>
+          <li>
+            <span class="oq-num">Q2</span>
+            <span class="oq-q">Destination parsing from event title</span>
+            <span class="oq-a">PTO events may not have a location field set. Title parsing needs a convention: "Maya – PTO Maryland" works; "Maya – PTO" alone does not yield a destination. Worth establishing the naming convention and adding it to the scheduler secretary's entry template.</span>
+          </li>
+          <li>
+            <span class="oq-num">Q3</span>
+            <span class="oq-q">Sam's Google calendar access</span>
+            <span class="oq-a">The script needs read access to Sam's shared family calendar to detect joint trips. Confirm aria-google has the correct scope and that the calendar is shared with Maya's Google account.</span>
+          </li>
+          <li>
+            <span class="oq-num">Q4</span>
+            <span class="oq-q">Work trip hobby implications</span>
+            <span class="oq-a">Work travel (Denver) is different from vacation — Maya may or may not train depending on the trip. Currently the model sets <code>hobby_training: skip</code> only for vacation type. Confirm whether work trips should also skip or leave as ambiguous (requiring checkin verification to clarify).</span>
+          </li>
+        </ul>
+      </section>
+
+    </main>
+  </div>
+</div>
