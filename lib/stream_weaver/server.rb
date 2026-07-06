@@ -899,12 +899,38 @@ module StreamWeaver
         JSON.generate({ deleted: deleted, remaining: remaining, dir: dir })
       end
 
+      # =========================================
+      # Custom user-defined HTTP endpoints (App#endpoint DSL)
+      # =========================================
+      # These are defined AFTER every StreamWeaver-internal route above, so on a path
+      # collision the internal route always wins (Sinatra dispatches to the first route
+      # that matches, and `endpoint` warns at registration time about known collisions).
+      # GET custom endpoints are checked inside the '/*' catch-all below (Sinatra only
+      # dispatches one GET '/*' route, which URL-routing's fallback also needs); the other
+      # verbs get their own catch-all here since no other route claims them.
+      %i[post put patch delete].each do |verb|
+        send(verb, '/*') do
+          streamlit_app = settings.streamlit_app
+          path = "/#{params['splat'].first}"
+          ep = streamlit_app.find_endpoint(verb, path)
+          pass unless ep
+          status, headers, body = SinatraApp.normalize_endpoint_result(ep[:block].call(request))
+          halt status, headers, body
+        end
+      end
+
       # URL routing: catch-all GET for deep-linked paths
       get '/*' do
         streamlit_app = settings.streamlit_app
+        path = "/#{params['splat'].first}"
+
+        if (ep = streamlit_app.find_endpoint(:get, path))
+          status, headers, body = SinatraApp.normalize_endpoint_result(ep[:block].call(request))
+          halt status, headers, body
+        end
+
         pass unless streamlit_app.routable?
 
-        path = "/#{params['splat'].first}"
         route_state = streamlit_app.state_for_path(path)
         pass unless route_state
 
@@ -929,6 +955,24 @@ module StreamWeaver
 
       # Return the class itself (it's the Rack app)
       self
+    end
+
+    # Convert an App#endpoint block's return value into a Rack triplet.
+    # Shared by SinatraApp (standalone mode) and Service (multi-app mode).
+    #
+    # @param result [Object] whatever the endpoint block returned
+    # @return [Array(Integer, Hash, Array<String>)] a Rack-compatible [status, headers, body]
+    def self.normalize_endpoint_result(result)
+      case result
+      when Array
+        result
+      when Hash
+        [200, { 'Content-Type' => 'application/json' }, [JSON.generate(result)]]
+      when String
+        [200, { 'Content-Type' => 'text/html' }, [result]]
+      else
+        [200, { 'Content-Type' => 'text/plain' }, [result.to_s]]
+      end
     end
 
     # Find a button recursively in the component tree

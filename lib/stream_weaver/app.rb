@@ -14,7 +14,17 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :layout_slots
+    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :layout_slots, :endpoints
+
+    # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
+    ENDPOINT_VERBS = %i[get post put patch delete].freeze
+
+    # Paths/prefixes owned by StreamWeaver's own framework routes (see server.rb / service.rb).
+    # An `endpoint` registered on one of these is never reached -- the internal route is always
+    # defined first, and Sinatra dispatches to the first matching route. We still warn at
+    # registration time so the collision is obvious instead of silently swallowed.
+    RESERVED_ENDPOINT_EXACT = %w[/update /submit].freeze
+    RESERVED_ENDPOINT_PREFIXES = %w[/action/ /event/ /form/ /theme/ /sw/].freeze
 
     def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], &block)
       @title = title
@@ -39,6 +49,7 @@ module StreamWeaver
       @route_builder = nil
       @route_rules   = []  # Array<RouteRule> — persistent, never cleared in rebuild
       @resource_defs = {}  # name(sym) → ResourceDefinition — persistent
+      @endpoints     = []  # Array<{verb:, path:, block:}> — persistent, never cleared in rebuild
 
       @layout_slots = {}
       components.each { |mod| singleton_class.include(mod) }
@@ -133,6 +144,53 @@ module StreamWeaver
 
     def route(name, path)
       page(name, path) {}
+    end
+
+    # Register a real HTTP endpoint (webhook receiver, JSON API, file download, etc.)
+    # — the "never rewrite in Sinatra" escape hatch. Unlike `route`/`page` (which are
+    # state-driven VIEW matchers), an `endpoint` is a genuine Rack route: it bypasses
+    # StreamWeaver's state machinery, session, and CSRF handling entirely. The block
+    # receives the raw `Rack::Request` and its return value is converted to a response:
+    #
+    #   Hash            -> 200 application/json (JSON.generate'd)
+    #   String          -> 200 text/html
+    #   [status, headers, body] Array -> passed through to Rack verbatim
+    #   anything else   -> 200 text/plain (#to_s)
+    #
+    # @example
+    #   endpoint :get, "/api/status" do |req|
+    #     { ok: true, uptime: 42 }
+    #   end
+    #
+    #   endpoint :post, "/webhook/github" do |req|
+    #     payload = req.body.read
+    #     [202, {}, "queued"]
+    #   end
+    #
+    # Idempotent: repeated registration of the same verb+path across `rebuild_with_state`
+    # calls (every request) keeps only the first block, mirroring `resource`/`route_with`.
+    def endpoint(verb, path, &block)
+      verb = verb.to_sym
+      unless ENDPOINT_VERBS.include?(verb)
+        raise ArgumentError, "endpoint: unsupported verb #{verb.inspect} (must be one of #{ENDPOINT_VERBS.join(', ')})"
+      end
+      raise ArgumentError, "endpoint: block required" unless block
+
+      return if @endpoints.any? { |e| e[:verb] == verb && e[:path] == path }
+
+      if reserved_endpoint_path?(path)
+        warn "StreamWeaver: endpoint #{verb.to_s.upcase} #{path} collides with a StreamWeaver-internal " \
+             "route and will never be reached — the internal route always wins."
+      end
+
+      @endpoints << { verb: verb, path: path, block: block }
+    end
+
+    # Look up a registered endpoint by verb + exact path. Used by SinatraApp/Service
+    # route dispatch at request time.
+    def find_endpoint(verb, path)
+      verb = verb.to_sym
+      @endpoints.find { |e| e[:verb] == verb && e[:path] == path }
     end
 
     def rebuild_with_state(current_state)
@@ -863,6 +921,11 @@ module StreamWeaver
       else
         target[key] ||= default_value
       end
+    end
+
+    def reserved_endpoint_path?(path)
+      RESERVED_ENDPOINT_EXACT.include?(path) ||
+        RESERVED_ENDPOINT_PREFIXES.any? { |prefix| path.start_with?(prefix) }
     end
 
     def define_path_helpers(defn)

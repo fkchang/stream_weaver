@@ -1062,6 +1062,29 @@ module StreamWeaver
         "Invalid theme"
       end
     end
+
+    # =========================================
+    # Custom user-defined HTTP endpoints (App#endpoint DSL) — service mode
+    # =========================================
+    # Scoped under /apps/:app_id/* so multiple apps' endpoints can't collide with each
+    # other. Defined AFTER every fixed /apps/:app_id/... route above, so on a path
+    # collision the internal route always wins (Sinatra dispatches to the first route
+    # that matches; `endpoint` also warns at registration time about known collisions).
+    %i[get post put patch delete].each do |verb|
+      send(verb, '/apps/:app_id/*') do
+        app_id = params[:app_id]
+        app_entry = self.class.apps[app_id]
+        pass unless app_entry
+
+        streamlit_app = app_entry[:app]
+        path = "/#{params['splat'].first}"
+        ep = streamlit_app.find_endpoint(verb, path)
+        pass unless ep
+
+        status, headers, body = SinatraApp.normalize_endpoint_result(ep[:block].call(request))
+        halt status, headers, body
+      end
+    end
   end
 
   # Module-level helper for apps to register with the service
