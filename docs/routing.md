@@ -2,6 +2,8 @@
 
 StreamWeaver supports URL-addressable views — deep links, browser back/forward, and bookmarkable URLs — without adding a router library. Two mechanisms are available depending on complexity.
 
+**Not looking for state routing?** Everything on this page maps a URL path to *state* — the same StreamWeaver view still renders, just seeded differently. If you need a genuine HTTP endpoint (webhook receiver, JSON API, file download) that bypasses StreamWeaver's page rendering entirely, see [`docs/endpoints.md`](endpoints.md) (`endpoint` DSL) instead.
+
 ## How It Works (Internals)
 
 StreamWeaver uses a bidirectional URL ↔ state contract:
