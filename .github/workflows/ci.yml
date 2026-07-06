@@ -29,3 +29,19 @@ jobs:
 
       - name: Run RSpec
         run: bundle exec rspec
+
+  smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+
+      - name: Run smoke test
+        run: bin/smoke

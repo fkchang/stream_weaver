@@ -1,0 +1,310 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/smoke — executable UAT smoke test (stream_weaver-gsv)
+#
+# Freezes the 2026-07-06 manual UAT battery into deterministic, repeatable
+# code. Boots real StreamWeaver servers — standalone (`run!`) and multi-app
+# service (`streamweaver serve`) — on ephemeral ports and drives them over
+# real HTTP (Net::HTTP). This is NOT an rspec file; it's a release/CI gate a
+# human can also run locally:
+#
+#   bin/smoke
+#
+# Prints one check/x check line per check plus a final "N/M passed" summary.
+# Exits 0 only if every check passes.
+#
+# No dependencies beyond stdlib — spawned StreamWeaver processes are launched
+# via `bundle exec` so the repo's own Gemfile.lock resolves gems, meaning this
+# works from a fresh clone as long as `bundle install` has been run.
+
+require 'net/http'
+require 'json'
+require 'socket'
+require 'tmpdir'
+require 'fileutils'
+
+REPO_ROOT = File.expand_path('..', __dir__)
+FIXTURE = File.join(REPO_ROOT, 'bin', 'support', 'smoke_fixture.rb')
+
+$results = []
+$pids = []
+$tmp_dirs = []
+
+CHECK = "✓" # check mark
+CROSS = "✗" # ballot x
+
+# ---------------------------------------------------------------------------
+# Process / port management
+# ---------------------------------------------------------------------------
+
+# Bind to port 0 to let the OS hand out a free ephemeral port, then release it
+# immediately so a child process can bind it. Small TOCTOU race is acceptable
+# for a local smoke test.
+def free_port
+  server = TCPServer.new('127.0.0.1', 0)
+  port = server.addr[1]
+  server.close
+  port
+end
+
+def scratch_dir
+  dir = Dir.mktmpdir('sw-smoke-')
+  $tmp_dirs << dir
+  dir
+end
+
+# Spawn a tracked child process in its own process group (so we can kill the
+# whole group later, catching any Puma worker/thread descendants) with
+# stdout+stderr captured to `log`.
+def spawn_tracked(cmd, env: {}, log: File::NULL)
+  pid = Process.spawn(env, *cmd, chdir: REPO_ROOT, pgroup: true, out: log, err: log)
+  $pids << pid
+  pid
+end
+
+def kill_all_tracked
+  $pids.each do |pid|
+    Process.kill('TERM', -pid)
+  rescue Errno::ESRCH, Errno::EPERM
+    next
+  end
+  sleep 0.3
+  $pids.each do |pid|
+    Process.kill('KILL', -pid)
+  rescue Errno::ESRCH, Errno::EPERM
+    next
+  end
+  $pids.each do |pid|
+    Process.wait(pid)
+  rescue Errno::ECHILD
+    next
+  end
+  $pids.clear
+end
+
+def cleanup_tmp_dirs
+  $tmp_dirs.each { |dir| FileUtils.remove_entry(dir, true) }
+  $tmp_dirs.clear
+end
+
+at_exit do
+  kill_all_tracked
+  cleanup_tmp_dirs
+end
+
+# Poll a port until it accepts TCP connections, or raise after `timeout` secs.
+def wait_for_boot(port, timeout: 15)
+  deadline = Time.now + timeout
+  loop do
+    TCPSocket.new('127.0.0.1', port).close
+    return true
+  rescue Errno::ECONNREFUSED, Errno::EADDRNOTAVAIL, SocketError
+    raise "timed out after #{timeout}s waiting for port #{port} to accept connections" if Time.now > deadline
+
+    sleep 0.1
+  end
+end
+
+# ---------------------------------------------------------------------------
+# HTTP helpers
+# ---------------------------------------------------------------------------
+
+def http_request(port, method, path, body: nil, headers: {})
+  uri = URI("http://127.0.0.1:#{port}#{path}")
+  Net::HTTP.start(uri.host, uri.port, open_timeout: 5, read_timeout: 5) do |http|
+    req_class = { get: Net::HTTP::Get, post: Net::HTTP::Post, put: Net::HTTP::Put, delete: Net::HTTP::Delete }.fetch(method)
+    req = req_class.new(uri)
+    headers.each { |k, v| req[k] = v }
+    req.body = body if body
+    http.request(req)
+  end
+end
+
+def http_post_form(port, path, params)
+  uri = URI("http://127.0.0.1:#{port}#{path}")
+  Net::HTTP.post_form(uri, params)
+end
+
+# ---------------------------------------------------------------------------
+# Check runner
+# ---------------------------------------------------------------------------
+
+def check(description)
+  ok, detail = yield
+  $results << ok
+  if ok
+    puts "#{CHECK} #{description}"
+  else
+    puts "#{CROSS} #{description}#{detail ? " -- #{detail}" : ''}"
+  end
+rescue StandardError => e
+  $results << false
+  puts "#{CROSS} #{description} -- raised #{e.class}: #{e.message}"
+end
+
+def section(title)
+  puts
+  puts "-- #{title} --"
+end
+
+# ---------------------------------------------------------------------------
+# Phase 1: standalone (`ruby smoke_fixture.rb`, PORT env picks the port and
+# suppresses auto-browser-open)
+# ---------------------------------------------------------------------------
+
+section "Standalone (run!)"
+
+standalone_port = free_port
+standalone_log = File.join(scratch_dir, 'standalone.log')
+spawn_tracked(['bundle', 'exec', 'ruby', FIXTURE], env: { 'PORT' => standalone_port.to_s }, log: standalone_log)
+
+begin
+  wait_for_boot(standalone_port)
+rescue StandardError => e
+  puts "#{CROSS} standalone app failed to boot -- #{e.message}"
+  puts "---- boot log ----"
+  puts (File.read(standalone_log) rescue "(log unavailable)")
+  puts "-------------------"
+  exit 1
+end
+
+check("boot log warns that POST /update collides with a StreamWeaver-internal route") do
+  log = File.read(standalone_log)
+  ok = log.include?("collides with a StreamWeaver-internal route")
+  [ok, ok ? nil : "boot log did not contain the expected warning"]
+end
+
+check("GET /api/status?q=1 -> 200 JSON, echo.q == \"1\"") do
+  res = http_request(standalone_port, :get, "/api/status?q=1")
+  body = JSON.parse(res.body) rescue {}
+  ok = res.code == "200" && body["echo"] == { "q" => "1" }
+  [ok, ok ? nil : "expected 200 echo.q=1, got #{res.code} #{res.body}"]
+end
+
+check("POST /webhook/test -> 202, X-Smoke: yes, body \"queued:hello\"") do
+  res = http_request(standalone_port, :post, "/webhook/test", body: "hello", headers: { 'Content-Type' => 'text/plain' })
+  smoke_header = res['x-smoke']&.downcase # Rack lowercases header names; compare case-insensitively
+  ok = res.code == "202" && smoke_header == "yes" && res.body == "queued:hello"
+  [ok, ok ? nil : "expected 202/x-smoke=yes/\"queued:hello\", got #{res.code}/#{res['x-smoke'].inspect}/#{res.body.inspect}"]
+end
+
+check("GET /export/report.csv -> 200 text/csv attachment containing \"west,42\"") do
+  res = http_request(standalone_port, :get, "/export/report.csv")
+  ok = res.code == "200" &&
+       res['content-type'].to_s.include?("text/csv") &&
+       res['content-disposition'].to_s.include?("attachment") &&
+       res.body.include?("west,42")
+  [ok, ok ? nil : "got #{res.code}, content-type=#{res['content-type'].inspect}, disposition=#{res['content-disposition'].inspect}, body=#{res.body.inspect}"]
+end
+
+check("POST /update -> 200, internal route wins (body does not contain \"never reached\")") do
+  res = http_request(standalone_port, :post, "/update")
+  ok = res.code == "200" && !res.body.include?("never reached")
+  [ok, ok ? nil : "got #{res.code}, body=#{res.body.inspect}"]
+end
+
+check("PUT /api/status -> 404 (verb not registered)") do
+  res = http_request(standalone_port, :put, "/api/status")
+  [res.code == "404", res.code == "404" ? nil : "got #{res.code}"]
+end
+
+check("GET /nonexistent -> 404") do
+  res = http_request(standalone_port, :get, "/nonexistent")
+  [res.code == "404", res.code == "404" ? nil : "got #{res.code}"]
+end
+
+check("GET / -> 200, body contains \"Smoke Demo\"") do
+  res = http_request(standalone_port, :get, "/")
+  ok = res.code == "200" && res.body.include?("Smoke Demo")
+  [ok, ok ? nil : "got #{res.code}, body did not contain \"Smoke Demo\""]
+end
+
+# ---------------------------------------------------------------------------
+# Phase 2: multi-app service (`exe/streamweaver serve --port <port>`)
+# ---------------------------------------------------------------------------
+
+section "Service (streamweaver serve)"
+
+service_port = free_port
+service_log = File.join(scratch_dir, 'service.log')
+spawn_tracked(['bundle', 'exec', 'ruby', File.join(REPO_ROOT, 'exe', 'streamweaver'), 'serve', '--port', service_port.to_s],
+              log: service_log)
+
+begin
+  wait_for_boot(service_port)
+rescue StandardError => e
+  puts "#{CROSS} service failed to boot -- #{e.message}"
+  puts "---- boot log ----"
+  puts (File.read(service_log) rescue "(log unavailable)")
+  puts "-------------------"
+  exit 1
+end
+
+hex_app_id = nil
+
+check("POST /load-app (form-encoded) -> success, slug \"smoke-sales-dashboard\"") do
+  res = http_post_form(service_port, "/load-app", { "file_path" => FIXTURE })
+  body = JSON.parse(res.body) rescue {}
+  hex_app_id = body["app_id"]
+  ok = res.code == "200" && body["success"] == true && body["slug"] == "smoke-sales-dashboard"
+  [ok, ok ? nil : "got #{res.code} #{res.body}"]
+end
+
+check("GET /apps/smoke-sales-dashboard -> 200, body contains \"Smoke Demo\"") do
+  res = http_request(service_port, :get, "/apps/smoke-sales-dashboard")
+  ok = res.code == "200" && res.body.include?("Smoke Demo")
+  [ok, ok ? nil : "got #{res.code}"]
+end
+
+check("GET /apps/<hex app_id> -> 200") do
+  res = http_request(service_port, :get, "/apps/#{hex_app_id}")
+  [res.code == "200", res.code == "200" ? nil : "got #{res.code} for app_id=#{hex_app_id.inspect}"]
+end
+
+check("GET /apps/smoke-sales-dashboard/api/status -> 200 JSON (slug-scoped endpoint dispatch)") do
+  res = http_request(service_port, :get, "/apps/smoke-sales-dashboard/api/status")
+  body = JSON.parse(res.body) rescue {}
+  ok = res.code == "200" && body["ok"] == true
+  [ok, ok ? nil : "got #{res.code} #{res.body}"]
+end
+
+check("GET /apps/<hex app_id>/api/status -> 200 JSON (hex-scoped endpoint dispatch)") do
+  res = http_request(service_port, :get, "/apps/#{hex_app_id}/api/status")
+  body = JSON.parse(res.body) rescue {}
+  ok = res.code == "200" && body["ok"] == true
+  [ok, ok ? nil : "got #{res.code} #{res.body}"]
+end
+
+copy_path = File.join(scratch_dir, 'smoke_fixture_copy.rb')
+FileUtils.cp(FIXTURE, copy_path)
+
+check("POST /load-app on a copy (same name, different path) -> slug \"smoke-sales-dashboard-2\"") do
+  res = http_post_form(service_port, "/load-app", { "file_path" => copy_path })
+  body = JSON.parse(res.body) rescue {}
+  ok = res.code == "200" && body["success"] == true && body["slug"] == "smoke-sales-dashboard-2"
+  [ok, ok ? nil : "got #{res.code} #{res.body}"]
+end
+
+check("POST /load-app on the original path again -> slug reused: \"smoke-sales-dashboard\"") do
+  res = http_post_form(service_port, "/load-app", { "file_path" => FIXTURE })
+  body = JSON.parse(res.body) rescue {}
+  ok = res.code == "200" && body["success"] == true && body["slug"] == "smoke-sales-dashboard"
+  [ok, ok ? nil : "got #{res.code} #{res.body}"]
+end
+
+check("GET /apps/no-such-app -> 404") do
+  res = http_request(service_port, :get, "/apps/no-such-app")
+  [res.code == "404", res.code == "404" ? nil : "got #{res.code}"]
+end
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+
+puts
+passed = $results.count(true)
+total = $results.size
+puts "#{passed}/#{total} passed"
+
+exit(passed == total ? 0 : 1)

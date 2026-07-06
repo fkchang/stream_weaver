@@ -112,4 +112,37 @@ Note: Testing the full `run_once!` flow (with browser wait loop) requires manual
 State persists in browser cookies across server restarts. For testing:
 - Clear browser cookies for localhost
 - Use incognito mode for fresh sessions
+
+## Smoke test / UAT
+
+`bin/smoke` is an executable UAT battery, not an rspec file. It boots real
+StreamWeaver servers on ephemeral ports and drives them over real HTTP
+(`Net::HTTP`), covering things unit/integration specs don't: the actual
+process boot sequence, the standalone-vs-service seam, and slug/hex URL
+resolution across multiple loaded apps.
+
+It covers, using a small fixture app (`bin/support/smoke_fixture.rb`):
+
+- **Standalone mode** (`ruby app.rb`, driven via `run!`): custom `endpoint`
+  JSON/webhook/CSV responses, the reserved-path boot warning and internal
+  route always winning for `/update`, and 404s for unmapped verbs/paths.
+- **Service mode** (`streamweaver serve`): loading an app via `POST
+  /load-app`, rendering it at both its slug and hex `/apps/:id` URLs,
+  endpoint dispatch scoped under `/apps/:id/...` for both forms, the
+  collision-suffix behavior when two different files derive the same slug,
+  and slug reuse when the same file is reloaded.
+
+Run it locally:
+
+```bash
+bin/smoke
+```
+
+It prints one check/x check line per assertion plus a final `N/M passed`
+summary, and exits non-zero if anything fails (all remaining checks still
+run so a single miss doesn't hide others). Spawned processes are tracked and
+killed (by process group) in an `at_exit` handler, and ports are picked by
+binding to port 0 so it never collides with a `streamweaver` instance you
+already have running. It's wired into CI as the `smoke` job alongside
+`rspec`.
 - Add a reset button: `button "Reset" do |s| s.clear end`
