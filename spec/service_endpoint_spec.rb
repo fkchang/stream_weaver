@@ -57,6 +57,13 @@ RSpec.describe "StreamWeaver::Service — App#endpoint (multi-app service mode)"
     expect(last_response.status).to eq(404)
   end
 
+  it "dispatches an endpoint via the app's slug prefix, same as page routes" do
+    StreamWeaver::Service.slug_registry["service-endpoint-app"] = app_id
+    get "/apps/service-endpoint-app/api/status"
+    expect(last_response.status).to eq(200)
+    expect(JSON.parse(last_response.body)).to eq("ok" => true, "source" => "service")
+  end
+
   it "does not shadow the app's own main render route" do
     get "/apps/#{app_id}"
     expect(last_response).to be_ok

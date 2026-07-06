@@ -115,7 +115,8 @@ registered (e.g. `GET /api/status`).
 
 In multi-app service mode, each app is mounted under `/apps/:app_id`, so its
 endpoints are scoped under that prefix too: an app registered as `svc123`
-serves `endpoint :get, "/api/status"` at `GET /apps/svc123/api/status`. The
+serves `endpoint :get, "/api/status"` at `GET /apps/svc123/api/status` — and
+equally via the app's human-readable slug, e.g. `GET /apps/my-dashboard/api/status`. The
 same precedence rule applies — StreamWeaver's fixed `/apps/:app_id/...` routes
 (update, action, event, form, theme) are defined first and always win on
 collision.

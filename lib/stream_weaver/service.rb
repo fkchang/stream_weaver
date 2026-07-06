@@ -212,6 +212,7 @@ module StreamWeaver
       def clear_apps
         count = apps.size
         @apps = {}
+        @slug_registry = {}
         count
       end
 
@@ -1072,8 +1073,10 @@ module StreamWeaver
     # that matches; `endpoint` also warns at registration time about known collisions).
     %i[get post put patch delete].each do |verb|
       send(verb, '/apps/:app_id/*') do
-        app_id = params[:app_id]
-        app_entry = self.class.apps[app_id]
+        # Resolve slugs the same way the page route does — endpoints must be
+        # reachable at /apps/my-dashboard/api/... as well as the hex id.
+        app_id = self.class.resolve_app_id(params[:app_id])
+        app_entry = app_id && self.class.apps[app_id]
         pass unless app_entry
 
         streamlit_app = app_entry[:app]
