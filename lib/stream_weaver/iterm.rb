@@ -17,6 +17,15 @@ module StreamWeaver
         ENV["ITERM_SESSION_ID"]&.split(":", 2)&.last&.then { |g| g.empty? ? nil : g }
       end
 
+      # True only when the user is inside iTerm2 on macOS but the optional gem
+      # isn't installed — the one case where a "gem install iterm2_ruby" hint
+      # is actionable rather than noise.
+      def gem_missing?
+        !available? &&
+          RbConfig::CONFIG["host_os"].match?(/darwin/) &&
+          !ENV["ITERM_SESSION_ID"].to_s.empty?
+      end
+
       # Split the calling iTerm2 pane and open a browser pane with the URL.
       # Returns Hash with :type (:browser, :external, or nil) and :pane_id
       def split_vertical_with_url(url, open_browser: true, horizontal: false)

@@ -1682,6 +1682,9 @@ module StreamWeaver
         else
           # iTerm2 not available — open external browser (Forrest's Law)
           puts "Canvas '#{session_name}' ready at #{url}"
+          if ITerm.gem_missing?
+            puts "(Tip: `gem install iterm2_ruby` to open canvases in an iTerm split pane)"
+          end
           puts "(iTerm2 not available — opening browser...)"
           system("open", url)
         end
