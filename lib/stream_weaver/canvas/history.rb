@@ -32,19 +32,16 @@ module StreamWeaver
 
       # Writes dsl to <root>/<session>/<timestamp>.rb and returns the path.
       # Appends a numeric suffix on collision so back-to-back writes within
-      # the same second don't clobber each other.
-      #
-      # Assumes a single-process caller per session: concurrent writes within
-      # the same second can race between the unique_path lookup and File.write.
+      # the same second don't clobber each other. Paths are claimed atomically
+      # (File::EXCL), so concurrent callers get distinct files instead of
+      # racing between an exist? check and the write.
       def record(session, dsl)
         validate_session!(session)
         dir = File.join(root, session)
         FileUtils.mkdir_p(dir)
 
         stamp = Time.now.strftime('%Y%m%d_%H%M%S')
-        path = unique_path(dir, stamp)
-        File.write(path, dsl)
-        path
+        write_unique(dir, stamp, dsl)
       end
 
       # Deletes snapshot files older than MAX_AGE_DAYS and prunes any
@@ -74,19 +71,20 @@ module StreamWeaver
       end
       private_class_method :validate_session!
 
-      def unique_path(dir, stamp)
-        path = File.join(dir, "#{stamp}.rb")
-        return path unless File.exist?(path)
-
-        suffix = 1
+      def write_unique(dir, stamp, dsl)
+        suffix = nil
         loop do
-          candidate = File.join(dir, "#{stamp}_#{suffix}.rb")
-          return candidate unless File.exist?(candidate)
-
-          suffix += 1
+          name = suffix ? "#{stamp}_#{suffix}.rb" : "#{stamp}.rb"
+          path = File.join(dir, name)
+          begin
+            File.open(path, File::WRONLY | File::CREAT | File::EXCL) { |f| f.write(dsl) }
+            return path
+          rescue Errno::EEXIST
+            suffix = (suffix || 0) + 1
+          end
         end
       end
-      private_class_method :unique_path
+      private_class_method :write_unique
     end
   end
 end

@@ -49,6 +49,24 @@ RSpec.describe StreamWeaver::Canvas::History do
       expect(File.read(p2)).to eq('b')
     end
 
+    it 'claims paths atomically — a file appearing between candidates is never clobbered' do
+      now = Time.utc(2026, 4, 27, 14, 30, 52)
+      allow(Time).to receive(:now).and_return(now)
+      # Simulate another process winning the race for both the base name and
+      # the first suffix before we write.
+      dir = File.join(@root, 'demo')
+      FileUtils.mkdir_p(dir)
+      File.write(File.join(dir, '20260427_143052.rb'), 'theirs')
+      File.write(File.join(dir, '20260427_143052_1.rb'), 'theirs too')
+
+      path = described_class.record('demo', 'mine')
+
+      expect(File.basename(path)).to eq('20260427_143052_2.rb')
+      expect(File.read(File.join(dir, '20260427_143052.rb'))).to eq('theirs')
+      expect(File.read(File.join(dir, '20260427_143052_1.rb'))).to eq('theirs too')
+      expect(File.read(path)).to eq('mine')
+    end
+
     it 'rejects session names containing path separators' do
       expect { described_class.record('../evil', 'x') }
         .to raise_error(ArgumentError)
