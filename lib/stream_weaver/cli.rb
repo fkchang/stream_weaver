@@ -107,11 +107,15 @@ module StreamWeaver
 
     # Start service in foreground (for development)
     def self.serve(args)
-      port = DEFAULT_PORT
+      port = nil
 
       OptionParser.new do |opts|
         opts.on('-p', '--port PORT', Integer, "Port (default: #{DEFAULT_PORT})") { |p| port = p }
       end.parse!(args)
+
+      # No explicit --port: auto-increment past busy ports, same as standalone mode.
+      # Explicit --port: honor it strictly and fail on EADDRINUSE.
+      port ||= Service.find_available_port
 
       puts "Starting StreamWeaver service on port #{port}..."
       Service.set :port, port
@@ -1677,7 +1681,7 @@ module StreamWeaver
             # Split pane unavailable or failed — open external browser (Forrest's Law)
             puts "Canvas '#{session_name}' ready at #{url}"
             puts "(Opening browser...)"
-            system("open", url)
+            open_browser(url)
           end
         else
           # iTerm2 not available — open external browser (Forrest's Law)
@@ -1686,7 +1690,7 @@ module StreamWeaver
             puts "(Tip: `gem install iterm2_ruby` to open canvases in an iTerm split pane)"
           end
           puts "(iTerm2 not available — opening browser...)"
-          system("open", url)
+          open_browser(url)
         end
 
         puts ""

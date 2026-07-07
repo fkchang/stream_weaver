@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`bin/smoke` — executable UAT smoke test** - Freezes a manual UAT battery into a repeatable script: boots a fixture app in both standalone (`run!`) and multi-app service (`streamweaver serve`) mode on ephemeral ports and drives it over real HTTP, checking the `endpoint` DSL, the reserved-path boot warning, slug/hex `/apps/:id` resolution, endpoint dispatch scoping, and slug collision/reuse. Prints one check/x check line per assertion plus a final summary; exits nonzero on any failure. Wired into CI as the `smoke` job. See `docs/testing.md`.
 
 ### Fixed
+- **`streamweaver serve` auto-selects a free port** - When 4567 (or the default) is busy, `serve` now increments to the next free port like standalone mode instead of crashing with EADDRINUSE; an explicit `--port` is still honored strictly
+- **`streamweaver panel` browser fallback works beyond macOS** - The fallback now uses the cross-platform `open_browser` helper (`open`/`xdg-open`/`start`) instead of macOS-only `open`
+- **Canvas history ignores empty `STREAMWEAVER_HISTORY_ROOT`** - An empty-string env var no longer redirects history writes to filesystem-root-relative paths
+- **Canvas history writes are atomic** - `History.record` claims snapshot paths with `File::EXCL`, so concurrent writers in the same second get distinct files instead of clobbering each other
 - **Loading a `.run!` app file no longer kills service mode** - `Service.load_app` evaluates app files with a `service_loading` flag set, and `run!` is now a warn-and-no-op while it's active. Previously a file ending in `end.run!` (the documented standalone pattern) started a second server inside the service process and took the whole service down on exit. Standalone `ruby app.rb` behavior is unchanged.
 
 ## [0.2.0] - 2026-07-05
