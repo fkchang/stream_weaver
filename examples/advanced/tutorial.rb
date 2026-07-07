@@ -108,6 +108,56 @@ module Sections
     RUBY
   )
 
+  FOUR_MODES = Section.new(
+    id: :four_modes,
+    nav_title: "The Four Modes",
+    title: "Standalone, Agentic, Service, Canvas/Panel",
+    content: <<~MD,
+      ## Four Ways To Run a StreamWeaver App
+
+      Every mode uses the same DSL you just saw - what changes is **how it's
+      launched** and **who's driving**. Get oriented before going further:
+
+      | Mode | Launch | Who it's for |
+      |---|---|---|
+      | **Standalone** | `ruby app.rb` (calls `.run!`) | A person, in a browser, for the life of the process |
+      | **Agentic** | `StreamWeaver.run_once!` inside a script | A script needs one answer, then keeps going |
+      | **Service** | `streamweaver run app.rb` | Multiple apps on one server, human `/apps/:slug` URLs |
+      | **Canvas / Panel** | `streamweaver panel <session>` + `canvas-push` | An agent (Claude Code) drives live UI mid-conversation |
+
+      ### When To Use Which
+
+      - Building a tool a human opens in a tab and uses for a while? **Standalone.**
+      - A script needs a single decision from a human before continuing? **Agentic** (`run_once!`).
+      - Running several apps side by side with memorable URLs? **Service.**
+      - An agent needs to show live, updating UI while it works? **Canvas/Panel.**
+
+      This tutorial is itself a **standalone** app (`ruby examples/advanced/tutorial.rb`).
+      Its "Run" button launches each playground into the **service** - you'll see
+      that in action a few lessons from now, and each of the other three modes
+      gets its own lesson later on.
+    MD
+    code: <<~RUBY
+      select :demo_mode, [
+        "Standalone (ruby app.rb)",
+        "Agentic (run_once!)",
+        "Service (streamweaver run)",
+        "Canvas/Panel (streamweaver panel)"
+      ], default: "Standalone (ruby app.rb)"
+
+      case state[:demo_mode]
+      when "Standalone (ruby app.rb)"
+        alert(variant: :info) { text 'app("My App") { ... }.run!' }
+      when "Agentic (run_once!)"
+        alert(variant: :info) { text "StreamWeaver.run_once! { ... }  # blocks, returns a Hash" }
+      when "Service (streamweaver run)"
+        alert(variant: :info) { text "streamweaver run app.rb  -> http://localhost:4567/apps/your-app" }
+      when "Canvas/Panel (streamweaver panel)"
+        alert(variant: :info) { text "streamweaver panel my-session, then canvas-push my-session" }
+      end
+    RUBY
+  )
+
   GETTING_INPUT = Section.new(
     id: :getting_input,
     nav_title: "Getting Input",
@@ -218,6 +268,12 @@ module Sections
       - **columns** - Multi-column layouts
       - **vstack/hstack** - Vertical/horizontal stacking
       - **grid** - Responsive grid layouts
+
+      ### Labeled Card Headers
+
+      `card_header "Title", badge: "C1", meta: "..."` renders a small mono
+      badge before the title and right-aligned meta text after it - handy for
+      compact, labeled sections (a status panel, a numbered step, ...).
     MD
     code: <<~RUBY
       columns widths: ['30%', '70%'] do
@@ -233,7 +289,7 @@ module Sections
         end
         column do
           card do
-            card_header "Main Content"
+            card_header "Main Content", badge: "C1", meta: "content pane"
             card_body do
               text_field :search, placeholder: "Search..."
               text "Wide area for content"
@@ -349,31 +405,49 @@ module Sections
     content: <<~MD,
       ## Themes
 
-      StreamWeaver supports theming via CSS variables and the `style` attribute.
+      StreamWeaver theming has two independent layers, both switchable via CSS
+      variables and the `style` attribute.
 
-      ### Built-in Themes
+      ### Built-in Themes (`app theme: :name`)
 
-      - `:default` - Clean, minimal look
-      - `:dashboard` - Optimized for data-heavy apps
-      - `:document` - Reading-focused layout
+      - `:default` - Warm Industrial
+      - `:dashboard` - Data Dense
+      - `:document` - Reading Mode (serif, generous line-height)
+      - `:doc` - Compact Editorial (tight, magazine-like)
 
-      ### CSS Variables
+      ### Presets (`theme_preset :name`)
 
-      Override colors using `theme_overrides`:
+      A second layer of curated font + color palettes you can drop onto any
+      theme with one line: `:editorial`, `:technical`, `:warm`, `:minimal`,
+      `:terminal`, and `:sketch` (hand-drawn wireframe look - rough.js borders
+      and a Caveat handwriting font).
 
       ```ruby
-      app "My App", theme_overrides: { primary: "#0066cc" } do
+      app "My App", theme: :doc do
+        theme_preset :sketch
         # ...
-      end
+      end.run!
       ```
 
-      ### Inline Styles
+      ### Dark Mode, Automatically
 
-      Any component accepts a `style:` attribute:
+      `theme_toggle mode: :auto` adds a dark/light/auto button that **follows
+      the OS `prefers-color-scheme`** out of the box and remembers the user's
+      override in `localStorage`. `theme_switcher` renders a full picker over
+      every registered theme instead of a single toggle - try both below,
+      they actually change this page's theme.
+
+      ### CSS Variables & Inline Styles
+
+      Override colors per-app with `theme_overrides:`, or reach for `style:`
+      on any component for one-off styling:
     MD
     code: <<~RUBY
+      theme_switcher
+      theme_toggle mode: :auto
+
       # Using CSS variables
-      div style: "background: var(--sw-color-primary); color: white; padding: 1rem; border-radius: 8px;" do
+      div style: "background: var(--sw-color-primary); color: white; padding: 1rem; border-radius: 8px; margin-top: 0.75rem;" do
         text "Primary colored box"
       end
 
@@ -384,6 +458,267 @@ module Sections
         header3 "Gradient Header"
         text "Custom styled content"
       end
+    RUBY
+  )
+
+  NAVIGATION = Section.new(
+    id: :navigation,
+    nav_title: "Navigation",
+    title: "navbar, nav_item, link_to & State Routing",
+    content: <<~MD,
+      ## Cross-App Navigation
+
+      - `navbar` - a horizontal nav bar container
+      - `nav_item "Label", href: "/path", active: true` - bold and
+        non-clickable when active, a link otherwise
+      - `link_to "Label", href: "/path"` - a plain inline anchor
+
+      ```ruby
+      navbar do
+        nav_item "Dashboard", href: "/", active: true
+        nav_item "Settings", href: "/settings"
+      end
+      link_to "Docs", href: "https://example.com"
+      ```
+
+      ### `route_by` / `route_with` - State Routing, Not HTTP Routing
+
+      These map a URL to **state**, not to a server-side handler - the same
+      StreamWeaver view still renders, just seeded differently.
+      `route_by :page, home: "/", settings: "/settings"` gives one state key a
+      bidirectional URL mapping; `route_with(parser:, builder:)` handles
+      parameterized routes (`/post/:id`) with two lambdas. See
+      `docs/routing.md` for the full parser/builder contract.
+
+      If you need a genuine HTTP route that bypasses rendering entirely (a
+      webhook, a JSON API, a file download), that's `endpoint` - next lesson.
+
+      **Heads up:** Run below launches into the multi-app *service*, where
+      every app lives under `/apps/:slug` - so this snippet's `/` and
+      `/settings` hrefs point above that scope and will 404 if you click
+      them there. State routing is built for **standalone** apps; save this
+      code to a file and `ruby` it directly to see the real URLs work.
+    MD
+    code: <<~RUBY
+      route_by :page, home: "/", settings: "/settings"
+      state[:page] ||= :home
+
+      navbar do
+        nav_item "Home", href: "/", active: state[:page] == :home
+        nav_item "Settings", href: "/settings", active: state[:page] == :settings
+      end
+
+      case state[:page]
+      when :home
+        header3 "Home"
+        text "Visiting / sets state[:page] = :home"
+      when :settings
+        header3 "Settings"
+        text "Visiting /settings sets state[:page] = :settings"
+      end
+    RUBY
+  )
+
+  RESOURCE_DSL = Section.new(
+    id: :resource_dsl,
+    nav_title: "Resource DSL",
+    title: "CRUD Scaffolding",
+    content: <<~MD,
+      ## One Block, Full CRUD
+
+      `resource :name, store: MyStore do field ... end` replaces 30-50 lines
+      of hand-written routes/state/forms with index, show, new, edit, and
+      delete - all deep-linkable.
+
+      | URL | Action |
+      |---|---|
+      | `GET /posts` | Index - table with View / Edit / Delete |
+      | `GET /posts/new` | New - form, Create button |
+      | `GET /post/:id` | Show - card with field values |
+      | `GET /post/:id/edit` | Edit - form seeded from the record |
+      | Delete button | Inline confirm, then destroys |
+
+      Stores are duck-typed - any object with `all`, `find`, `create`,
+      `update`, `destroy` works. See `docs/resource-dsl.md` for the full
+      field-type table, override blocks, and named-route helpers
+      (`posts_path`, `post_path(rec)`, ...).
+
+      Declare `page`/`route` calls **before** `resource` blocks - routing is
+      first-registered-wins, so the root path needs its own landing page.
+
+      **Heads up:** like the Navigation lesson, this is state routing -
+      built for **standalone** apps. Run below launches into the multi-app
+      service (same as every other lesson's playground), so the "View
+      Posts" link's `/posts` href points above the service's `/apps/:slug`
+      scope and will 404 if you click it there. Save this code to a file
+      and `ruby` it directly to click through the real thing.
+    MD
+    code: <<~RUBY
+      module PostStore
+        @posts = [{ id: '1', title: 'Hello', body: 'First post', status: 'published' }]
+        def self.all;        @posts; end
+        def self.find(id);   @posts.find { |p| p[:id] == id }; end
+        def self.create(attrs)
+          id = ((@posts.map { |p| p[:id].to_i }.max || 0) + 1).to_s
+          @posts << { id: id, **attrs }; id
+        end
+        def self.update(id, attrs); post = find(id) or return false; post.merge!(attrs); true; end
+        def self.destroy(id);       @posts.reject! { |p| p[:id] == id }; true; end
+      end
+
+      state[:_sw_action] ||= :home  # first render inside this playground has no URL to route from
+
+      page :home, '/' do
+        header1 "Blog"
+        link_to "View Posts", href: "/posts"  # posts_path isn't defined until `resource` below runs
+      end
+
+      resource :post, store: PostStore do
+        field :title,  :string
+        field :body,   :text
+        field :status, :enum, values: %w[draft published]
+      end
+    RUBY
+  )
+
+  ENDPOINTS = Section.new(
+    id: :endpoints,
+    nav_title: "Endpoints",
+    title: "The endpoint DSL - a Real HTTP Escape Hatch",
+    content: <<~MD,
+      ## When You Need Real HTTP
+
+      `route_by`/`route_with` map URLs to *state* - same page, different
+      seed. Sometimes you need a genuine HTTP route instead: a webhook
+      receiver, a JSON API, a file download. That's `endpoint`.
+
+      ```ruby
+      app "My App" do
+        endpoint :get, "/api/status" do |req|
+          { ok: true, uptime: 42 }        # Hash -> 200 application/json
+        end
+      end.run!
+      ```
+
+      - Supported verbs: `:get`, `:post`, `:put`, `:patch`, `:delete`
+      - The block receives the raw `Rack::Request`; return a `Hash` (JSON), a
+        `String` (HTML), or `[status, headers, body]` for full control
+      - Endpoints bypass state/session/CSRF entirely - no StreamWeaver
+        machinery, just Rack
+      - **Reserved paths**: anything under `/update`, `/action/*`, `/submit`,
+        `/event/*`, `/form/*`, `/theme/*`, `/sw/*` always loses to
+        StreamWeaver's internal routes - `endpoint` warns at registration
+        time if you collide
+
+      ### This Tutorial Eats Its Own Dog Food
+
+      This tutorial app registers a real endpoint:
+      `endpoint :get, "/tutorial/api/hello"`. With the tutorial running, hit
+      it from another terminal (check the startup banner for the actual port
+      - StreamWeaver auto-picks one starting at 4567):
+
+      ```bash
+      curl http://127.0.0.1:<PORT>/tutorial/api/hello
+      ```
+    MD
+    code: <<~RUBY
+      endpoint :get, "/api/ping" do |req|
+        { ok: true, message: "pong", name: req.params["name"] || "world" }
+      end
+
+      header3 "Live Endpoint"
+      text "Registered: GET /api/ping"
+      text "Click Run, then curl the playground URL's /api/ping"
+    RUBY
+  )
+
+  SERVICE_MODE = Section.new(
+    id: :service_mode,
+    nav_title: "Service Mode",
+    title: "One Server, Many Apps, Human URLs",
+    content: <<~MD,
+      ## Multiple Apps, One Server
+
+      `streamweaver run app.rb` (or just `streamweaver app.rb`) starts (or
+      reuses) a single background service and serves your app at a
+      human-readable slug URL like `/apps/sales-dashboard`, derived from the
+      app's declared name (falling back to the filename). The old opaque hex
+      `/apps/:app_id` URL still resolves too, as a canonical fallback.
+
+      - Slugs that collide across different files get a numeric suffix
+        (`-2`, `-3`, ...)
+      - Re-loading the same file reuses its existing slug
+      - `streamweaver list` shows every loaded app and its URL;
+        `streamweaver remove <app_id>` / `streamweaver clear` tear them down
+
+      **This tutorial already uses the service** - every "Run" button on a
+      code panel loads that playground into the service and hands you back
+      its slug URL. That's `streamweaver`'s service doing exactly this job,
+      one playground at a time.
+    MD
+    code: <<~RUBY
+      text_field :demo_app_name, placeholder: "App name...", default: "Sales Dashboard"
+
+      name = state[:demo_app_name].to_s.strip
+      name = "Sales Dashboard" if name.empty?
+      slug = name.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\\A-+|-+\\z/, "")
+
+      header3 "Derived slug"
+      code_block "/apps/\#{slug}", lang: "text"
+      text "A second app with the same name gets /apps/\#{slug}-2, and so on."
+    RUBY
+  )
+
+  CANVAS_PANEL = Section.new(
+    id: :canvas_panel,
+    nav_title: "Canvas / Panel",
+    title: "Live UI For Coding Agents",
+    content: <<~MD,
+      ## A Canvas Claude Code Can Push To
+
+      Canvas/Panel mode gives an agent (Claude Code or similar) a
+      **persistent browser session** it can push UI into and read responses
+      from, mid-conversation - no polling, no screenshots.
+
+      This lesson is a CLI walkthrough, not an in-page demo - canvas needs
+      its own terminal and browser pane. Copy these into a real terminal:
+
+      ```bash
+      # 1. Open a panel - splits iTerm2, opens the canvas in the right pane
+      #    (falls back to your system browser outside iTerm2 / without iterm2_ruby)
+      streamweaver panel demo-session
+
+      # 2. Push some UI to it (DSL via stdin)
+      streamweaver canvas-push demo-session <<'RUBY'
+      header1 "Working..."
+      spinner label: "Crunching numbers"
+      RUBY
+
+      # 3. Ask the user something and block for the answer
+      streamweaver canvas-wait demo-session
+      # => {"choice":"B"}
+
+      # High-level one-shot helpers - skip the create/push/wait dance
+      streamweaver pick "Pick a branch" "main" "feature/x" "feature/y"
+      streamweaver confirm "Deploy to production?"
+
+      # When you're done
+      streamweaver canvas-close demo-session
+      ```
+
+      See `docs/canvas-roadmap.md` and `docs/streamweaver-for-ai-agents.md`
+      for the full pattern catalog.
+    MD
+    code: <<~RUBY
+      # This is a shell walkthrough, not a StreamWeaver app - copy it into a
+      # terminal rather than clicking Run.
+
+      # streamweaver panel demo-session
+      # streamweaver canvas-push demo-session <<'RUBY'
+      #   header1 "Working..."
+      #   spinner label: "Crunching numbers"
+      # RUBY
+      # streamweaver canvas-wait demo-session
     RUBY
   )
 
@@ -455,6 +790,7 @@ module Sections
   ALL_SECTIONS = [
     PHILOSOPHY,
     HELLO_WORLD,
+    FOUR_MODES,
     GETTING_INPUT,
     MAKING_CHOICES,
     TAKING_ACTION,
@@ -462,6 +798,11 @@ module Sections
     TABLES,
     MODALS,
     THEMES,
+    NAVIGATION,
+    RESOURCE_DSL,
+    ENDPOINTS,
+    SERVICE_MODE,
+    CANVAS_PANEL,
     PATTERNS
   ].freeze
 end
@@ -727,6 +1068,31 @@ module DemoRenderers
     end
   end
 
+  def render_four_modes_demo(state)
+    card do
+      card_header "Try It"
+      card_body do
+        select :demo_mode_pick, [
+          "Standalone (ruby app.rb)",
+          "Agentic (run_once!)",
+          "Service (streamweaver run)",
+          "Canvas/Panel (streamweaver panel)"
+        ], default: "Standalone (ruby app.rb)"
+
+        case state[:demo_mode_pick]
+        when "Standalone (ruby app.rb)"
+          alert(variant: :info) { text 'app("My App") { ... }.run!' }
+        when "Agentic (run_once!)"
+          alert(variant: :info) { text "StreamWeaver.run_once! { ... }  # blocks, returns a Hash" }
+        when "Service (streamweaver run)"
+          alert(variant: :info) { text "streamweaver run app.rb  -> http://localhost:4567/apps/your-app" }
+        when "Canvas/Panel (streamweaver panel)"
+          alert(variant: :info) { text "streamweaver panel my-session, then canvas-push my-session" }
+        end
+      end
+    end
+  end
+
   def render_getting_input_demo(state)
     card do
       card_header "Try It"
@@ -798,11 +1164,16 @@ module DemoRenderers
             end
           end
           column do
-            vstack spacing: :sm do
-              text "Main content (60%)"
-              hstack spacing: :sm do
-                alert(variant: :info) { text "Alert 1" }
-                alert(variant: :success) { text "Alert 2" }
+            card do
+              card_header "Main Content", badge: "C1", meta: "content pane"
+              card_body do
+                vstack spacing: :sm do
+                  text "Main content (60%)"
+                  hstack spacing: :sm do
+                    alert(variant: :info) { text "Alert 1" }
+                    alert(variant: :success) { text "Alert 2" }
+                  end
+                end
               end
             end
           end
@@ -875,12 +1246,91 @@ module DemoRenderers
     card do
       card_header "Try It"
       card_body do
-        div style: "background: var(--sw-color-primary); color: white; padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem;" do
+        hstack spacing: :sm, align: :center do
+          theme_switcher
+          theme_toggle mode: :auto
+        end
+        div style: "background: var(--sw-color-primary); color: white; padding: 1rem; border-radius: 8px; margin-top: 0.75rem; margin-bottom: 0.5rem;" do
           text "Primary color box"
         end
         div style: "background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1rem; border-radius: 8px; color: white;" do
           text "Custom gradient"
         end
+      end
+    end
+  end
+
+  def render_navigation_demo(_state)
+    card do
+      card_header "Try It"
+      card_body do
+        text "Preview of the navbar look (click Run above to try real state-routing URLs in an isolated playground):"
+        navbar do
+          nav_item "Home", active: true
+          nav_item "Settings"
+          nav_item "Profile"
+        end
+        div style: "margin-top: 0.75rem;" do end
+        link_to "External docs example", href: "https://example.com"
+      end
+    end
+  end
+
+  def render_resource_dsl_demo(_state)
+    card do
+      card_header "Try It"
+      card_body do
+        text "Preview of a generated index view (real resource blocks are deep-linkable; click Run for the live version):"
+        div style: "display: grid; grid-template-columns: 1fr 1fr 160px; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.5rem;" do
+          ["Title", "Status", "Actions"].each do |h|
+            div style: "padding: 8px 10px; background: #f5f5f5; font-weight: 600; border-bottom: 2px solid #ddd;" do
+              text h
+            end
+          end
+          [["Hello", "published"], ["Draft idea", "draft"]].each do |title, status|
+            div(style: "padding: 8px 10px; border-bottom: 1px solid #eee;") { text title }
+            div(style: "padding: 8px 10px; border-bottom: 1px solid #eee;") { text status }
+            div(style: "padding: 8px 10px; border-bottom: 1px solid #eee;") { text "View · Edit · Delete" }
+          end
+        end
+      end
+    end
+  end
+
+  def render_endpoints_demo(_state)
+    card do
+      card_header "Try It", badge: "Live", meta: "runs against this very page"
+      card_body do
+        text "This tutorial registered a real endpoint. From another terminal:"
+        code_block "curl http://127.0.0.1:<PORT>/tutorial/api/hello", lang: "bash"
+        text "(Swap <PORT> for whatever the startup banner printed - StreamWeaver auto-picks a free port starting at 4567.)"
+      end
+    end
+  end
+
+  def render_service_mode_demo(state)
+    card do
+      card_header "Try It"
+      card_body do
+        text_field :demo_app_name, placeholder: "App name...", default: "Sales Dashboard"
+
+        name = state[:demo_app_name].to_s.strip
+        name = "Sales Dashboard" if name.empty?
+        slug = name.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-+|-+\z/, "")
+
+        header3 "Derived slug"
+        code_block "/apps/#{slug}", lang: "text"
+        text "A second app with the same name gets /apps/#{slug}-2, and so on."
+      end
+    end
+  end
+
+  def render_canvas_panel_demo(_state)
+    card do
+      card_header "Try It", meta: "in a real terminal"
+      card_body do
+        alert(variant: :info) { text "Canvas/Panel needs its own terminal + browser pane - there's nothing to click here." }
+        text "Copy the commands from the Code panel into a terminal to try it for real."
       end
     end
   end
@@ -948,6 +1398,12 @@ generated_app = app(
   scripts: [CODEMIRROR_JS, CODEMIRROR_RUBY],
   components: [TutorialHelpers, DemoRenderers]
 ) do
+  # Self-demonstrating endpoint for the "Endpoints" lesson - a real HTTP route
+  # you can curl while the tutorial is running: see Sections::ENDPOINTS.
+  endpoint :get, "/tutorial/api/hello" do |req|
+    { ok: true, message: "Hello from the StreamWeaver tutorial's own endpoint!", name: req.params["name"] || "world" }
+  end
+
   # Force clear state if --reset flag was passed
   if RESET_MODE && !state[:_reset_done]
     state.clear
