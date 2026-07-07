@@ -975,14 +975,18 @@ module StreamWeaver
       end
     end
 
-    # Find a button recursively in the component tree
+    # Find a button (or menu item -- same click-dispatch contract: #id + #execute)
+    # recursively in the component tree
     #
     # @param components [Array] Array of components
     # @param button_id [String] Button ID to find
-    # @return [Components::Button, nil] The button or nil
+    # @return [Components::Button, Components::MenuItem, nil] The button/menu item or nil
     def self.find_button_recursive(components, button_id)
       components.each do |component|
-        return component if component.is_a?(Components::Button) && component.id == button_id
+        if (component.is_a?(Components::Button) || component.is_a?(Components::MenuItem)) &&
+           component.id == button_id
+          return component
+        end
 
         if component.respond_to?(:children) && component.children
           found = find_button_recursive(component.children, button_id)
@@ -1173,6 +1177,13 @@ module StreamWeaver
     # @option options [String] :host Host to bind (default: '127.0.0.1', or STREAMWEAVER_HOST env var)
     # @option options [Boolean] :open_browser Auto-open browser (default: true, but false when PORT env var is set)
     def self.run!(options = {})
+      if StreamWeaver.service_loading
+        warn "StreamWeaver: skipping run! — this file is being loaded into a running " \
+             "service (streamweaver serve), which serves it directly; starting a second " \
+             "server here would take the service down."
+        return self
+      end
+
       host, port = resolve_host_and_port(options)
       auto_open = options.fetch(:open_browser, !ENV['PORT'])
       @reset_state_pending = ARGV.delete('--reset') ? true : false

@@ -47,6 +47,12 @@ module StreamWeaver
   # Stores the last generated app for service mode to capture
   class << self
     attr_accessor :last_generated_app
+
+    # True while Service.load_app is evaluating an app file. Makes run! a
+    # warn-and-no-op so a file ending in `end.run!` (the documented standalone
+    # pattern) can be loaded into a running service without starting a second
+    # server inside it and killing the service.
+    attr_accessor :service_loading
   end
 
   def self.default_adapter

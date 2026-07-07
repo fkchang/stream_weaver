@@ -125,8 +125,15 @@ module StreamWeaver
         # Clear any previous captured app
         StreamWeaver.last_generated_app = nil
 
-        # Load the file - the global app() helper captures the result
-        load expanded_path
+        # Load the file - the global app() helper captures the result.
+        # service_loading makes any trailing `end.run!` in the file a
+        # warn-and-no-op instead of booting a second server inside us.
+        StreamWeaver.service_loading = true
+        begin
+          load expanded_path
+        ensure
+          StreamWeaver.service_loading = false
+        end
 
         # Get the captured app
         sinatra_app = StreamWeaver.last_generated_app
