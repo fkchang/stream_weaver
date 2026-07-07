@@ -72,7 +72,7 @@ streamweaver admin
 - Long-running development sessions
 
 **Characteristics:**
-- Single server process on port 4575
+- Single server process on port 4567
 - Apps at human-readable `/apps/:slug` URLs (e.g. `/apps/sales-dashboard`), derived from the app's declared name
 - Canonical `/apps/:app_id` hex URL always still resolves as a fallback
 - Human-readable aliases like `/tutorial/philosophy`
@@ -100,7 +100,7 @@ streamweaver admin
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    StreamWeaver Service                      │
-│                     (port 4575)                              │
+│                     (port 4567)                              │
 ├─────────────────────────────────────────────────────────────┤
 │  /apps/hello-world  (a1b2c3d4)  →  hello_world.rb           │
 │  /apps/todo-list    (e5f6g7h8)  →  todo_list.rb             │
@@ -157,7 +157,7 @@ The interactive tutorial (`streamweaver tutorial`) demonstrates service integrat
          │ Click "Run" → Loads code into service
          ▼
 ┌────────────────────────────────────────────────────────────┐
-│  StreamWeaver Service (port 4575)                           │
+│  StreamWeaver Service (port 4567)                           │
 ├────────────────────────────────────────────────────────────┤
 │  /tutorial/philosophy → User's edited code running          │
 │  /tutorial/hello_world → Another lesson's code              │
