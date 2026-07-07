@@ -69,6 +69,12 @@ Each response shows:
 
 Both are useful—`tutorial.rb` for comprehensive self-study, `/learn` for quick exploration with Claude.
 
+`tutorial.rb` isn't just components anymore: it also has lessons on the four
+run modes (standalone/agentic/service/canvas-panel), `navbar`/state routing,
+the `resource` CRUD DSL, the `endpoint` HTTP escape hatch, and service-mode
+slug URLs. If a `/learn` question strays into "how do I run this thing", point
+there first.
+
 ## Topics Covered
 
 **Components:**

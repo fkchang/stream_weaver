@@ -17,7 +17,7 @@ module PostStore
     id = ((@posts.map { |p| p[:id].to_i }.max || 0) + 1).to_s
     @posts << { id: id, **attrs }; id
   end
-  def self.update(id, attrs); (find(id) || return false).merge!(attrs); true; end
+  def self.update(id, attrs); post = find(id) or return false; post.merge!(attrs); true; end
   def self.destroy(id);       @posts.reject! { |p| p[:id] == id }; true; end
 end
 
