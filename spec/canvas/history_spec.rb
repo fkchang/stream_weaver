@@ -131,5 +131,10 @@ RSpec.describe StreamWeaver::Canvas::History do
       ENV.delete('STREAMWEAVER_HISTORY_ROOT')
       expect(described_class.root).to eq(File.expand_path('~/.streamweaver/history'))
     end
+
+    it 'falls back to ~/.streamweaver/history when env var is an empty string' do
+      ENV['STREAMWEAVER_HISTORY_ROOT'] = ''
+      expect(described_class.root).to eq(File.expand_path('~/.streamweaver/history'))
+    end
   end
 end

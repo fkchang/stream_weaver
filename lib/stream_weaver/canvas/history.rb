@@ -24,7 +24,10 @@ module StreamWeaver
       module_function
 
       def root
-        ENV['STREAMWEAVER_HISTORY_ROOT'] || DEFAULT_ROOT
+        env = ENV['STREAMWEAVER_HISTORY_ROOT']
+        return env if env && !env.empty?
+
+        DEFAULT_ROOT
       end
 
       # Writes dsl to <root>/<session>/<timestamp>.rb and returns the path.
