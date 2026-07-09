@@ -68,10 +68,10 @@ RSpec.describe "Doc theme (sw-theme-doc)" do
       expect(html).not_to match(/class="[^"]*sw-theme-doc(?!ument)[^"]*"/)
     end
 
-    it "sw-theme-default bg token (#f8f8f8) still present in CSS" do
+    it "sw-theme-default bg token (#f2ede4) still present in CSS" do
       a = StreamWeaver::App.new("Title", theme: :default) {}
       html = render_app(a)
-      expect(html).to include("--sw-color-bg: #f8f8f8")
+      expect(html).to include("--sw-color-bg: #f2ede4")
     end
   end
 

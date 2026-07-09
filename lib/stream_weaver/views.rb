@@ -233,17 +233,23 @@ module StreamWeaver
                   --sw-font-size-xl: 24px;
                   --sw-line-height: 1.7;
 
-                  /* Colors - High Contrast with Warm Accent */
-                  --sw-color-primary: #c2410c;        /* Terracotta/burnt orange */
-                  --sw-color-primary-hover: #9a3412;  /* Deeper terracotta */
-                  --sw-color-primary-light: #fff7ed; /* Very light warm tint */
-                  --sw-color-primary-glow: rgba(194, 65, 12, 0.12);
+                  /* Colors - High Contrast with Warm Accent
+                     Amber/brass, not terracotta/orange -- the previous burnt-orange
+                     (#c2410c) sat close enough to browser validation-error red that
+                     it read as a warning state on cards rather than a brand accent. */
+                  --sw-color-primary: #a16207;        /* Brass/ochre */
+                  --sw-color-primary-hover: #854d0e;  /* Deeper brass */
+                  --sw-color-primary-light: #fef3c7;  /* Warm pale tint */
+                  --sw-color-primary-glow: rgba(161, 98, 7, 0.12);
 
                   /* Colors - High Contrast Neutrals */
                   --sw-color-text: #111111;           /* Near black - high contrast */
                   --sw-color-text-muted: #444444;     /* Dark gray - still readable */
                   --sw-color-text-light: #888888;     /* Placeholder gray */
-                  --sw-color-bg: #f8f8f8;             /* Clean light gray */
+                  --sw-color-bg: #f2ede4;             /* Warm light tan -- was #f8f8f8, nearly
+                                                          indistinguishable from the white card
+                                                          background below; this gives visible
+                                                          page/card separation */
                   --sw-color-bg-card: #ffffff;
                   --sw-color-bg-elevated: #f3f3f3;   /* Subtle elevation */
                   --sw-color-border: #e0e0e0;        /* Clean border */
@@ -303,10 +309,10 @@ module StreamWeaver
                   --sw-line-height: 1.5;
 
                   /* Colors - Same palette, cleaner */
-                  --sw-color-primary: #c2410c;
-                  --sw-color-primary-hover: #9a3412;
-                  --sw-color-primary-light: #fff7ed;
-                  --sw-color-primary-glow: rgba(194, 65, 12, 0.08);
+                  --sw-color-primary: #a16207;
+                  --sw-color-primary-hover: #854d0e;
+                  --sw-color-primary-light: #fef3c7;
+                  --sw-color-primary-glow: rgba(161, 98, 7, 0.08);
 
                   --sw-color-text: #111111;
                   --sw-color-text-muted: #555555;
@@ -325,12 +331,18 @@ module StreamWeaver
                   --sw-color-accent-light: #e6fffa;
 
                   /* Spacing - Reduced for density */
-                  --sw-spacing-xs: 0.375rem;
-                  --sw-spacing-sm: 0.5rem;
-                  --sw-spacing-md: 0.875rem;
-                  --sw-spacing-lg: 1.25rem;
-                  --sw-spacing-xl: 1.75rem;
-                  --sw-spacing-2xl: 2.5rem;
+                  --sw-spacing-xs: 0.3125rem;
+                  --sw-spacing-sm: 0.4375rem;
+                  --sw-spacing-md: 0.75rem;
+                  --sw-spacing-lg: 1.125rem;
+                  --sw-spacing-xl: 1.5rem;
+                  --sw-spacing-2xl: 2.25rem;
+
+                  /* Table/callout density -- tighter than the 0.75rem/1rem shared default,
+                     since "Data Dense" is this theme's whole reason to exist */
+                  --sw-table-header-padding: 6px 10px;
+                  --sw-table-cell-padding: 7px 10px;
+                  --sw-callout-padding: 10px 14px;
 
                   /* Border Radius - Slightly smaller */
                   --sw-radius-sm: 2px;
@@ -429,9 +441,29 @@ module StreamWeaver
                   --sw-term-bg-hover: var(--sw-color-accent-light);
                 }
 
-                /* Document-specific adjustments */
-                body.sw-theme-document {
+                /* Document-specific adjustments
+                   The 720px cap is a prose reading-width, so it's scoped off of
+                   body:not(:has(.sw-app-shell)) -- an app_shell page manages its
+                   own width via its sidebar+main grid, and capping the whole body
+                   at 720px squeezes that grid down to a sliver (e.g. two 1fr chart
+                   columns collapsing to ~180px each instead of filling the content
+                   pane), well below what a plain document's max-width shouldn't
+                   ever apply to. */
+                body.sw-theme-document:not(:has(.sw-app-shell)) {
                   max-width: 720px;
+                }
+
+                /* #app-container re-applies --sw-spacing-xl as its own padding on top
+                   of body's --sw-spacing-xl padding (see the shared `body` and
+                   `#app-container` rules above). Document theme's --sw-spacing-xl
+                   (4rem) is the largest of any theme, so that doubling costs 128px
+                   of width off the top -- fine for prose, but enough to squeeze an
+                   app_shell's sidebar+main grid down until 2-column chart layouts
+                   lose bars/points to an undersized canvas. Halve the inner layer
+                   only in the app_shell case; the outer body padding alone still
+                   gives comfortable page margins. */
+                body.sw-theme-document:has(.sw-app-shell) #app-container {
+                  padding: calc(var(--sw-spacing-xl) / 2);
                 }
 
                 body.sw-theme-document p {

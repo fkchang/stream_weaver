@@ -158,8 +158,8 @@ module StreamWeaver
           font_body: "'Source Sans 3', system-ui, sans-serif",
           font_size_base: "17px",
           line_height: "1.7",
-          color_primary: "#c2410c",
-          color_bg: "#f8f8f8",
+          color_primary: "#a16207",
+          color_bg: "#f2ede4",
           color_text: "#111111",
           spacing_md: "1.25rem",
           card_border_left: "3px solid var(--sw-color-primary)"
@@ -173,10 +173,10 @@ module StreamWeaver
           font_body: "'Source Sans 3', system-ui, sans-serif",
           font_size_base: "15px",
           line_height: "1.5",
-          color_primary: "#c2410c",
+          color_primary: "#a16207",
           color_bg: "#fafafa",
           color_text: "#111111",
-          spacing_md: "0.875rem",
+          spacing_md: "0.75rem",
           card_border_left: "1px solid var(--sw-color-border)"
         }
       },
