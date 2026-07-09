@@ -1161,6 +1161,14 @@ module StreamWeaver
         @menu_component = nil
       end
 
+      # Union of trigger/menu, so component-tree walkers (button/menu_item lookup
+      # in server.rb) that only know about `children` can still find the trigger
+      # button and menu_items nested inside a dropdown's trigger/menu blocks.
+      # Same fix as AppShell#children -- see that class for the full rationale.
+      def children
+        [trigger_component, menu_component].compact
+      end
+
       def render(view, state)
         view.adapter.render_dropdown(view, self, state)
       end
@@ -1200,6 +1208,14 @@ module StreamWeaver
         @style = style
         @action = block
         @options = options
+      end
+
+      # The DSL's `menu_item` method sets @id via instance_variable_set (see
+      # App#menu_item) rather than passing it through the constructor -- expose
+      # it so find_button_recursive can match on it the same way it matches
+      # Components::Button#id.
+      def id
+        @id
       end
 
       def execute(state)
@@ -1846,7 +1862,7 @@ module StreamWeaver
     # Provides a main content area with optional fixed sidebar
     class AppShell < Base
       attr_reader :sidebar_width, :sidebar_position, :gap
-      attr_accessor :children, :main_children, :sidebar_children
+      attr_accessor :main_children, :sidebar_children
 
       POSITIONS = %i[left right].freeze
 
@@ -1859,9 +1875,15 @@ module StreamWeaver
         @sidebar_position = POSITIONS.include?(sidebar_position.to_sym) ? sidebar_position.to_sym : :right
         @gap = gap
         @options = options
-        @children = []
         @main_children = []
         @sidebar_children = []
+      end
+
+      # Union of main/sidebar content, so component-tree walkers (button/form/input
+      # lookup in server.rb) that only know about `children` can still find buttons,
+      # forms, and inputs nested inside an app_shell's main/sidebar blocks.
+      def children
+        main_children + sidebar_children
       end
 
       def render(view, state)
