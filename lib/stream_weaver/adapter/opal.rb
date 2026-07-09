@@ -157,7 +157,17 @@ module StreamWeaver
 
       # Not in Base — defined fresh here
       def render_column(view, width, children, _options, state)
-        style = width ? "flex:1 1 #{width};min-width:0;" : "flex:1 1 0;min-width:0;"
+        # "fr" is a CSS Grid unit, not a valid flex-basis -- using it there makes the
+        # whole `flex` shorthand invalid and silently falls back to shrink-to-content.
+        # Translate the fraction to flex-grow instead. See alpinejs.rb#render_column.
+        fr_match = width && width.match(/\A(\d+(?:\.\d+)?)fr\z/)
+        style = if width.nil?
+          "flex:1 1 0;min-width:0;"
+        elsif fr_match
+          "flex:#{fr_match[1]} 1 0%;min-width:0;"
+        else
+          "flex:1 1 #{width};min-width:0;"
+        end
         view.div(class: "sw-column", style: style) do
           children.each { |child| child.render(view, state) }
         end

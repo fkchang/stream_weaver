@@ -1408,10 +1408,16 @@ module StreamWeaver
       def render_column(view, width, children, options, state)
         css_class = ["sw-column", options[:class]].compact.join(" ")
 
-        style = if width
-          "flex: 1 1 #{width}; min-width: 0;"  # Grow/shrink proportionally from width basis
-        else
+        style = if width.nil?
           "flex: 1 1 0; min-width: 0;"  # Equal distribution
+        elsif (fr_match = width.match(/\A(\d+(?:\.\d+)?)fr\z/))
+          # "fr" is a CSS Grid unit, not a valid flex-basis -- using it there makes
+          # the whole `flex` shorthand invalid, which silently falls back to
+          # `flex: 0 1 auto` (shrink-to-content instead of the intended equal/
+          # proportional share). Translate the fraction to flex-grow instead.
+          "flex: #{fr_match[1]} 1 0%; min-width: 0;"
+        else
+          "flex: 1 1 #{width}; min-width: 0;"  # Grow/shrink proportionally from width basis
         end
 
         view.div(class: css_class, style: style) do
