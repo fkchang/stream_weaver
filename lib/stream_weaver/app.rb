@@ -26,7 +26,7 @@ module StreamWeaver
     RESERVED_ENDPOINT_EXACT = %w[/update /submit].freeze
     RESERVED_ENDPOINT_PREFIXES = %w[/action/ /event/ /form/ /theme/ /sw/].freeze
 
-    def initialize(title, layout: :default, chrome: true, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], &block)
+    def initialize(title, layout: :default, chrome: true, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], strict_ids: false, &block)
       @title = title
       @layout = layout
       @chrome = chrome
@@ -37,6 +37,9 @@ module StreamWeaver
       @state_key = :streamlit_state
       @_state = {}
       @button_counter = 0
+      @strict_ids = strict_ids
+      @_seen_component_ids = Hash.new(0)
+      @_warned_duplicate_ids = Set.new
       @scripts = scripts
       @stylesheets = stylesheets
       @fonts = fonts
@@ -203,6 +206,7 @@ module StreamWeaver
       @components = []
       @layout_slots = {}
       @button_counter = 0
+      @_seen_component_ids = Hash.new(0)
       instance_eval(&@block)
       @timers_frozen = true
     end
@@ -395,13 +399,16 @@ module StreamWeaver
     # Interactive components
     # =========================================
 
-    def button(label, id: nil, **options, &block)
+    def button(label, key: nil, id: nil, **options, &block)
+      key = validate_scalar_key!(key || id, context: "button")
       # Generate stable ID: use source location for buttons with blocks,
       # fallback to counter for blockless buttons (submit: false)
-      # If id: is provided, use it to disambiguate buttons in loops
+      # If key: is provided, mix it in to disambiguate buttons in loops
+      # (order-independent -- unlike a positional index, reordering the
+      # collection doesn't change a keyed button's id).
       if block
         source_loc = block.source_location.join(':')
-        id_input = id ? "#{label}:#{id}" : "#{label}:#{source_loc}"
+        id_input = key ? "#{label}:#{key}" : "#{label}:#{source_loc}"
         stable_id = Digest::MD5.hexdigest(id_input)[0..7]
       else
         @button_counter += 1
@@ -409,7 +416,9 @@ module StreamWeaver
       end
       # Pass modal context to button so it can close the modal via Alpine
       options[:modal_context] = @modal_context if @modal_context
-      @components << Components::Button.new(label, stable_id, **options, &block)
+      btn = Components::Button.new(label, stable_id, **options, &block)
+      btn.id = disambiguate_component_id(btn.id, label: label, source_loc: block&.source_location)
+      @components << btn
     end
 
     # =========================================
@@ -932,6 +941,43 @@ module StreamWeaver
     def reserved_endpoint_path?(path)
       RESERVED_ENDPOINT_EXACT.include?(path) ||
         RESERVED_ENDPOINT_PREFIXES.any? { |prefix| path.start_with?(prefix) }
+    end
+
+    # Ensures a component's key/id is a stable scalar -- never a positional
+    # index or an arbitrary object's #inspect, which would silently break on
+    # any collection reorder.
+    def validate_scalar_key!(key, context:)
+      return key if key.nil?
+      unless key.is_a?(String) || key.is_a?(Symbol) || key.is_a?(Integer)
+        raise ArgumentError, "#{context}: key: must be a String, Symbol, or Integer, got #{key.class}"
+      end
+      key
+    end
+
+    # Detects two interactive components resolving to the same id within a
+    # single build (typically same-label buttons in a loop, sharing block
+    # source_location). First occurrence keeps its id unchanged; each further
+    # occurrence gets a stable "-dup-N" suffix so it remains independently
+    # dispatchable (FAC-P0.1). Warns once per id per process, or raises if
+    # strict_ids: true was passed to the App.
+    def disambiguate_component_id(candidate_id, label:, source_loc:)
+      occurrence = @_seen_component_ids[candidate_id]
+      @_seen_component_ids[candidate_id] = occurrence + 1
+      return candidate_id if occurrence.zero?
+
+      loc = source_loc ? source_loc.join(':') : 'unknown location'
+      message = "StreamWeaver: duplicate component id for \"#{label}\" at #{loc} " \
+                "-- likely the same label/block in a loop. Pass a stable key:, e.g. " \
+                "button(#{label.inspect}, key: item.id) { ... }, for distinct, order-independent ids."
+
+      raise ArgumentError, message if @strict_ids
+
+      unless @_warned_duplicate_ids.include?(candidate_id)
+        @_warned_duplicate_ids << candidate_id
+        warn "#{message} Auto-assigned a unique id for now."
+      end
+
+      "#{candidate_id}-dup-#{occurrence + 1}"
     end
 
     def define_path_helpers(defn)

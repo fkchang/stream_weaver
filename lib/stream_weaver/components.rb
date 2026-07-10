@@ -189,6 +189,12 @@ module StreamWeaver
         @button_id
       end
 
+      # Reassign id after duplicate-id auto-disambiguation (FAC-P0.1) -- see
+      # App#disambiguate_component_id.
+      def id=(new_id)
+        @button_id = new_id
+      end
+
       def register_callbacks(registry)
         registry[id] = @action if @action
       end
