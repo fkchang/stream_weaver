@@ -231,7 +231,7 @@ module StreamWeaver
                   --sw-font-size-sm: 15px;
                   --sw-font-size-lg: 19px;
                   --sw-font-size-xl: 24px;
-                  --sw-line-height: 1.7;
+                  --sw-line-height: 1.6;
 
                   /* Colors - High Contrast with Warm Accent
                      Amber/brass, not terracotta/orange -- the previous burnt-orange
@@ -264,13 +264,17 @@ module StreamWeaver
                   --sw-color-accent: #0d9488;
                   --sw-color-accent-light: #e6fffa;
 
-                  /* Spacing - Generous */
-                  --sw-spacing-xs: 0.5rem;
-                  --sw-spacing-sm: 0.75rem;
-                  --sw-spacing-md: 1.25rem;
-                  --sw-spacing-lg: 2rem;
-                  --sw-spacing-xl: 3rem;
-                  --sw-spacing-2xl: 4rem;
+                  /* Spacing -- was "Generous" (1.25/2/3/4rem), measured ~21% taller
+                     than :doc for identical Dashboard content at the same viewport
+                     width with no proportional benefit -- tightened to be close to
+                     :doc's own scale while keeping a touch more room than dashboard
+                     (which is deliberately the densest theme). */
+                  --sw-spacing-xs: 0.375rem;
+                  --sw-spacing-sm: 0.5rem;
+                  --sw-spacing-md: 1rem;
+                  --sw-spacing-lg: 1.5rem;
+                  --sw-spacing-xl: 2rem;
+                  --sw-spacing-2xl: 3rem;
 
                   /* Border Radius */
                   --sw-radius-sm: 3px;
@@ -291,6 +295,18 @@ module StreamWeaver
                   /* Term highlighting */
                   --sw-term-color: var(--sw-color-primary);
                   --sw-term-bg-hover: var(--sw-color-primary-light);
+                }
+
+                /* Default-specific adjustments.
+                   h1/h3 are already identical to :doc's (both fall through to the
+                   shared, theme-unaware base rules -- rem against a fixed 16px
+                   root, not var(--sw-font-size-base)). h2 was the one real gap:
+                   :doc already has its own tuned override (1.45rem = 23.2px) but
+                   default never got one, so it fell through to the generic 1.625rem
+                   (26px) instead -- match :doc's value so both themes share one
+                   coherent heading scale instead of only mostly agreeing. */
+                body.sw-theme-default h2 {
+                  font-size: 1.45rem;
                 }
 
                 /* ===========================================
