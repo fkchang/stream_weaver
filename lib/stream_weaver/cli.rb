@@ -639,8 +639,8 @@ module StreamWeaver
         Panel (iTerm2 Split + Canvas):
           streamweaver panel [name]               Split iTerm2, open canvas in right pane
           streamweaver panel [name] --fresh       Close existing session first, then open
-          streamweaver setup                      Configure Claude Code (permissions + skill)
-          streamweaver install-skill [--global]   Install Claude Code skill only
+          streamweaver setup                      Configure Claude Code (permissions + skills)
+          streamweaver install-skill [--global]   Install Claude Code skills only
 
         Panel Example (iTerm2):
           # Split terminal, open canvas on right
@@ -1798,38 +1798,52 @@ module StreamWeaver
       ```
     MARKDOWN
 
-    # Install the StreamWeaver panel skill for Claude Code
+    # Install the StreamWeaver skills for Claude Code, plus the gem-sourced
+    # skills to the .agents/skills/ cross-tool alias that Codex CLI, Gemini
+    # CLI, and GitHub Copilot all discover natively (verified against each
+    # tool's own docs). Claude Code does not read .agents/skills/ itself, so
+    # its own ~/.claude/skills/ (or project .claude/skills/) path stays primary.
     # Usage: streamweaver install-skill [--global]
     def self.install_skill(args)
       global = args.include?('--global') || args.include?('-g')
 
-      if global
-        skill_dir = File.expand_path('~/.claude/skills')
-      else
-        skill_dir = File.join(Dir.pwd, '.claude', 'skills')
+      claude_dir = global ? File.expand_path('~/.claude/skills') : File.join(Dir.pwd, '.claude', 'skills')
+      agents_dir = global ? File.expand_path('~/.agents/skills') : File.join(Dir.pwd, '.agents', 'skills')
+
+      FileUtils.mkdir_p(claude_dir)
+
+      # Panel skill: inline content, flat .md file, no frontmatter — not
+      # SKILL.md-spec-compliant, so Claude Code only (its legacy loose-file
+      # skill format). Not installed to .agents/skills/.
+      File.write(File.join(claude_dir, 'streamweaver-panel.md'), SKILL_CONTENT)
+
+      # Gem-sourced skills (proper SKILL.md with frontmatter) — symlinked so
+      # gem updates propagate, into both Claude Code's own path and the
+      # cross-tool alias.
+      gem_skills = {
+        'streamweaver-visual-companion' => File.join(__dir__, 'skills', 'streamweaver-visual-companion', 'SKILL.md'),
+        'streamweaver-doc-builder' => File.join(__dir__, 'skills', 'streamweaver-doc-builder', 'SKILL.md')
+      }
+
+      [claude_dir, agents_dir].each do |root|
+        gem_skills.each do |name, src|
+          dir = File.join(root, name)
+          FileUtils.mkdir_p(dir)
+          FileUtils.ln_sf(src, File.join(dir, 'SKILL.md'))
+        end
       end
 
-      FileUtils.mkdir_p(skill_dir)
-
-      # Panel skill (inline content, written as a flat .md file)
-      panel_path = File.join(skill_dir, 'streamweaver-panel.md')
-      File.write(panel_path, SKILL_CONTENT)
-
-      # Visual companion skill (lives in gem, installed as symlink so gem updates propagate)
-      gem_skill_src = File.expand_path(
-        File.join(File.dirname(__FILE__), 'skills', 'streamweaver-visual-companion', 'SKILL.md')
-      )
-      companion_dir = File.join(skill_dir, 'streamweaver-visual-companion')
-      companion_path = File.join(companion_dir, 'SKILL.md')
-      FileUtils.mkdir_p(companion_dir)
-      FileUtils.ln_sf(gem_skill_src, companion_path)
-
-      location = global ? "global (~/.claude/skills/)" : "project (.claude/skills/)"
-      puts "StreamWeaver skills installed to #{location}"
-      puts "  streamweaver-panel.md          (panel workflow reference)"
+      claude_location = global ? "global (~/.claude/skills/)" : "project (.claude/skills/)"
+      agents_location = global ? "global (~/.agents/skills/)" : "project (.agents/skills/)"
+      puts "StreamWeaver skills installed to #{claude_location}"
+      puts "  streamweaver-panel.md          (panel workflow reference, Claude Code only)"
       puts "  streamweaver-visual-companion/ (brainstorming companion, symlinked from gem)"
+      puts "  streamweaver-doc-builder/      (editorial doc builder, symlinked from gem)"
       puts ""
-      puts "Claude Code will now know how to use StreamWeaver panels and the visual companion."
+      puts "Also installed to #{agents_location} — the cross-tool alias Codex CLI, Gemini CLI,"
+      puts "and GitHub Copilot all discover natively (Claude Code uses its own path above instead)."
+      puts ""
+      puts "Claude Code will now know how to use StreamWeaver panels, the visual companion, and the doc builder."
     end
 
     # One-command setup for Claude Code integration
@@ -1866,9 +1880,10 @@ module StreamWeaver
       puts ""
       puts "StreamWeaver setup complete!"
       puts ""
-      puts "Skills installed (~/.claude/skills/):"
-      puts "  panel             → streamweaver-panel.md"
+      puts "Skills installed (~/.claude/skills/, plus ~/.agents/skills/ for Codex/Gemini CLI/Copilot):"
+      puts "  panel             → streamweaver-panel.md (Claude Code only)"
       puts "  visual-companion  → symlink → gem (auto-updates with gem)"
+      puts "  doc-builder       → symlink → gem (auto-updates with gem)"
       puts ""
       puts "Run: streamweaver panel <name>  to start a visual companion session."
     end

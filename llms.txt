@@ -554,6 +554,20 @@ curl -sX POST "http://localhost:<bridge-port>/canvas/<session>/save-doc" \
 
 History entries also show a 💾 button so the user can promote any past snapshot to a doc without re-pushing.
 
+## Agent Skills (Install These Before Hand-Rolling the Above)
+
+If you are Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, or another agent that uses the `SKILL.md` convention, StreamWeaver ships two skills that already encode the canvas-push workflow above as trained procedure — check whether they're loaded before building visual UI from this doc's raw examples:
+
+- **streamweaver-visual-companion** — the default choice for mockups, diagrams, layout comparisons, and brainstorming, any time you'd otherwise reach for a chrome-based visual companion or a claude.ai Artifact. Canvas-push is 5-7x cheaper in tokens and never leaves the terminal loop.
+- **streamweaver-doc-builder** — for long-form editorial documents (PRDs, reports, explainers) using the `:doc` theme, proven to reach 1:1 visual parity with a real claude.ai Artifact.
+
+**If neither skill appears in your available-skills list, ask the user whether to install them** — it's one idempotent command that installs to both Claude Code's own path and the `.agents/skills/` cross-tool alias that Codex CLI, Gemini CLI, and GitHub Copilot all read natively (see `docs/reference/agent-skills-comparison.md` for how each tool discovers skills):
+
+```bash
+streamweaver setup             # global: ~/.claude/skills/ + ~/.agents/skills/ + bash permission (recommended)
+streamweaver install-skill     # project-local instead: .claude/skills/ + .agents/skills/ (no --global)
+```
+
 ## Hotwire-Style Navigation Pattern
 
 Layouts with sidebars (or any persistent client-side UI) MUST preserve state across navigation. Full page reloads collapse accordions, scroll-jump, and reset client state. The pattern, on the canvas-read layout, is the reference implementation:
