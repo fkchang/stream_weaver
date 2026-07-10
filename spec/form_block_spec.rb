@@ -177,6 +177,60 @@ RSpec.describe "Form Block" do
     end
   end
 
+  describe "Submit block execution with a string-named form (regression)" do
+    let(:stream_app) do
+      StreamWeaver::App.new("String Name Form") do
+        form("legacy_form") do
+          text_field :value
+          submit "Save" do |form_values|
+            @_state[:save_result] = "saved: #{form_values[:value]}"
+          end
+        end
+        text "Result: #{state[:save_result]}" if state[:save_result]
+      end
+    end
+
+    let(:app) { stream_app.generate }
+
+    it "executes the submit block" do
+      env 'rack.session', { streamlit_state: { legacy_form: {} } }
+      post '/form/legacy_form', { 'legacy_form' => { 'value' => 'hello' } }
+
+      expect(last_response).to be_ok
+      expect(last_response.body).to include('Result: saved: hello')
+    end
+  end
+
+  describe "Submit block execution with a form nested inside tabs/tab (regression)" do
+    # String form name is deliberate -- a symbol name here never reproduced the
+    # bug; only the string/symbol mismatch (fixed in App#form) did.
+    let(:stream_app) do
+      StreamWeaver::App.new("Tabbed Form") do
+        tabs :my_tabs, variant: :enclosed do
+          tab "Tab A" do
+            form("tabbed_form") do
+              text_field :value
+              submit "Save" do |form_values|
+                @_state[:save_result] = "saved: #{form_values[:value]}"
+              end
+            end
+          end
+        end
+        text "Result: #{state[:save_result]}" if state[:save_result]
+      end
+    end
+
+    let(:app) { stream_app.generate }
+
+    it "executes the submit block" do
+      env 'rack.session', { streamlit_state: { my_tabs: 0, tabbed_form: {} } }
+      post '/form/tabbed_form', { 'tabbed_form' => { 'value' => 'world' } }
+
+      expect(last_response).to be_ok
+      expect(last_response.body).to include('Result: saved: world')
+    end
+  end
+
   describe "HTML rendering" do
     let(:stream_app) do
       StreamWeaver::App.new("Render Test") do

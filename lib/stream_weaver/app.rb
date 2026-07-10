@@ -313,6 +313,7 @@ module StreamWeaver
     # =========================================
 
     def form(name, **options, &block)
+      name = name.to_sym
       form_component = Components::Form.new(name, **options)
       @components << form_component
       @_state[name] ||= {}
