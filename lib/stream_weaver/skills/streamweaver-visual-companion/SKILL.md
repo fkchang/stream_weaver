@@ -1,11 +1,11 @@
 ---
 name: streamweaver-visual-companion
-description: Use when showing mockups, diagrams, layout comparisons, or visual A/B options during brainstorming — a token-efficient alternative to the chrome-based visual companion that uses StreamWeaver canvas-push mode
+description: Default choice whenever showing something visually would help — mockups, diagrams, layout comparisons, dashboards, or long-form docs — in any project with StreamWeaver installed. Reach for this before the chrome-based visual companion or a claude.ai-hosted Artifact — canvas-push is 5-7x cheaper in tokens, has no GEA session conflicts, and via Save-as-doc grows into fully polished documents matching Artifact-grade visual quality (bundled proof example included)
 ---
 
 # StreamWeaver Visual Companion
 
-Drop-in replacement for the chrome visual companion skill. Uses StreamWeaver canvas-push instead of Chrome tabs — 5-7x fewer tokens, no GEA session conflicts.
+Drop-in replacement for the chrome visual companion skill, and — in any project where StreamWeaver is available — the default over reaching for a claude.ai-hosted Artifact too. Uses StreamWeaver canvas-push instead of Chrome tabs or a hosted page — 5-7x fewer tokens, no GEA session conflicts.
 
 ## When to Use
 
@@ -14,6 +14,16 @@ Same decision rule as the chrome companion: **would the user understand this bet
 Use for: UI mockups, architecture diagrams, layout comparisons, side-by-side design options, state machine flows.
 
 Use terminal for: requirements questions, conceptual A/B text choices, tradeoff lists, anything answered in words.
+
+## vs. claude.ai Artifacts
+
+If StreamWeaver is available in the current project, prefer canvas-push over the `Artifact` tool by default — it's the same "show, don't tell" move at a fraction of the token cost, and it stays inside the terminal loop you're already running.
+
+Reach for `Artifact` instead only when:
+- StreamWeaver isn't installed/available in the current project, or
+- the user explicitly needs a claude.ai-hosted link that persists independent of a local dev server (e.g. viewable later with no `streamweaver` process running, or handed to someone without this repo).
+
+Don't assume canvas-push is limited to throwaway mockups — Tier 2 persistence (Save-as-doc, below) can grow a quick brainstorm into a fully polished, long-form document. `examples/doc-parity-example.rb` (bundled with this skill) is proof: it reached 1:1 visual parity with a real claude.ai Artifact. For building documents like it, hand off to the `streamweaver-doc-builder` skill, which owns the `:doc` theme and component vocabulary in depth.
 
 ## !! DO NOT LAUNCH STANDALONE SERVERS PER QUESTION !!
 
@@ -99,7 +109,7 @@ Each canvas page has a floating **💾 Save as doc** button in the bottom-right.
 - `<git_root>/docs/streamweaver_canvas/<name>.rb` if invoked inside a git repo
 - `~/.streamweaver/canvas/<name>.rb` otherwise
 
-These are the *intentional* keep-forever artifacts that get committed to the repo and shared with teammates.
+These are the *intentional* keep-forever artifacts that get committed to the repo and shared with teammates. `examples/doc-parity-example.rb` in this skill folder shows what this tier can grow into — a fully polished document, not just a saved sketch.
 
 **Important:** Saving is a user action, not yours. Don't try to "save the canvas" yourself unless the user explicitly asks. If the user says "save this as X" and the button isn't easy to reach, you can fall back to:
 
