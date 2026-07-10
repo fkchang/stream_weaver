@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 module StreamWeaver
+  class StaleActionDefinition < StandardError; end
+
   # Owns the state-to-response pipeline for every interactive request.
   #
   # Updates and events dispatch against descriptors/components retained from the
@@ -12,7 +14,8 @@ module StreamWeaver
     ROUTE_PARAMS = %w[splat captures app_id button_id key form_name].freeze
 
     def initialize(app:, state:, params:, interaction:, target: nil, adapter:, agentic: false,
-                   persist:, prepare_state: nil, result_container: nil, auto_close: false)
+                   persist:, prepare_state: nil, result_container: nil, auto_close: false,
+                   action_manifest: nil, generation: "0", persist_manifest: nil)
       @app = app
       @state = state
       @params = params
@@ -24,13 +27,16 @@ module StreamWeaver
       @prepare_state = prepare_state
       @result_container = result_container
       @auto_close = auto_close
+      @action_manifest = action_manifest || Set.new
+      @generation = generation.to_s
+      @persist_manifest = persist_manifest
     end
 
     def call
       app.with_render_lock do
         prepare_state&.call(state)
         prepare_form_state if interaction == :form
-        app.rebuild_with_state(state) if discovery_required?
+        app.rebuild_with_state(state, generation: generation) if discovery_required?
 
         unless interaction == :form
           sync_params_to_state
@@ -41,7 +47,8 @@ module StreamWeaver
         persist.call(state)
 
         completion_response || begin
-          app.rebuild_with_state(state)
+          app.rebuild_with_state(state, generation: generation)
+          persist_manifest&.call(app.render_state.action_tokens)
           Views::AppContentView.new(app, state, adapter, agentic).call
         end
       end
@@ -50,10 +57,11 @@ module StreamWeaver
     private
 
     attr_reader :app, :state, :params, :interaction, :target, :adapter, :agentic,
-                :persist, :prepare_state, :result_container, :auto_close
+                :persist, :prepare_state, :result_container, :auto_close,
+                :action_manifest, :generation, :persist_manifest
 
     def discovery_required?
-      interaction == :action || interaction == :form
+      (interaction == :action && !named_action?) || interaction == :form
     end
 
     def sync_params_to_state
@@ -93,7 +101,15 @@ module StreamWeaver
       when :update
         nil
       when :action
-        find_button(app.components, target.to_s)&.execute(state)
+        if named_action?
+          payload = decoded_action
+          return unless payload
+          return unless action_manifest.include?(ActionToken.fingerprint(target))
+          raise StaleActionDefinition if payload[:d] != app.action_definition_digest || payload[:g].to_s != generation
+          app.actions[payload[:a].to_sym]&.call(state, payload[:k])
+        else
+          find_button(app.components, target.to_s)&.execute(state)
+        end
       when :event
         component = find_component(app.components, target.to_sym)
         return unless component
@@ -106,6 +122,16 @@ module StreamWeaver
       else
         raise ArgumentError, "unknown interaction: #{interaction.inspect}"
       end
+    end
+
+    def named_action?
+      target.to_s.include?(".")
+    end
+
+    def decoded_action
+      @decoded_action ||= ActionToken.decode(target)
+    rescue ActionToken::Invalid
+      nil
     end
 
     def completion_response

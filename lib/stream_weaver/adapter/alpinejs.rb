@@ -450,6 +450,7 @@ module StreamWeaver
       private
 
       def button_attrs(view, button_id, options, modal_context)
+        action_target = options[:action_token] || button_id
         loading = options.fetch(:submit, true) && options.fetch(:loading, true) && loading_indicators_enabled?(view)
         style = button_style_attrs(options, loading)
 
@@ -459,14 +460,14 @@ module StreamWeaver
 
         if websocket_mode?
           # Disable on click; page morph from server response replaces the element, clearing disabled
-          style.merge("@click" => "$el.disabled=true; sendEvent('action', {button: '#{button_id}', state: getFormState()})")
+          style.merge("@click" => "$el.disabled=true; sendEvent('action', {button: '#{action_target}', state: getFormState()})")
         elsif modal_context
           # hx-on::before-request closes the modal before HTMX fires — ordering matters here
-          htmx_attrs(url("/action/#{button_id}"), view: view, loading: loading, indicator: "##{button_id}",
+          htmx_attrs(url("/action/#{action_target}"), view: view, loading: loading, indicator: "##{button_id}",
             "hx-disabled-elt" => "this",
             "hx-on::before-request" => "open = false").merge(id: button_id).merge(style)
         else
-          htmx_attrs(url("/action/#{button_id}"), view: view, loading: loading, indicator: "##{button_id}",
+          htmx_attrs(url("/action/#{action_target}"), view: view, loading: loading, indicator: "##{button_id}",
             "hx-disabled-elt" => "this").merge(id: button_id).merge(style)
         end
       end

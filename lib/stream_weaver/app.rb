@@ -17,7 +17,7 @@ module StreamWeaver
                     :current_tabs, :current_breadcrumbs, :current_dropdown,
                     :current_menu, :current_modal, :modal_context, :current_deck,
                     :current_slide, :current_app_shell, :current_row_key_thunk,
-                    :checkbox_keys
+                    :checkbox_keys, :action_tokens, :generation
 
       def initialize
         self.components = []
@@ -25,6 +25,8 @@ module StreamWeaver
         self.button_counter = 0
         self.seen_component_ids = Hash.new(0)
         self.checkbox_keys = []
+        self.action_tokens = Set.new
+        self.generation = "0"
       end
     end
 
@@ -33,7 +35,7 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state
+    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions
 
     # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
     ENDPOINT_VERBS = %i[get post put patch delete].freeze
@@ -73,6 +75,7 @@ module StreamWeaver
       @route_rules   = []  # Array<RouteRule> — persistent, never cleared in rebuild
       @resource_defs = {}  # name(sym) → ResourceDefinition — persistent
       @endpoints     = []  # Array<{verb:, path:, block:}> — persistent, never cleared in rebuild
+      @actions = {}
       components.each { |mod| singleton_class.include(mod) }
     end
 
@@ -234,9 +237,10 @@ module StreamWeaver
       @endpoints.find { |e| e[:verb] == verb && e[:path] == path }
     end
 
-    def rebuild_with_state(current_state)
+    def rebuild_with_state(current_state, generation: "0")
       @_state = current_state
       @render_state = RenderState.new
+      @render_state.generation = generation.to_s
       evaluate_dsl_block(@block)
       @render_state.checkbox_keys = collect_checkbox_keys(components)
       @timers_frozen = true
@@ -315,6 +319,28 @@ module StreamWeaver
     end
 
     public
+
+    def action(name, &handler)
+      raise ArgumentError, "action: block required" unless handler
+      name = name.to_sym
+      existing = @actions[name]
+      if existing && existing.source_location != handler.source_location
+        raise ArgumentError, "action #{name.inspect} is already registered with a different block"
+      end
+      @actions[name] ||= handler
+    end
+
+    def action_definition_digest
+      Digest::SHA256.hexdigest(([StreamWeaver::VERSION] + actions.keys.map(&:to_s).sort).join("\0"))
+    end
+
+    def action_token(name, key)
+      name = name.to_sym
+      raise ArgumentError, "unknown named action #{name.inspect}" unless actions.key?(name)
+      token = ActionToken.encode(a: name, k: key, d: action_definition_digest, g: render_state.generation)
+      render_state.action_tokens << ActionToken.fingerprint(token)
+      token
+    end
 
     # =========================================
     # App-specific display components
@@ -441,8 +467,16 @@ module StreamWeaver
     # Interactive components
     # =========================================
 
-    def button(label, key: nil, id: nil, **options, &block)
+    def button(label, action: nil, key: nil, id: nil, **options, &block)
+      raise ArgumentError, "button cannot use both action: and a block" if action && block
       key = validate_scalar_key!(key || id, context: "button")
+      if action
+        row_key = render_state.current_row_key_thunk&.value
+        action_key = key || row_key
+        action_key = validate_scalar_key!(action_key, context: "named action button")
+        raise ArgumentError, "named action button: key: is required" if action_key.nil?
+        options[:action_token] = action_token(action, action_key)
+      end
       # Generate stable ID: use source location for buttons with blocks,
       # fallback to counter for blockless buttons (submit: false)
       # If key: is provided, mix it in to disambiguate buttons in loops
@@ -450,10 +484,10 @@ module StreamWeaver
       # collection doesn't change a keyed button's id). Inside a table's
       # component cell, the row's key is auto-mixed in too (FAC-P2.1
       # decision 3), on top of any explicit key: also passed.
-      if block
+      if block || action
         row_key = render_state.current_row_key_thunk&.value
         combined_key = [row_key, key].compact
-        source_loc = block.source_location.join(':')
+        source_loc = block ? block.source_location.join(':') : "action:#{action}"
         id_input = combined_key.any? ? "#{label}:#{combined_key.join(':')}" : "#{label}:#{source_loc}"
         stable_id = Digest::MD5.hexdigest(id_input)[0..7]
       else

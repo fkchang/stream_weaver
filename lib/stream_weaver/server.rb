@@ -143,7 +143,9 @@ module StreamWeaver
           session_theme = session[:theme_override]
           streamlit_app.with_render_lock do
             inject_deck_state!(state)
-            streamlit_app.rebuild_with_state(state)
+            generation = session[:sw_action_generation] ||= SecureRandom.hex(12)
+            streamlit_app.rebuild_with_state(state, generation: generation)
+            session[:sw_action_manifest] = streamlit_app.render_state.action_tokens.to_a
 
             # Scrub transient keys that leaked into the session
             unless streamlit_app.transient_keys.empty?
@@ -278,9 +280,16 @@ module StreamWeaver
             agentic: settings.respond_to?(:result_container),
             prepare_state: method(:inject_deck_state!),
             persist: ->(value) { session[:streamlit_state] = session_safe_state(value) },
+            action_manifest: Set.new(session[:sw_action_manifest] || []),
+            generation: (session[:sw_action_generation] ||= SecureRandom.hex(12)),
+            persist_manifest: ->(tokens) { session[:sw_action_manifest] = tokens.to_a },
             result_container: (settings.result_container if settings.respond_to?(:result_container)),
             auto_close: settings.respond_to?(:auto_close_window) && settings.auto_close_window
           ).call
+        rescue StaleActionDefinition
+          status 409
+          headers 'HX-Retarget' => '#app-container'
+          render_app(state, is_htmx: true)
         rescue => e
           render_error("/action/#{params[:button_id]}", e)
         end

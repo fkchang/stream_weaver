@@ -403,6 +403,21 @@ module StreamWeaver
         session[:app_states][app_id] = state
       end
 
+      def action_generation(app_id)
+        session[:action_generations] ||= {}
+        session[:action_generations][app_id] ||= SecureRandom.hex(12)
+      end
+
+      def action_manifest(app_id)
+        session[:action_manifests] ||= {}
+        session[:action_manifests][app_id] ||= []
+      end
+
+      def set_action_manifest(app_id, tokens)
+        session[:action_manifests] ||= {}
+        session[:action_manifests][app_id] = tokens.to_a
+      end
+
       # Sync form params to state hash (copied from server.rb)
       def sync_params_to_state(state, excluded_keys: [])
         excluded = %w[splat captures app_id button_id] + excluded_keys.map(&:to_s)
@@ -837,7 +852,8 @@ module StreamWeaver
       adapter = Adapter::AlpineJS.new(url_prefix: "/admin")
 
       admin_app.with_render_lock do
-        admin_app.rebuild_with_state(state)
+        admin_app.rebuild_with_state(state, generation: action_generation('admin'))
+        set_action_manifest('admin', admin_app.render_state.action_tokens)
         set_app_state('admin', state)
 
         Views::AppView.new(admin_app, state, adapter, false).call
@@ -865,7 +881,10 @@ module StreamWeaver
       InteractionRunner.new(
         app: admin_app, state: state, params: params,
         interaction: :action, target: button_id, adapter: adapter,
-        persist: ->(value) { set_app_state('admin', value) }
+        persist: ->(value) { set_app_state('admin', value) },
+        action_manifest: Set.new(action_manifest('admin')),
+        generation: action_generation('admin'),
+        persist_manifest: ->(tokens) { set_action_manifest('admin', tokens) }
       ).call
     end
 
@@ -947,7 +966,8 @@ module StreamWeaver
       end
 
       streamlit_app.with_render_lock do
-        streamlit_app.rebuild_with_state(state)
+        streamlit_app.rebuild_with_state(state, generation: action_generation(app_id))
+        set_action_manifest(app_id, streamlit_app.render_state.action_tokens)
         set_app_state(app_id, state)
 
         Views::AppView.new(streamlit_app, state, adapter, false).call
@@ -980,7 +1000,8 @@ module StreamWeaver
       adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
       is_htmx = request.env.key?('HTTP_HX_REQUEST')
       streamlit_app.with_render_lock do
-        streamlit_app.rebuild_with_state(state)
+        streamlit_app.rebuild_with_state(state, generation: action_generation(app_id))
+        set_action_manifest(app_id, streamlit_app.render_state.action_tokens)
         if is_htmx
           Views::AppContentView.new(streamlit_app, state, adapter, false).call
         else
@@ -1038,8 +1059,19 @@ module StreamWeaver
       InteractionRunner.new(
         app: streamlit_app, state: state, params: params,
         interaction: :action, target: button_id, adapter: adapter,
-        persist: ->(value) { set_app_state(app_id, value) }
+        persist: ->(value) { set_app_state(app_id, value) },
+        action_manifest: Set.new(action_manifest(app_id)),
+        generation: action_generation(app_id),
+        persist_manifest: ->(tokens) { set_action_manifest(app_id, tokens) }
       ).call
+    rescue StaleActionDefinition
+      status 409
+      headers 'HX-Retarget' => '#app-container'
+      streamlit_app.with_render_lock do
+        streamlit_app.rebuild_with_state(state, generation: action_generation(app_id))
+        set_action_manifest(app_id, streamlit_app.render_state.action_tokens)
+        Views::AppContentView.new(streamlit_app, state, adapter, false).call
+      end
     end
 
     # Event callback endpoint

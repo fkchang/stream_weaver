@@ -3,6 +3,7 @@
 require 'fileutils'
 
 require_relative "stream_weaver/version"
+require_relative "stream_weaver/action_token"
 require_relative "stream_weaver/utils"
 require_relative "stream_weaver/adapter/base"
 require_relative "stream_weaver/adapter/alpinejs"
