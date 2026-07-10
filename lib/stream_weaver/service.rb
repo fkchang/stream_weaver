@@ -836,10 +836,12 @@ module StreamWeaver
       state = app_state('admin')
       adapter = Adapter::AlpineJS.new(url_prefix: "/admin")
 
-      admin_app.rebuild_with_state(state)
-      set_app_state('admin', state)
+      admin_app.with_render_lock do
+        admin_app.rebuild_with_state(state)
+        set_app_state('admin', state)
 
-      Views::AppView.new(admin_app, state, adapter, false).call
+        Views::AppView.new(admin_app, state, adapter, false).call
+      end
     end
 
     post '/admin/update' do
@@ -847,12 +849,14 @@ module StreamWeaver
       state = app_state('admin')
       adapter = Adapter::AlpineJS.new(url_prefix: "/admin")
 
-      admin_app.rebuild_with_state(state)
-      sync_params_to_state(state)
-      set_app_state('admin', state)
+      admin_app.with_render_lock do
+        admin_app.rebuild_with_state(state)
+        sync_params_to_state(state)
+        set_app_state('admin', state)
 
-      admin_app.rebuild_with_state(state)
-      Views::AppContentView.new(admin_app, state, adapter, false).call
+        admin_app.rebuild_with_state(state)
+        Views::AppContentView.new(admin_app, state, adapter, false).call
+      end
     end
 
     post '/admin/action/:button_id' do
@@ -861,15 +865,17 @@ module StreamWeaver
       state = app_state('admin')
       adapter = Adapter::AlpineJS.new(url_prefix: "/admin")
 
-      admin_app.rebuild_with_state(state)
-      sync_params_to_state(state)
+      admin_app.with_render_lock do
+        admin_app.rebuild_with_state(state)
+        sync_params_to_state(state)
 
-      button = SinatraApp.find_button_recursive(admin_app.components, button_id)
-      button&.execute(state)
-      set_app_state('admin', state)
+        button = SinatraApp.find_button_recursive(admin_app.components, button_id)
+        button&.execute(state)
+        set_app_state('admin', state)
 
-      admin_app.rebuild_with_state(state)
-      Views::AppContentView.new(admin_app, state, adapter, false).call
+        admin_app.rebuild_with_state(state)
+        Views::AppContentView.new(admin_app, state, adapter, false).call
+      end
     end
 
     # Aliased route: /:source/:name -> /apps/:app_id
@@ -949,10 +955,12 @@ module StreamWeaver
         route_state.each { |k, v| state[k] = v }
       end
 
-      streamlit_app.rebuild_with_state(state)
-      set_app_state(app_id, state)
+      streamlit_app.with_render_lock do
+        streamlit_app.rebuild_with_state(state)
+        set_app_state(app_id, state)
 
-      Views::AppView.new(streamlit_app, state, adapter, false).call
+        Views::AppView.new(streamlit_app, state, adapter, false).call
+      end
     end
 
     # URL routing: seed state from the path suffix under /apps/:app_id/* -- the
@@ -978,13 +986,15 @@ module StreamWeaver
       sync_params_to_state(state)
       set_app_state(app_id, state)
 
-      streamlit_app.rebuild_with_state(state)
       adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
       is_htmx = request.env.key?('HTTP_HX_REQUEST')
-      if is_htmx
-        Views::AppContentView.new(streamlit_app, state, adapter, false).call
-      else
-        Views::AppView.new(streamlit_app, state, adapter, false).call
+      streamlit_app.with_render_lock do
+        streamlit_app.rebuild_with_state(state)
+        if is_htmx
+          Views::AppContentView.new(streamlit_app, state, adapter, false).call
+        else
+          Views::AppView.new(streamlit_app, state, adapter, false).call
+        end
       end
     end
 
@@ -1016,12 +1026,14 @@ module StreamWeaver
       state = app_state(app_id)
       adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
 
-      streamlit_app.rebuild_with_state(state)
-      sync_params_to_state(state)
-      set_app_state(app_id, state)
+      streamlit_app.with_render_lock do
+        streamlit_app.rebuild_with_state(state)
+        sync_params_to_state(state)
+        set_app_state(app_id, state)
 
-      streamlit_app.rebuild_with_state(state)
-      Views::AppContentView.new(streamlit_app, state, adapter, false).call
+        streamlit_app.rebuild_with_state(state)
+        Views::AppContentView.new(streamlit_app, state, adapter, false).call
+      end
     end
 
     # Button actions
@@ -1035,16 +1047,18 @@ module StreamWeaver
       state = app_state(app_id)
       adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
 
-      streamlit_app.rebuild_with_state(state)
-      sync_params_to_state(state)
+      streamlit_app.with_render_lock do
+        streamlit_app.rebuild_with_state(state)
+        sync_params_to_state(state)
 
-      # Find and execute button
-      button = SinatraApp.find_button_recursive(streamlit_app.components, button_id)
-      button&.execute(state)
-      set_app_state(app_id, state)
+        # Find and execute button
+        button = SinatraApp.find_button_recursive(streamlit_app.components, button_id)
+        button&.execute(state)
+        set_app_state(app_id, state)
 
-      streamlit_app.rebuild_with_state(state)
-      Views::AppContentView.new(streamlit_app, state, adapter, false).call
+        streamlit_app.rebuild_with_state(state)
+        Views::AppContentView.new(streamlit_app, state, adapter, false).call
+      end
     end
 
     # Event callback endpoint
@@ -1058,21 +1072,23 @@ module StreamWeaver
       state = app_state(app_id)
       adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
 
-      streamlit_app.rebuild_with_state(state)
-      sync_params_to_state(state)
+      streamlit_app.with_render_lock do
+        streamlit_app.rebuild_with_state(state)
+        sync_params_to_state(state)
 
-      # Execute callbacks
-      new_value = state[key]
-      component = SinatraApp.find_component_by_key(streamlit_app.components, key)
-      if component
-        component.execute_on_change(state, new_value) if component.respond_to?(:execute_on_change)
-        component.execute_on_blur(state, new_value) if component.respond_to?(:execute_on_blur)
+        # Execute callbacks
+        new_value = state[key]
+        component = SinatraApp.find_component_by_key(streamlit_app.components, key)
+        if component
+          component.execute_on_change(state, new_value) if component.respond_to?(:execute_on_change)
+          component.execute_on_blur(state, new_value) if component.respond_to?(:execute_on_blur)
+        end
+
+        set_app_state(app_id, state)
+
+        streamlit_app.rebuild_with_state(state)
+        Views::AppContentView.new(streamlit_app, state, adapter, false).call
       end
-
-      set_app_state(app_id, state)
-
-      streamlit_app.rebuild_with_state(state)
-      Views::AppContentView.new(streamlit_app, state, adapter, false).call
     end
 
     # Form submission endpoint
@@ -1099,16 +1115,18 @@ module StreamWeaver
       end
 
       state[form_name] = form_values
-      streamlit_app.rebuild_with_state(state)
+      streamlit_app.with_render_lock do
+        streamlit_app.rebuild_with_state(state)
 
-      # Execute submit block
-      form_component = SinatraApp.find_form_recursive(streamlit_app.components, form_name)
-      form_component&.execute_submit(state, form_values)
+        # Execute submit block
+        form_component = SinatraApp.find_form_recursive(streamlit_app.components, form_name)
+        form_component&.execute_submit(state, form_values)
 
-      set_app_state(app_id, state)
+        set_app_state(app_id, state)
 
-      streamlit_app.rebuild_with_state(state)
-      Views::AppContentView.new(streamlit_app, state, adapter, false).call
+        streamlit_app.rebuild_with_state(state)
+        Views::AppContentView.new(streamlit_app, state, adapter, false).call
+      end
     end
 
     # Theme switching

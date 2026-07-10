@@ -28,7 +28,7 @@ RSpec.describe StreamWeaver::App do
 
     it "initializes button counter to 0" do
       app = described_class.new("Test") {}
-      expect(app.instance_variable_get(:@button_counter)).to eq(0)
+      expect(app.render_state.button_counter).to eq(0)
     end
 
     describe "layout option" do
@@ -90,7 +90,7 @@ RSpec.describe StreamWeaver::App do
       it "uses counter for blockless buttons" do
         expect {
           app.button("First", submit: false)
-        }.to change { app.instance_variable_get(:@button_counter) }.from(0).to(1)
+        }.to change { app.render_state.button_counter }.from(0).to(1)
       end
 
       it "generates stable hash ID for buttons with blocks" do

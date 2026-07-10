@@ -207,7 +207,7 @@ RSpec.describe "Resource::DefaultViews (T3)" do
       expect(received_items).to be_an(Array)
     end
 
-    it "after override runs, @current_form is same as before" do
+    it "restores the current form context after an override runs" do
       fake_store = FakeStoreForViews
 
       app = build_app_with_state(SK::RESOURCE => :post, SK::ACTION => :index) do
@@ -220,8 +220,8 @@ RSpec.describe "Resource::DefaultViews (T3)" do
         end
       end
 
-      # After the override ran (which created a form), @current_form should be nil (restored)
-      expect(app.instance_variable_get(:@current_form)).to be_nil
+      # After the override ran (which created a form), current_form should be nil (restored)
+      expect(app.render_state.current_form).to be_nil
     end
   end
 end

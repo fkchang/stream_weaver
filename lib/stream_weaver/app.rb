@@ -9,12 +9,29 @@ module StreamWeaver
   class App
     include DisplayDSL
 
+    # Mutable state used only while evaluating one render tree. App-definition
+    # metadata intentionally remains on App so it survives fresh render states.
+    class RenderState
+      attr_accessor :components, :layout_slots, :button_counter, :seen_component_ids,
+                    :current_form, :form_context, :current_checkbox_group,
+                    :current_tabs, :current_breadcrumbs, :current_dropdown,
+                    :current_menu, :current_modal, :modal_context, :current_deck,
+                    :current_slide, :current_app_shell, :current_row_key_thunk
+
+      def initialize
+        self.components = []
+        self.layout_slots = {}
+        self.button_counter = 0
+        self.seen_component_ids = Hash.new(0)
+      end
+    end
+
     # Built-in themes (custom themes checked via StreamWeaver.theme_exists?)
     BUILT_IN_THEMES = [:default, :dashboard, :document, :dark, :doc].freeze
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :components, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :layout_slots, :endpoints, :loading_indicators
+    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state
 
     # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
     ENDPOINT_VERBS = %i[get post put patch delete].freeze
@@ -33,13 +50,12 @@ module StreamWeaver
       @theme = validate_theme(theme)
       @theme_overrides = theme_overrides
       @block = block
-      @components = []
+      @render_state = RenderState.new
+      @render_mutex = Mutex.new
       @state_key = :streamlit_state
       @_state = {}
-      @button_counter = 0
       @strict_ids = strict_ids
       @loading_indicators = loading_indicators
-      @_seen_component_ids = Hash.new(0)
       @_warned_duplicate_ids = Set.new
       @scripts = scripts
       @stylesheets = stylesheets
@@ -55,8 +71,6 @@ module StreamWeaver
       @route_rules   = []  # Array<RouteRule> — persistent, never cleared in rebuild
       @resource_defs = {}  # name(sym) → ResourceDefinition — persistent
       @endpoints     = []  # Array<{verb:, path:, block:}> — persistent, never cleared in rebuild
-
-      @layout_slots = {}
       components.each { |mod| singleton_class.include(mod) }
     end
 
@@ -78,6 +92,22 @@ module StreamWeaver
 
     def state
       @_state
+    end
+
+    def components
+      @render_state.components
+    end
+
+    def components=(value)
+      @render_state.components = value
+    end
+
+    def layout_slots
+      @render_state.layout_slots
+    end
+
+    def with_render_lock(&block)
+      @render_mutex.synchronize(&block)
     end
 
     # Declare URL routing: maps a state key's values to URL paths.
@@ -204,10 +234,7 @@ module StreamWeaver
 
     def rebuild_with_state(current_state)
       @_state = current_state
-      @components = []
-      @layout_slots = {}
-      @button_counter = 0
-      @_seen_component_ids = Hash.new(0)
+      @render_state = RenderState.new
       evaluate_dsl_block(@block)
       @timers_frozen = true
     end
@@ -217,15 +244,15 @@ module StreamWeaver
     #
     # @param name [Symbol] Slot identifier (:header, :sidebar_left, :footer, etc.)
     def layout_slot(name, &block)
-      @layout_slots[name] ||= []
-      parent_components = @components
-      @components = @layout_slots[name]
+      layout_slots[name] ||= []
+      parent_components = components
+      self.components = layout_slots[name]
       evaluate_dsl_block(block)
-      @components = parent_components
+      self.components = parent_components
     end
 
     # Find a component by its key (for callback execution)
-    def find_component_by_key(key, components_list = @components)
+    def find_component_by_key(key, components_list = components)
       components_list.each do |component|
         return component if component.respond_to?(:key) && component.key == key
         # Search in children if component has them
@@ -250,12 +277,12 @@ module StreamWeaver
     # Save and restore form DSL ivars around a block — used by ResourceDefinition
     # when executing override blocks so they can't leave form state dirty.
     def with_clean_form_context
-      saved_form    = @current_form
-      saved_context = @form_context
+      saved_form    = render_state.current_form
+      saved_context = render_state.form_context
       yield
     ensure
-      @current_form = saved_form
-      @form_context = saved_context
+      render_state.current_form = saved_form
+      render_state.form_context = saved_context
     end
 
     def has_charts?
@@ -265,7 +292,7 @@ module StreamWeaver
     private
 
     def components_include?(klass)
-      @components.any? { |c| c.is_a?(klass) || nested_include?(c, klass) }
+      components.any? { |c| c.is_a?(klass) || nested_include?(c, klass) }
     end
 
     def nested_include?(component, klass)
@@ -283,7 +310,7 @@ module StreamWeaver
       if content_or_options.is_a?(String)
         glossary = options[:glossary] || {}
         lesson_component = Components::LessonText.new(glossary: glossary)
-        @components << lesson_component
+        components << lesson_component
         lesson_component.children = parse_lesson_string(content_or_options, glossary)
       else
         opts = content_or_options.is_a?(Hash) ? content_or_options.merge(options) : options
@@ -293,24 +320,24 @@ module StreamWeaver
     end
 
     def term(term_key, **options)
-      @components << Components::Term.new(term_key, **options)
+      components << Components::Term.new(term_key, **options)
     end
 
     def checkbox_group(key, **options, &block)
       @_state[key] = options[:default] || [] unless @_state.key?(key)
 
       group_component = Components::CheckboxGroup.new(key, **options)
-      @components << group_component
+      components << group_component
 
-      parent_components = @components
-      @current_checkbox_group = group_component
-      @components = []
+      parent_components = components
+      render_state.current_checkbox_group = group_component
+      self.components = []
 
       evaluate_dsl_block(block)
 
-      group_component.children = @components
-      @components = parent_components
-      @current_checkbox_group = nil
+      group_component.children = components
+      self.components = parent_components
+      render_state.current_checkbox_group = nil
     end
 
     def item(value, &block)
@@ -325,34 +352,34 @@ module StreamWeaver
     def form(name, **options, &block)
       name = name.to_sym
       form_component = Components::Form.new(name, **options)
-      @components << form_component
+      components << form_component
       @_state[name] ||= {}
 
-      parent_components = @components
-      @current_form = form_component
-      @form_context = { name: name }
-      @components = []
+      parent_components = components
+      render_state.current_form = form_component
+      render_state.form_context = { name: name }
+      self.components = []
 
       evaluate_dsl_block(block)
 
-      form_component.children = @components
-      @components = parent_components
-      @current_form = nil
-      @form_context = nil
+      form_component.children = components
+      self.components = parent_components
+      render_state.current_form = nil
+      render_state.form_context = nil
     end
 
     def submit(label, &block)
-      raise "submit can only be used inside a form block" unless @current_form
-      @current_form.set_submit(label, &block)
+      raise "submit can only be used inside a form block" unless render_state.current_form
+      render_state.current_form.set_submit(label, &block)
     end
 
     def cancel(label)
-      raise "cancel can only be used inside a form block" unless @current_form
-      @current_form.set_cancel(label)
+      raise "cancel can only be used inside a form block" unless render_state.current_form
+      render_state.current_form.set_cancel(label)
     end
 
     def form_context
-      @form_context
+      render_state.form_context
     end
 
     # =========================================
@@ -362,38 +389,38 @@ module StreamWeaver
     def text_field(key, **options)
       @transient_keys << key if options.delete(:transient)
       initialize_form_state(key, options, options[:default] || "")
-      @components << Components::TextField.new(key, **options)
+      components << Components::TextField.new(key, **options)
     end
 
     def text_area(key, **options)
       @transient_keys << key if options.delete(:transient)
       initialize_form_state(key, options, options[:default] || "")
-      @components << Components::TextArea.new(key, **options)
+      components << Components::TextArea.new(key, **options)
     end
 
     def code_editor(key, language: :ruby, readonly: true, height: "400px", **options)
       initialize_form_state(key, options, options[:default] || "")
-      @components << Components::CodeEditor.new(key, language: language, readonly: readonly, height: height, **options)
+      components << Components::CodeEditor.new(key, language: language, readonly: readonly, height: height, **options)
     end
 
     def checkbox(key, label, **options)
       initialize_form_state(key, options, false)
-      @components << Components::Checkbox.new(key, label, **options)
+      components << Components::Checkbox.new(key, label, **options)
     end
 
     def select(key, choices, **options)
       initialize_form_state(key, options, options[:default] || "", skip_if_exists: true)
-      @components << Components::Select.new(key, choices, **options)
+      components << Components::Select.new(key, choices, **options)
     end
 
     def radio_group(key, choices, **options)
       initialize_form_state(key, options, "")
-      @components << Components::RadioGroup.new(key, choices, **options)
+      components << Components::RadioGroup.new(key, choices, **options)
     end
 
     def tag_buttons(key, tags, **options)
       @_state[key] ||= nil
-      @components << Components::TagButtons.new(key, tags, **options)
+      components << Components::TagButtons.new(key, tags, **options)
     end
 
     # =========================================
@@ -406,20 +433,24 @@ module StreamWeaver
       # fallback to counter for blockless buttons (submit: false)
       # If key: is provided, mix it in to disambiguate buttons in loops
       # (order-independent -- unlike a positional index, reordering the
-      # collection doesn't change a keyed button's id).
+      # collection doesn't change a keyed button's id). Inside a table's
+      # component cell, the row's key is auto-mixed in too (FAC-P2.1
+      # decision 3), on top of any explicit key: also passed.
       if block
+        row_key = render_state.current_row_key_thunk&.value
+        combined_key = [row_key, key].compact
         source_loc = block.source_location.join(':')
-        id_input = key ? "#{label}:#{key}" : "#{label}:#{source_loc}"
+        id_input = combined_key.any? ? "#{label}:#{combined_key.join(':')}" : "#{label}:#{source_loc}"
         stable_id = Digest::MD5.hexdigest(id_input)[0..7]
       else
-        @button_counter += 1
-        stable_id = @button_counter.to_s
+        render_state.button_counter += 1
+        stable_id = render_state.button_counter.to_s
       end
       # Pass modal context to button so it can close the modal via Alpine
-      options[:modal_context] = @modal_context if @modal_context
+      options[:modal_context] = render_state.modal_context if render_state.modal_context
       btn = Components::Button.new(label, stable_id, **options, &block)
       btn.id = disambiguate_component_id(btn.id, label: label, source_loc: block&.source_location)
-      @components << btn
+      components << btn
     end
 
     # =========================================
@@ -427,7 +458,7 @@ module StreamWeaver
     # =========================================
 
     def bar_chart(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
-      @components << Components::BarChart.new(
+      components << Components::BarChart.new(
         data: data, file: file, path: path, labels: labels, values: values, **options, &block
       )
     end
@@ -437,7 +468,7 @@ module StreamWeaver
     end
 
     def line_chart(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
-      @components << Components::LineChart.new(
+      components << Components::LineChart.new(
         data: data, file: file, path: path, labels: labels, values: values, **options, &block
       )
     end
@@ -451,7 +482,7 @@ module StreamWeaver
     end
 
     def pie_chart(data: nil, file: nil, path: nil, labels: nil, values: nil, **options, &block)
-      @components << Components::PieChart.new(
+      components << Components::PieChart.new(
         data: data, file: file, path: path, labels: labels, values: values, **options, &block
       )
     end
@@ -461,7 +492,7 @@ module StreamWeaver
     end
 
     def stacked_bar_chart(data: nil, file: nil, path: nil, **options, &block)
-      @components << Components::StackedBarChart.new(data: data, file: file, path: path, **options, &block)
+      components << Components::StackedBarChart.new(data: data, file: file, path: path, **options, &block)
     end
 
     # =========================================
@@ -472,17 +503,17 @@ module StreamWeaver
       @_state[key] ||= 0
 
       tabs_component = Components::Tabs.new(key, variant: variant, **options)
-      @components << tabs_component
+      components << tabs_component
 
-      parent_components = @components
-      @current_tabs = tabs_component
-      @components = []
+      parent_components = components
+      render_state.current_tabs = tabs_component
+      self.components = []
 
       evaluate_dsl_block(block)
 
-      tabs_component.children = @components
-      @components = parent_components
-      @current_tabs = nil
+      tabs_component.children = components
+      self.components = parent_components
+      render_state.current_tabs = nil
     end
 
     def tab(label, **options, &block)
@@ -492,73 +523,73 @@ module StreamWeaver
 
     def breadcrumbs(separator: "/", **options, &block)
       breadcrumbs_component = Components::Breadcrumbs.new(separator: separator, **options)
-      @components << breadcrumbs_component
+      components << breadcrumbs_component
 
-      parent_components = @components
-      @current_breadcrumbs = breadcrumbs_component
-      @components = []
+      parent_components = components
+      render_state.current_breadcrumbs = breadcrumbs_component
+      self.components = []
 
       evaluate_dsl_block(block)
 
-      breadcrumbs_component.children = @components
-      @components = parent_components
-      @current_breadcrumbs = nil
+      breadcrumbs_component.children = components
+      self.components = parent_components
+      render_state.current_breadcrumbs = nil
     end
 
     def crumb(label, href: nil, **options)
-      @components << Components::Crumb.new(label, href: href, **options)
+      components << Components::Crumb.new(label, href: href, **options)
     end
 
     def dropdown(**options, &block)
       dropdown_component = Components::Dropdown.new(**options)
-      @components << dropdown_component
+      components << dropdown_component
 
-      @current_dropdown = dropdown_component
+      render_state.current_dropdown = dropdown_component
       evaluate_dsl_block(block)
-      @current_dropdown = nil
+      render_state.current_dropdown = nil
     end
 
     def trigger(&block)
-      raise "trigger can only be used inside a dropdown block" unless @current_dropdown
+      raise "trigger can only be used inside a dropdown block" unless render_state.current_dropdown
 
       trigger_component = Components::DropdownTrigger.new
-      parent_components = @components
-      @components = []
+      parent_components = components
+      self.components = []
 
       evaluate_dsl_block(block)
 
-      trigger_component.children = @components
-      @components = parent_components
-      @current_dropdown.trigger_component = trigger_component
+      trigger_component.children = components
+      self.components = parent_components
+      render_state.current_dropdown.trigger_component = trigger_component
     end
 
     def menu(**options, &block)
-      raise "menu can only be used inside a dropdown block" unless @current_dropdown
+      raise "menu can only be used inside a dropdown block" unless render_state.current_dropdown
 
       menu_component = Components::Menu.new(**options)
-      parent_components = @components
-      @current_menu = menu_component
-      @components = []
+      parent_components = components
+      render_state.current_menu = menu_component
+      self.components = []
 
       evaluate_dsl_block(block)
 
-      menu_component.children = @components
-      @components = parent_components
-      @current_dropdown.menu_component = menu_component
-      @current_menu = nil
+      menu_component.children = components
+      self.components = parent_components
+      render_state.current_dropdown.menu_component = menu_component
+      render_state.current_menu = nil
     end
 
     def menu_item(label, style: :default, **options, &block)
-      raise "menu_item can only be used inside a menu block" unless @current_menu
-      @button_counter += 1
+      raise "menu_item can only be used inside a menu block" unless render_state.current_menu
+      render_state.button_counter += 1
       item = Components::MenuItem.new(label, style: style, **options, &block)
-      item.instance_variable_set(:@id, "menu_item_#{@button_counter}")
-      @components << item
+      item.instance_variable_set(:@id, "menu_item_#{render_state.button_counter}")
+      components << item
     end
 
     def menu_divider
-      raise "menu_divider can only be used inside a menu block" unless @current_menu
-      @components << Components::MenuDivider.new
+      raise "menu_divider can only be used inside a menu block" unless render_state.current_menu
+      components << Components::MenuDivider.new
     end
 
     # =========================================
@@ -570,33 +601,33 @@ module StreamWeaver
       @_state[open_key] = false unless @_state.key?(open_key)
 
       modal_component = Components::Modal.new(key, title: title, size: size, **options)
-      @components << modal_component
+      components << modal_component
 
-      parent_components = @components
-      @current_modal = modal_component
-      @modal_context = { key: key }
-      @components = []
+      parent_components = components
+      render_state.current_modal = modal_component
+      render_state.modal_context = { key: key }
+      self.components = []
 
       evaluate_dsl_block(block)
 
-      modal_component.children = @components
-      @components = parent_components
-      @current_modal = nil
-      @modal_context = nil
+      modal_component.children = components
+      self.components = parent_components
+      render_state.current_modal = nil
+      render_state.modal_context = nil
     end
 
     def modal_footer(**options, &block)
-      raise "modal_footer can only be used inside a modal block" unless @current_modal
+      raise "modal_footer can only be used inside a modal block" unless render_state.current_modal
 
       footer_component = Components::ModalFooter.new(**options)
-      parent_components = @components
-      @components = []
+      parent_components = components
+      self.components = []
 
       evaluate_dsl_block(block)
 
-      footer_component.children = @components
-      @components = parent_components
-      @current_modal.footer_component = footer_component
+      footer_component.children = components
+      self.components = parent_components
+      render_state.current_modal.footer_component = footer_component
     end
 
     def open_modal(key)
@@ -613,7 +644,7 @@ module StreamWeaver
 
     def toast_container(position: :top_right, duration: 5000, **options)
       @_state[:_toasts] ||= []
-      @components << Components::ToastContainer.new(position: position, duration: duration, **options)
+      components << Components::ToastContainer.new(position: position, duration: duration, **options)
     end
 
     def show_toast(message, variant: :info, duration: nil)
@@ -634,11 +665,11 @@ module StreamWeaver
     end
 
     def canvas_continue(message: "Processing...")
-      @components << Components::CanvasContinue.new(message: message)
+      components << Components::CanvasContinue.new(message: message)
     end
 
     def theme_switcher(position: :inline, show_label: true, **options)
-      @components << Components::ThemeSwitcher.new(position: position, show_label: show_label, **options)
+      components << Components::ThemeSwitcher.new(position: position, show_label: show_label, **options)
     end
 
     # =========================================
@@ -663,14 +694,14 @@ module StreamWeaver
     #   end
     def design_deck(title, **options, &block)
       deck = Components::Deck::DesignDeck.new(title, **options)
-      @components << deck
-      @current_deck = deck
+      components << deck
+      render_state.current_deck = deck
 
-      parent_components = @components
-      @components = []
+      parent_components = components
+      self.components = []
       evaluate_dsl_block(block)
-      deck.children = @components
-      @components = parent_components
+      deck.children = components
+      self.components = parent_components
 
       deck.validate!
 
@@ -680,28 +711,28 @@ module StreamWeaver
       summary.deck_slides = slides
       deck.children << summary
 
-      @current_deck = nil
+      render_state.current_deck = nil
       deck
     end
 
     # Override slide to create DeckSlide when inside a design_deck context.
     # Falls through to DisplayDSL#slide when not in deck context.
     def slide(id, title = nil, **options, &block)
-      unless @current_deck
+      unless render_state.current_deck
         return super(id, title, **options, &block)
       end
 
       deck_slide = Components::Deck::DeckSlide.new(id, title, **options)
-      @components << deck_slide
-      @current_slide = deck_slide
+      components << deck_slide
+      render_state.current_slide = deck_slide
 
-      parent_components = @components
-      @components = []
+      parent_components = components
+      self.components = []
       evaluate_dsl_block(block)
-      deck_slide.children = @components
-      @components = parent_components
+      deck_slide.children = components
+      self.components = parent_components
 
-      @current_slide = nil
+      render_state.current_slide = nil
       deck_slide
     end
 
@@ -720,20 +751,20 @@ module StreamWeaver
     #     mermaid "graph TD; A-->B", compact: true
     #   end
     def option(label, **options, &block)
-      raise "option must be inside a slide within design_deck" unless @current_deck && @current_slide
+      raise "option must be inside a slide within design_deck" unless render_state.current_deck && render_state.current_slide
 
       opt = Components::Deck::DeckOption.new(label, **options)
       # Track parent slide context for selection state (T8)
-      opt.slide_id = @current_slide.id
-      # Count options already in the current build's @components list (not slide.children which isn't set yet)
-      opt.option_index = @components.count { |c| c.is_a?(Components::Deck::DeckOption) }
-      @components << opt
+      opt.slide_id = render_state.current_slide.id
+      # Count options already in the current build's components list (not slide.children which isn't set yet)
+      opt.option_index = components.count { |c| c.is_a?(Components::Deck::DeckOption) }
+      components << opt
 
-      parent_components = @components
-      @components = []
+      parent_components = components
+      self.components = []
       evaluate_dsl_block(block)
-      opt.children = @components
-      @components = parent_components
+      opt.children = components
+      self.components = parent_components
 
       opt
     end
@@ -757,7 +788,7 @@ module StreamWeaver
     #     default_model: "claude-3"
     #   )
     def model_selector(models:, default_model: nil, **options)
-      @components << Components::Deck::ModelSelector.new(
+      components << Components::Deck::ModelSelector.new(
         models: models, default_model: default_model, **options
       )
     end
@@ -778,7 +809,7 @@ module StreamWeaver
     #   )
     def confirmation_bar(message:, confirm_label: "Cancel", cancel_label: "Keep Going",
                          auto_hide: 5, **options)
-      @components << Components::Deck::ConfirmationBar.new(
+      components << Components::Deck::ConfirmationBar.new(
         message: message, confirm_label: confirm_label,
         cancel_label: cancel_label, auto_hide: auto_hide, **options
       )
@@ -794,7 +825,7 @@ module StreamWeaver
     # @example
     #   close_overlay(status: :submitted, message: "Deck submitted!")
     def close_overlay(status:, message:, auto_close_delay: 800, **options)
-      @components << Components::Deck::CloseOverlay.new(
+      components << Components::Deck::CloseOverlay.new(
         status: status, message: message,
         auto_close_delay: auto_close_delay, **options
       )
@@ -847,39 +878,39 @@ module StreamWeaver
         gap: gap,
         **options
       )
-      @components << component
+      components << component
 
       return component unless block
 
-      @current_app_shell = component
+      render_state.current_app_shell = component
       evaluate_dsl_block(block)
-      @current_app_shell = nil
+      render_state.current_app_shell = nil
 
       component
     end
 
     def main(**options, &block)
-      raise "main can only be used inside an app_shell block" unless @current_app_shell
+      raise "main can only be used inside an app_shell block" unless render_state.current_app_shell
 
-      parent_components = @components
-      @components = []
+      parent_components = components
+      self.components = []
       evaluate_dsl_block(block)
-      @current_app_shell.main_children = @components
-      @components = parent_components
+      render_state.current_app_shell.main_children = components
+      self.components = parent_components
     end
 
     def sidebar(header: nil, sticky: true, **options, &block)
-      raise "sidebar can only be used inside an app_shell block" unless @current_app_shell
+      raise "sidebar can only be used inside an app_shell block" unless render_state.current_app_shell
 
       sidebar_component = Components::Sidebar.new(header: header, sticky: sticky, **options)
 
-      parent_components = @components
-      @components = []
+      parent_components = components
+      self.components = []
       evaluate_dsl_block(block)
-      sidebar_component.children = @components
-      @components = parent_components
+      sidebar_component.children = components
+      self.components = parent_components
 
-      @current_app_shell.sidebar_children << sidebar_component
+      render_state.current_app_shell.sidebar_children << sidebar_component
     end
 
     def expandable_card(key:, title:, subtitle: nil, badge_text: nil, badge_variant: :default,
@@ -912,20 +943,20 @@ module StreamWeaver
 
     # Captures children then appends the component (for item, column patterns)
     def capture_children_then_append(component, &block)
-      parent_components = @components
-      @components = []
+      parent_components = components
+      self.components = []
       evaluate_dsl_block(block)
-      component.children = @components
-      @components = parent_components
-      @components << component
+      component.children = components
+      self.components = parent_components
+      components << component
     end
 
     # Initialize state for form fields, handling form context
     def initialize_form_state(key, options, default_value, skip_if_exists: false)
-      options[:form_context] = @form_context if @form_context
+      options[:form_context] = render_state.form_context if render_state.form_context
 
-      if @form_context
-        form_name = @form_context[:name]
+      if render_state.form_context
+        form_name = render_state.form_context[:name]
         @_state[form_name] ||= {}
         target = @_state[form_name]
       else
@@ -962,8 +993,8 @@ module StreamWeaver
     # dispatchable (FAC-P0.1). Warns once per id per process, or raises if
     # strict_ids: true was passed to the App.
     def disambiguate_component_id(candidate_id, label:, source_loc:)
-      occurrence = @_seen_component_ids[candidate_id]
-      @_seen_component_ids[candidate_id] = occurrence + 1
+      occurrence = render_state.seen_component_ids[candidate_id]
+      render_state.seen_component_ids[candidate_id] = occurrence + 1
       return candidate_id if occurrence.zero?
 
       loc = source_loc ? source_loc.join(':') : 'unknown location'

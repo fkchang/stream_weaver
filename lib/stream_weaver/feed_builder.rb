@@ -11,7 +11,7 @@ module StreamWeaver
   class FeedBuilder
     include DisplayDSL
 
-    attr_reader :components
+    attr_accessor :components
 
     def initialize(state = nil)
       @components = []

@@ -91,21 +91,21 @@ module StreamWeaver
     # =========================================
 
     def text(content)
-      @components << Components::Text.new(content)
+      components << Components::Text.new(content)
     end
 
     def md(content)
-      @components << Components::Markdown.new(content)
+      components << Components::Markdown.new(content)
     end
     alias_method :markdown, :md
 
     (1..6).each do |level|
-      define_method(:"header#{level}") { |content| @components << Components::Header.new(content, level: level) }
+      define_method(:"header#{level}") { |content| components << Components::Header.new(content, level: level) }
     end
     alias_method :header, :header2
 
     def phrase(content)
-      @components << Components::Phrase.new(content)
+      components << Components::Phrase.new(content)
     end
 
     # =========================================
@@ -113,31 +113,31 @@ module StreamWeaver
     # =========================================
 
     def stat_display(value:, label:, color: :blue, size: :md, **options)
-      @components << Components::StatDisplay.new(value: value, label: label, color: color, size: size, **options)
+      components << Components::StatDisplay.new(value: value, label: label, color: color, size: size, **options)
     end
 
     def badge(text, variant: :default, size: :sm, **options)
-      @components << Components::Badge.new(text, variant: variant, size: size, **options)
+      components << Components::Badge.new(text, variant: variant, size: size, **options)
     end
 
     def status_dot(status: :gray, pulse: false, size: :md, **options)
-      @components << Components::StatusDot.new(status: status, pulse: pulse, size: size, **options)
+      components << Components::StatusDot.new(status: status, pulse: pulse, size: size, **options)
     end
 
     def type_tag(type_name, color: nil, **options)
-      @components << Components::TypeTag.new(type_name, color: color, **options)
+      components << Components::TypeTag.new(type_name, color: color, **options)
     end
 
     def pulse_indicator(color: :green, label: nil, **options)
-      @components << Components::PulseIndicator.new(color: color, label: label, **options)
+      components << Components::PulseIndicator.new(color: color, label: label, **options)
     end
 
     def activity_item(time:, title:, summary: nil, type: nil, **options)
-      @components << Components::ActivityItem.new(time: time, title: title, summary: summary, type: type, **options)
+      components << Components::ActivityItem.new(time: time, title: title, summary: summary, type: type, **options)
     end
 
     def timeline_event(index:, event_type:, timestamp:, label:, fields: {}, expanded: false, **options)
-      @components << Components::TimelineEvent.new(
+      components << Components::TimelineEvent.new(
         index: index, event_type: event_type, timestamp: timestamp,
         label: label, fields: fields, expanded: expanded, **options
       )
@@ -152,34 +152,39 @@ module StreamWeaver
     end
 
     def progress_bar(value:, max: 100, variant: :default, show_label: false, animated: false, **options)
-      @components << Components::ProgressBar.new(value: value, max: max, variant: variant, show_label: show_label, animated: animated, **options)
+      components << Components::ProgressBar.new(value: value, max: max, variant: variant, show_label: show_label, animated: animated, **options)
     end
 
     def spinner(size: :md, label: nil, **options)
-      @components << Components::Spinner.new(size: size, label: label, **options)
+      components << Components::Spinner.new(size: size, label: label, **options)
     end
 
     def score_table(scores:, **options)
-      @components << Components::ScoreTable.new(scores: scores, **options)
+      components << Components::ScoreTable.new(scores: scores, **options)
     end
 
     def table(positional_data = nil, data: nil, headers: nil, rows: nil, file: nil, path: nil, **options, &block)
       actual_data = positional_data || data
-      @components << Components::Table.new(
+      table_component = Components::Table.new(
         actual_data, headers: headers, rows: rows, file: file, path: path, **options, &block
       )
+      # Resolve cells now (not lazily at render time) so any buttons a cell
+      # builds already exist in the component tree for dispatch to find --
+      # button-action requests never call #render (FAC-P2.1 decision 4).
+      table_component.resolve!(self, state)
+      components << table_component
     end
 
     def status_badge(status, reasoning)
-      @components << Components::StatusBadge.new(status, reasoning)
+      components << Components::StatusBadge.new(status, reasoning)
     end
 
     def external_link_button(label, url:, submit: false)
-      @components << Components::ExternalLinkButton.new(label, url: url, submit: submit)
+      components << Components::ExternalLinkButton.new(label, url: url, submit: submit)
     end
 
     def link_to(label, href:, **options)
-      @components << Components::Link.new(label, href: href, **options)
+      components << Components::Link.new(label, href: href, **options)
     end
 
     def navbar(**options, &block)
@@ -187,7 +192,7 @@ module StreamWeaver
     end
 
     def nav_item(label, href: nil, active: false, **options)
-      @components << Components::NavItem.new(label, href: href, active: active, **options)
+      components << Components::NavItem.new(label, href: href, active: active, **options)
     end
 
     # =========================================
@@ -209,7 +214,7 @@ module StreamWeaver
     # @example With file header and truncation
     #   code_block(code, file: "src/app.rb", lang: "ruby", truncate: 10)
     def code_block(code, **options)
-      @components << Components::CodeBlock.new(code, **options)
+      components << Components::CodeBlock.new(code, **options)
     end
 
     # Render an image with optional caption.
@@ -226,7 +231,7 @@ module StreamWeaver
     # @example With caption
     #   image_block("diagram.svg", caption: "Figure 1: Architecture")
     def image_block(src, **options)
-      @components << Components::ImageBlock.new(src, **options)
+      components << Components::ImageBlock.new(src, **options)
     end
 
     # Render a Mermaid diagram.
@@ -245,7 +250,7 @@ module StreamWeaver
     #   mermaid("graph LR; A-->B", compact: true)
     #   mermaid("graph TD; A-->B", layout: :elk)
     def mermaid(code, zoom: false, compact: false, layout: :default, theme_vars: nil, **options)
-      @components << Components::Mermaid.new(
+      components << Components::Mermaid.new(
         code, zoom: zoom, compact: compact, layout: layout,
         theme_vars: theme_vars, **options
       )
@@ -268,7 +273,7 @@ module StreamWeaver
     #     { label: "Deploy", status: :pending }
     #   ]
     def pipeline(steps:, **options)
-      @components << Components::Pipeline.new(steps: steps, **options)
+      components << Components::Pipeline.new(steps: steps, **options)
     end
 
     # Render a KPI dashboard with auto-fit grid of metric cards.
@@ -282,7 +287,7 @@ module StreamWeaver
     #     { value: "42ms",  label: "Latency", trend: :down }
     #   ]
     def kpi_dashboard(metrics:, **options)
-      @components << Components::KpiDashboard.new(metrics: metrics, **options)
+      components << Components::KpiDashboard.new(metrics: metrics, **options)
     end
 
     # Render a Chart.js chart. CDN loads lazily (only when this method is called).
@@ -297,7 +302,7 @@ module StreamWeaver
     # @example
     #   chart type: :bar, data: { labels: ["A", "B"], datasets: [{ data: [1, 2] }] }
     def chart(type:, data:, options: {}, height: 300, **extra)
-      @components << Components::Chart.new(type: type, data: data, options: options, height: height, **extra)
+      components << Components::Chart.new(type: type, data: data, options: options, height: height, **extra)
     end
 
     # =========================================
@@ -319,7 +324,7 @@ module StreamWeaver
     def keyboard_shortcuts(**options, &block)
       component = Components::KeyboardShortcuts.new(**options)
       yield component if block
-      @components << component
+      components << component
       component
     end
 
@@ -388,7 +393,7 @@ module StreamWeaver
     #   theme_toggle mode: :auto
     #   theme_toggle mode: :auto, hotkey: "mod+shift+l"
     def theme_toggle(mode: :auto, hotkey: nil, persist: true, **options)
-      @components << Components::ThemeToggle.new(mode: mode, hotkey: hotkey, persist: persist, **options)
+      components << Components::ThemeToggle.new(mode: mode, hotkey: hotkey, persist: persist, **options)
     end
 
     # =========================================
@@ -408,7 +413,7 @@ module StreamWeaver
     #   theme_preset :warm        # Friendly rounded + amber
     #   theme_preset :terminal    # Monospace retro hacker
     def theme_preset(name, **options)
-      @components << Components::ThemePreset.new(name, **options)
+      components << Components::ThemePreset.new(name, **options)
     end
 
     # =========================================
@@ -428,7 +433,7 @@ module StreamWeaver
     #     { id: "architecture", label: "Architecture" }
     #   ]
     def sidebar_toc(sections:, **options)
-      @components << Components::SidebarToc.new(sections: sections, **options)
+      components << Components::SidebarToc.new(sections: sections, **options)
     end
 
     # Render a document-level header with eyebrow, serif title, and meta pills.
@@ -449,7 +454,7 @@ module StreamWeaver
     #     pills: [{ text: "Draft" }, "June 25, 2026", "Author: Forrest Chang"]
     #   )
     def doc_header(title:, eyebrow: nil, pills: [], **options)
-      @components << Components::DocHeader.new(title: title, eyebrow: eyebrow, pills: pills, **options)
+      components << Components::DocHeader.new(title: title, eyebrow: eyebrow, pills: pills, **options)
     end
 
     # Render a numbered section eyebrow + h2 heading.
@@ -463,7 +468,7 @@ module StreamWeaver
     # @example
     #   doc_section_header "01", "Problem Statement", id: "problem"
     def doc_section_header(number, title, id: nil, **options)
-      @components << Components::DocSectionHeader.new(number, title, id: id, **options)
+      components << Components::DocSectionHeader.new(number, title, id: id, **options)
     end
 
     # Render a non-dismissible callout box with colored left border.
@@ -490,7 +495,7 @@ module StreamWeaver
     #     { path: "lib/foo.rb", note: "Add the new method" }
     #   ])
     def implementation_map(files: [], **options)
-      @components << Components::ImplementationMap.new(files: files, **options)
+      components << Components::ImplementationMap.new(files: files, **options)
     end
 
     # Render an architecture decision block with labeled option cards.
@@ -507,7 +512,7 @@ module StreamWeaver
     #   end
     def decision(question:, **options, &block)
       component = Components::Decision.new(question: question, **options)
-      @components << component
+      components << component
       if block
         builder = DecisionBuilder.new(component)
         builder.instance_eval(&block)
@@ -537,7 +542,7 @@ module StreamWeaver
     # @example
     #   wireframe_block(html: '<h1>Login</h1><button class="primary">Sign in</button>')
     def wireframe_block(html: "", surface: "browser", **options)
-      @components << Components::WireframeBlock.new(html: html, surface: surface, **options)
+      components << Components::WireframeBlock.new(html: html, surface: surface, **options)
     end
 
     # Render an HTML mockup wrapped in device chrome matching the surface type.
@@ -553,7 +558,7 @@ module StreamWeaver
     #   end
     def wireframe(surface: :browser, **options, &block)
       html = block ? instance_exec(&block).to_s : ""
-      @components << Components::Wireframe.new(html: html, surface: surface, **options)
+      components << Components::Wireframe.new(html: html, surface: surface, **options)
     end
 
     # Render a code block with line-number-pinned annotation bubbles in a side panel.
@@ -564,13 +569,13 @@ module StreamWeaver
     def annotated_code(language: nil, annotations: [], **options, &block)
       component = Components::AnnotatedCode.new(language: language, annotations: annotations, **options)
       component.code = block ? instance_exec(&block) : ""
-      @components << component
+      components << component
       component
     end
 
     def diff(language: nil, **options, &block)
       component = Components::DiffBlock.new(language: language, **options)
-      @components << component
+      components << component
       return component unless block
 
       builder = DiffBlockBuilder.new
@@ -602,7 +607,7 @@ module StreamWeaver
         method: method, path: path, description: description,
         params: params, response: response, **options
       )
-      @components << component
+      components << component
       component
     end
 
@@ -624,7 +629,7 @@ module StreamWeaver
       component = Components::Comparison.new(
         before_label: before_label, after_label: after_label, **options
       )
-      @components << component
+      components << component
       return component unless block
 
       # Capture before/after blocks using a builder context
@@ -656,11 +661,11 @@ module StreamWeaver
       private
 
       def capture_components(&block)
-        parent = @dsl.instance_variable_get(:@components)
-        @dsl.instance_variable_set(:@components, [])
+        parent = @dsl.components
+        @dsl.components = []
         @dsl.instance_eval(&block)
-        captured = @dsl.instance_variable_get(:@components)
-        @dsl.instance_variable_set(:@components, parent)
+        captured = @dsl.components
+        @dsl.components = parent
         captured
       end
     end
@@ -700,7 +705,7 @@ module StreamWeaver
     # @example
     #   pullquote "Design is not just what it looks like.", attribution: "Steve Jobs"
     def pullquote(text, attribution: nil, **options)
-      @components << Components::Pullquote.new(text, attribution: attribution, **options)
+      components << Components::Pullquote.new(text, attribution: attribution, **options)
     end
 
     # Render a monospace file tree display with color-coded status.
@@ -711,7 +716,7 @@ module StreamWeaver
     # @example
     #   dir_tree "src/\n  app.rb [modified]\n  new_file.rb [new]"
     def dir_tree(tree_text, **options)
-      @components << Components::DirTree.new(tree_text, **options)
+      components << Components::DirTree.new(tree_text, **options)
     end
 
     # Render a color swatch legend (horizontal row of dots with labels).
@@ -721,7 +726,7 @@ module StreamWeaver
     # @example
     #   legend items: [{ color: "#22c55e", label: "New" }, { color: "#f59e0b", label: "Modified" }]
     def legend(items:, **options)
-      @components << Components::Legend.new(items: items, **options)
+      components << Components::Legend.new(items: items, **options)
     end
 
     # Render a vertical arrow connector between sections.
@@ -731,7 +736,7 @@ module StreamWeaver
     # @example
     #   flow_arrow label: "transforms into"
     def flow_arrow(label: nil, **options)
-      @components << Components::FlowArrow.new(label: label, **options)
+      components << Components::FlowArrow.new(label: label, **options)
     end
 
     # Render column count override buttons (1/2/3/4 columns).
@@ -743,7 +748,7 @@ module StreamWeaver
     # @example
     #   layout_toggle target: ".my-grid", columns: [1, 2, 3]
     def layout_toggle(target: ".sw-layout-target", columns: [1, 2, 3, 4], **options)
-      @components << Components::LayoutToggle.new(target: target, columns: columns, **options)
+      components << Components::LayoutToggle.new(target: target, columns: columns, **options)
     end
 
     # =========================================
@@ -761,12 +766,12 @@ module StreamWeaver
         @button_counter = (@button_counter || 0) + 1
         stable_id = @button_counter.to_s
       end
-      @components << Components::Button.new(label, stable_id, **options, &block)
+      components << Components::Button.new(label, stable_id, **options, &block)
     end
 
     def select(key, choices, **options)
       @_state[key] = options[:default] || "" unless @_state&.key?(key)
-      @components << Components::Select.new(key, choices, **options)
+      components << Components::Select.new(key, choices, **options)
     end
 
     def expandable_card(key:, title:, subtitle: nil, badge_text: nil, badge_variant: :default,
@@ -804,14 +809,14 @@ module StreamWeaver
     end
 
     def with_container(component, &block)
-      @components << component
+      components << component
       return component unless block
 
-      parent_components = @components
-      @components = []
+      parent_components = components
+      self.components = []
       evaluate_dsl_block(block)
-      component.children = @components
-      @components = parent_components
+      component.children = components
+      self.components = parent_components
       component
     end
 

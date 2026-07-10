@@ -141,19 +141,21 @@ module StreamWeaver
           streamlit_app = settings.streamlit_app
           is_agentic = settings.respond_to?(:result_container)
           session_theme = session[:theme_override]
-          inject_deck_state!(state)
-          streamlit_app.rebuild_with_state(state)
+          streamlit_app.with_render_lock do
+            inject_deck_state!(state)
+            streamlit_app.rebuild_with_state(state)
 
-          # Scrub transient keys that leaked into the session
-          unless streamlit_app.transient_keys.empty?
-            state.reject! { |k, _| streamlit_app.transient_keys.include?(k) }
-          end
-          session[:streamlit_state] = session_safe_state(state)
+            # Scrub transient keys that leaked into the session
+            unless streamlit_app.transient_keys.empty?
+              state.reject! { |k, _| streamlit_app.transient_keys.include?(k) }
+            end
+            session[:streamlit_state] = session_safe_state(state)
 
-          if is_htmx
-            Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
-          else
-            Views::AppView.new(streamlit_app, state, adapter, is_agentic, session_theme: session_theme).call
+            if is_htmx
+              Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+            else
+              Views::AppView.new(streamlit_app, state, adapter, is_agentic, session_theme: session_theme).call
+            end
           end
         end
 
@@ -258,14 +260,16 @@ module StreamWeaver
           adapter = settings.adapter
           is_agentic = settings.respond_to?(:result_container)
 
-          inject_deck_state!(state)
-          streamlit_app.rebuild_with_state(state)
-          sync_params_to_state(state)
-          handle_unchecked_checkboxes(state, streamlit_app.components)
-          session[:streamlit_state] = session_safe_state(state)
+          streamlit_app.with_render_lock do
+            inject_deck_state!(state)
+            streamlit_app.rebuild_with_state(state)
+            sync_params_to_state(state)
+            handle_unchecked_checkboxes(state, streamlit_app.components)
+            session[:streamlit_state] = session_safe_state(state)
 
-          streamlit_app.rebuild_with_state(state)
-          Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+            streamlit_app.rebuild_with_state(state)
+            Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+          end
         rescue => e
           render_error("/update", e)
         end
@@ -280,40 +284,42 @@ module StreamWeaver
           adapter = settings.adapter
           is_agentic = settings.respond_to?(:result_container)
 
-          inject_deck_state!(state)
-          streamlit_app.rebuild_with_state(state)
-          sync_params_to_state(state, excluded_keys: [:button_id])
-          handle_unchecked_checkboxes(state, streamlit_app.components)
+          streamlit_app.with_render_lock do
+            inject_deck_state!(state)
+            streamlit_app.rebuild_with_state(state)
+            sync_params_to_state(state, excluded_keys: [:button_id])
+            handle_unchecked_checkboxes(state, streamlit_app.components)
 
-          # Find and execute the button action
-          button = self.class.find_button_recursive(streamlit_app.components, button_id)
-          if button
-            button.execute(state)
-            session[:streamlit_state] = session_safe_state(state)
-          end
-
-          # If button callback set _result in agentic mode, signal completion
-          if is_agentic && state[:_result] && settings.respond_to?(:result_container)
-            input_keys = self.class.collect_input_keys(streamlit_app.components)
-            filtered_result = {}
-            input_keys.each { |key| filtered_result[key] = state[key] if state.key?(key) }
-            filtered_result[:_result] = state[:_result]
-            settings.result_container[:result] = filtered_result
-            settings.result_container[:ready] = true
-
-            auto_close = settings.respond_to?(:auto_close_window) && settings.auto_close_window
-            if auto_close
-              return <<~HTML
-                <html><body>
-                  <h1>Done!</h1>
-                  <script>setTimeout(function(){ window.close(); }, 500);</script>
-                </body></html>
-              HTML
+            # Find and execute the button action
+            button = self.class.find_button_recursive(streamlit_app.components, button_id)
+            if button
+              button.execute(state)
+              session[:streamlit_state] = session_safe_state(state)
             end
-          end
 
-          streamlit_app.rebuild_with_state(state)
-          Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+            # If button callback set _result in agentic mode, signal completion
+            if is_agentic && state[:_result] && settings.respond_to?(:result_container)
+              input_keys = self.class.collect_input_keys(streamlit_app.components)
+              filtered_result = {}
+              input_keys.each { |key| filtered_result[key] = state[key] if state.key?(key) }
+              filtered_result[:_result] = state[:_result]
+              settings.result_container[:result] = filtered_result
+              settings.result_container[:ready] = true
+
+              auto_close = settings.respond_to?(:auto_close_window) && settings.auto_close_window
+              if auto_close
+                return <<~HTML
+                  <html><body>
+                    <h1>Done!</h1>
+                    <script>setTimeout(function(){ window.close(); }, 500);</script>
+                  </body></html>
+                HTML
+              end
+            end
+
+            streamlit_app.rebuild_with_state(state)
+            Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+          end
         rescue => e
           render_error("/action/#{params[:button_id]}", e)
         end
@@ -324,13 +330,15 @@ module StreamWeaver
         state = session[:streamlit_state] ||= {}
         streamlit_app = settings.streamlit_app
 
-        streamlit_app.rebuild_with_state(state)
-        sync_params_to_state(state)
-        handle_unchecked_checkboxes(state, streamlit_app.components)
-        session[:streamlit_state] = session_safe_state(state)
+        input_keys = streamlit_app.with_render_lock do
+          streamlit_app.rebuild_with_state(state)
+          sync_params_to_state(state)
+          handle_unchecked_checkboxes(state, streamlit_app.components)
+          session[:streamlit_state] = session_safe_state(state)
 
-        # Collect input keys for filtering the result
-        input_keys = self.class.collect_input_keys(streamlit_app.components)
+          # Collect input keys for filtering the result
+          self.class.collect_input_keys(streamlit_app.components)
+        end
 
         # Filter result to only include keys from input components
         filtered_result = {}
@@ -380,22 +388,24 @@ module StreamWeaver
           adapter = settings.adapter
           is_agentic = settings.respond_to?(:result_container)
 
-          streamlit_app.rebuild_with_state(state)
-          sync_params_to_state(state, excluded_keys: [:key])
-          handle_unchecked_checkboxes(state, streamlit_app.components)
+          streamlit_app.with_render_lock do
+            streamlit_app.rebuild_with_state(state)
+            sync_params_to_state(state, excluded_keys: [:key])
+            handle_unchecked_checkboxes(state, streamlit_app.components)
 
-          # Find the component and execute callbacks
-          new_value = state[key]
-          component = self.class.find_component_by_key(streamlit_app.components, key)
-          if component
-            component.execute_on_change(state, new_value) if component.respond_to?(:execute_on_change)
-            component.execute_on_blur(state, new_value) if component.respond_to?(:execute_on_blur)
+            # Find the component and execute callbacks
+            new_value = state[key]
+            component = self.class.find_component_by_key(streamlit_app.components, key)
+            if component
+              component.execute_on_change(state, new_value) if component.respond_to?(:execute_on_change)
+              component.execute_on_blur(state, new_value) if component.respond_to?(:execute_on_blur)
+            end
+
+            session[:streamlit_state] = session_safe_state(state)
+
+            streamlit_app.rebuild_with_state(state)
+            Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
           end
-
-          session[:streamlit_state] = session_safe_state(state)
-
-          streamlit_app.rebuild_with_state(state)
-          Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
         rescue => e
           render_error("/event/#{params[:key]}", e)
         end
@@ -430,16 +440,18 @@ module StreamWeaver
           state[form_name] = form_values
           session[:streamlit_state] = session_safe_state(state)
 
-          # Rebuild to find the form component
-          streamlit_app.rebuild_with_state(state)
+          streamlit_app.with_render_lock do
+            # Rebuild to find the form component
+            streamlit_app.rebuild_with_state(state)
 
-          # Find and execute submit block if defined
-          form_component = self.class.find_form_recursive(streamlit_app.components, form_name)
-          form_component&.execute_submit(state, form_values)
+            # Find and execute submit block if defined
+            form_component = self.class.find_form_recursive(streamlit_app.components, form_name)
+            form_component&.execute_submit(state, form_values)
 
-          # Re-render with updated state
-          streamlit_app.rebuild_with_state(state)
-          Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+            # Re-render with updated state
+            streamlit_app.rebuild_with_state(state)
+            Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+          end
         rescue => e
           render_error("/form/#{params[:form_name]}", e)
         end
@@ -560,8 +572,10 @@ module StreamWeaver
         streamlit_app = settings.streamlit_app
         adapter = settings.adapter
         is_agentic = settings.respond_to?(:result_container)
-        streamlit_app.rebuild_with_state(state)
-        Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+        streamlit_app.with_render_lock do
+          streamlit_app.rebuild_with_state(state)
+          Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+        end
       end
 
       # Save final notes on the summary slide (T9)
@@ -675,8 +689,10 @@ module StreamWeaver
             streamlit_app = settings.streamlit_app
             adapter = settings.adapter
             is_agentic = settings.respond_to?(:result_container)
-            streamlit_app.rebuild_with_state(state)
-            html = Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+            html = streamlit_app.with_render_lock do
+              streamlit_app.rebuild_with_state(state)
+              Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+            end
             settings.streamer.replace("#main", html)
           end
 
@@ -783,8 +799,10 @@ module StreamWeaver
             streamlit_app = settings.streamlit_app
             adapter = settings.adapter
             is_agentic = settings.respond_to?(:result_container)
-            streamlit_app.rebuild_with_state(state)
-            html = Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+            html = streamlit_app.with_render_lock do
+              streamlit_app.rebuild_with_state(state)
+              Views::AppContentView.new(streamlit_app, state, adapter, is_agentic).call
+            end
             settings.streamer.replace("#main", html)
           end
 

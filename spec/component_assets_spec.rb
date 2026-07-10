@@ -141,10 +141,10 @@ RSpec.describe "Component-scoped CSS/JS macros" do
 
   describe "HTML rendering — inline CSS injected into <head>" do
     # Build an app with the given components pre-set, bypassing rebuild_with_state
-    # (which would clear @components). The AppView only reads @app.components.
+    # (which would replace the render state). The AppView only reads app.components.
     def render_with_components(*components)
       a = StreamWeaver::App.new("Test") {}
-      a.instance_variable_set(:@components, components)
+      a.components = components
       adapter = StreamWeaver::Adapter::AlpineJS.new
       StreamWeaver::Views::AppView.new(a, {}, adapter).call
     end
