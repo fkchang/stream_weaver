@@ -16,13 +16,15 @@ module StreamWeaver
                     :current_form, :form_context, :current_checkbox_group,
                     :current_tabs, :current_breadcrumbs, :current_dropdown,
                     :current_menu, :current_modal, :modal_context, :current_deck,
-                    :current_slide, :current_app_shell, :current_row_key_thunk
+                    :current_slide, :current_app_shell, :current_row_key_thunk,
+                    :checkbox_keys
 
       def initialize
         self.components = []
         self.layout_slots = {}
         self.button_counter = 0
         self.seen_component_ids = Hash.new(0)
+        self.checkbox_keys = []
       end
     end
 
@@ -236,8 +238,20 @@ module StreamWeaver
       @_state = current_state
       @render_state = RenderState.new
       evaluate_dsl_block(@block)
+      @render_state.checkbox_keys = collect_checkbox_keys(components)
       @timers_frozen = true
     end
+
+    def collect_checkbox_keys(component_list)
+      component_list.each_with_object([]) do |component, keys|
+        keys << component.key if component.is_a?(Components::Checkbox)
+        keys.concat(collect_checkbox_keys(component.children)) if component.respond_to?(:children) && component.children
+        if component.is_a?(Components::Modal) && component.footer_component&.children
+          keys.concat(collect_checkbox_keys(component.footer_component.children))
+        end
+      end
+    end
+    private :collect_checkbox_keys
 
     # Capture DSL components for a named layout slot.
     # Components in a slot are rendered outside #app-container (static chrome).
