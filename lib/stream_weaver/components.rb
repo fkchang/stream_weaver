@@ -338,6 +338,7 @@ module StreamWeaver
         styles = []
         styles << "border-left-color: #{@accent};" if @accent && !@accent.is_a?(Symbol)
         styles << "position: relative;" if @label
+        styles << @options[:style] if @options[:style]
         attrs[:style] = styles.join(" ") unless styles.empty?
 
         view.div(**attrs) do

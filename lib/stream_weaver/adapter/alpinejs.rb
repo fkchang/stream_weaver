@@ -1387,8 +1387,12 @@ module StreamWeaver
       # @return [void] Renders to view
       def render_columns(view, widths, children, options, state)
         gap = options[:gap] || "var(--sw-spacing-lg)"
+        css_classes = ["sw-columns"]
+        css_classes << options[:class] if options[:class]
+        styles = ["display: flex;", "gap: #{gap};"]
+        styles << options[:style] if options[:style]
 
-        view.div(class: "sw-columns", style: "display: flex; gap: #{gap};") do
+        view.div(class: css_classes.join(" "), style: styles.join(" ")) do
           children.each_with_index do |column, index|
             # Apply width if specified, otherwise equal flex
             column.width = widths&.[](index)
@@ -1425,6 +1429,7 @@ module StreamWeaver
           # narrow fixed sidebar much wider than its stated width.
           "flex: 0 1 #{width}; min-width: 0;"
         end
+        style = [style, options[:style]].compact.join(" ")
 
         view.div(class: css_class, style: style) do
           children.each { |child| child.render(view, state) }
@@ -1490,6 +1495,7 @@ module StreamWeaver
 
         gap_value = spacing_to_css(component.gap)
         styles = ["gap: #{gap_value};"]
+        styles << component.options[:style] if component.options[:style]
 
         # Named template-areas mode
         if component.template_areas
@@ -7066,7 +7072,10 @@ module StreamWeaver
         css_classes << "sw-divider" if component.divider
         css_classes << component.options[:class] if component.options[:class]
 
-        view.div(class: css_classes.join(" "), style: "gap: #{spacing_to_css(component.spacing)};") do
+        styles = ["gap: #{spacing_to_css(component.spacing)};"]
+        styles << component.options[:style] if component.options[:style]
+
+        view.div(class: css_classes.join(" "), style: styles.join(" ")) do
           component.children.each { |child| child.render(view, state) }
         end
       end
