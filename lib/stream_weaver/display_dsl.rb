@@ -792,13 +792,24 @@ module StreamWeaver
 
     private
 
+    # Evaluates a user-supplied DSL block (FAC-P0.3). Arity-0 blocks keep the
+    # legacy instance_eval behavior (self inside the block is `receiver`).
+    # Arity>=1 blocks are called as a plain block.call(receiver) instead --
+    # instance_exec is deliberately not used, so the block keeps its own
+    # self/binding and can call methods on its enclosing object (e.g. a
+    # presenter) while still reaching the DSL via the yielded argument.
+    def evaluate_dsl_block(block, receiver = self)
+      return unless block
+      block.arity >= 1 ? block.call(receiver) : receiver.instance_eval(&block)
+    end
+
     def with_container(component, &block)
       @components << component
       return component unless block
 
       parent_components = @components
       @components = []
-      instance_eval(&block)
+      evaluate_dsl_block(block)
       component.children = @components
       @components = parent_components
       component

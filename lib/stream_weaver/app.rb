@@ -146,7 +146,7 @@ module StreamWeaver
         )
       end
       if @_state[sk::ACTION] == key && @_state[sk::RESOURCE].nil?
-        instance_eval(&block)
+        evaluate_dsl_block(block)
       end
     end
 
@@ -207,7 +207,7 @@ module StreamWeaver
       @layout_slots = {}
       @button_counter = 0
       @_seen_component_ids = Hash.new(0)
-      instance_eval(&@block)
+      evaluate_dsl_block(@block)
       @timers_frozen = true
     end
 
@@ -219,7 +219,7 @@ module StreamWeaver
       @layout_slots[name] ||= []
       parent_components = @components
       @components = @layout_slots[name]
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
       @components = parent_components
     end
 
@@ -305,7 +305,7 @@ module StreamWeaver
       @current_checkbox_group = group_component
       @components = []
 
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
 
       group_component.children = @components
       @components = parent_components
@@ -332,7 +332,7 @@ module StreamWeaver
       @form_context = { name: name }
       @components = []
 
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
 
       form_component.children = @components
       @components = parent_components
@@ -477,7 +477,7 @@ module StreamWeaver
       @current_tabs = tabs_component
       @components = []
 
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
 
       tabs_component.children = @components
       @components = parent_components
@@ -497,7 +497,7 @@ module StreamWeaver
       @current_breadcrumbs = breadcrumbs_component
       @components = []
 
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
 
       breadcrumbs_component.children = @components
       @components = parent_components
@@ -513,7 +513,7 @@ module StreamWeaver
       @components << dropdown_component
 
       @current_dropdown = dropdown_component
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
       @current_dropdown = nil
     end
 
@@ -524,7 +524,7 @@ module StreamWeaver
       parent_components = @components
       @components = []
 
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
 
       trigger_component.children = @components
       @components = parent_components
@@ -539,7 +539,7 @@ module StreamWeaver
       @current_menu = menu_component
       @components = []
 
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
 
       menu_component.children = @components
       @components = parent_components
@@ -576,7 +576,7 @@ module StreamWeaver
       @modal_context = { key: key }
       @components = []
 
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
 
       modal_component.children = @components
       @components = parent_components
@@ -591,7 +591,7 @@ module StreamWeaver
       parent_components = @components
       @components = []
 
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
 
       footer_component.children = @components
       @components = parent_components
@@ -667,7 +667,7 @@ module StreamWeaver
 
       parent_components = @components
       @components = []
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
       deck.children = @components
       @components = parent_components
 
@@ -696,7 +696,7 @@ module StreamWeaver
 
       parent_components = @components
       @components = []
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
       deck_slide.children = @components
       @components = parent_components
 
@@ -730,7 +730,7 @@ module StreamWeaver
 
       parent_components = @components
       @components = []
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
       opt.children = @components
       @components = parent_components
 
@@ -851,7 +851,7 @@ module StreamWeaver
       return component unless block
 
       @current_app_shell = component
-      instance_eval(&block)
+      evaluate_dsl_block(block)
       @current_app_shell = nil
 
       component
@@ -862,7 +862,7 @@ module StreamWeaver
 
       parent_components = @components
       @components = []
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
       @current_app_shell.main_children = @components
       @components = parent_components
     end
@@ -874,7 +874,7 @@ module StreamWeaver
 
       parent_components = @components
       @components = []
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
       sidebar_component.children = @components
       @components = parent_components
 
@@ -913,7 +913,7 @@ module StreamWeaver
     def capture_children_then_append(component, &block)
       parent_components = @components
       @components = []
-      instance_eval(&block) if block
+      evaluate_dsl_block(block)
       component.children = @components
       @components = parent_components
       @components << component
