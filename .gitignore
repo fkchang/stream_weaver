@@ -67,3 +67,6 @@ examples_playground/
 # Personal content — sanitize before committing (contains travel/location details)
 docs/sw-doc-parity-checkpoint.md
 docs/blog/ruby-docs-beat-react-artifacts.md
+
+# GSD orchestration scratch + analysis reports (cite personal paths/apps)
+/gsd/
