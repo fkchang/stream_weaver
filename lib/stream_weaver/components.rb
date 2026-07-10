@@ -668,18 +668,28 @@ module StreamWeaver
 
     # Column definition for table DSL
     class TableColumn
-      attr_reader :key, :header, :format, :align, :style
+      attr_reader :key, :header, :format, :align, :style, :sort_value
 
-      def initialize(key, header: nil, format: nil, align: nil, style: nil, &block)
+      def initialize(key, header: nil, format: nil, align: nil, style: nil, sort_value: nil, &block)
         @key = key
         @header = header || key.to_s.split("_").map(&:capitalize).join(" ")
         @format = format
         @align = align
         @style = style
+        @sort_value = sort_value
         @value_block = block
       end
 
-      def extract_value(item, index = nil)
+      # @param item [Object] The row's item
+      # @param index [Integer, nil] The row's index
+      # @param app [StreamWeaver::App, nil] When given, the block is executed via
+      #   app.instance_exec so it can call component-builder DSL methods
+      #   (button, badge, hstack, ...); anything it builds is captured and
+      #   returned as an Array<Components::Base> instead of a formatted scalar
+      #   (FAC-P2.1 decision 1). Without an app, behavior is unchanged.
+      def extract_value(item, index = nil, app: nil)
+        return extract_component_cell(item, index, app) if app && @value_block
+
         raw = if @value_block
                 @value_block.arity == 2 ? @value_block.call(item, index) : @value_block.call(item)
               elsif item.respond_to?(@key)
@@ -690,6 +700,18 @@ module StreamWeaver
                 nil
               end
         TableFormatters.apply(raw, @format)
+      end
+
+      private
+
+      def extract_component_cell(item, index, app)
+        parent_components = app.components
+        app.components = []
+        raw = @value_block.arity == 2 ? app.instance_exec(item, index, &@value_block) : app.instance_exec(item, &@value_block)
+        built = app.components
+        app.components = parent_components
+
+        built.any? ? built : TableFormatters.apply(raw, @format)
       end
     end
 
@@ -712,14 +734,32 @@ module StreamWeaver
     class Table < Base
       attr_reader :columns
 
+      # Lazily resolves and memoizes a row's key, so column blocks that never
+      # build a button never pay the cost (or the ArgumentError) of an
+      # unresolvable row_key (FAC-P2.1 decision 3).
+      class RowKeyThunk
+        def initialize(&resolver)
+          @resolver = resolver
+        end
+
+        def value
+          return @value if defined?(@value)
+          @value = @resolver.call
+        end
+      end
+
       def key
         @data
+      end
+
+      def children
+        @children || []
       end
 
       def initialize(data = nil, headers: nil, rows: nil, file: nil, path: nil,
                      striped: false, bordered: false, hoverable: true, compact: false,
                      sortable: false, sticky_header: false, markdown: false, caption: nil,
-                     alternating: false, scrollable: false, hover: false, **options, &block)
+                     alternating: false, scrollable: false, hover: false, row_key: nil, **options, &block)
         @data = data
         @headers = headers
         @rows = rows
@@ -736,6 +776,7 @@ module StreamWeaver
         @alternating = alternating
         @scrollable = scrollable
         @hover = hover
+        @row_key_proc = row_key
         @options = options
         @columns = []
         @transform_block = nil
@@ -752,13 +793,32 @@ module StreamWeaver
       end
 
       # Column DSL method
-      def column(key, header: nil, format: nil, align: nil, style: nil, &block)
-        @columns << TableColumn.new(key, header: header, format: format, align: align, style: style, &block)
+      def column(key, header: nil, format: nil, align: nil, style: nil, sort_value: nil, &block)
+        @columns << TableColumn.new(key, header: header, format: format, align: align, style: style, sort_value: sort_value, &block)
+      end
+
+      # Resolves headers/rows (and, for the column DSL, cell components/sort
+      # values/row ids) once. Called eagerly by the `table` DSL method with the
+      # owning app so component cells and their buttons exist before dispatch
+      # ever runs (FAC-P2.1 decision 4) -- and lazily, without an app, from
+      # #render for Table instances built directly (legacy/scalar-only path).
+      def resolve!(app, state)
+        return self if @resolved
+
+        resolved = resolve_data(state, app)
+        @resolved_headers = resolved[:headers]
+        @resolved_rows = resolved[:rows]
+        @sort_values = resolved[:sort_values] || []
+        @component_columns = resolved[:component_columns] || []
+        @row_ids = resolved[:row_ids] || []
+        @children = @resolved_rows.flat_map { |row| row.flat_map { |cell| cell.is_a?(Array) ? cell : [] } }
+        @resolved = true
+        self
       end
 
       def render(view, state)
-        resolved = resolve_data(state)
-        view.adapter.render_table(view, resolved[:headers], resolved[:rows], table_options, state)
+        resolve!(nil, state) unless @resolved
+        view.adapter.render_table(view, @resolved_headers, @resolved_rows, table_options, state)
       end
 
       def register_callbacks(registry)
@@ -782,9 +842,9 @@ module StreamWeaver
 
       private
 
-      def resolve_data(state)
+      def resolve_data(state, app = nil)
         raw = raw_data(state)
-        normalize(raw)
+        normalize(raw, app)
       end
 
       def raw_data(state)
@@ -820,12 +880,12 @@ module StreamWeaver
         end
       end
 
-      def normalize(data)
+      def normalize(data, app = nil)
         return data if data.is_a?(Hash) && data.key?(:headers) && data.key?(:rows)
 
         case data
         when Array
-          normalize_array(data)
+          normalize_array(data, app)
         when Hash
           normalize_hash_of_arrays(data)
         else
@@ -833,22 +893,18 @@ module StreamWeaver
         end
       end
 
-      def normalize_array(data)
+      def normalize_array(data, app)
         return { headers: [], rows: [] } if data.empty?
 
         first = data.first
-        if first.is_a?(Hash)
-          # Array of hashes - use column DSL if defined, otherwise infer from keys
-          if @columns.any?
-            headers = @columns.map(&:header)
-            rows = data.each_with_index.map do |item, idx|
-              @columns.map { |col| col.extract_value(item, idx) }
-            end
-          else
-            keys = first.keys
-            headers = keys.map { |k| k.to_s.split("_").map(&:capitalize).join(" ") }
-            rows = data.map { |item| keys.map { |k| (item[k] || item[k.to_s]).to_s } }
-          end
+        if @columns.any?
+          # Column DSL - works for Hash rows and for any object the columns'
+          # keys/blocks know how to read (structs, records, ...).
+          build_column_rows(data, app)
+        elsif first.is_a?(Hash)
+          keys = first.keys
+          headers = keys.map { |k| k.to_s.split("_").map(&:capitalize).join(" ") }
+          rows = data.map { |item| keys.map { |k| (item[k] || item[k.to_s]).to_s } }
           { headers: headers, rows: rows }
         elsif first.is_a?(Array)
           # Array of arrays - original format, no headers unless provided
@@ -857,6 +913,56 @@ module StreamWeaver
           # Simple array - single column
           { headers: @headers || ["Value"], rows: data.map { |v| [v.to_s] } }
         end
+      end
+
+      def build_column_rows(data, app)
+        headers = @columns.map(&:header)
+        rows = []
+        sort_values = []
+        row_ids = []
+
+        data.each_with_index do |item, idx|
+          row_key_thunk = RowKeyThunk.new { resolve_row_key(item) }
+          had_render_state = app.respond_to?(:render_state)
+          saved_thunk = app.render_state.current_row_key_thunk if had_render_state
+          app.render_state.current_row_key_thunk = row_key_thunk if had_render_state
+
+          rows << @columns.map { |col| col.extract_value(item, idx, app: app) }
+          sort_values << @columns.map { |col| col.sort_value ? col.sort_value.call(item) : nil }
+          row_ids << row_dom_key(item)
+
+          app.render_state.current_row_key_thunk = saved_thunk if had_render_state
+        end
+
+        component_columns = @columns.each_index.map { |ci| rows.any? { |row| row[ci].is_a?(Array) } }
+
+        { headers: headers, rows: rows, sort_values: sort_values, component_columns: component_columns, row_ids: row_ids }
+      end
+
+      # @raise [ArgumentError] when no row_key: proc was given and the item has
+      #   neither #id nor a :id/"id" Hash key (FAC-P2.1 decision 3). Only
+      #   invoked when something actually needs the key (a button built inside
+      #   a cell, or DOM row-id assignment) -- rows whose cells stay scalar
+      #   never pay for this.
+      def resolve_row_key(item)
+        return @row_key_proc.call(item) if @row_key_proc
+        return item.id if item.respond_to?(:id)
+        if item.is_a?(Hash)
+          return item[:id] if item.key?(:id)
+          return item["id"] if item.key?("id")
+        end
+
+        raise ArgumentError,
+              "table: cannot derive a row_key for #{item.inspect} -- pass row_key: ->(item) { ... } " \
+              "to `table`, or give each item an #id method or :id/\"id\" key."
+      end
+
+      # DOM row ids are best-effort: an unresolvable row_key just means no
+      # <tr id> is assigned, never a raise (FAC-P2.1 decision 7).
+      def row_dom_key(item)
+        resolve_row_key(item)
+      rescue ArgumentError
+        nil
       end
 
       def normalize_hash_of_arrays(data)
@@ -884,7 +990,10 @@ module StreamWeaver
           columns: @columns,
           alternating: @alternating,
           scrollable: @scrollable,
-          hover: @hover
+          hover: @hover,
+          sort_values: @sort_values || [],
+          component_columns: @component_columns || [],
+          row_ids: @row_ids || []
         )
       end
     end

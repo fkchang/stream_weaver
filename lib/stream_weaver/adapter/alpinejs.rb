@@ -1135,7 +1135,12 @@ module StreamWeaver
         table_classes << "sw-table--sticky-header" if options[:sticky_header]
 
         columns = options[:columns] || []
-        table_id = "table_#{SecureRandom.hex(4)}" if options[:sortable]
+        component_columns = options[:component_columns] || []
+        sort_values = options[:sort_values] || []
+        row_ids = options[:row_ids] || []
+        # A stable per-row DOM id needs a table id to hang off of, not just a
+        # sortable one (FAC-P2.1 decision 6) -- future row-level targeting.
+        table_id = "table_#{SecureRandom.hex(4)}" if options[:sortable] || options[:key].is_a?(Symbol)
 
         # Wrapper for sticky header or scrollable
         wrapper_classes = []
@@ -1169,18 +1174,23 @@ module StreamWeaver
                   headers.each_with_index do |header, col_idx|
                     col = columns[col_idx]
                     align = col&.align || :left
+                    # A component column with no declared sort_value: has
+                    # nothing meaningful to sort by (textContent isn't the
+                    # data), so it's excluded from click-to-sort entirely
+                    # (FAC-P2.1 decision 5) while other columns stay sortable.
+                    col_sortable = options[:sortable] && !(component_columns[col_idx] && col&.sort_value.nil?)
                     th_padding = options[:compact] ? "0.5rem 1rem" : "var(--sw-table-header-padding, 0.75rem 1rem)"
                     th_style = "padding: #{th_padding}; text-align: #{align}; border-bottom: 2px solid var(--sw-color-border, #e0e0e0); font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--sw-color-text-dim, var(--sw-color-text-muted, #6B6860));"
-                    th_style += " cursor: pointer; user-select: none;" if options[:sortable]
+                    th_style += " cursor: pointer; user-select: none;" if col_sortable
 
                     th_attrs = { style: th_style }
-                    if options[:sortable]
+                    if col_sortable
                       th_attrs["@click"] = "sortCol = #{col_idx}; sortAsc = sortCol === #{col_idx} ? !sortAsc : true; $dispatch('sort-table', { col: #{col_idx}, asc: sortAsc })"
                     end
 
                     view.th(**th_attrs) do
                       view.span { header.to_s }
-                      if options[:sortable]
+                      if col_sortable
                         view.span(
                           "x-show" => "sortCol === #{col_idx}",
                           "x-text" => "sortAsc ? ' ▲' : ' ▼'",
@@ -1199,8 +1209,10 @@ module StreamWeaver
               tbody_attrs["@sort-table.window"] = <<~JS.gsub("\n", " ").strip
                 const rows = Array.from($refs.tbody.querySelectorAll('tr'));
                 rows.sort((a, b) => {
-                  const aVal = a.children[$event.detail.col]?.textContent || '';
-                  const bVal = b.children[$event.detail.col]?.textContent || '';
+                  const aCell = a.children[$event.detail.col];
+                  const bCell = b.children[$event.detail.col];
+                  const aVal = aCell?.dataset.sortValue ?? aCell?.textContent ?? '';
+                  const bVal = bCell?.dataset.sortValue ?? bCell?.textContent ?? '';
                   const aNum = parseFloat(aVal.replace(/[^0-9.-]/g, ''));
                   const bNum = parseFloat(bVal.replace(/[^0-9.-]/g, ''));
                   const cmp = !isNaN(aNum) && !isNaN(bNum) ? aNum - bNum : aVal.localeCompare(bVal);
@@ -1218,7 +1230,12 @@ module StreamWeaver
                 row_classes << "sw-table__row--alt" if options[:alternating] && idx.odd?
                 row_classes << "sw-table__row--hover" if options[:hover]
 
-                view.tr(class: row_classes.any? ? row_classes.join(" ") : nil) do
+                tr_attrs = {}
+                tr_attrs[:class] = row_classes.join(" ") if row_classes.any?
+                row_id = row_ids[idx]
+                tr_attrs[:id] = "#{table_id}-row-#{row_id}" if table_id && row_id
+
+                view.tr(**tr_attrs) do
                   row.each_with_index do |cell, col_idx|
                     col = columns[col_idx]
                     align = col&.align || :left
@@ -1237,12 +1254,17 @@ module StreamWeaver
                       # For now, skip dynamic styles in adapter
                     end
 
-                    cell_content = cell.to_s
-                    if options[:markdown]
-                      cell_content = parse_cell_markdown(cell_content)
-                      view.td(style: cell_style) { view.raw(view.safe(cell_content)) }
+                    td_attrs = { style: cell_style }
+                    sort_value = sort_values.dig(idx, col_idx)
+                    td_attrs["data-sort-value"] = sort_value.to_s unless sort_value.nil?
+
+                    if cell.is_a?(Array)
+                      view.td(**td_attrs) { cell.each { |component| component.render(view, state) } }
+                    elsif options[:markdown]
+                      cell_content = parse_cell_markdown(cell.to_s)
+                      view.td(**td_attrs) { view.raw(view.safe(cell_content)) }
                     else
-                      view.td(style: cell_style) { cell_content }
+                      view.td(**td_attrs) { cell.to_s }
                     end
                   end
                 end
