@@ -942,10 +942,68 @@ module StreamWeaver
       state = app_state(app_id)
       adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
 
+      # Seed state from URL routing (e.g., `page :home, '/'` registers a parser for
+      # '/') -- mirrors the standalone `GET /` seeding so a routed app's default view
+      # doesn't depend on how it's hosted (stream_weaver-oow).
+      if streamlit_app.routable? && (route_state = streamlit_app.state_for_path('/'))
+        route_state.each { |k, v| state[k] = v }
+      end
+
       streamlit_app.rebuild_with_state(state)
       set_app_state(app_id, state)
 
       Views::AppView.new(streamlit_app, state, adapter, false).call
+    end
+
+    # URL routing: seed state from the path suffix under /apps/:app_id/* -- the
+    # service-mode counterpart to the standalone catch-all GET '/*' (server.rb). The
+    # mount prefix is already stripped by Sinatra's splat capture, so `path` below is
+    # the same suffix state_for_path expects from a standalone app (stream_weaver-oow).
+    get '/apps/:app_id/*' do
+      app_id = self.class.resolve_app_id(params[:app_id])
+      app_entry = app_id && self.class.apps[app_id]
+      pass unless app_entry
+
+      streamlit_app = app_entry[:app]
+      pass unless streamlit_app.routable?
+
+      path = "/#{params['splat'].first}"
+      route_state = streamlit_app.state_for_path(path)
+      pass unless route_state
+
+      app_entry[:last_accessed] = Time.now
+
+      state = app_state(app_id)
+      route_state.each { |k, v| state[k] = v }
+      sync_params_to_state(state)
+      set_app_state(app_id, state)
+
+      streamlit_app.rebuild_with_state(state)
+      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
+      is_htmx = request.env.key?('HTTP_HX_REQUEST')
+      if is_htmx
+        Views::AppContentView.new(streamlit_app, state, adapter, false).call
+      else
+        Views::AppView.new(streamlit_app, state, adapter, false).call
+      end
+    end
+
+    # URL routing: push URL on POST responses when route state changes -- the
+    # service-mode counterpart to the standalone `after` hook (server.rb), with the
+    # app's /apps/:app_id mount prefix re-applied so the pushed URL stays inside the
+    # mounted app (stream_weaver-oow).
+    after '/apps/:app_id/*' do
+      next unless request.post?
+
+      app_id = self.class.resolve_app_id(params[:app_id])
+      app_entry = app_id && self.class.apps[app_id]
+      next unless app_entry
+
+      streamlit_app = app_entry[:app]
+      next unless streamlit_app.routable?
+
+      new_path = streamlit_app.path_for_state(app_state(app_id))
+      headers['HX-Push-Url'] = "/apps/#{app_id}#{new_path}" if new_path
     end
 
     # Update state from form inputs

@@ -494,10 +494,13 @@ module Sections
       webhook, a JSON API, a file download), that's `endpoint` - next lesson.
 
       **Heads up:** Run below launches into the multi-app *service*, where
-      every app lives under `/apps/:slug` - so this snippet's `/` and
-      `/settings` hrefs point above that scope and will 404 if you click
-      them there. State routing is built for **standalone** apps; save this
-      code to a file and `ruby` it directly to see the real URLs work.
+      every app lives under `/apps/:slug`. State routing itself works the
+      same way there as standalone - visiting `/apps/:slug/settings`
+      correctly seeds `state[:page] = :settings`. What doesn't carry over is
+      this snippet's hardcoded `/settings` href, which points above the
+      service's `/apps/:slug` scope and will 404 if you click it there. Save
+      this code to a file and `ruby` it directly to see the hrefs resolve at
+      the real root.
     MD
     code: <<~RUBY
       route_by :page, home: "/", settings: "/settings"
@@ -546,12 +549,13 @@ module Sections
       Declare `page`/`route` calls **before** `resource` blocks - routing is
       first-registered-wins, so the root path needs its own landing page.
 
-      **Heads up:** like the Navigation lesson, this is state routing -
-      built for **standalone** apps. Run below launches into the multi-app
-      service (same as every other lesson's playground), so the "View
-      Posts" link's `/posts` href points above the service's `/apps/:slug`
-      scope and will 404 if you click it there. Save this code to a file
-      and `ruby` it directly to click through the real thing.
+      **Heads up:** like the Navigation lesson, Run below launches into the
+      multi-app service, where every app lives under `/apps/:slug`. Deep
+      links like `/apps/:slug/posts` correctly seed the index action there -
+      what doesn't carry over is this snippet's hardcoded "View Posts" href,
+      which points above the service's `/apps/:slug` scope and will 404 if
+      you click it there. Save this code to a file and `ruby` it directly to
+      click through the real thing.
     MD
     code: <<~RUBY
       module PostStore
@@ -565,8 +569,6 @@ module Sections
         def self.update(id, attrs); post = find(id) or return false; post.merge!(attrs); true; end
         def self.destroy(id);       @posts.reject! { |p| p[:id] == id }; true; end
       end
-
-      state[:_sw_action] ||= :home  # first render inside this playground has no URL to route from
 
       page :home, '/' do
         header1 "Blog"
