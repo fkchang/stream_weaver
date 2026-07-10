@@ -15,7 +15,7 @@ RECENT_ORDERS = [
   { order: "#10486", customer: "Eve Turner",    total: 88.25,  status: "Shipped" }
 ].freeze
 
-app = StreamWeaver::App.new("Theme Demo", theme: THEME) do
+app = StreamWeaver::App.new("Theme Demo", theme: THEME, layout: :fluid) do
   # NOTE: section switching uses route_by + nav_item (plain <a href> links + GET routing)
   # rather than button-with-block, because StreamWeaver's button-action dispatcher
   # (find_button_recursive in server.rb) only walks component.children -- it does not

@@ -189,8 +189,8 @@ RSpec.describe "SidebarToc Component (T11)" do
     end
 
     it "turns the doc container into a grid when sidebar_toc is present" do
-      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*\{[^}]*display:\s*grid/m)
-      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*\{[^}]*grid-template-columns:\s*var\(--sw-toc-width\) minmax\(0,\s*1fr\)/m)
+      expect(css).to match(/#app-container:has\(>\s*\.sw-sidebar-toc\)\s*\{[^}]*display:\s*grid/m)
+      expect(css).to match(/#app-container:has\(>\s*\.sw-sidebar-toc\)\s*\{[^}]*grid-template-columns:\s*var\(--sw-toc-width\) minmax\(0,\s*1fr\)/m)
     end
 
     it "pins the sidebar to column 1, sticky and self-aligned to start" do
@@ -201,18 +201,18 @@ RSpec.describe "SidebarToc Component (T11)" do
 
     it "bleeds the doc_header full-width via negative margin" do
       # not grid-column — that would block the sidebar's row-span
-      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*>\s*\.sw-doc-header\s*\{[^}]*margin-left:\s*calc\(-1 \* \(var\(--sw-toc-width\) \+ var\(--sw-toc-gap\)\)\)/m)
-      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*>\s*\.sw-doc-header\s*\{[^}]*padding-left:\s*calc\(var\(--sw-toc-width\) \+ var\(--sw-toc-gap\)\)/m)
+      expect(css).to match(/#app-container:has\(>\s*\.sw-sidebar-toc\)\s*>\s*\.sw-doc-header\s*\{[^}]*margin-left:\s*calc\(-1 \* \(var\(--sw-toc-width\) \+ var\(--sw-toc-gap\)\)\)/m)
+      expect(css).to match(/#app-container:has\(>\s*\.sw-sidebar-toc\)\s*>\s*\.sw-doc-header\s*\{[^}]*padding-left:\s*calc\(var\(--sw-toc-width\) \+ var\(--sw-toc-gap\)\)/m)
     end
 
     it "defines --sw-toc-width and --sw-toc-gap as the single source of truth for sidebar sizing" do
-      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*\{[^}]*--sw-toc-width:\s*220px/m)
-      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*\{[^}]*--sw-toc-gap:\s*2rem/m)
+      expect(css).to match(/#app-container:has\(>\s*\.sw-sidebar-toc\)\s*\{[^}]*--sw-toc-width:\s*220px/m)
+      expect(css).to match(/#app-container:has\(>\s*\.sw-sidebar-toc\)\s*\{[^}]*--sw-toc-gap:\s*2rem/m)
     end
 
     it "restores overflow to visible on the grid container" do
       # position:sticky won't position relative to the page otherwise
-      expect(css).to match(/#app-container:has\(\.sw-sidebar-toc\)\s*\{[^}]*overflow:\s*visible/m)
+      expect(css).to match(/#app-container:has\(>\s*\.sw-sidebar-toc\)\s*\{[^}]*overflow:\s*visible/m)
     end
 
     it "preserves the horizontal-bar responsive layout below 1000px" do

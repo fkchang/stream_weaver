@@ -1417,7 +1417,13 @@ module StreamWeaver
           # proportional share). Translate the fraction to flex-grow instead.
           "flex: #{fr_match[1]} 1 0%; min-width: 0;"
         else
-          "flex: 1 1 #{width}; min-width: 0;"  # Grow/shrink proportionally from width basis
+          # A plain length (px/rem/%) means "pin this column at exactly this
+          # width" (e.g. widths: ["260px", "1fr"] for a fixed sidebar + fluid
+          # content pane) -- flex-grow must be 0 or this column competes
+          # equally with any sibling "1fr"/no-width column for leftover
+          # space instead of staying fixed, which visibly skews a supposedly
+          # narrow fixed sidebar much wider than its stated width.
+          "flex: 0 1 #{width}; min-width: 0;"
         end
 
         view.div(class: css_class, style: style) do
@@ -4004,12 +4010,23 @@ module StreamWeaver
              - Remove the card chrome from #app-container
              - Remove top padding (hidden h1 leaves a gap) */
           @media (min-width: 1000px) {
-            body:has(.sw-sidebar-toc) {
+            /* All the :has() checks below are scoped to a DIRECT child
+               sidebar_toc/doc_header (the flat prd_dsl.rb-style page
+               pattern: sidebar_toc and doc content as siblings directly
+               inside #app-container). Without the ">" combinator, :has()
+               matches sidebar_toc/doc_header at ANY depth -- so a page
+               that nests sidebar_toc deep inside an app_shell (its own
+               main/columns/column layout) would still hijack #app-container
+               into this grid. Since app_shell is then #app-container's
+               ONLY child, CSS Grid auto-placement drops it into just the
+               first (toc-width) column and leaves the second column empty
+               -- collapsing the entire app_shell to ~220px wide. */
+            body:has(> #app-container > .sw-sidebar-toc) {
               max-width: 1200px;
             }
 
-            body:has(.sw-doc-header) > h1 + #app-container,
-            #app-container:has(.sw-sidebar-toc) {
+            body:has(> #app-container > .sw-doc-header) > h1 + #app-container,
+            #app-container:has(> .sw-sidebar-toc) {
               padding-top: 0;
               box-shadow: none;
               border: none;
@@ -4027,7 +4044,7 @@ module StreamWeaver
                (this was the actual root cause of the sticky-sidebar bug,
                independent of the float hack). Restore both axes to
                visible here so sticky positions relative to the page. */
-            #app-container:has(.sw-sidebar-toc) {
+            #app-container:has(> .sw-sidebar-toc) {
               --sw-toc-width: 220px;
               --sw-toc-gap: 2rem;
               display: grid;
@@ -4039,7 +4056,7 @@ module StreamWeaver
             /* doc_header stays a normal column-2 grid item (never claims
                column 1) so it can't block the sidebar's row-span below —
                it bleeds visually full-width via negative margin instead. */
-            #app-container:has(.sw-sidebar-toc) > .sw-doc-header {
+            #app-container:has(> .sw-sidebar-toc) > .sw-doc-header {
               margin-left: calc(-1 * (var(--sw-toc-width) + var(--sw-toc-gap)));
               padding-left: calc(var(--sw-toc-width) + var(--sw-toc-gap));
             }

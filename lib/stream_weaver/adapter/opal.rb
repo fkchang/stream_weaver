@@ -166,7 +166,8 @@ module StreamWeaver
         elsif fr_match
           "flex:#{fr_match[1]} 1 0%;min-width:0;"
         else
-          "flex:1 1 #{width};min-width:0;"
+          # Fixed length -- pin the width, don't grow. See alpinejs.rb#render_column.
+          "flex:0 1 #{width};min-width:0;"
         end
         view.div(class: "sw-column", style: style) do
           children.each { |child| child.render(view, state) }
