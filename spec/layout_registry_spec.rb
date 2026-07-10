@@ -103,6 +103,26 @@ RSpec.describe StreamWeaver::LayoutRegistry do
     end
   end
 
+  describe "HTML rendering — chrome opt-out" do
+    it "renders content bare in #app-container without the title or layout chrome class" do
+      a = StreamWeaver::App.new("No Chrome", chrome: false) { text "bare content" }
+      html = render_app(a)
+
+      expect(html).not_to include("<h1>No Chrome</h1>")
+      expect(html).to include('<body class="sw-theme-default">')
+      expect(html).to match(/<div id="app-container"[^>]*><p>bare content<\/p><\/div>/)
+    end
+
+    it "leaves default app chrome unchanged" do
+      a = StreamWeaver::App.new("Default Chrome") { text "content" }
+      html = render_app(a)
+
+      expect(html).to include("<h1>Default Chrome</h1>")
+      expect(html).to include('<body class="sw-layout-default sw-theme-default">')
+      expect(html).to include('id="app-container"')
+    end
+  end
+
   describe "HTML rendering — exclusive layout" do
     before do
       StreamWeaver::LayoutRegistry.register(

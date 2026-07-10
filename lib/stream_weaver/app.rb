@@ -14,7 +14,7 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :components, :block, :layout, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :layout_slots, :endpoints
+    attr_reader :title, :components, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :layout_slots, :endpoints
 
     # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
     ENDPOINT_VERBS = %i[get post put patch delete].freeze
@@ -26,9 +26,10 @@ module StreamWeaver
     RESERVED_ENDPOINT_EXACT = %w[/update /submit].freeze
     RESERVED_ENDPOINT_PREFIXES = %w[/action/ /event/ /form/ /theme/ /sw/].freeze
 
-    def initialize(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], &block)
+    def initialize(title, layout: :default, chrome: true, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], &block)
       @title = title
       @layout = layout
+      @chrome = chrome
       @theme = validate_theme(theme)
       @theme_overrides = theme_overrides
       @block = block
@@ -66,6 +67,10 @@ module StreamWeaver
     end
 
     public
+
+    def layout_entry
+      chrome ? LayoutRegistry[layout] : LayoutRegistry.chromeless
+    end
 
     def state
       @_state

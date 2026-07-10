@@ -97,7 +97,7 @@ module StreamWeaver
             # Theme overrides as inline CSS
             render_theme_overrides if @app.theme_overrides.any?
 
-            layout_entry = StreamWeaver::LayoutRegistry[@app.layout]
+            layout_entry = @app.layout_entry
             if layout_entry&.dig(:exclusive) && layout_entry[:render_block]
               instance_exec(&layout_entry[:render_block])
             else
@@ -644,8 +644,8 @@ module StreamWeaver
                   font-size: var(--sw-font-size-base);
                   line-height: var(--sw-line-height);
                   color: var(--sw-color-text);
-                  margin: 0 auto;
-                  padding: var(--sw-spacing-xl);
+                  margin: 0;
+                  padding: 0;
                   background: var(--sw-color-bg);
                   -webkit-font-smoothing: antialiased;
                   -moz-osx-font-smoothing: grayscale;
@@ -653,6 +653,7 @@ module StreamWeaver
                 }
 
                 /* Layout modes */
+                body[class*="sw-layout-"] { margin: 0 auto; padding: var(--sw-spacing-xl); }
                 body.sw-layout-default { max-width: 900px; }
                 body.sw-layout-wide { max-width: 1100px; }
                 body.sw-layout-full { max-width: 1400px; }
@@ -667,7 +668,7 @@ module StreamWeaver
                   margin: 0 0 var(--sw-spacing-lg) 0;
                 }
 
-                #app-container {
+                body[class*="sw-layout-"] > #app-container {
                   background: var(--sw-color-bg-card);
                   padding: var(--sw-spacing-xl);
                   border-radius: var(--sw-radius-lg);
@@ -3272,7 +3273,7 @@ module StreamWeaver
                   color: var(--sw-color-text);
                 }
 
-                body.sw-theme-dark #app-container {
+                body.sw-theme-dark[class*="sw-layout-"] > #app-container {
                   background: var(--sw-color-bg-card);
                   border-color: var(--sw-color-border);
                 }
@@ -3396,7 +3397,7 @@ module StreamWeaver
         effective_theme = @session_theme || @app.theme
         theme_class = "sw-theme-#{effective_theme}"
 
-        layout_entry = StreamWeaver::LayoutRegistry[@app.layout]
+        layout_entry = @app.layout_entry
         if layout_entry&.dig(:exclusive)
           extra = layout_entry[:body_classes].join(" ")
           [extra, theme_class].reject(&:empty?).join(" ")
@@ -3445,7 +3446,7 @@ module StreamWeaver
         all_components = @app.components + (@app.layout_slots || {}).values.flatten
 
         # Layout-level CSS file
-        layout_entry = StreamWeaver::LayoutRegistry[@app.layout]
+        layout_entry = @app.layout_entry
         if layout_entry&.dig(:css_path)
           path = layout_entry[:css_path]
           key  = ComponentAssets.file_key(path)

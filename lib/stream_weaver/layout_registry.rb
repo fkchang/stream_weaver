@@ -23,6 +23,13 @@ module StreamWeaver
   #     text "Main content"
   #   end
   module LayoutRegistry
+    CHROMELESS_ENTRY = {
+      exclusive: true,
+      body_classes: [].freeze,
+      css_path: nil,
+      render_block: proc { main_content_region }
+    }.freeze
+
     @registry = {}
 
     class << self
@@ -54,6 +61,10 @@ module StreamWeaver
 
       def all
         @registry.dup
+      end
+
+      def chromeless
+        CHROMELESS_ENTRY
       end
 
       def reset!
