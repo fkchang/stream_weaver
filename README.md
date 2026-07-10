@@ -276,6 +276,31 @@ button "Secondary", style: :secondary do |state|
 end
 ```
 
+### Scoped Fragments
+
+Fragments keep the normal single full DSL rerun while limiting the HTML swapped into
+the page. Interactive controls target their enclosing fragment automatically.
+
+```ruby
+action :refresh, updates: :sidebar_count do |state, account_id|
+  state[:account_id] = account_id
+end
+
+fragment :results do
+  text "Account: #{state[:account_id]}"
+  button "Refresh", action: :refresh, key: 42
+end
+
+fragment :sidebar_count do
+  text "Selected: #{state[:account_id] ? 1 : 0}"
+end
+```
+
+Use `updates:` on an action or button to refresh additional named fragments with
+out-of-band swaps. Server-rendered content in other fragments is intentionally left
+unchanged; omit fragments when an interaction must refresh the whole app. If a target
+disappears or routing changes, StreamWeaver automatically falls back to a full swap.
+
 ### Layout
 
 ```ruby

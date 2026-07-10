@@ -102,6 +102,23 @@ module StreamWeaver
       end
     end
 
+    class Fragment < Base
+      attr_accessor :children
+      attr_reader :name, :id
+
+      def initialize(name, id)
+        @name = name.to_sym
+        @id = id
+        @children = []
+      end
+
+      def render(view, state)
+        view.div(id: id) do
+          view.with_fragment(id) { children.each { |child| child.render(view, state) } }
+        end
+      end
+    end
+
     # TextField component for single-line text input
     class TextField < Base
       include Callbacks

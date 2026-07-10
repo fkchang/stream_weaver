@@ -144,7 +144,8 @@ module StreamWeaver
           streamlit_app.with_render_lock do
             inject_deck_state!(state)
             generation = session[:sw_action_generation] ||= SecureRandom.hex(12)
-            streamlit_app.rebuild_with_state(state, generation: generation)
+            streamlit_app.rebuild_with_state(state, generation: generation,
+              state_version: (session[:sw_state_version] || 0))
             session[:sw_action_manifest] = streamlit_app.render_state.action_tokens.to_a
 
             # Scrub transient keys that leaked into the session
@@ -263,7 +264,10 @@ module StreamWeaver
             interaction: :update, adapter: settings.adapter,
             agentic: settings.respond_to?(:result_container),
             prepare_state: method(:inject_deck_state!),
-            persist: ->(value) { session[:streamlit_state] = session_safe_state(value) }
+            persist: ->(value) { session[:streamlit_state] = session_safe_state(value) },
+            response_headers: ->(values) { headers values },
+            state_version: (session[:sw_state_version] || 0),
+            persist_state_version: ->(version) { session[:sw_state_version] = version }
           ).call
         rescue => e
           render_error("/update", e)
@@ -284,7 +288,10 @@ module StreamWeaver
             generation: (session[:sw_action_generation] ||= SecureRandom.hex(12)),
             persist_manifest: ->(tokens) { session[:sw_action_manifest] = tokens.to_a },
             result_container: (settings.result_container if settings.respond_to?(:result_container)),
-            auto_close: settings.respond_to?(:auto_close_window) && settings.auto_close_window
+            auto_close: settings.respond_to?(:auto_close_window) && settings.auto_close_window,
+            response_headers: ->(values) { headers values },
+            state_version: (session[:sw_state_version] || 0),
+            persist_state_version: ->(version) { session[:sw_state_version] = version }
           ).call
         rescue StaleActionDefinition
           status 409
@@ -357,7 +364,10 @@ module StreamWeaver
             app: settings.streamlit_app, state: state, params: params,
             interaction: :event, target: params[:key], adapter: settings.adapter,
             agentic: settings.respond_to?(:result_container),
-            persist: ->(value) { session[:streamlit_state] = session_safe_state(value) }
+            persist: ->(value) { session[:streamlit_state] = session_safe_state(value) },
+            response_headers: ->(values) { headers values },
+            state_version: (session[:sw_state_version] || 0),
+            persist_state_version: ->(version) { session[:sw_state_version] = version }
           ).call
         rescue => e
           render_error("/event/#{params[:key]}", e)
@@ -373,7 +383,10 @@ module StreamWeaver
             app: settings.streamlit_app, state: state, params: params,
             interaction: :form, target: params[:form_name], adapter: settings.adapter,
             agentic: settings.respond_to?(:result_container),
-            persist: ->(value) { session[:streamlit_state] = session_safe_state(value) }
+            persist: ->(value) { session[:streamlit_state] = session_safe_state(value) },
+            response_headers: ->(values) { headers values },
+            state_version: (session[:sw_state_version] || 0),
+            persist_state_version: ->(version) { session[:sw_state_version] = version }
           ).call
         rescue => e
           render_error("/form/#{params[:form_name]}", e)

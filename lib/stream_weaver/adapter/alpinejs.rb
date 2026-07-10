@@ -464,11 +464,12 @@ module StreamWeaver
         elsif modal_context
           # hx-on::before-request closes the modal before HTMX fires — ordering matters here
           htmx_attrs(url("/action/#{action_target}"), view: view, loading: loading, indicator: "##{button_id}",
+            sw_updates: options[:updates],
             "hx-disabled-elt" => "this",
             "hx-on::before-request" => "open = false").merge(id: button_id).merge(style)
         else
           htmx_attrs(url("/action/#{action_target}"), view: view, loading: loading, indicator: "##{button_id}",
-            "hx-disabled-elt" => "this").merge(id: button_id).merge(style)
+            sw_updates: options[:updates], "hx-disabled-elt" => "this").merge(id: button_id).merge(style)
         end
       end
 
@@ -867,14 +868,44 @@ module StreamWeaver
                     var fresh = JSON.parse(stateEl.textContent);
                     var transientKeys = new Set(fresh._transient || []);
                     var data = Alpine.$data(container);
+                    if (typeof fresh._sw_version === 'number') {
+                      window.StreamWeaverStateVersion = fresh._sw_version;
+                    }
                     if (data) {
                       Object.keys(fresh).forEach(function(k) {
-                        if (k === '_transient') return;
+                        if (k === '_transient' || k === '_sw_version') return;
                         if (transientKeys.has(k)) return;
                         if (data[k] !== fresh[k]) data[k] = fresh[k];
                       });
                     }
                   } catch(e) {}
+                }
+
+                // Scoped swaps carry a versioned top-level patch instead of a
+                // full state snapshot. Deletions are authoritative; nested
+                // changed values arrive whole in `set`.
+                var patchEl = document.getElementById('sw-state-patch');
+                if (patchEl && container) {
+                  try {
+                    var patch = JSON.parse(patchEl.textContent);
+                    var currentVersion = window.StreamWeaverStateVersion;
+                    if (typeof currentVersion !== 'number') {
+                      currentVersion = Number(container.dataset.swStateVersion || 0);
+                    }
+                    if (typeof patch.version !== 'number' || patch.version !== currentVersion + 1) {
+                      window.location.reload();
+                      return;
+                    }
+                    var data = Alpine.$data(container);
+                    if (data) {
+                      Object.keys(patch.set || {}).forEach(function(k) { data[k] = patch.set[k]; });
+                      (patch.delete || []).forEach(function(k) { delete data[k]; });
+                    }
+                    window.StreamWeaverStateVersion = patch.version;
+                    patchEl.remove();
+                  } catch(e) {
+                    window.location.reload();
+                  }
                 }
               });
             })();
@@ -968,14 +999,30 @@ module StreamWeaver
       # @param overrides [Hash] Any attribute overrides
       # @return [Hash] HTMX attribute hash
       def htmx_attrs(post_url, view: nil, loading: true, indicator: nil, **overrides)
+        fragment_updates = Array(overrides.delete(:sw_updates)).compact.map(&:to_s)
+        fragment_id = view.current_fragment_id if view&.respond_to?(:current_fragment_id)
+        target = fragment_id ? "##{fragment_id}" : HTMX_TARGET
+        named_action_scope = begin
+          candidate = post_url.to_s[%r{/action/([^?]+)}, 1]
+          candidate && ActionToken.decode(candidate)[:f]
+        rescue ActionToken::Invalid
+          nil
+        end
+        if fragment_id && !named_action_scope && !post_url.to_s.include?("_sw_fragment=")
+          separator = post_url.to_s.include?("?") ? "&" : "?"
+          fragment_payload = { f: fragment_id }
+          fragment_payload[:u] = fragment_updates unless fragment_updates.empty?
+          signed_fragment = ActionToken.encode(fragment_payload)
+          post_url = "#{post_url}#{separator}_sw_fragment=#{CGI.escape(signed_fragment)}"
+        end
         attrs = {
           "hx-post" => post_url,
           "hx-include" => input_selector,
-          "hx-target" => HTMX_TARGET,
+          "hx-target" => target,
           "hx-swap" => HTMX_SWAP
         }
         if loading && loading_indicators_enabled?(view)
-          attrs["hx-indicator"] = [indicator, HTMX_TARGET].compact.join(", ")
+          attrs["hx-indicator"] = [indicator, target].compact.join(", ")
         end
         attrs.merge(overrides)
       end

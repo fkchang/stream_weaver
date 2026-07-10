@@ -3,6 +3,22 @@
 require 'stream_weaver/adapter/alpinejs'
 
 RSpec.describe StreamWeaver::Adapter::AlpineJS do
+  describe "fragment state patches" do
+    it "applies top-level sets and deletions and rejects non-monotonic versions" do
+      adapter = described_class.new
+      view = double("view")
+      javascript = []
+      allow(view).to receive(:script) { |*_args, **_kwargs, &block| block&.call }
+      allow(view).to receive(:raw)
+      allow(view).to receive(:safe) { |value| javascript << value; value }
+
+      adapter.render_cdn_scripts(view)
+      javascript = javascript.join
+
+      expect(javascript).to include("sw-state-patch", "patch.delete", "patch.version")
+      expect(javascript).to include("delete data[k]", "window.location.reload()", "currentVersion + 1")
+    end
+  end
   let(:adapter) { described_class.new }
   let(:mock_view) { double("view") }
   let(:state) { { email: "test@example.com", name: "Alice", agree: true, color: "Red" } }

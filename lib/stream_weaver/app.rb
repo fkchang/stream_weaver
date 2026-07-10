@@ -17,7 +17,7 @@ module StreamWeaver
                     :current_tabs, :current_breadcrumbs, :current_dropdown,
                     :current_menu, :current_modal, :modal_context, :current_deck,
                     :current_slide, :current_app_shell, :current_row_key_thunk,
-                    :checkbox_keys, :action_tokens, :generation
+                    :checkbox_keys, :action_tokens, :generation, :fragment_stack, :state_version
 
       def initialize
         self.components = []
@@ -27,6 +27,8 @@ module StreamWeaver
         self.checkbox_keys = []
         self.action_tokens = Set.new
         self.generation = "0"
+        self.fragment_stack = []
+        self.state_version = 0
       end
     end
 
@@ -35,7 +37,7 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions
+    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions, :action_updates
 
     # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
     ENDPOINT_VERBS = %i[get post put patch delete].freeze
@@ -76,6 +78,7 @@ module StreamWeaver
       @resource_defs = {}  # name(sym) → ResourceDefinition — persistent
       @endpoints     = []  # Array<{verb:, path:, block:}> — persistent, never cleared in rebuild
       @actions = {}
+      @action_updates = {}
       components.each { |mod| singleton_class.include(mod) }
     end
 
@@ -237,10 +240,11 @@ module StreamWeaver
       @endpoints.find { |e| e[:verb] == verb && e[:path] == path }
     end
 
-    def rebuild_with_state(current_state, generation: "0")
+    def rebuild_with_state(current_state, generation: "0", state_version: 0)
       @_state = current_state
       @render_state = RenderState.new
       @render_state.generation = generation.to_s
+      @render_state.state_version = state_version.to_i
       evaluate_dsl_block(@block)
       @render_state.checkbox_keys = collect_checkbox_keys(components)
       @timers_frozen = true
@@ -320,7 +324,7 @@ module StreamWeaver
 
     public
 
-    def action(name, &handler)
+    def action(name, updates: nil, &handler)
       raise ArgumentError, "action: block required" unless handler
       name = name.to_sym
       existing = @actions[name]
@@ -328,16 +332,25 @@ module StreamWeaver
         raise ArgumentError, "action #{name.inspect} is already registered with a different block"
       end
       @actions[name] ||= handler
+      normalized_updates = Array(updates).compact.map(&:to_sym)
+      if @action_updates.key?(name) && @action_updates[name] != normalized_updates
+        raise ArgumentError, "action #{name.inspect} is already registered with different updates"
+      end
+      @action_updates[name] ||= normalized_updates
     end
 
     def action_definition_digest
       Digest::SHA256.hexdigest(([StreamWeaver::VERSION] + actions.keys.map(&:to_s).sort).join("\0"))
     end
 
-    def action_token(name, key)
+    def action_token(name, key, fragment: nil, updates: nil)
       name = name.to_sym
       raise ArgumentError, "unknown named action #{name.inspect}" unless actions.key?(name)
-      token = ActionToken.encode(a: name, k: key, d: action_definition_digest, g: render_state.generation)
+      scopes = Array(updates.nil? ? action_updates[name] : updates).compact.map(&:to_s)
+      payload = { a: name, k: key, d: action_definition_digest, g: render_state.generation }
+      payload[:f] = fragment if fragment
+      payload[:u] = scopes unless scopes.empty?
+      token = ActionToken.encode(payload)
       render_state.action_tokens << ActionToken.fingerprint(token)
       token
     end
@@ -345,6 +358,31 @@ module StreamWeaver
     # =========================================
     # App-specific display components
     # =========================================
+
+    def fragment(name, &block)
+      name = validate_scalar_key!(name, context: "fragment")
+      raise ArgumentError, "fragment: block required" unless block
+
+      safe_name = name.to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-|\-\z/, "")
+      raise ArgumentError, "fragment: name must contain a letter or number" if safe_name.empty?
+      candidate_id = if render_state.fragment_stack.empty?
+        "sw-frag-#{safe_name}"
+      else
+        "#{render_state.fragment_stack.last}--#{safe_name}"
+      end
+      id = disambiguate_component_id(candidate_id, label: name.to_s, source_loc: block.source_location)
+      component = Components::Fragment.new(name, id)
+      components << component
+      parent = components
+      render_state.fragment_stack << id
+      self.components = []
+      evaluate_dsl_block(block)
+      component.children = components
+      self.components = parent
+      component
+    ensure
+      render_state.fragment_stack.pop if id && render_state.fragment_stack.last == id
+    end
 
     def lesson_text(content_or_options = nil, **options, &block)
       if content_or_options.is_a?(String)
@@ -475,7 +513,11 @@ module StreamWeaver
         action_key = key || row_key
         action_key = validate_scalar_key!(action_key, context: "named action button")
         raise ArgumentError, "named action button: key: is required" if action_key.nil?
-        options[:action_token] = action_token(action, action_key)
+        options[:action_token] = action_token(
+          action, action_key,
+          fragment: render_state.fragment_stack.last,
+          updates: options.delete(:updates)
+        )
       end
       # Generate stable ID: use source location for buttons with blocks,
       # fallback to counter for blockless buttons (submit: false)

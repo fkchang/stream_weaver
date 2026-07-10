@@ -8,6 +8,7 @@ module StreamWeaver
     # Full page view for initial load (includes <html>, <head>, <body>)
     class AppView < Phlex::HTML
       attr_reader :adapter, :app
+      attr_reader :current_fragment_id
 
       # @param app [StreamWeaver::App] The app instance
       # @param state [Hash] The current state
@@ -103,12 +104,21 @@ module StreamWeaver
             else
               h1 { @app.title }
               # Merge adapter-specific container attributes with container id
-              div(id: "app-container", **@adapter.container_attributes(@state)) do
+              div(id: "app-container", "data-sw-state-version" => @app.render_state.state_version,
+                  **@adapter.container_attributes(@state)) do
                 render_components
               end
             end
           end
         end
+      end
+
+      def with_fragment(id)
+        previous = @current_fragment_id
+        @current_fragment_id = id
+        yield
+      ensure
+        @current_fragment_id = previous
       end
 
       def self.master_theme_css
@@ -3487,7 +3497,8 @@ module StreamWeaver
       # Emit the main reactive content region (#app-container).
       # Use this inside a register_layout render block to place the reactive app content.
       def main_content_region
-        div(id: "app-container", **@adapter.container_attributes(@state)) do
+        div(id: "app-container", "data-sw-state-version" => @app.render_state.state_version,
+            **@adapter.container_attributes(@state)) do
           render_components
         end
       end
@@ -3497,6 +3508,7 @@ module StreamWeaver
     # Includes state data for Alpine.js reinitialization after HTMX swap
     class AppContentView < Phlex::HTML
       attr_reader :adapter, :app
+      attr_reader :current_fragment_id
 
       # @param app [StreamWeaver::App] The app instance
       # @param state [Hash] The current state
@@ -3514,6 +3526,7 @@ module StreamWeaver
         # This allows JavaScript to update the outer container's x-data after HTMX swap
         # See: Alpine.js Defer Mutations Pattern in adapter/alpinejs.rb
         state_json_data = @state.transform_keys(&:to_s)
+        state_json_data["_sw_version"] = @app.render_state.state_version
         if @app.respond_to?(:transient_keys) && @app.transient_keys.any?
           state_json_data["_transient"] = @app.transient_keys.map(&:to_s)
         end
@@ -3526,6 +3539,14 @@ module StreamWeaver
 
         # Add submit button for agentic mode
         render_agentic_submit_button if @is_agentic
+      end
+
+      def with_fragment(id)
+        previous = @current_fragment_id
+        @current_fragment_id = id
+        yield
+      ensure
+        @current_fragment_id = previous
       end
 
       private
@@ -3542,6 +3563,36 @@ module StreamWeaver
             "hx-include" => @adapter.input_selector
           ) { "🤖 Submit to Agent" }
         end
+      end
+    end
+
+    class FragmentContentView < AppContentView
+      def initialize(app, state, adapter, fragment, updates: [], state_patch:)
+        super(app, state, adapter, false)
+        @fragment = fragment
+        @updates = updates
+        @state_patch = state_patch
+      end
+
+      def view_template
+        with_fragment(@fragment.id) { @fragment.children.each { |child| child.render(self, @state) } }
+        @updates.each do |fragment|
+          div(id: fragment.id, "hx-swap-oob" => "morph:innerHTML") do
+            with_fragment(fragment.id) { fragment.children.each { |child| child.render(self, @state) } }
+          end
+        end
+        raw safe(StatePatchView.new(@state_patch).call)
+      end
+    end
+
+    class StatePatchView < Phlex::HTML
+      def initialize(patch)
+        @patch = patch
+      end
+
+      def view_template
+        json = JSON.generate(@patch).gsub("<", "\\u003c")
+        script(type: "application/json", id: "sw-state-patch") { raw safe(json) }
       end
     end
   end
