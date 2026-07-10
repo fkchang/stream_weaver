@@ -14,7 +14,7 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :components, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :layout_slots, :endpoints
+    attr_reader :title, :components, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :layout_slots, :endpoints, :loading_indicators
 
     # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
     ENDPOINT_VERBS = %i[get post put patch delete].freeze
@@ -26,7 +26,7 @@ module StreamWeaver
     RESERVED_ENDPOINT_EXACT = %w[/update /submit].freeze
     RESERVED_ENDPOINT_PREFIXES = %w[/action/ /event/ /form/ /theme/ /sw/].freeze
 
-    def initialize(title, layout: :default, chrome: true, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], strict_ids: false, &block)
+    def initialize(title, layout: :default, chrome: true, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], strict_ids: false, loading_indicators: true, &block)
       @title = title
       @layout = layout
       @chrome = chrome
@@ -38,6 +38,7 @@ module StreamWeaver
       @_state = {}
       @button_counter = 0
       @strict_ids = strict_ids
+      @loading_indicators = loading_indicators
       @_seen_component_ids = Hash.new(0)
       @_warned_duplicate_ids = Set.new
       @scripts = scripts

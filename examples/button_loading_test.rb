@@ -1,8 +1,12 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Test app to verify button loading state
-# Button action sleeps 2s so you can see the spinner before page refreshes
+# Manual-verification harness for button loading state (FAC-P1.5).
+# The spinner + dim/disabled treatment is automatic now -- no hand-built markup
+# needed. Button action sleeps 2s so you can see it before the page updates:
+#   - the clicked button dims, disables, and spins (button.htmx-request::after)
+#   - #app-container dims subtly after a ~150ms delay (no flicker on fast responses)
+# "Opted Out" demonstrates the per-component `loading: false` escape hatch.
 
 $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
 require "stream_weaver"
@@ -19,6 +23,11 @@ app "Button Loading Test" do
   button "Secondary (2s delay)", style: :secondary do |s|
     sleep 2
     s[:last] = "secondary clicked at #{Time.now.strftime('%H:%M:%S')}"
+  end
+
+  button "Opted Out (2s delay, loading: false)", loading: false do |s|
+    sleep 2
+    s[:last] = "opted-out clicked at #{Time.now.strftime('%H:%M:%S')}"
   end
 
   if state[:last]

@@ -80,7 +80,7 @@ module StreamWeaver
             value: state[key] || "",
             placeholder: options[:placeholder] || "",
             "x-model" => key.to_s,
-            **htmx_attrs(endpoint, "hx-trigger" => trigger_str)
+            **htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str)
           )
         else
           # No auto-submit: just Alpine.js binding, no HTMX
@@ -130,7 +130,7 @@ module StreamWeaver
             placeholder: options[:placeholder] || "",
             rows: options[:rows] || 3,
             "x-model" => key.to_s,
-            **htmx_attrs(endpoint, "hx-trigger" => trigger_str)
+            **htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str)
           ) { state[key] || "" }
         else
           # No auto-submit: just Alpine.js binding, no HTMX
@@ -188,7 +188,7 @@ module StreamWeaver
               value: "true",
               checked: state[key],
               "x-model" => key.to_s,
-              **htmx_attrs(endpoint, "hx-trigger" => "change")
+              **htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => "change")
             )
             view.label(for: "checkbox_#{key}") do
               view.raw view.safe(parsed_label)
@@ -274,7 +274,7 @@ module StreamWeaver
             name: key.to_s,
             "x-model" => key.to_s,
             autocomplete: "off",
-            **htmx_attrs(endpoint, "hx-trigger" => "change")
+            **htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => "change")
           ) do
             choices.each do |choice|
               label, value = choice.is_a?(Array) ? choice : [choice, choice]
@@ -444,13 +444,14 @@ module StreamWeaver
       # @param modal_context [Hash, nil] Modal context if button is inside a modal
       # @return [void] Renders to view
       def render_button(view, button_id, label, options, modal_context = nil)
-        view.button(**button_attrs(button_id, options, modal_context)) { label }
+        view.button(**button_attrs(view, button_id, options, modal_context)) { label }
       end
 
       private
 
-      def button_attrs(button_id, options, modal_context)
-        style = button_style_attrs(options)
+      def button_attrs(view, button_id, options, modal_context)
+        loading = options.fetch(:submit, true) && options.fetch(:loading, true) && loading_indicators_enabled?(view)
+        style = button_style_attrs(options, loading)
 
         unless options.fetch(:submit, true)
           return style.merge(type: "button")
@@ -461,22 +462,25 @@ module StreamWeaver
           style.merge("@click" => "$el.disabled=true; sendEvent('action', {button: '#{button_id}', state: getFormState()})")
         elsif modal_context
           # hx-on::before-request closes the modal before HTMX fires — ordering matters here
-          htmx_attrs(url("/action/#{button_id}"),
+          htmx_attrs(url("/action/#{button_id}"), view: view, loading: loading, indicator: "##{button_id}",
             "hx-disabled-elt" => "this",
-            "hx-on::before-request" => "open = false").merge(style)
+            "hx-on::before-request" => "open = false").merge(id: button_id).merge(style)
         else
-          htmx_attrs(url("/action/#{button_id}"), "hx-disabled-elt" => "this").merge(style)
+          htmx_attrs(url("/action/#{button_id}"), view: view, loading: loading, indicator: "##{button_id}",
+            "hx-disabled-elt" => "this").merge(id: button_id).merge(style)
         end
       end
 
-      def button_style_attrs(options)
+      def button_style_attrs(options, loading = true)
         style_option = options[:style]
-        if style_option == :none || style_option.is_a?(String)
+        attrs = if style_option == :none || style_option.is_a?(String)
           { class: options[:class], style: (style_option if style_option.is_a?(String)) }.compact
         else
           style_class = style_option == :secondary ? "secondary" : "primary"
           { class: "btn btn-#{style_class}" }
         end
+        attrs[:class] = [attrs[:class], "sw-no-loading-indicator"].compact.join(" ") unless loading
+        attrs
       end
 
       public
@@ -951,15 +955,40 @@ module StreamWeaver
       # Standard HTMX attributes for server interactions
       #
       # @param post_url [String] The POST endpoint
+      # @param view [Phlex::HTML, nil] The current view, used to check the app-level
+      #   `loading_indicators:` option (FAC-P1.5). Pass whenever the caller has one.
+      # @param loading [Boolean] Component-level opt-out (`loading: false`) -- when
+      #   false, no `hx-indicator` is emitted for this element at all (FAC-P1.5)
+      # @param indicator [String, nil] Extra CSS selector (typically `"##{element_id}"`)
+      #   added alongside the swap target. htmx's `hx-indicator`, when present, REPLACES
+      #   its default self-targeting rather than adding to it -- so any element with its
+      #   own `.htmx-request`-keyed CSS (e.g. the button spinner) must list its own id
+      #   here or lose that styling once `hx-indicator` is set.
       # @param overrides [Hash] Any attribute overrides
       # @return [Hash] HTMX attribute hash
-      def htmx_attrs(post_url, **overrides)
-        {
+      def htmx_attrs(post_url, view: nil, loading: true, indicator: nil, **overrides)
+        attrs = {
           "hx-post" => post_url,
           "hx-include" => input_selector,
           "hx-target" => HTMX_TARGET,
           "hx-swap" => HTMX_SWAP
-        }.merge(overrides)
+        }
+        if loading && loading_indicators_enabled?(view)
+          attrs["hx-indicator"] = [indicator, HTMX_TARGET].compact.join(", ")
+        end
+        attrs.merge(overrides)
+      end
+
+      # App-level `loading_indicators: false` opt-out check (FAC-P1.5). Fails open
+      # (true) when the view/app aren't available, e.g. bare test doubles.
+      #
+      # @param view [Phlex::HTML, nil]
+      # @return [Boolean]
+      def loading_indicators_enabled?(view)
+        return true unless view.respond_to?(:app)
+        app = view.app
+        return true unless app.respond_to?(:loading_indicators)
+        app.loading_indicators != false
       end
 
       # Render a term with tooltip functionality
@@ -1463,10 +1492,17 @@ module StreamWeaver
           # Render form buttons
           view.div(class: "sw-form-actions") do
             if submit_label
+              submit_id = "form-#{name}-submit"
+              loading = options.fetch(:loading, true) && loading_indicators_enabled?(view)
+              submit_class = ["btn", "btn-primary"]
+              submit_class << "sw-no-loading-indicator" unless loading
+
               view.button(
                 type: "button",
-                class: "btn btn-primary",
-                **htmx_attrs(url("/form/#{name}"), "hx-include" => "[name^='#{name}[']")
+                id: submit_id,
+                class: submit_class.join(" "),
+                **htmx_attrs(url("/form/#{name}"), view: view, loading: loading, indicator: "##{submit_id}",
+                  "hx-include" => "[name^='#{name}[']")
               ) { submit_label }
             end
 

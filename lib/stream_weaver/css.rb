@@ -100,6 +100,18 @@ module StreamWeaver
             }
           }
 
+          /* Swap-target busy treatment during in-flight requests (FAC-P1.5).
+             Delay-in via transition-delay so fast responses never flicker;
+             undimming (class removed) is immediate. */
+          #app-container {
+            transition: opacity var(--sw-transition-fast, 120ms) ease-out;
+          }
+
+          #app-container.htmx-request {
+            opacity: 0.85;
+            transition-delay: 150ms;
+          }
+
           /* Table styles */
           .sw-table {
             width: 100%;

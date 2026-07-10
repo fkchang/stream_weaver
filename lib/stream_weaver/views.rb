@@ -7,7 +7,7 @@ module StreamWeaver
   module Views
     # Full page view for initial load (includes <html>, <head>, <body>)
     class AppView < Phlex::HTML
-      attr_reader :adapter
+      attr_reader :adapter, :app
 
       # @param app [StreamWeaver::App] The app instance
       # @param state [Hash] The current state
@@ -1027,7 +1027,7 @@ module StreamWeaver
                   pointer-events: none;
                 }
 
-                button:disabled::after, button.htmx-request::after {
+                button:disabled::after, button.htmx-request:not(.sw-no-loading-indicator)::after {
                   content: "";
                   position: absolute;
                   top: 50%;
@@ -1047,6 +1047,18 @@ module StreamWeaver
 
                 @keyframes sw-btn-spinner-appear {
                   to { opacity: 1; }
+                }
+
+                /* Swap-target busy treatment during in-flight requests (FAC-P1.5).
+                   Delay-in via transition-delay so fast responses never flicker;
+                   undimming (class removed) is immediate. */
+                #app-container {
+                  transition: opacity var(--sw-transition-fast, 120ms) ease-out;
+                }
+
+                #app-container.htmx-request {
+                  opacity: 0.85;
+                  transition-delay: 150ms;
                 }
 
                 /* ===========================================
@@ -3484,7 +3496,7 @@ module StreamWeaver
     # Partial view for HTMX updates (just the app-container content)
     # Includes state data for Alpine.js reinitialization after HTMX swap
     class AppContentView < Phlex::HTML
-      attr_reader :adapter
+      attr_reader :adapter, :app
 
       # @param app [StreamWeaver::App] The app instance
       # @param state [Hash] The current state
