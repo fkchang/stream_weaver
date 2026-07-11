@@ -1302,6 +1302,49 @@ module StreamWeaver
         end
       end
 
+      # Render a static Kanban board -- a row of Lane columns.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param children [Array<Components::Lane>] The lanes
+      # @param options [Hash] Component options
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_board(view, children, options, state)
+        inject_board_css(view)
+
+        view.div(class: "sw-board") do
+          children.each { |lane| lane.render(view, state) }
+        end
+      end
+
+      # Render a single board lane (column): header + stacked cards.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::Lane]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_lane(view, component, state)
+        view.div(class: "sw-board__lane") do
+          view.div(class: "sw-board__lane-header") { component.title }
+          view.div(class: "sw-board__lane-body") do
+            component.children.each { |child| child.render(view, state) }
+          end
+        end
+      end
+
+      # Render a single board card.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param children [Array] Child components
+      # @param options [Hash] Component options
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_board_card(view, children, options, state)
+        view.div(class: "sw-board__card") do
+          children.each { |child| child.render(view, state) }
+        end
+      end
+
       # Render a score table with color-coded metrics
       #
       # Render a data table with configurable styling
@@ -4041,6 +4084,13 @@ module StreamWeaver
         view.style { view.raw(view.safe(chip_group_css)) }
       end
 
+      def inject_board_css(view)
+        return if view.instance_variable_get(:@_board_css_injected)
+
+        view.instance_variable_set(:@_board_css_injected, true)
+        view.style { view.raw(view.safe(board_css)) }
+      end
+
       def inject_comparison_css(view)
         return if view.instance_variable_get(:@_comparison_css_injected)
 
@@ -4667,6 +4717,52 @@ module StreamWeaver
             height: 1px;
             opacity: 0;
             pointer-events: none;
+          }
+        CSS
+      end
+
+      def board_css
+        <<~CSS
+          /* ===========================================
+             Board (Kanban) Styles (sw- prefix, FAC-P2.2)
+             =========================================== */
+          .sw-board {
+            display: flex;
+            gap: var(--sw-spacing-md, 1.25rem);
+            overflow-x: auto;
+            margin: 0.75rem 0;
+            align-items: flex-start;
+          }
+
+          .sw-board__lane {
+            flex: 1 0 260px;
+            min-width: 240px;
+            background: var(--sw-color-bg, #f8f8f8);
+            border: 1px solid var(--sw-color-border, #e0e0e0);
+            border-radius: var(--sw-radius-md, 6px);
+            display: flex;
+            flex-direction: column;
+          }
+
+          .sw-board__lane-header {
+            padding: 0.75rem 1rem;
+            font-weight: 700;
+            border-bottom: 1px solid var(--sw-color-border, #e0e0e0);
+          }
+
+          .sw-board__lane-body {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            padding: 0.75rem;
+          }
+
+          .sw-board__card {
+            background: var(--sw-color-bg-card, #ffffff);
+            border: 1px solid var(--sw-color-border, #e0e0e0);
+            border-radius: var(--sw-radius-sm, 4px);
+            padding: 0.75rem;
+            box-shadow: var(--sw-shadow-sm);
           }
         CSS
       end

@@ -92,6 +92,22 @@ module StreamWeaver
       with_container(Components::AccordionSection.new(title, open: open, **options), &block)
     end
 
+    # Static Kanban board layout (03 gap #9: tyrion hand-built its "War Room"
+    # board from plain divs with inline styles). No drag-and-drop -- that's
+    # future work; this is the static-columns layout primitive real apps
+    # were hand-rolling.
+    def board(**options, &block)
+      with_container(Components::Board.new(**options), &block)
+    end
+
+    def lane(title, **options, &block)
+      with_container(Components::Lane.new(title, **options), &block)
+    end
+
+    def board_card(**options, &block)
+      with_container(Components::BoardCard.new(**options), &block)
+    end
+
     def alert(variant: :info, title: nil, dismissible: false, **options, &block)
       with_container(Components::Alert.new(variant: variant, title: title, dismissible: dismissible, **options), &block)
     end

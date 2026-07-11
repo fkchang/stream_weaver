@@ -715,6 +715,52 @@ module StreamWeaver
       end
     end
 
+    # Static Kanban board -- groups Lane children. No drag-and-drop (03 gap
+    # #9); a future primitive can add it without changing this shape.
+    class Board < Base
+      attr_accessor :children
+
+      def initialize(**options)
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_board(view, @children, @options, state)
+      end
+    end
+
+    # Single column within a Board. Children are typically BoardCards, but
+    # any component is accepted directly (e.g. an empty-state text).
+    class Lane < Base
+      attr_accessor :children
+      attr_reader :title
+
+      def initialize(title, **options)
+        @title = title
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_lane(view, self, state)
+      end
+    end
+
+    # A single card within a Lane.
+    class BoardCard < Base
+      attr_accessor :children
+
+      def initialize(**options)
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_board_card(view, @children, @options, state)
+      end
+    end
+
     # ScoreTable component for displaying metrics with color-coded scores
     class ScoreTable < Base
       # @param scores [Array<Hash>] Array of {label:, value:, max:} hashes
