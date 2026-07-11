@@ -56,6 +56,7 @@ module StreamWeaver
       # @return [void] Renders to view
       def render_text_field(view, key, options, state)
         form_context = options[:form_context]
+        scope_name = options[:scope_name]
         should_submit = options.fetch(:submit, true)
 
         if form_context
@@ -69,6 +70,21 @@ module StreamWeaver
             value: form_state[key] || "",
             placeholder: options[:placeholder] || "",
             "x-model" => "_form.#{key}"  # Form-local Alpine scope
+          )
+        elsif scope_name
+          # Inside a bare `scope` block (not `form`): nested name/x-model so a
+          # "live" field's HTMX submit lands in state[scope_name][key], not a
+          # same-named flat top-level key (FAC-P3.1 handoff, form-for.md).
+          scope_state = state[scope_name] || {}
+          trigger_str, endpoint = build_input_triggers(key, options)
+          view.input(
+            id: "input-#{scope_name}-#{key}",
+            type: "text",
+            name: "#{scope_name}[#{key}]",
+            value: scope_state[key] || "",
+            placeholder: options[:placeholder] || "",
+            "x-model" => "#{scope_name}.#{key}",
+            **(should_submit ? htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str) : {})
           )
         elsif should_submit
           trigger_str, endpoint = build_input_triggers(key, options)
@@ -108,6 +124,7 @@ module StreamWeaver
       # @return [void] Renders to view
       def render_text_area(view, key, options, state)
         form_context = options[:form_context]
+        scope_name = options[:scope_name]
         should_submit = options.fetch(:submit, true)
 
         if form_context
@@ -121,6 +138,18 @@ module StreamWeaver
             rows: options[:rows] || 3,
             "x-model" => "_form.#{key}"  # Form-local Alpine scope
           ) { form_state[key] || "" }
+        elsif scope_name
+          # Inside a bare `scope` block: nested name/x-model (FAC-P3.1 handoff).
+          scope_state = state[scope_name] || {}
+          trigger_str, endpoint = build_input_triggers(key, options)
+          view.textarea(
+            id: "input-#{scope_name}-#{key}",
+            name: "#{scope_name}[#{key}]",
+            placeholder: options[:placeholder] || "",
+            rows: options[:rows] || 3,
+            "x-model" => "#{scope_name}.#{key}",
+            **(should_submit ? htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str) : {})
+          ) { scope_state[key] || "" }
         elsif should_submit
           trigger_str, endpoint = build_input_triggers(key, options)
 
@@ -155,6 +184,7 @@ module StreamWeaver
       # @return [void] Renders to view
       def render_checkbox(view, key, label, options, state)
         form_context = options[:form_context]
+        scope_name = options[:scope_name]
         should_submit = options.fetch(:submit, true)
         parsed_label = parse_inline_markdown(label)
 
@@ -172,6 +202,25 @@ module StreamWeaver
               "x-model" => "_form.#{key}"  # Form-local Alpine scope
             )
             view.label(for: "checkbox_#{form_name}_#{key}") do
+              view.raw view.safe(parsed_label)
+            end
+          end
+        elsif scope_name
+          # Inside a bare `scope` block: nested name/x-model (FAC-P3.1 handoff).
+          scope_state = state[scope_name] || {}
+          has_on_change = options[:on_change]
+          endpoint = has_on_change ? url("/event/#{key}") : url("/update")
+          view.div(class: "checkbox-wrapper") do
+            view.input(
+              type: "checkbox",
+              id: "checkbox_#{scope_name}_#{key}",
+              name: "#{scope_name}[#{key}]",
+              value: "true",
+              checked: scope_state[key],
+              "x-model" => "#{scope_name}.#{key}",
+              **(should_submit ? htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => "change") : {})
+            )
+            view.label(for: "checkbox_#{scope_name}_#{key}") do
               view.raw view.safe(parsed_label)
             end
           end
@@ -242,6 +291,7 @@ module StreamWeaver
       # @return [void] Renders to view
       def render_select(view, key, choices, options, state)
         form_context = options[:form_context]
+        scope_name = options[:scope_name]
         should_submit = options.fetch(:submit, true)
 
         if form_context
@@ -255,6 +305,28 @@ module StreamWeaver
             "x-model" => "_form.#{key}",   # Form-local Alpine scope
             autocomplete: "off",
             "x-init" => "$el.value = _form.#{key}"
+          ) do
+            choices.each do |choice|
+              label, value = choice.is_a?(Array) ? choice : [choice, choice]
+              view.option(
+                value: value,
+                selected: current_value == value
+              ) { label }
+            end
+          end
+        elsif scope_name
+          # Inside a bare `scope` block: nested name/x-model (FAC-P3.1 handoff).
+          scope_state = state[scope_name] || {}
+          has_on_change = options[:on_change]
+          endpoint = has_on_change ? url("/event/#{key}") : url("/update")
+          current_value = scope_state[key] || options[:default]
+
+          view.select(
+            name: "#{scope_name}[#{key}]",
+            "x-model" => "#{scope_name}.#{key}",
+            autocomplete: "off",
+            "x-init" => "$el.value = #{scope_name}.#{key}",
+            **(should_submit ? htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => "change") : {})
           ) do
             choices.each do |choice|
               label, value = choice.is_a?(Array) ? choice : [choice, choice]

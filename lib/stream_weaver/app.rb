@@ -18,7 +18,8 @@ module StreamWeaver
                     :current_menu, :current_modal, :modal_context, :current_deck,
                     :current_slide, :current_app_shell, :current_row_key_thunk,
                     :checkbox_keys, :action_tokens, :generation, :fragment_stack, :state_version,
-                    :table_counter, :current_scope
+                    :table_counter, :current_scope,
+                    :form_for_active, :form_for_submit_label, :form_for_cancel_label, :form_for_validate
 
       def initialize
         self.components = []
@@ -254,9 +255,13 @@ module StreamWeaver
       @timers_frozen = true
     end
 
+    # Returns [scope_name, key] pairs (scope_name nil for flat/form-context
+    # checkboxes) so InteractionRunner#handle_unchecked_checkboxes can clear
+    # an unchecked scope-nested "live" checkbox at state[scope_name][key]
+    # instead of a same-named flat key (FAC-P3.1 handoff).
     def collect_checkbox_keys(component_list)
       component_list.each_with_object([]) do |component, keys|
-        keys << component.key if component.is_a?(Components::Checkbox)
+        keys << [component.options[:scope_name], component.key] if component.is_a?(Components::Checkbox)
         keys.concat(collect_checkbox_keys(component.children)) if component.respond_to?(:children) && component.children
         if component.is_a?(Components::Modal) && component.footer_component&.children
           keys.concat(collect_checkbox_keys(component.footer_component.children))
@@ -497,6 +502,97 @@ module StreamWeaver
 
     def form_context
       render_state.form_context
+    end
+
+    # =========================================
+    # form_for -- resource-bound form (builds on `form`, FAC-P3.2)
+    # =========================================
+
+    # Generates a full create/update form bound to a resource's store + fields
+    # (form-for.md): seeds from `record:` only on first render for that record
+    # id and never re-seeds an in-progress edit (reuses the :resource-kind
+    # scope auto-reset from `state-scopes.md` §4/§7 -- no hand-rolled seeded_key
+    # guard needed), infers create vs. update from record identity, renders
+    # fields via the shared Resource::FieldInput table, and wires submit to
+    # coerce -> validate -> store.create/update -> flash + PRG transition.
+    #
+    # @param resource_name [Symbol, nil] a registered `resource` name to reuse
+    #   its store/fields, or nil when passing store:/fields: directly
+    # @param record [Hash, nil] the record being edited; nil/no :id means create
+    # @param store [#all,#find,#create,#update,#destroy] required unless resource_name given
+    # @param fields [Array<Field>] required unless resource_name given
+    # @param name [Symbol, nil] scope/form name override (default "#{singular}_form")
+    # @param on_success [Proc, nil] instance_exec'd with the new/updated id;
+    #   overrides the resource's default show/index transition
+    # @param validate [Proc, nil] called with the coerced values, returns
+    #   Hash[field, Array[String]] of extra validation errors (empty/nil = valid)
+    def form_for(resource_name = nil, record: nil, store: nil, fields: nil, name: nil, on_success: nil, validate: nil, &block)
+      defn = resource_name && @resource_defs[resource_name.to_sym]
+      raise ArgumentError, "form_for: unknown resource #{resource_name.inspect}" if resource_name && !defn
+
+      store  ||= defn&.store
+      fields ||= defn&.fields
+      raise ArgumentError, "form_for: no store given and no resource #{resource_name.inspect} registered" unless store
+      raise ArgumentError, "form_for: no fields given and no resource #{resource_name.inspect} registered" unless fields
+      Resource::Store.validate!(store, resource_name || name || :form_for) unless defn
+
+      singular   = resource_name&.to_s || name&.to_s&.sub(/_form\z/, '')
+      singular   = "record" if singular.nil? || singular.empty?
+      scope_name = (name || :"#{singular}_form").to_sym
+      errors_key = :"#{scope_name}_errors"
+      is_update  = !record.nil? && !record[:id].nil?
+
+      scope(scope_name, kind: :resource) do |s|
+        fields.each { |f| s[f.name] = record[f.name] unless s.key?(f.name) } if record
+      end
+
+      form(scope_name) do
+        if (errs = state[errors_key]) && !errs.empty?
+          alert(variant: :error, title: "Please fix the following") do
+            errs.each { |field, msgs| Array(msgs).each { |m| text "#{field.to_s.tr('_', ' ').capitalize}: #{m}" } }
+          end
+        end
+
+        fields.each { |f| instance_exec(f, &Resource::FieldInput::RENDER) }
+
+        render_state.form_for_submit_label = is_update ? "Save" : "Create"
+        render_state.form_for_cancel_label = nil
+        render_state.form_for_validate     = validate
+        render_state.form_for_active       = true
+        instance_exec(&block) if block
+        render_state.form_for_active       = false
+
+        submit(render_state.form_for_submit_label) do |raw_values|
+          form_for_submit(fields: fields, raw_values: raw_values, store: store, record: record,
+                           is_update: is_update, errors_key: errors_key, defn: defn,
+                           on_success: on_success, validate_proc: render_state.form_for_validate,
+                           singular: singular)
+        end
+        cancel(render_state.form_for_cancel_label) if render_state.form_for_cancel_label
+      end
+    end
+
+    # Configures the auto-generated form's submit button label -- only valid
+    # inside a `form_for` block (dual-purpose reader/setter, like `edit_view`).
+    def submit_label(text = nil)
+      raise "submit_label can only be used inside a form_for block" unless render_state.form_for_active
+      text.nil? ? render_state.form_for_submit_label : (render_state.form_for_submit_label = text)
+    end
+
+    # Configures the auto-generated form's cancel button label (omitted by
+    # default) -- only valid inside a `form_for` block.
+    def cancel_label(text = nil)
+      raise "cancel_label can only be used inside a form_for block" unless render_state.form_for_active
+      text.nil? ? render_state.form_for_cancel_label : (render_state.form_for_cancel_label = text)
+    end
+
+    # Registers an extra validation hook for the enclosing `form_for`: called
+    # with the coerced submitted values, returns Hash[field, Array[String]] of
+    # additional errors (merged with coercion failures) -- only valid inside a
+    # `form_for` block.
+    def validate(&block)
+      raise "validate can only be used inside a form_for block" unless render_state.form_for_active
+      render_state.form_for_validate = block
     end
 
     # =========================================
@@ -1082,7 +1178,15 @@ module StreamWeaver
 
     # Initialize state for form fields, handling form/scope context
     def initialize_form_state(key, options, default_value, skip_if_exists: false)
-      options[:form_context] = render_state.form_context if render_state.form_context
+      if render_state.form_context
+        options[:form_context] = render_state.form_context
+      elsif render_state.current_scope
+        # A field inside a bare `scope` block (not a `form` block, e.g. a
+        # retained filter panel) -- FAC-P3.1 handoff: the adapter needs to
+        # know this so it can render a scope-nested name/x-model path instead
+        # of a flat one, the same way :form_context already does for forms.
+        options[:scope_name] = render_state.current_scope
+      end
 
       target_scope = render_state.form_context&.fetch(:name, nil) || render_state.current_scope
       if target_scope
@@ -1097,6 +1201,77 @@ module StreamWeaver
       else
         target[key] ||= default_value
       end
+    end
+
+    # form_for submit pipeline: symbolize -> coerce -> validate -> persist ->
+    # flash + PRG transition (form-for.md §3-§5). A validation failure never
+    # flashes/redirects -- it just populates errors_key so the same-request
+    # re-render shows the summary Alert with the user's in-progress values
+    # still in the scope (untouched here on the failure path).
+    def form_for_submit(fields:, raw_values:, store:, record:, is_update:, errors_key:, defn:,
+                         on_success:, validate_proc:, singular:)
+      form_values = raw_values.transform_keys(&:to_sym)
+      coerced, errors = form_for_coerce(fields, form_values)
+
+      if validate_proc
+        (instance_exec(coerced, &validate_proc) || {}).each do |field, msgs|
+          (errors[field.to_sym] ||= []).concat(Array(msgs))
+        end
+      end
+
+      if errors.any?
+        state[errors_key] = errors
+        return
+      end
+      state[errors_key] = nil
+
+      if is_update
+        store.update(record[:id], coerced)
+        id = record[:id]
+      else
+        id = store.create(coerced)
+      end
+
+      # Raw state[:_flash] write, not the `flash` accessor -- the accessor,
+      # rendering, and one-shot session-clear lifecycle ship in FAC-P3.2b
+      # (flash-prg.md); this is the same wire shape that commit will build on.
+      state[:_flash] = { notice: "#{singular.capitalize} #{is_update ? 'updated' : 'created'}." }
+
+      if on_success
+        instance_exec(id, &on_success)
+      elsif defn
+        sk = Resource::StateKeys
+        state[sk::RESOURCE] = defn.name
+        if defn.only.include?(:show)
+          state[sk::ACTION] = :show
+          state[sk::ID]     = id
+        else
+          state[sk::ACTION] = :index
+        end
+      end
+    end
+
+    def form_for_coerce(fields, form_values)
+      errors  = {}
+      coerced = {}
+      fields.each do |f|
+        key = f.name
+        raw = form_values[key]
+        coerced[key] = case f.type
+        when :integer then form_for_number(raw, key, errors, :integer, "must be a whole number")
+        when :number   then form_for_number(raw, key, errors, :number, "must be a number")
+        else raw
+        end
+      end
+      [coerced, errors]
+    end
+
+    def form_for_number(raw, key, errors, kind, message)
+      return nil if raw.nil? || raw == ""
+      kind == :integer ? Integer(raw) : Float(raw)
+    rescue ArgumentError, TypeError
+      (errors[key] ||= []) << message
+      raw
     end
 
     # Internal, flat, unscoped state key (like _sw_resource/_sw_action/_sw_id)

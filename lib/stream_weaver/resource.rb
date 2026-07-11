@@ -3,6 +3,7 @@
 require 'cgi'
 require_relative 'resource/state_keys'
 require_relative 'resource/store'
+require_relative 'resource/field_input'
 require_relative 'resource/default_views'
 
 module StreamWeaver

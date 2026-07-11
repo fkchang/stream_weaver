@@ -7,22 +7,6 @@ module StreamWeaver
     module DefaultViews
       include StateKeys
 
-      # Proc for rendering a single form field — called via instance_exec so
-      # DSL methods (text_field, select, etc.) resolve against the App instance.
-      FIELD_INPUT = proc do |field|
-        label = field.name.to_s.tr('_', ' ').capitalize
-        case field.type
-        when :string           then text_field field.name, label: label, submit: false
-        when :text             then text_area  field.name, label: label, rows: 4, submit: false
-        when :enum             then select     field.name, field.opts[:values] || [], submit: false
-        when :boolean          then checkbox   field.name, label, submit: false
-        when :integer, :number then text_field field.name, submit: false
-        when :date             then text_field field.name, submit: false
-        else                        text_field field.name, submit: false
-        end
-      end
-      private_constant :FIELD_INPUT
-
       def self.index(defn, app, items)
         items ||= []
         app.instance_exec do
@@ -83,17 +67,7 @@ module StreamWeaver
       def self.new(defn, app, _data)
         app.instance_exec do
           header1 "New #{defn.singular.capitalize}"
-
-          form :"#{defn.singular}_form" do
-            defn.fields.each { |f| instance_exec(f, &FIELD_INPUT) }
-
-            submit("Create") do |form_values|
-              id = defn.store.create(form_values.transform_keys(&:to_sym))
-              app.state[ACTION]   = :show
-              app.state[RESOURCE] = defn.name
-              app.state[ID]       = id
-            end
-          end
+          form_for defn.name
         end
       end
 
@@ -104,24 +78,7 @@ module StreamWeaver
           first_field = defn.fields.first
           title_value = first_field ? item[first_field.name] : item[:id]
           header1 "Edit #{title_value || item[:id]}"
-
-          seeded_key = :"#{defn.singular}_form_seeded_for"
-          if state[seeded_key] != item[:id]
-            defn.fields.each do |field|
-              state[:"#{defn.singular}_form"] ||= {}
-              state[:"#{defn.singular}_form"][field.name] = item[field.name]
-            end
-            state[seeded_key] = item[:id]
-          end
-
-          form :"#{defn.singular}_form" do
-            defn.fields.each { |f| instance_exec(f, &FIELD_INPUT) }
-
-            submit("Save") do |form_values|
-              defn.store.update(app.state[ID], form_values.transform_keys(&:to_sym))
-              app.state[ACTION] = :show
-            end
-          end
+          form_for defn.name, record: item
         end
       end
 

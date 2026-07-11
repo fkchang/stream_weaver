@@ -271,7 +271,7 @@ module StreamWeaver
     # Checkbox component for boolean input
     class Checkbox < Base
       include Callbacks
-      attr_reader :key
+      attr_reader :key, :options
 
       # @param key [Symbol] The state key
       # @param label [String] The label text

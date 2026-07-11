@@ -250,7 +250,18 @@ module StreamWeaver
       params.each do |key, value|
         next if ROUTE_PARAMS.include?(key.to_s)
 
-        state[key.to_sym] = coerce_param_value(value, state[key.to_sym])
+        if value.is_a?(Hash)
+          # A scope-nested "live" field (FAC-P3.1 handoff): Rack already
+          # parsed the Rails-style `scope[field]=value` param into a nested
+          # hash. Merge the one changed field into the scope's sub-hash --
+          # never replace it wholesale, since a single live field's keyup
+          # only posts that one key, not its siblings.
+          scope_name = key.to_sym
+          state[scope_name] ||= {}
+          value.each { |k, v| state[scope_name][k.to_sym] = coerce_param_value(v, state[scope_name][k.to_sym]) }
+        else
+          state[key.to_sym] = coerce_param_value(value, state[key.to_sym])
+        end
       end
     end
 
@@ -265,8 +276,15 @@ module StreamWeaver
     end
 
     def handle_unchecked_checkboxes
-      app.render_state.checkbox_keys.each do |key|
-        state[key] = false unless params.key?(key.to_s) || params.key?(key)
+      app.render_state.checkbox_keys.each do |scope_name, key|
+        if scope_name
+          nested = params[scope_name.to_s]
+          next if nested.is_a?(Hash) && (nested.key?(key.to_s) || nested.key?(key))
+          state[scope_name] ||= {}
+          state[scope_name][key] = false
+        else
+          state[key] = false unless params.key?(key.to_s) || params.key?(key)
+        end
       end
     end
 
