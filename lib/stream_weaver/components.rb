@@ -680,6 +680,41 @@ module StreamWeaver
       end
     end
 
+    # Accordion container -- groups AccordionSection children. Native
+    # <details>/<summary>, no state key, no JS (03 gap #7).
+    class Accordion < Base
+      attr_accessor :children
+
+      def initialize(**options)
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_accordion(view, @children, @options, state)
+      end
+    end
+
+    # Single disclosure panel within an Accordion.
+    class AccordionSection < Base
+      attr_accessor :children
+      attr_reader :title, :open
+
+      # @param title [String] Always-visible summary text
+      # @param open [Boolean] Whether the panel starts expanded (default: false)
+      # @param options [Hash] Additional options
+      def initialize(title, open: false, **options)
+        @title = title
+        @open = open
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_accordion_section(view, self, state)
+      end
+    end
+
     # ScoreTable component for displaying metrics with color-coded scores
     class ScoreTable < Base
       # @param scores [Array<Hash>] Array of {label:, value:, max:} hashes

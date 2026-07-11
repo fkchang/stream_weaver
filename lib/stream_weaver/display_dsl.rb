@@ -82,6 +82,16 @@ module StreamWeaver
       with_container(Components::Collapsible.new(label, expanded: expanded, **options), &block)
     end
 
+    # Progressive disclosure without nested expandable_card hacks (03 gap #7):
+    # native <details>/<summary>, works with zero JS/Alpine.
+    def accordion(**options, &block)
+      with_container(Components::Accordion.new(**options), &block)
+    end
+
+    def section(title, open: false, **options, &block)
+      with_container(Components::AccordionSection.new(title, open: open, **options), &block)
+    end
+
     def alert(variant: :info, title: nil, dismissible: false, **options, &block)
       with_container(Components::Alert.new(variant: variant, title: title, dismissible: dismissible, **options), &block)
     end

@@ -1268,6 +1268,40 @@ module StreamWeaver
         end
       end
 
+      # Render an accordion -- a plain wrapper around native <details> sections.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param children [Array<Components::AccordionSection>] The sections
+      # @param options [Hash] Component options
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_accordion(view, children, options, state)
+        inject_accordion_css(view)
+
+        view.div(class: "sw-accordion") do
+          children.each { |section| section.render(view, state) }
+        end
+      end
+
+      # Render a single accordion section as native <details>/<summary> --
+      # expand/collapse is handled entirely by the browser, no JS required.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::AccordionSection]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_accordion_section(view, component, state)
+        attrs = { class: "sw-accordion__section" }
+        attrs[:open] = true if component.open
+
+        view.details(**attrs) do
+          view.summary(class: "sw-accordion__summary") { component.title }
+          view.div(class: "sw-accordion__body") do
+            component.children.each { |child| child.render(view, state) }
+          end
+        end
+      end
+
       # Render a score table with color-coded metrics
       #
       # Render a data table with configurable styling
@@ -3929,6 +3963,13 @@ module StreamWeaver
         view.style { view.raw(view.safe(date_field_css)) }
       end
 
+      def inject_accordion_css(view)
+        return if view.instance_variable_get(:@_accordion_css_injected)
+
+        view.instance_variable_set(:@_accordion_css_injected, true)
+        view.style { view.raw(view.safe(accordion_css)) }
+      end
+
       def inject_comparison_css(view)
         return if view.instance_variable_get(:@_comparison_css_injected)
 
@@ -4458,6 +4499,56 @@ module StreamWeaver
 
           html.dark .sw-date-field input[type="date"] {
             color-scheme: dark;
+          }
+        CSS
+      end
+
+      def accordion_css
+        <<~CSS
+          /* ===========================================
+             Accordion Styles (sw- prefix, FAC-P2.2)
+             =========================================== */
+          .sw-accordion {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin: 0.75rem 0;
+          }
+
+          .sw-accordion__section {
+            border: 1px solid var(--sw-color-border, #e0e0e0);
+            border-radius: var(--sw-radius-md, 6px);
+            background: var(--sw-color-bg-card, #ffffff);
+            overflow: hidden;
+          }
+
+          .sw-accordion__summary {
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            list-style: none;
+            user-select: none;
+          }
+
+          .sw-accordion__summary::-webkit-details-marker {
+            display: none;
+          }
+
+          .sw-accordion__summary::before {
+            content: "▶";
+            display: inline-block;
+            margin-right: 0.5rem;
+            font-size: 0.75em;
+            transition: transform var(--sw-transition-fast, 120ms) ease-out;
+          }
+
+          .sw-accordion__section[open] > .sw-accordion__summary::before {
+            transform: rotate(90deg);
+          }
+
+          .sw-accordion__body {
+            padding: 0 1rem 0.875rem;
+            color: var(--sw-color-text, #111111);
           }
         CSS
       end
