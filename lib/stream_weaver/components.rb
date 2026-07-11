@@ -1192,6 +1192,29 @@ module StreamWeaver
       end
     end
 
+    # ChipGroup component for tag/chip multi-select bound to a state array.
+    # multi: true (default) stores an Array of selected values; multi: false
+    # stores a single scalar (radio-style exclusive selection).
+    class ChipGroup < Base
+      attr_reader :key, :choices, :multi, :options
+
+      # @param key [Symbol] The state key (Array when multi, scalar otherwise)
+      # @param choices [Array<String>, Array<Array(String, Object)>] Chip labels,
+      #   or [label, value] pairs
+      # @param multi [Boolean] Multi-select (Array state) vs single-select (default: true)
+      # @param options [Hash] Additional options (e.g. submit: false)
+      def initialize(key, choices = [], multi: true, **options)
+        @key = key
+        @choices = choices
+        @multi = multi
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_chip_group(view, self, state)
+      end
+    end
+
     # ExternalLinkButton component - opens URL and optionally submits form
     class ExternalLinkButton < Base
       # @param label [String] Button label

@@ -1621,6 +1621,70 @@ module StreamWeaver
         end
       end
 
+      # Render a tag/chip multi-select bound to a state array (or a scalar
+      # when multi: false). Mirrors the form_context/scope_name/top-level
+      # branching used by render_text_field/render_select so chip_group works
+      # the same way inside form/scope blocks.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::ChipGroup]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_chip_group(view, component, state)
+        inject_chip_group_css(view)
+        key = component.key
+        choices = component.choices
+        multi = component.multi
+        options = component.options
+        form_context = options[:form_context]
+        scope_name = options[:scope_name]
+
+        if form_context
+          form_name = form_context[:name]
+          current = (state[form_name] || {})[key]
+          model = "_form.#{key}"
+          name = "#{form_name}[#{key}]"
+          submit_attrs = {}
+        elsif scope_name
+          current = (state[scope_name] || {})[key]
+          model = "#{scope_name}.#{key}"
+          name = "#{scope_name}[#{key}]"
+          submit_attrs = chip_group_submit_attrs(view, options)
+        else
+          current = state[key]
+          model = key.to_s
+          name = key.to_s
+          submit_attrs = chip_group_submit_attrs(view, options)
+        end
+        current = multi ? Array(current) : current
+
+        view.div(class: "sw-chip-group") do
+          choices.each do |choice|
+            chip_label, value = choice.is_a?(Array) ? choice : [choice, choice]
+            checked = multi ? current.include?(value) : current == value
+
+            view.label(class: "sw-chip") do
+              view.input(
+                type: multi ? "checkbox" : "radio",
+                name: multi ? "#{name}[]" : name,
+                value: value,
+                checked: checked,
+                "x-model" => model,
+                class: "sw-chip__input",
+                **submit_attrs
+              )
+              view.span(class: "sw-chip__label") { chip_label }
+            end
+          end
+        end
+      end
+
+      def chip_group_submit_attrs(view, options)
+        return {} unless options.fetch(:submit, true)
+
+        htmx_attrs(url("/update"), view: view, loading: options.fetch(:loading, true), "hx-trigger" => "change")
+      end
+
       # Render a button that opens external URL and optionally submits form
       #
       # @param view [Phlex::HTML] The Phlex view instance
@@ -3970,6 +4034,13 @@ module StreamWeaver
         view.style { view.raw(view.safe(accordion_css)) }
       end
 
+      def inject_chip_group_css(view)
+        return if view.instance_variable_get(:@_chip_group_css_injected)
+
+        view.instance_variable_set(:@_chip_group_css_injected, true)
+        view.style { view.raw(view.safe(chip_group_css)) }
+      end
+
       def inject_comparison_css(view)
         return if view.instance_variable_get(:@_comparison_css_injected)
 
@@ -4549,6 +4620,53 @@ module StreamWeaver
           .sw-accordion__body {
             padding: 0 1rem 0.875rem;
             color: var(--sw-color-text, #111111);
+          }
+        CSS
+      end
+
+      def chip_group_css
+        <<~CSS
+          /* ===========================================
+             ChipGroup Styles (sw- prefix, FAC-P2.2)
+             =========================================== */
+          .sw-chip-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 0.5rem 0;
+          }
+
+          .sw-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.375rem 0.875rem;
+            border: 1px solid var(--sw-color-border, #e0e0e0);
+            border-radius: 999px;
+            background: var(--sw-color-bg-card, #ffffff);
+            color: var(--sw-color-text, #111111);
+            font-size: var(--sw-font-size-sm, 0.875rem);
+            cursor: pointer;
+            transition: all var(--sw-transition-fast, 120ms) ease-out;
+          }
+
+          .sw-chip:has(.sw-chip__input:checked) {
+            background: var(--sw-color-primary, #c2410c);
+            border-color: var(--sw-color-primary, #c2410c);
+            color: #ffffff;
+          }
+
+          .sw-chip:hover {
+            border-color: var(--sw-color-primary, #c2410c);
+          }
+
+          .sw-chip__input {
+            /* Visually hidden but still focusable/clickable via the label. */
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
           }
         CSS
       end

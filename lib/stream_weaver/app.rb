@@ -647,6 +647,15 @@ module StreamWeaver
       components << Components::TagButtons.new(key, tags, **options)
     end
 
+    # Tag/chip multi-select bound to a state array (03 gap #8: rivet's
+    # "* "-prefixed toggle buttons faking a checked state). multi: false
+    # binds a single scalar value (radio-style) instead of an array.
+    # Works inside form/scope like text_field/select.
+    def chip_group(key, choices = [], multi: true, **options)
+      initialize_form_state(key, options, options[:default] || (multi ? [] : nil))
+      components << Components::ChipGroup.new(key, choices, multi: multi, **options)
+    end
+
     # =========================================
     # Interactive components
     # =========================================
