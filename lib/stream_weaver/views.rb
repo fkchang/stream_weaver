@@ -3433,8 +3433,18 @@ module StreamWeaver
         @session_theme || @app.theme
       end
 
-      # Render inline CSS for theme overrides
+      # Render inline CSS for theme overrides.
+      #
+      # Scoped to body.sw-theme-<active theme> rather than a bare `body`
+      # selector: every built-in theme's own CSS uses that same
+      # body.sw-theme-<name> selector (specificity 0-1-1), which always
+      # beats a plain `body {}` (0-0-1) regardless of source order. Matching
+      # the selector's specificity means the tie is broken by cascade order
+      # instead -- this block is emitted in <body>, after the built-in
+      # theme's own block in <head>, so it wins (stream_weaver-ckz; same
+      # technique as the `html.dark body` dark-mode override above).
       def render_theme_overrides
+        warn_unknown_theme_override_tokens
         css_vars = @app.theme_overrides.map do |key, value|
           css_var = key.to_s.tr('_', '-')
           # Add sw- prefix if not present
@@ -3443,8 +3453,17 @@ module StreamWeaver
         end.join("\n  ")
 
         style do
-          raw(safe("body { #{css_vars} }"))
+          raw(safe("body.sw-theme-#{effective_theme} { #{css_vars} }"))
         end
+      end
+
+      def warn_unknown_theme_override_tokens
+        unknown = @app.theme_overrides.keys.reject { |key| Theme::VARIABLE_SCHEMA.key?(key.to_sym) }
+        return if unknown.empty?
+
+        warn "StreamWeaver: Unknown theme override token(s) #{unknown.map(&:inspect).join(', ')} -- " \
+             "no matching entry in Theme::VARIABLE_SCHEMA, so this override is emitted as a raw --sw- custom property " \
+             "that no built-in styling reads."
       end
 
       # Render CSS for custom registered themes

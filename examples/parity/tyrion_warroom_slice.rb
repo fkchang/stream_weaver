@@ -52,39 +52,25 @@ end
 
 LANES = [[:queue, "Queue"], [:active, "Active Campaign"], [:blocked, "Blocked Frontier"], [:done, "Shipped Keep"]].freeze
 
-# WORKAROUND (lib bug, see gsd/analysis/07-parity-early-gate.md gap #1):
-# `theme_overrides:` on App.new renders `body { --sw-color-primary: ...; }`
-# (specificity 0-0-1, lib/stream_weaver/views.rb:3437-3448) but every built-in
-# theme's own CSS is `body.sw-theme-<name> { --sw-color-primary: ...; }`
-# (specificity 0-1-1) -- the class selector always wins regardless of source
-# order, so theme_overrides: silently no-ops on top of any built-in `theme:`.
-# Verified live: with theme: :dashboard + theme_overrides: {color_primary:
-# "#D97706"}, the rendered page still carries dashboard's own "#a16207".
-# Workaround: register a full custom theme (merging dashboard's base
-# variables with the gold/parchment palette) so the override selector and
-# the base theme's selector are the same specificity and only one applies.
-tyrion_gold = StreamWeaver::Theme::BUILT_IN_THEMES[:dashboard][:variables].merge(
-  font_display: "'Cinzel', 'Lora', Georgia, serif",
-  font_body: "'Lora', Georgia, serif",
-  color_primary: "#D97706",
-  color_primary_hover: "#F59E0B",
-  color_bg: "#0D0A07",
-  color_bg_card: "#1A1208",
-  color_bg_elevated: "#241A0E",
-  color_text: "#F5E6C8",
-  color_text_muted: "#D4B896",
-  color_border: "#4A3520",
-  color_border_strong: "#6B4E2A",
-  color_accent: "#F59E0B",
-  card_border_left: "3px solid var(--sw-color-primary)"
-)
-StreamWeaver.register_theme(:tyrion_gold, tyrion_gold, base: :dashboard,
-                                            label: "Tyrion Gold/Parchment")
-
 App = StreamWeaver::App.new(
   "Tyrion War Room (parity slice)",
   chrome: false,
-  theme: :tyrion_gold
+  theme: :dashboard,
+  theme_overrides: {
+    font_display: "'Cinzel', 'Lora', Georgia, serif",
+    font_body: "'Lora', Georgia, serif",
+    color_primary: "#D97706",
+    color_primary_hover: "#F59E0B",
+    color_bg: "#0D0A07",
+    color_bg_card: "#1A1208",
+    color_bg_elevated: "#241A0E",
+    color_text: "#F5E6C8",
+    color_text_muted: "#D4B896",
+    color_border: "#4A3520",
+    color_border_strong: "#6B4E2A",
+    color_accent: "#F59E0B",
+    card_border_left: "3px solid var(--sw-color-primary)"
+  }
 ) do
   header1 "War Room"
   text "Field Ops Ledger -- parity slice", tone: :muted
