@@ -753,7 +753,12 @@ module StreamWeaver
     #     column :balance, format: :currency, align: :right
     #   end
     class Table < Base
-      attr_reader :columns
+      attr_reader :columns, :resolved_rows
+      # Deterministic DOM id assigned by the `table` DSL method (display_dsl.rb)
+      # for column-DSL tables, used to build stable `<tr id="#{dom_id}-row-#{key}">`
+      # ids that survive across rebuilds (see that method for why -- FAC row-granular
+      # narrowing, stream_weaver-95k). nil for tables that don't need row addressing.
+      attr_accessor :dom_id
 
       # Lazily resolves and memoizes a row's key, so column blocks that never
       # build a button never pay the cost (or the ArgumentError) of an
@@ -1014,9 +1019,14 @@ module StreamWeaver
           hover: @hover,
           sort_values: @sort_values || [],
           component_columns: @component_columns || [],
-          row_ids: @row_ids || []
+          row_ids: @row_ids || [],
+          dom_id: @dom_id
         )
       end
+      # #table_options is a pure derived-data reader (no side effects); the
+      # adapter calls it, and InteractionRunner's row-narrowing (stream_weaver-95k)
+      # needs it too to compare a table's pre/post-mutation row identity.
+      public :table_options
     end
 
     # Markdown component for rendering markdown-formatted content

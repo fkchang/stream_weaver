@@ -38,6 +38,12 @@ module StreamWeaver
 
     def call
       app.with_render_lock do
+        # For named actions (discovery_required? false below), this is still
+        # the retained tree from the last rebuild -- i.e. exactly what's live
+        # in the browser right now, before this interaction's mutation. Row
+        # narrowing (#row_narrowing) diffs a table found in here against the
+        # same table after the final rebuild to prove a mutation is row-local.
+        components_before = app.components
         before_state = deep_copy(state)
         prepare_state&.call(state)
         prepare_form_state if interaction == :form
@@ -54,7 +60,7 @@ module StreamWeaver
         completion_response || begin
           app.rebuild_with_state(state, generation: generation, state_version: state_version)
           persist_manifest&.call(app.render_state.action_tokens)
-          scoped_response(before_state) || Views::AppContentView.new(app, state, adapter, agentic).call
+          scoped_response(before_state, components_before) || Views::AppContentView.new(app, state, adapter, agentic).call
         end
       end
     end
@@ -75,7 +81,7 @@ module StreamWeaver
       value.transform_values { |item| item.dup rescue item }
     end
 
-    def scoped_response(before_state)
+    def scoped_response(before_state, components_before)
       scope = declared_scope
       if named_action? && !@named_action_authorized
         response_headers&.call("HX-Retarget" => "#app-container")
@@ -107,7 +113,100 @@ module StreamWeaver
       version = state_version + 1
       persist_state_version&.call(version)
       patch = state_patch(before_state, state, version)
-      Views::FragmentContentView.new(app, state, adapter, fragment, updates: extras, state_patch: patch).call
+
+      # Row-granular table swaps (stream_weaver-95k). A named action's row
+      # mutation can be narrowed whether the table it touched is the primary
+      # target fragment *or* one of the declared `updates:` extras -- the
+      # common shape is actually the latter (an "Add" button living in a
+      # toolbar fragment, with `updates: :the_table_fragment`), so both are
+      # analyzed independently and each narrows or falls back on its own.
+      if named_action? && components_before
+        primary_swap = row_swap_for(components_before, fragment)
+        extra_swaps = extras.map { |extra| row_swap_for(components_before, extra) }
+      end
+      extra_swaps ||= []
+
+      if primary_swap
+        response_headers&.call(primary_swap_headers(primary_swap))
+        return Views::RowSwapView.new(app, state, adapter, updates: extras, extra_swaps: extra_swaps,
+                                       state_patch: patch, primary: primary_swap_proc(primary_swap)).call
+      end
+
+      Views::FragmentContentView.new(app, state, adapter, fragment, updates: extras, extra_swaps: extra_swaps,
+                                      state_patch: patch).call
+    end
+
+    # Row-local proof for one fragment: does it contain exactly one table
+    # with row identity, and does that table's row-id list before/after this
+    # interaction's rebuild prove the mutation touched only one row? Same
+    # ordered row keys (edit), pre-set minus exactly the actioned key
+    # (delete), or pre-set plus one trailing key (create) -- anything else
+    # (a sort, a filter, more than one table, unresolvable row keys) returns
+    # nil, and the caller falls back to that fragment's full content, which
+    # is always correct (point 4 of the design: narrowing is a size
+    # optimization only, never a state-semantics change).
+    #
+    # @param components_before [Array<Components::Base>] The retained tree from before this
+    #   interaction's mutation (see #call)
+    # @param new_fragment [Components::Fragment] The post-mutation fragment (target or extra)
+    # @return [Hash, nil] `{ kind:, table:, idx:, row_dom_id: }` (idx absent for :delete) or nil
+    def row_swap_for(components_before, new_fragment)
+      old_fragment = find_fragment(components_before, new_fragment.id)
+      return nil unless old_fragment
+
+      old_table = single_row_table(old_fragment.children)
+      new_table = single_row_table(new_fragment.children)
+      return nil unless old_table && new_table && old_table.dom_id == new_table.dom_id
+
+      old_ids = old_table.table_options[:row_ids]
+      new_ids = new_table.table_options[:row_ids]
+      return nil if old_ids.empty? || new_ids.empty? || old_ids.any?(&:nil?) || new_ids.any?(&:nil?)
+
+      action_key = decoded_action && decoded_action[:k]
+      return nil if action_key.nil?
+
+      if new_ids == old_ids
+        idx = old_ids.index(action_key)
+        return nil unless idx
+        { kind: :edit, table: new_table, idx: idx, row_dom_id: "#{new_table.dom_id}-row-#{old_ids[idx]}" }
+      elsif old_ids.length == new_ids.length + 1 && (old_ids - [action_key]) == new_ids
+        { kind: :delete, table: old_table, row_dom_id: "#{old_table.dom_id}-row-#{action_key}" }
+      elsif new_ids.length == old_ids.length + 1 && new_ids[0...-1] == old_ids
+        { kind: :create, table: new_table, idx: new_ids.length - 1 }
+      end
+    end
+
+    # The table a fragment's row-mutation could be narrowed against, or nil
+    # if the fragment doesn't contain exactly one table with row identity --
+    # more than one is ambiguous (which table did the action touch?), so it
+    # falls back like everything else unproven (FAC-P2.1's `dom_id` is only
+    # assigned to column-DSL tables with row identity in the first place).
+    def single_row_table(children)
+      tables = collect_tables(children)
+      tables.length == 1 ? tables.first : nil
+    end
+
+    def collect_tables(children)
+      children.each_with_object([]) do |component, found|
+        found << component if component.is_a?(Components::Table) && component.dom_id
+        found.concat(collect_tables(component.children)) if component.respond_to?(:children) && component.children
+      end
+    end
+
+    def primary_swap_headers(swap)
+      case swap[:kind]
+      when :edit then { "HX-Retarget" => "##{swap[:row_dom_id]}", "HX-Reswap" => "morph:outerHTML" }
+      when :delete then { "HX-Retarget" => "##{swap[:row_dom_id]}", "HX-Reswap" => "delete" }
+      when :create then { "HX-Retarget" => "##{swap[:table].dom_id} tbody", "HX-Reswap" => "beforeend" }
+      end
+    end
+
+    def primary_swap_proc(swap)
+      return nil if swap[:kind] == :delete
+
+      table = swap[:table]
+      idx = swap[:idx]
+      ->(view) { adapter.render_table_row(view, table.resolved_rows[idx], idx, table.table_options, state, table.dom_id) }
     end
 
     def declared_scope

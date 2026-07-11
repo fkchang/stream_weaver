@@ -3566,33 +3566,116 @@ module StreamWeaver
       end
     end
 
+    # Shared by FragmentContentView and RowSwapView: renders one declared
+    # `updates:` fragment as an OOB element. Row-granular narrowing
+    # (stream_weaver-95k) applies independently per extra -- a toolbar button
+    # whose own fragment has nothing to narrow can still narrow an extra
+    # fragment's table (the common "Add" button outside the table, `updates:`
+    # pointing at the table's fragment, is exactly this shape). Falls back to
+    # the full-fragment OOB morph (pre-existing FAC-P1 behavior) whenever
+    # `swap` is nil -- i.e. that extra's mutation wasn't provably row-local.
+    module ExtraFragmentRendering
+      def render_extra(fragment, swap)
+        return render_row_oob(swap) if swap
+
+        div(id: fragment.id, "hx-swap-oob" => "morph:innerHTML") do
+          with_fragment(fragment.id) { fragment.children.each { |child| child.render(self, @state) } }
+        end
+      end
+
+      def render_row_oob(swap)
+        table = swap[:table]
+        case swap[:kind]
+        when :edit
+          adapter.render_table_row(self, table.resolved_rows[swap[:idx]], swap[:idx], table.table_options, @state, table.dom_id,
+                                    extra_attrs: { "hx-swap-oob" => "morph:outerHTML" })
+        when :delete
+          tr(id: swap[:row_dom_id], "hx-swap-oob" => "delete")
+        when :create
+          adapter.render_table_row(self, table.resolved_rows[swap[:idx]], swap[:idx], table.table_options, @state, table.dom_id,
+                                    extra_attrs: { "hx-swap-oob" => "beforeend:##{table.dom_id} tbody" })
+        end
+      end
+    end
+
     class FragmentContentView < AppContentView
-      def initialize(app, state, adapter, fragment, updates: [], state_patch:)
+      include ExtraFragmentRendering
+
+      # @param extra_swaps [Array<Hash, nil>] One row-swap analysis (or nil) per
+      #   entry in `updates:`, positionally aligned (stream_weaver-95k)
+      def initialize(app, state, adapter, fragment, updates: [], extra_swaps: [], state_patch:)
         super(app, state, adapter, false)
         @fragment = fragment
         @updates = updates
+        @extra_swaps = extra_swaps
         @state_patch = state_patch
       end
 
       def view_template
         with_fragment(@fragment.id) { @fragment.children.each { |child| child.render(self, @state) } }
-        @updates.each do |fragment|
-          div(id: fragment.id, "hx-swap-oob" => "morph:innerHTML") do
-            with_fragment(fragment.id) { fragment.children.each { |child| child.render(self, @state) } }
-          end
-        end
+        @updates.each_with_index { |fragment, i| render_extra(fragment, @extra_swaps[i]) }
         raw safe(StatePatchView.new(@state_patch).call)
       end
     end
 
+    # Row-granular counterpart to FragmentContentView (stream_weaver-95k): renders
+    # just the mutated row's content (or nothing, for a delete) instead of the
+    # whole fragment. The caller retargets/reswaps the *primary* content via
+    # HX-Retarget/HX-Reswap response headers (InteractionRunner picks the row's
+    # own id, or the table's tbody, as the target) rather than hx-swap-oob on the
+    # primary content itself -- that reuses the exact header mechanism the runner
+    # already has for full-view fallback, and keeps the primary swap composable
+    # with htmx's normal target/swap-style handling (morph, delete, beforeend)
+    # instead of hand-rolling those semantics via OOB attributes.
+    # Declared `updates:` extras and the state patch still need hx-swap-oob,
+    # since they are never part of the (retargeted) primary swap zone.
+    class RowSwapView < AppContentView
+      include ExtraFragmentRendering
+
+      # @param app [StreamWeaver::App] The app instance
+      # @param state [Hash] The current state
+      # @param adapter [StreamWeaver::Adapter::Base] The adapter for rendering
+      # @param updates [Array<Components::Fragment>] Declared `updates:` fragments, rendered OOB
+      # @param extra_swaps [Array<Hash, nil>] One row-swap analysis (or nil) per entry in `updates:`
+      # @param state_patch [Hash] The state patch (see InteractionRunner#state_patch)
+      # @param primary [Proc, nil] Renders the primary (retargeted) content into the view; nil for a delete (empty body)
+      def initialize(app, state, adapter, updates:, state_patch:, extra_swaps: [], primary: nil)
+        super(app, state, adapter, false)
+        @updates = updates
+        @extra_swaps = extra_swaps
+        @state_patch = state_patch
+        @primary = primary
+      end
+
+      def view_template
+        @primary&.call(self)
+        @updates.each_with_index { |fragment, i| render_extra(fragment, @extra_swaps[i]) }
+        raw safe(StatePatchView.new(@state_patch, true).call)
+      end
+    end
+
     class StatePatchView < Phlex::HTML
-      def initialize(patch)
+      # `oob` is positional, not a keyword arg: existing call sites pass the
+      # patch hash bare (`StatePatchView.new(set: ..., delete: ..., version: ...)`),
+      # relying on Ruby folding an un-braced trailing hash into the sole
+      # positional `patch` param. Declaring `oob:` as a keyword instead would
+      # make Ruby try to parse that call's hash as keyword arguments (it isn't).
+      def initialize(patch, oob = false)
         @patch = patch
+        @oob = oob
       end
 
       def view_template
         json = JSON.generate(@patch).gsub("<", "\\u003c")
-        script(type: "application/json", id: "sw-state-patch") { raw safe(json) }
+        attrs = { type: "application/json", id: "sw-state-patch" }
+        # RowSwapView's primary swap zone is a row/tbody, not the fragment, so
+        # the patch script can't ride along inside the primary content like it
+        # does for FragmentContentView -- it needs its own OOB delivery.
+        # beforeend into #app-container (not an id-match OOB swap) so this
+        # doesn't depend on a `#sw-state-patch` element already existing in
+        # the DOM (stream_weaver-95k).
+        attrs["hx-swap-oob"] = "beforeend:#app-container" if @oob
+        script(**attrs) { raw safe(json) }
       end
     end
   end

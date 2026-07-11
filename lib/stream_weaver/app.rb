@@ -17,12 +17,14 @@ module StreamWeaver
                     :current_tabs, :current_breadcrumbs, :current_dropdown,
                     :current_menu, :current_modal, :modal_context, :current_deck,
                     :current_slide, :current_app_shell, :current_row_key_thunk,
-                    :checkbox_keys, :action_tokens, :generation, :fragment_stack, :state_version
+                    :checkbox_keys, :action_tokens, :generation, :fragment_stack, :state_version,
+                    :table_counter
 
       def initialize
         self.components = []
         self.layout_slots = {}
         self.button_counter = 0
+        self.table_counter = 0
         self.seen_component_ids = Hash.new(0)
         self.checkbox_keys = []
         self.action_tokens = Set.new

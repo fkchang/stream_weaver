@@ -1187,8 +1187,13 @@ module StreamWeaver
         sort_values = options[:sort_values] || []
         row_ids = options[:row_ids] || []
         # A stable per-row DOM id needs a table id to hang off of, not just a
-        # sortable one (FAC-P2.1 decision 6) -- future row-level targeting.
-        table_id = "table_#{SecureRandom.hex(4)}" if options[:sortable] || options[:key].is_a?(Symbol)
+        # sortable one (FAC-P2.1 decision 6) -- row-level targeting for
+        # row-granular swaps (stream_weaver-95k). `dom_id` (deterministic,
+        # assigned once per table by the `table` DSL method) is used whenever
+        # present; SecureRandom stays as a fallback only for tables that
+        # don't need row addressing (no column DSL / no row identity), where
+        # per-render freshness doesn't matter.
+        table_id = options[:dom_id] || ("table_#{SecureRandom.hex(4)}" if options[:sortable] || options[:key].is_a?(Symbol))
 
         # Wrapper for sticky header or scrollable
         wrapper_classes = []
@@ -1272,51 +1277,76 @@ module StreamWeaver
 
             view.tbody(**tbody_attrs) do
               rows.each_with_index do |row, idx|
-                row_classes = []
-                row_classes << "sw-row-striped" if options[:striped] && idx.odd?
-                row_classes << "sw-row-hoverable" if options[:hoverable]
-                row_classes << "sw-table__row--alt" if options[:alternating] && idx.odd?
-                row_classes << "sw-table__row--hover" if options[:hover]
-
-                tr_attrs = {}
-                tr_attrs[:class] = row_classes.join(" ") if row_classes.any?
-                row_id = row_ids[idx]
-                tr_attrs[:id] = "#{table_id}-row-#{row_id}" if table_id && row_id
-
-                view.tr(**tr_attrs) do
-                  row.each_with_index do |cell, col_idx|
-                    col = columns[col_idx]
-                    align = col&.align || :left
-                    cell_padding = options[:compact] ? "0.5rem 1rem" : "var(--sw-table-cell-padding, 0.75rem 1rem)"
-                    cell_style = "padding: #{cell_padding}; text-align: #{align}; border-bottom: 1px solid var(--sw-color-border, #e0e0e0);"
-                    if options[:bordered]
-                      cell_style += " border: 1px solid var(--sw-color-border, #e0e0e0);"
-                    end
-                    if col_idx.zero?
-                      cell_style += " color: var(--sw-color-accent, #1E4ED8); font-family: var(--sw-font-mono, monospace); font-size: .8rem;"
-                    end
-
-                    # Apply column style if defined
-                    if col&.style.is_a?(Proc)
-                      # Dynamic style based on cell value - would need to be pre-computed
-                      # For now, skip dynamic styles in adapter
-                    end
-
-                    td_attrs = { style: cell_style }
-                    sort_value = sort_values.dig(idx, col_idx)
-                    td_attrs["data-sort-value"] = sort_value.to_s unless sort_value.nil?
-
-                    if cell.is_a?(Array)
-                      view.td(**td_attrs) { cell.each { |component| component.render(view, state) } }
-                    elsif options[:markdown]
-                      cell_content = parse_cell_markdown(cell.to_s)
-                      view.td(**td_attrs) { view.raw(view.safe(cell_content)) }
-                    else
-                      view.td(**td_attrs) { cell.to_s }
-                    end
-                  end
-                end
+                render_table_row(view, row, idx, options, state, table_id)
               end
+            end
+          end
+        end
+      end
+
+      # Renders one `<tr>` -- the body of the row loop in #render_table,
+      # extracted so InteractionRunner's row-granular narrowing
+      # (stream_weaver-95k) can render a single row's HTML standalone (for
+      # an OOB row swap) instead of the whole table.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param row [Array] One row's cell values (from Table#resolved_rows)
+      # @param idx [Integer] The row's index (drives striping/alternating classes and sort-value lookup)
+      # @param options [Hash] Table options, as built by Components::Table#table_options
+      # @param state [Object] Current state (only used to render component cells)
+      # @param table_id [String, nil] The table's dom id (Components::Table#dom_id), or nil
+      # @param extra_attrs [Hash] Extra `<tr>` attributes, merged in last -- used by
+      #   InteractionRunner's row-granular narrowing to mark a standalone row as an
+      #   out-of-band swap (`hx-swap-oob`) when it's rendered as part of a declared
+      #   `updates:` fragment instead of the primary target (stream_weaver-95k)
+      # @return [void] Renders to view
+      def render_table_row(view, row, idx, options, state, table_id, extra_attrs: {})
+        columns = options[:columns] || []
+        sort_values = options[:sort_values] || []
+        row_ids = options[:row_ids] || []
+
+        row_classes = []
+        row_classes << "sw-row-striped" if options[:striped] && idx.odd?
+        row_classes << "sw-row-hoverable" if options[:hoverable]
+        row_classes << "sw-table__row--alt" if options[:alternating] && idx.odd?
+        row_classes << "sw-table__row--hover" if options[:hover]
+
+        tr_attrs = {}
+        tr_attrs[:class] = row_classes.join(" ") if row_classes.any?
+        row_id = row_ids[idx]
+        tr_attrs[:id] = "#{table_id}-row-#{row_id}" if table_id && row_id
+        tr_attrs.merge!(extra_attrs)
+
+        view.tr(**tr_attrs) do
+          row.each_with_index do |cell, col_idx|
+            col = columns[col_idx]
+            align = col&.align || :left
+            cell_padding = options[:compact] ? "0.5rem 1rem" : "var(--sw-table-cell-padding, 0.75rem 1rem)"
+            cell_style = "padding: #{cell_padding}; text-align: #{align}; border-bottom: 1px solid var(--sw-color-border, #e0e0e0);"
+            if options[:bordered]
+              cell_style += " border: 1px solid var(--sw-color-border, #e0e0e0);"
+            end
+            if col_idx.zero?
+              cell_style += " color: var(--sw-color-accent, #1E4ED8); font-family: var(--sw-font-mono, monospace); font-size: .8rem;"
+            end
+
+            # Apply column style if defined
+            if col&.style.is_a?(Proc)
+              # Dynamic style based on cell value - would need to be pre-computed
+              # For now, skip dynamic styles in adapter
+            end
+
+            td_attrs = { style: cell_style }
+            sort_value = sort_values.dig(idx, col_idx)
+            td_attrs["data-sort-value"] = sort_value.to_s unless sort_value.nil?
+
+            if cell.is_a?(Array)
+              view.td(**td_attrs) { cell.each { |component| component.render(view, state) } }
+            elsif options[:markdown]
+              cell_content = parse_cell_markdown(cell.to_s)
+              view.td(**td_attrs) { view.raw(view.safe(cell_content)) }
+            else
+              view.td(**td_attrs) { cell.to_s }
             end
           end
         end

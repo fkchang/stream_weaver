@@ -168,6 +168,18 @@ module StreamWeaver
       table_component = Components::Table.new(
         actual_data, headers: headers, rows: rows, file: file, path: path, **options, &block
       )
+      # A deterministic (not SecureRandom) dom id, keyed off the enclosing
+      # fragment id plus a per-render occurrence counter, both of which
+      # replay identically across rebuilds of the same DSL for the same
+      # control-flow path. This is what lets InteractionRunner's row-granular
+      # narrowing (stream_weaver-95k) address a `<tr>` rendered by a prior
+      # rebuild -- a random id would never match between requests. Only
+      # tables using the column DSL have row identity worth addressing.
+      if table_component.columns.any?
+        render_state.table_counter += 1
+        fragment_part = (render_state.fragment_stack.last || "root").downcase.gsub(/[^a-z0-9]+/, "-")
+        table_component.dom_id = "table_#{fragment_part}-#{render_state.table_counter}"
+      end
       # Resolve cells now (not lazily at render time) so any buttons a cell
       # builds already exist in the component tree for dispatch to find --
       # button-action requests never call #render (FAC-P2.1 decision 4).
