@@ -115,7 +115,8 @@ module StreamWeaver
         # Cookie store enforces 4KB limit and warns; file store passes through unchanged.
         def session_safe_state(state)
           app_transient = settings.streamlit_app.transient_keys
-          SW_SESSION_FILTER.filter(state, app_transient: app_transient)
+          scope_names = settings.streamlit_app.scope_names
+          SW_SESSION_FILTER.filter(state, app_transient: app_transient, scope_names: scope_names)
         end
 
         # Set unchecked checkboxes to false (they don't send params)

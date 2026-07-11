@@ -18,7 +18,7 @@ module StreamWeaver
                     :current_menu, :current_modal, :modal_context, :current_deck,
                     :current_slide, :current_app_shell, :current_row_key_thunk,
                     :checkbox_keys, :action_tokens, :generation, :fragment_stack, :state_version,
-                    :table_counter
+                    :table_counter, :current_scope
 
       def initialize
         self.components = []
@@ -81,6 +81,7 @@ module StreamWeaver
       @endpoints     = []  # Array<{verb:, path:, block:}> — persistent, never cleared in rebuild
       @actions = {}
       @action_updates = {}
+      @scope_registry = {}  # name(sym) → {kind:, retain:} — persistent, never cleared in rebuild
       components.each { |mod| singleton_class.include(mod) }
     end
 
@@ -247,6 +248,7 @@ module StreamWeaver
       @render_state = RenderState.new
       @render_state.generation = generation.to_s
       @render_state.state_version = state_version.to_i
+      apply_scope_lifecycle
       evaluate_dsl_block(@block)
       @render_state.checkbox_keys = collect_checkbox_keys(components)
       @timers_frozen = true
@@ -426,14 +428,49 @@ module StreamWeaver
     end
 
     # =========================================
+    # State scopes (namespacing + lifetime)
+    # =========================================
+
+    # Declare a named, kind-tagged, lifetime-managed sub-hash of state.
+    # `form(name) { }` is sugar over `scope(name, kind: :form) { }` -- same
+    # storage shape (`state[name] = { field => value, ... }`), now nameable,
+    # kind-tagged, and (unless retain: true) auto-reset when its owning
+    # routing discriminant changes between rebuilds (see #apply_scope_lifecycle).
+    #
+    # @param name [Symbol] scope name -- becomes the top-level state key
+    # @param kind [Symbol] one of :form, :resource, :fragment, :app
+    # @param retain [Boolean] opt out of auto-reset (default false)
+    # @yield [Hash] the scope's sub-hash, for direct reads/writes; the block
+    #   also runs in App's DSL context, so nested field/component calls work
+    def scope(name, kind:, retain: false, &block)
+      name = name.to_sym
+      register_scope(name, kind: kind, retain: retain)
+      @_state[name] ||= {}
+      return @_state[name] unless block
+
+      saved_scope = render_state.current_scope
+      render_state.current_scope = name
+      evaluate_dsl_block(block, @_state[name])
+      render_state.current_scope = saved_scope
+      @_state[name]
+    end
+
+    # Names of every scope registered so far (via `scope` or `form`) --
+    # used by SessionStore to know which top-level hash values are safe to
+    # recurse one level into for blank-stripping (FAC-P3.1 decision §7).
+    def scope_names
+      @scope_registry.keys
+    end
+
+    # =========================================
     # Form container with special context
     # =========================================
 
     def form(name, **options, &block)
       name = name.to_sym
+      scope(name, kind: :form)
       form_component = Components::Form.new(name, **options)
       components << form_component
-      @_state[name] ||= {}
 
       parent_components = components
       render_state.current_form = form_component
@@ -1043,14 +1080,14 @@ module StreamWeaver
       components << component
     end
 
-    # Initialize state for form fields, handling form context
+    # Initialize state for form fields, handling form/scope context
     def initialize_form_state(key, options, default_value, skip_if_exists: false)
       options[:form_context] = render_state.form_context if render_state.form_context
 
-      if render_state.form_context
-        form_name = render_state.form_context[:name]
-        @_state[form_name] ||= {}
-        target = @_state[form_name]
+      target_scope = render_state.form_context&.fetch(:name, nil) || render_state.current_scope
+      if target_scope
+        @_state[target_scope] ||= {}
+        target = @_state[target_scope]
       else
         target = @_state
       end
@@ -1059,6 +1096,55 @@ module StreamWeaver
         target[key] = default_value unless target.key?(key)
       else
         target[key] ||= default_value
+      end
+    end
+
+    # Internal, flat, unscoped state key (like _sw_resource/_sw_action/_sw_id)
+    # that snapshots each non-retained scope's owning discriminant values, so
+    # #apply_scope_lifecycle can detect a change between rebuilds. Not scoped
+    # data itself -- routing/lifecycle metadata (FAC-P3.0a §8).
+    SCOPE_WATCH_KEY = :_sw_scope_watch
+
+    def register_scope(name, kind:, retain:)
+      return @scope_registry[name] if @scope_registry.key?(name)
+
+      existing_value = @_state[name]
+      if @_state.key?(name) && !existing_value.is_a?(Hash)
+        raise ArgumentError, "scope #{name.inspect} collides with an existing top-level state " \
+                              "key holding a #{existing_value.class} -- scopes are always Hash sub-states"
+      end
+
+      @scope_registry[name] = { kind: kind, retain: retain }
+    end
+
+    # Owning routing discriminant per scope kind (FAC-P3.0a §4). :app-kind
+    # (and any unrecognized kind) has no discriminant -- it never auto-resets.
+    def discriminant_keys_for(kind)
+      sk = Resource::StateKeys
+      case kind
+      when :resource then [sk::RESOURCE, sk::ID]
+      when :form     then [sk::RESOURCE, sk::ACTION]
+      when :fragment then [sk::RESOURCE, sk::ACTION, sk::ID, @route_key].compact
+      end
+    end
+
+    # Clears each non-retained scope's sub-hash when its owning routing
+    # discriminant changed since the last rebuild (FAC-P3.0a §4) -- the
+    # framework-enforced replacement for hand-nulled edit_* keys at every
+    # navigation-away call site. Runs before the DSL block evaluates so
+    # stale values are gone before any field re-initializes its default.
+    def apply_scope_lifecycle
+      return if @scope_registry.empty?
+
+      watch = @_state[SCOPE_WATCH_KEY] ||= {}
+      @scope_registry.each do |name, meta|
+        next if meta[:retain]
+        keys = discriminant_keys_for(meta[:kind])
+        next unless keys
+
+        signature = keys.map { |k| @_state[k] }
+        @_state[name] = {} if watch.key?(name) && watch[name] != signature
+        watch[name] = signature
       end
     end
 

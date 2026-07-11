@@ -10,7 +10,7 @@ module StreamWeaver
 
   module SessionStore
     class Base
-      def filter(state, app_transient: [])
+      def filter(state, app_transient: [], scope_names: [])
         raise NotImplementedError, "#{self.class}#filter not implemented"
       end
 
@@ -20,12 +20,24 @@ module StreamWeaver
       def blank?(v)
         v.nil? || v == ""
       end
+
+      # Recurse exactly one level into hash values that are registered scopes
+      # (App#scope_names) so a blank field buried inside e.g. state[:person_form]
+      # gets stripped too, same as a blank top-level key — FAC-P3.1 §7. Arbitrary
+      # user-managed hash values that were never declared via scope/form/resource
+      # are left opaque, exactly as before.
+      def strip_scoped_blanks(state, scope_names)
+        return state if scope_names.empty?
+        state.each_with_object({}) do |(k, v), result|
+          result[k] = (scope_names.include?(k) && v.is_a?(Hash)) ? v.reject { |_, sv| blank?(sv) } : v
+        end
+      end
     end
 
     class FileStore < Base
       # No size limit, but strip blank values — they'll be re-initialized by ||= on next load.
-      def filter(state, app_transient: [])
-        state.reject { |_, v| blank?(v) }
+      def filter(state, app_transient: [], scope_names: [])
+        strip_scoped_blanks(state, scope_names).reject { |_, v| blank?(v) }
       end
     end
 
@@ -34,8 +46,8 @@ module StreamWeaver
       LIMIT_BYTES    = 4096
       WARN_THRESHOLD = 3072 # warn at 75% capacity
 
-      def filter(state, app_transient: [])
-        filtered = state.reject do |k, v|
+      def filter(state, app_transient: [], scope_names: [])
+        filtered = strip_scoped_blanks(state, scope_names).reject do |k, v|
           blank?(v) ||
             HARD_TRANSIENT.include?(k) ||
             app_transient.include?(k) ||
