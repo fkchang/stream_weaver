@@ -704,8 +704,8 @@ module StreamWeaver
       #   (button, badge, hstack, ...); anything it builds is captured and
       #   returned as an Array<Components::Base> instead of a formatted scalar
       #   (FAC-P2.1 decision 1). Without an app, behavior is unchanged.
-      def extract_value(item, index = nil, app: nil)
-        return extract_component_cell(item, index, app) if app && @value_block
+      def extract_value(item, index = nil, app: nil, fragment: nil)
+        return extract_component_cell(item, index, app, fragment) if app && @value_block
 
         raw = if @value_block
                 @value_block.arity == 2 ? @value_block.call(item, index) : @value_block.call(item)
@@ -721,14 +721,18 @@ module StreamWeaver
 
       private
 
-      def extract_component_cell(item, index, app)
+      def extract_component_cell(item, index, app, fragment)
         parent_components = app.components
+        pushed_fragment = fragment && app.render_state.fragment_stack.last != fragment
+        app.render_state.fragment_stack << fragment if pushed_fragment
         app.components = []
         raw = @value_block.arity == 2 ? app.instance_exec(item, index, &@value_block) : app.instance_exec(item, &@value_block)
         built = app.components
         app.components = parent_components
 
         built.any? ? built : TableFormatters.apply(raw, @format)
+      ensure
+        app.render_state.fragment_stack.pop if pushed_fragment
       end
     end
 
@@ -819,10 +823,10 @@ module StreamWeaver
       # owning app so component cells and their buttons exist before dispatch
       # ever runs (FAC-P2.1 decision 4) -- and lazily, without an app, from
       # #render for Table instances built directly (legacy/scalar-only path).
-      def resolve!(app, state)
+      def resolve!(app, state, fragment: nil)
         return self if @resolved
 
-        resolved = resolve_data(state, app)
+        resolved = resolve_data(state, app, fragment)
         @resolved_headers = resolved[:headers]
         @resolved_rows = resolved[:rows]
         @sort_values = resolved[:sort_values] || []
@@ -859,9 +863,9 @@ module StreamWeaver
 
       private
 
-      def resolve_data(state, app = nil)
+      def resolve_data(state, app = nil, fragment = nil)
         raw = raw_data(state)
-        normalize(raw, app)
+        normalize(raw, app, fragment)
       end
 
       def raw_data(state)
@@ -897,12 +901,12 @@ module StreamWeaver
         end
       end
 
-      def normalize(data, app = nil)
+      def normalize(data, app = nil, fragment = nil)
         return data if data.is_a?(Hash) && data.key?(:headers) && data.key?(:rows)
 
         case data
         when Array
-          normalize_array(data, app)
+          normalize_array(data, app, fragment)
         when Hash
           normalize_hash_of_arrays(data)
         else
@@ -910,14 +914,14 @@ module StreamWeaver
         end
       end
 
-      def normalize_array(data, app)
+      def normalize_array(data, app, fragment)
         return { headers: [], rows: [] } if data.empty?
 
         first = data.first
         if @columns.any?
           # Column DSL - works for Hash rows and for any object the columns'
           # keys/blocks know how to read (structs, records, ...).
-          build_column_rows(data, app)
+          build_column_rows(data, app, fragment)
         elsif first.is_a?(Hash)
           keys = first.keys
           headers = keys.map { |k| k.to_s.split("_").map(&:capitalize).join(" ") }
@@ -932,7 +936,7 @@ module StreamWeaver
         end
       end
 
-      def build_column_rows(data, app)
+      def build_column_rows(data, app, fragment)
         headers = @columns.map(&:header)
         rows = []
         sort_values = []
@@ -944,7 +948,7 @@ module StreamWeaver
           saved_thunk = app.render_state.current_row_key_thunk if had_render_state
           app.render_state.current_row_key_thunk = row_key_thunk if had_render_state
 
-          rows << @columns.map { |col| col.extract_value(item, idx, app: app) }
+          rows << @columns.map { |col| col.extract_value(item, idx, app: app, fragment: fragment) }
           sort_values << @columns.map { |col| col.sort_value ? col.sort_value.call(item) : nil }
           row_ids << row_dom_key(item)
 

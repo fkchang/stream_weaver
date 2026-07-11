@@ -171,7 +171,7 @@ module StreamWeaver
       # Resolve cells now (not lazily at render time) so any buttons a cell
       # builds already exist in the component tree for dispatch to find --
       # button-action requests never call #render (FAC-P2.1 decision 4).
-      table_component.resolve!(self, state)
+      table_component.resolve!(self, state, fragment: render_state.fragment_stack.last)
       components << table_component
     end
 

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "rack/test"
 
 RSpec.describe "fragments" do
   let(:adapter) { StreamWeaver::Adapter::AlpineJS.new }
@@ -59,6 +60,30 @@ RSpec.describe "fragments" do
     expect(StreamWeaver::ActionToken.decode(token)).to include(f: "sw-frag-results")
   end
 
+  it "carries fragment scope through table-cell component capture" do
+    app = StreamWeaver::App.new("Table target") do
+      action(:edit) { |state, key| state[:edited] = key }
+      fragment(:people) do
+        table [{ id: 1, name: "Ada" }], row_key: ->(person) { person[:id] } do
+          column :name
+          column :actions do |person|
+            hstack { button "Edit", action: :edit, key: person[:id] }
+          end
+        end
+      end
+      text "UNRELATED PAGE COPY"
+    end
+    state = {}
+    html = render(app, state)
+    token = html[%r{/action/([^"']+)}, 1]
+
+    expect(StreamWeaver::ActionToken.decode(token)).to include(f: "sw-frag-people")
+
+    response = run(app, state, token, manifest: app.render_state.action_tokens.dup)
+    expect(response).to include("Ada")
+    expect(response).not_to include("UNRELATED PAGE COPY")
+  end
+
   it "signs fragment scope and button-level updates for legacy callbacks" do
     app = StreamWeaver::App.new("Legacy scope") do
       fragment(:results) do
@@ -78,6 +103,42 @@ RSpec.describe "fragments" do
 
     expect(response).to include("updated", 'hx-swap-oob="morph:innerHTML"')
     expect(response).not_to include('id="sw-state-data"')
+  end
+
+  it "targets live inputs at their fragment and scopes update responses" do
+    app = StreamWeaver::App.new("Live scope") do
+      fragment(:search) do
+        text_field :query
+        text "results for #{state[:query]}"
+      end
+      text "UNRELATED PAGE COPY"
+    end
+    session = Rack::Test::Session.new(Rack::MockSession.new(app.generate))
+    html = session.get("/").body
+    input = html[/<input[^>]+name="query"[^>]*>/]
+    update_path = CGI.unescapeHTML(input[/hx-post="([^"]+)"/, 1])
+
+    expect(input).to include('hx-target="#sw-frag-search"')
+
+    response = session.post(update_path, query: "Ada")
+    expect(response.body).to include("results for Ada", 'id="sw-state-patch"')
+    expect(response.body).not_to include("UNRELATED PAGE COPY", 'id="sw-state-data"')
+  end
+
+  it "keeps live inputs outside fragments on full-container updates" do
+    app = StreamWeaver::App.new("Live full") do
+      text_field :query
+      text "results for #{state[:query]}"
+    end
+    session = Rack::Test::Session.new(Rack::MockSession.new(app.generate))
+    html = session.get("/").body
+    input = html[/<input[^>]+name="query"[^>]*>/]
+
+    expect(input).to include('hx-target="#app-container"')
+
+    response = session.post("/update", query: "Ada")
+    expect(response.body).to include("results for Ada", 'id="sw-state-data"')
+    expect(response.body).not_to include('id="sw-state-patch"')
   end
 
   it "reruns once and returns only the target plus patch and declared OOB updates" do
