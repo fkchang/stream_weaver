@@ -612,6 +612,16 @@ module StreamWeaver
       components << Components::TextArea.new(key, **options)
     end
 
+    # Native <input type=date>, state-bound like text_field. Value is stored
+    # as an ISO 8601 string ("YYYY-MM-DD"); use Components::DateField.to_date
+    # to coerce it to a Date (03 gap #4: rivet hand-parsed Date from a raw
+    # text_field because date_field didn't exist).
+    def date_field(key, **options)
+      @transient_keys << key if options.delete(:transient)
+      initialize_form_state(key, options, options[:default] || "")
+      components << Components::DateField.new(key, **options)
+    end
+
     def code_editor(key, language: :ruby, readonly: true, height: "400px", **options)
       initialize_form_state(key, options, options[:default] || "")
       components << Components::CodeEditor.new(key, language: language, readonly: readonly, height: height, **options)

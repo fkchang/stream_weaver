@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'date'
+
 module StreamWeaver
   # Component classes for UI elements
   module Components
@@ -170,6 +172,39 @@ module StreamWeaver
 
       def callback_options
         @options.merge(on_change: on_change, on_blur: on_blur, debounce: debounce)
+      end
+    end
+
+    # DateField component for native date input, state-bound like TextField.
+    # Value is stored/read as an ISO 8601 string ("YYYY-MM-DD").
+    class DateField < Base
+      attr_reader :key
+
+      # @param key [Symbol] The state key
+      # @param label [String, nil] Optional label rendered above the input
+      # @param min [String, nil] Minimum selectable date (ISO 8601)
+      # @param max [String, nil] Maximum selectable date (ISO 8601)
+      # @param options [Hash] Additional options (e.g. submit: false)
+      def initialize(key, label: nil, min: nil, max: nil, **options)
+        @key = key
+        @options = options.merge(label: label, min: min, max: max)
+      end
+
+      def render(view, state)
+        view.adapter.render_date_field(view, @key, @options, state)
+      end
+
+      # Coerce an ISO 8601 date string (as stored in state) to a Date.
+      # Returns nil for blank or unparsable input instead of raising.
+      #
+      # @param value [String, nil]
+      # @return [Date, nil]
+      def self.to_date(value)
+        return nil if value.nil? || value.to_s.strip.empty?
+
+        Date.iso8601(value.to_s)
+      rescue ArgumentError
+        nil
       end
     end
 

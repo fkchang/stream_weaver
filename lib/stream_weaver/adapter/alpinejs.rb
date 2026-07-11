@@ -173,6 +173,41 @@ module StreamWeaver
         end
       end
 
+      # Render a native date input with Alpine.js binding
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param key [Symbol] The state key for this input
+      # @param options [Hash] Component options
+      # @option options [String] :label Optional label rendered above the input
+      # @option options [String] :min Minimum selectable date (ISO 8601)
+      # @option options [String] :max Maximum selectable date (ISO 8601)
+      # @option options [Boolean] :submit Whether to auto-submit on change (default: true)
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      def render_date_field(view, key, options, state)
+        inject_date_field_css(view)
+        should_submit = options.fetch(:submit, true)
+        input_id = "input-#{key}"
+
+        attrs = {
+          id: input_id,
+          type: "date",
+          name: key.to_s,
+          value: state[key] || "",
+          "x-model" => key.to_s
+        }
+        attrs[:min] = options[:min] if options[:min]
+        attrs[:max] = options[:max] if options[:max]
+        attrs.merge!(htmx_attrs(url("/update"), view: view, loading: options.fetch(:loading, true), "hx-trigger" => "change")) if should_submit
+
+        view.div(class: "sw-date-field") do
+          if options[:label]
+            view.label(class: "sw-date-field__label", for: input_id) { options[:label] }
+          end
+          view.input(**attrs)
+        end
+      end
+
       # Render a checkbox input with Alpine.js binding
       #
       # @param view [Phlex::HTML] The Phlex view instance
@@ -3887,6 +3922,13 @@ module StreamWeaver
         view.style { view.raw(view.safe(callout_css)) }
       end
 
+      def inject_date_field_css(view)
+        return if view.instance_variable_get(:@_date_field_css_injected)
+
+        view.instance_variable_set(:@_date_field_css_injected, true)
+        view.style { view.raw(view.safe(date_field_css)) }
+      end
+
       def inject_comparison_css(view)
         return if view.instance_variable_get(:@_comparison_css_injected)
 
@@ -4377,6 +4419,45 @@ module StreamWeaver
           }
           html.dark .sw-callout--risk {
             background: color-mix(in oklch, #f87171 10%, var(--sw-surface, oklch(0.205 0 0)));
+          }
+        CSS
+      end
+
+      def date_field_css
+        <<~CSS
+          /* ===========================================
+             DateField Styles (sw- prefix, FAC-P2.2)
+             =========================================== */
+          .sw-date-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.375rem;
+            margin: 0.5rem 0;
+          }
+
+          .sw-date-field__label {
+            font-size: var(--sw-font-size-sm, 0.875rem);
+            font-weight: 600;
+            color: var(--sw-color-text, #111111);
+          }
+
+          .sw-date-field input[type="date"] {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--sw-color-border, #e0e0e0);
+            border-radius: var(--sw-radius-md, 6px);
+            background: var(--sw-color-bg-card, #ffffff);
+            color: var(--sw-color-text, #111111);
+            font-family: inherit;
+            font-size: var(--sw-font-size-base, 1rem);
+          }
+
+          .sw-date-field input[type="date"]:focus {
+            outline: none;
+            border-color: var(--sw-color-border-focus, var(--sw-color-primary));
+          }
+
+          html.dark .sw-date-field input[type="date"] {
+            color-scheme: dark;
           }
         CSS
       end
