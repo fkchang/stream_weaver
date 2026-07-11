@@ -116,8 +116,8 @@ module StreamWeaver
     # Text / display
     # =========================================
 
-    def text(content)
-      components << Components::Text.new(content)
+    def text(content, tone: nil)
+      components << Components::Text.new(content, tone: tone)
     end
 
     def md(content)
@@ -512,7 +512,12 @@ module StreamWeaver
     # Render a non-dismissible callout box with colored left border.
     # Unlike Alert, Callout is static -- no dismiss button.
     #
+    # @param content [String, nil] Optional banner text, rendered as the sole
+    #   (or first) child -- sugar for the common one-line-banner case (03
+    #   honorable mention: raw hex/padding divs standing in for a banner).
     # @param variant [Symbol] Callout type (:info, :warning, :success, :error, :tip)
+    # @param tone [Symbol, nil] Alias for variant: (kept consistent with `text`'s
+    #   tone: vocabulary); wins over variant: when both are given.
     # @param title [String, nil] Optional callout title
     # @param options [Hash] Additional options
     # @yield Block of child components rendered inside the callout body
@@ -521,8 +526,20 @@ module StreamWeaver
     #   callout(variant: :warning, title: "Caution") do
     #     text "Be careful with this API."
     #   end
-    def callout(variant: :info, title: nil, **options, &block)
-      with_container(Components::Callout.new(variant: variant, title: title, **options), &block)
+    #
+    # @example
+    #   callout("Saved successfully.", tone: :success)
+    def callout(content = nil, variant: :info, tone: nil, title: nil, **options, &block)
+      component = Components::Callout.new(variant: tone || variant, title: title, **options)
+      components << component
+
+      parent_components = components
+      self.components = []
+      text(content) if content
+      evaluate_dsl_block(block) if block
+      component.children = components
+      self.components = parent_components
+      component
     end
 
     # Render a file-path-to-rationale mapping for pre-flight planning.

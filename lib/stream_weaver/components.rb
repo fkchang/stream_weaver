@@ -254,14 +254,25 @@ module StreamWeaver
 
     # Text component for displaying literal content (no markdown parsing)
     class Text < Base
+      TONES = %i[muted caption error success].freeze
+
+      attr_reader :tone
+
       # @param content [String, Proc] The text content (can be a proc for dynamic content)
-      def initialize(content)
+      # @param tone [Symbol, nil] Visual tone -- :muted, :caption, :error, :success (03
+      #   honorable mention: hand-coded hex/padding divs standing in for text variants)
+      def initialize(content, tone: nil)
         @content = content
+        @tone = TONES.include?(tone) ? tone : nil
       end
 
       def render(view, state)
         content = @content.is_a?(Proc) ? @content.call(state) : @content
-        view.p { content.to_s }
+        if @tone
+          view.adapter.render_text(view, content.to_s, @tone)
+        else
+          view.p { content.to_s }
+        end
       end
     end
 

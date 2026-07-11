@@ -208,6 +208,23 @@ module StreamWeaver
         end
       end
 
+      # Render literal text (no markdown parsing), optionally with a visual
+      # tone class (03 honorable mention: muted/caption/error/success text
+      # variants that apps hand-coded as raw hex/padding divs).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param content [String] Already-resolved text content
+      # @param tone [Symbol, nil] :muted, :caption, :error, :success, or nil
+      # @return [void] Renders to view
+      def render_text(view, content, tone = nil)
+        if tone
+          inject_text_tone_css(view)
+          view.p(class: "sw-text sw-text--#{tone}") { content }
+        else
+          view.p { content }
+        end
+      end
+
       # Render a checkbox input with Alpine.js binding
       #
       # @param view [Phlex::HTML] The Phlex view instance
@@ -4091,6 +4108,13 @@ module StreamWeaver
         view.style { view.raw(view.safe(board_css)) }
       end
 
+      def inject_text_tone_css(view)
+        return if view.instance_variable_get(:@_text_tone_css_injected)
+
+        view.instance_variable_set(:@_text_tone_css_injected, true)
+        view.style { view.raw(view.safe(text_tone_css)) }
+      end
+
       def inject_comparison_css(view)
         return if view.instance_variable_get(:@_comparison_css_injected)
 
@@ -4763,6 +4787,30 @@ module StreamWeaver
             border-radius: var(--sw-radius-sm, 4px);
             padding: 0.75rem;
             box-shadow: var(--sw-shadow-sm);
+          }
+        CSS
+      end
+
+      def text_tone_css
+        <<~CSS
+          /* ===========================================
+             Text Tone Variants (sw- prefix, FAC-P2.2)
+             =========================================== */
+          .sw-text--muted {
+            color: var(--sw-color-text-muted, #6b7280);
+          }
+
+          .sw-text--caption {
+            font-size: var(--sw-font-size-sm, 0.875rem);
+            color: var(--sw-color-text-muted, #6b7280);
+          }
+
+          .sw-text--error {
+            color: var(--sw-error, #dc2626);
+          }
+
+          .sw-text--success {
+            color: var(--sw-success, #16a34a);
           }
         CSS
       end
