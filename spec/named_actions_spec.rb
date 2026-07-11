@@ -126,6 +126,49 @@ RSpec.describe "named stateless actions" do
     expect(legacy).to have_received(:rebuild_with_state).twice
   end
 
+  it "does not lose a flash write made via the App#flash accessor inside a named action" do
+    app = StreamWeaver::App.new("Flash") do
+      action(:trigger) { |_state, _key| flash[:notice] = "Saved!" }
+      button "Go", action: :trigger, key: 1
+    end
+    token = rendered_token(app)
+    state = {}
+
+    run(app, state, token)
+    expect(state[:_flash]).to eq(notice: "Saved!")
+  end
+
+  it "does not lose open_modal/close_modal writes made inside a named action" do
+    app = StreamWeaver::App.new("Modal") do
+      action(:open) { |_state, _key| open_modal(:confirm) }
+      action(:close) { |_state, _key| close_modal(:confirm) }
+      button "Open", action: :open, key: 1
+      button "Close", action: :close, key: 2
+    end
+
+    open_token = rendered_token(app)
+    state = { confirm_open: false }
+    run(app, state, open_token)
+    expect(state[:confirm_open]).to eq(true)
+
+    app.rebuild_with_state(state, generation: generation)
+    close_token = app.components.last.instance_variable_get(:@options).fetch(:action_token)
+    run(app, state, close_token)
+    expect(state[:confirm_open]).to eq(false)
+  end
+
+  it "still binds app-level state helpers even when a named action's key argument is unused" do
+    app = StreamWeaver::App.new("Toast") do
+      action(:notify) { |_state, _key| show_toast("Hi") }
+      button "Go", action: :notify, key: 1
+    end
+    token = rendered_token(app)
+    state = {}
+
+    run(app, state, token)
+    expect(state[:_toasts]&.map { |t| t[:message] }).to eq(["Hi"])
+  end
+
   it "works inside a table cell using the row key" do
     app = StreamWeaver::App.new("Table") do
       action(:choose) { |state, key| state[:chosen] = key }

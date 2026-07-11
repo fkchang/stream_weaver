@@ -244,6 +244,20 @@ module StreamWeaver
       @endpoints.find { |e| e[:verb] == verb && e[:path] == path }
     end
 
+    # Points @_state at the given state object without running a full
+    # rebuild (#rebuild_with_state). Named-action dispatch skips the
+    # pre-dispatch discovery rebuild by design (see InteractionRunner
+    # #discovery_required?), so without this, app-level state helpers
+    # reached from inside the handler (flash, open_modal, close_modal,
+    # show_toast, dismiss_toast, clear_toasts -- anything that reads/writes
+    # @_state directly rather than taking state as an argument) would
+    # target the previous request's now-stale state object, and any writes
+    # made through them would be silently discarded once the post-dispatch
+    # rebuild repoints @_state at this request's state (stream_weaver-dwi).
+    def bind_dispatch_state(current_state)
+      @_state = current_state
+    end
+
     def rebuild_with_state(current_state, generation: "0", state_version: 0)
       @_state = current_state
       @render_state = RenderState.new

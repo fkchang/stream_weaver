@@ -307,6 +307,7 @@ module StreamWeaver
           return unless action_manifest.include?(ActionToken.fingerprint(target))
           raise StaleActionDefinition if payload[:d] != app.action_definition_digest || payload[:g].to_s != generation
           @named_action_authorized = true
+          app.bind_dispatch_state(state)
           app.actions[payload[:a].to_sym]&.call(state, payload[:k])
         else
           find_button(app.components, target.to_s)&.execute(state)

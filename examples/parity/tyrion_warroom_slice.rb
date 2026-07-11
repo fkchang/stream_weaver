@@ -94,22 +94,14 @@ App = StreamWeaver::App.new(
   # `updates: :flash` only -- the button already lives inside fragment(:detail),
   # so that fragment is the primary (auto-scoped) target; re-listing it in
   # `updates:` would double-render the same fragment id as an OOB extra too.
-  #
-  # WORKAROUND (lib bug, see gsd/analysis/07-parity-early-gate.md gap #2, and
-  # rivet_people_slice.rb's save_edit action for the full writeup): the
-  # `flash` accessor reads/writes App#@_state, which named actions never sync
-  # to this request's `state` before the handler runs (interaction_runner.rb
-  # :245-247, app.rb:105-106/247-248) -- so `flash[...] =` here silently
-  # no-ops (verified live: the OOB flash fragment rendered empty). Write
-  # `state[:_flash]` directly instead.
   action(:add_note, updates: :flash) do |state, key|
     body = state[:note_body].to_s.strip
     if body.empty?
-      (state[:_flash] ||= {})[:error] = "Note can't be blank."
+      flash[:error] = "Note can't be blank."
     else
       StoryStore.add_note!(key, body)
       state[:note_body] = ""
-      (state[:_flash] ||= {})[:notice] = "Note added."
+      flash[:notice] = "Note added."
     end
   end
 

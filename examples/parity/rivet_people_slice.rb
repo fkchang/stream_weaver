@@ -112,33 +112,19 @@ App = app "Rivet People (parity slice)" do
   # response to that one <tr> instead of the whole :people fragment.
   action(:touch) { |_state, key| PeopleStore.touch!(key) }
 
-  # WORKAROUND (lib bug, see gsd/analysis/07-parity-early-gate.md gap #2):
-  # named actions skip the pre-dispatch discovery rebuild (`discovery_required?`
-  # is false for them, lib/stream_weaver/interaction_runner.rb:245-247), so
-  # `App#@_state` is NOT yet synced to this request's `state` when the handler
-  # runs -- it's only synced by the *post*-dispatch rebuild, after this block
-  # returns (lib/stream_weaver/app.rb:105-106, :247-248). The `flash` accessor
-  # (`def flash; @_state[:_flash] ||= {}; end`) therefore reads/writes a stale
-  # hash and the message is silently lost -- verified live (curl round trip):
-  # the OOB flash fragment renders empty even though `flash[:error] = "..."`
-  # ran. `close_modal`/`open_modal` have the same `@_state` dependency and are
-  # equally unreliable from a named action. The block's own `state` param IS
-  # the correct, current object (legacy block buttons don't hit this --
-  # they DO get a discovery rebuild first, which syncs @_state). Workaround:
-  # write `state[:_flash]` directly instead of the `flash` accessor.
   action(:save_edit, updates: %i[people flash]) do |state, _key|
     person = PeopleStore.find(state[:editing_id])
     name = state[:edit_name].to_s.strip
 
     if name.empty?
-      (state[:_flash] ||= {})[:error] = "Name can't be blank."
+      flash[:error] = "Name can't be blank."
     else
       PeopleStore.update(person[:id], name: name,
                                        relationship: state[:edit_relationship].to_s,
                                        tags: Array(state[:edit_tags]))
       state[:editing_id] = nil
       state[:quick_edit_open] = false
-      (state[:_flash] ||= {})[:notice] = "Saved #{name}."
+      flash[:notice] = "Saved #{name}."
     end
   end
 
