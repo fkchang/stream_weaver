@@ -398,9 +398,14 @@ module StreamWeaver
         session[:app_states][app_id] ||= {}
       end
 
+      # Service-mode parity with SessionStore::Base#filter (flash-prg.md §5):
+      # flash is one-shot, so it must never be the value persisted for the
+      # *next* request. Storing a stripped copy -- not mutating `state` in
+      # place -- leaves the caller's live `state` object (already used, or
+      # about to be used, for *this* request's render) untouched.
       def set_app_state(app_id, state)
         session[:app_states] ||= {}
-        session[:app_states][app_id] = state
+        session[:app_states][app_id] = state.reject { |k, _| k == :_flash }
       end
 
       def action_generation(app_id)

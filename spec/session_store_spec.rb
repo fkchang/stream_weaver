@@ -29,6 +29,12 @@ RSpec.describe StreamWeaver::SessionStore do
       # one level only: the nested `address` hash itself is untouched
       expect(result[:person_form][:address]).to eq({ street: "", city: "Reno" })
     end
+
+    it "always excludes _flash -- flash is one-shot, never the value persisted for the next request (FAC-P3.2b)" do
+      state = { name: "Alice", _flash: { notice: "Saved!" } }
+      result = store.filter(state)
+      expect(result).to eq({ name: "Alice" })
+    end
   end
 
   describe StreamWeaver::SessionStore::CookieStore do
@@ -44,6 +50,12 @@ RSpec.describe StreamWeaver::SessionStore do
       state = { code_content: "keep me out", visible: "x" }
       result = store.filter(state, app_transient: [:visible], scope_names: [])
       expect(result).to eq({})
+    end
+
+    it "always excludes _flash -- flash is one-shot, never the value persisted for the next request (FAC-P3.2b)" do
+      state = { name: "Alice", _flash: { notice: "Saved!" } }
+      result = store.filter(state)
+      expect(result).to eq({ name: "Alice" })
     end
   end
 end

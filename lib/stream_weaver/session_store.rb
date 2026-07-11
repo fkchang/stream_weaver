@@ -10,6 +10,13 @@ module StreamWeaver
 
   module SessionStore
     class Base
+      # Flash is one-shot (flash-prg.md §1): visible in the response that set
+      # it, never persisted for the next request. Excluding it here -- at the
+      # single point every filter subclass already funnels through -- is what
+      # makes that true; the caller's `state` object itself is untouched, so
+      # the render that already read it for *this* response is unaffected.
+      FLASH_KEY = :_flash
+
       def filter(state, app_transient: [], scope_names: [])
         raise NotImplementedError, "#{self.class}#filter not implemented"
       end
@@ -37,7 +44,7 @@ module StreamWeaver
     class FileStore < Base
       # No size limit, but strip blank values — they'll be re-initialized by ||= on next load.
       def filter(state, app_transient: [], scope_names: [])
-        strip_scoped_blanks(state, scope_names).reject { |_, v| blank?(v) }
+        strip_scoped_blanks(state, scope_names).reject { |k, v| blank?(v) || k == FLASH_KEY }
       end
     end
 
@@ -49,6 +56,7 @@ module StreamWeaver
       def filter(state, app_transient: [], scope_names: [])
         filtered = strip_scoped_blanks(state, scope_names).reject do |k, v|
           blank?(v) ||
+            k == FLASH_KEY ||
             HARD_TRANSIENT.include?(k) ||
             app_transient.include?(k) ||
             k.to_s.end_with?('_edited_code')

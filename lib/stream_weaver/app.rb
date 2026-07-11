@@ -250,6 +250,7 @@ module StreamWeaver
       @render_state.generation = generation.to_s
       @render_state.state_version = state_version.to_i
       apply_scope_lifecycle
+      flash_messages if chrome
       evaluate_dsl_block(@block)
       @render_state.checkbox_keys = collect_checkbox_keys(components)
       @timers_frozen = true
@@ -889,6 +890,38 @@ module StreamWeaver
       @_state[:_toasts] = []
     end
 
+    # =========================================
+    # Flash: one-shot, same-request messaging (FAC-P3.2b, flash-prg.md)
+    # =========================================
+
+    # Hash-like accessor backed by state[:_flash] (mirrors how `state` itself
+    # is exposed): `flash[:notice] = "Person created."`. flash.now-only
+    # semantics -- visible in the render that answers this request, gone by
+    # the next one (session persistence excludes :_flash entirely; see
+    # SessionStore::Base#filter and Service#set_app_state). Not merged with
+    # the toast system: toast is a persistent, dismissible list; flash is a
+    # one-shot PRG-shaped message, deliberately a different lifetime.
+    def flash
+      @_state[:_flash] ||= {}
+    end
+
+    # Renders whatever key/value pairs are present in the current flash as
+    # Alert summaries, mapping known keys to Alert variants (:notice ->
+    # :success, :error -> :error) and falling back to :info for anything
+    # else. Auto-called near the top of #app-container when chrome: true
+    # (see #rebuild_with_state); apps with chrome: false place it explicitly.
+    def flash_messages
+      return unless (f = @_state[:_flash]) && !f.empty?
+      f.each do |key, message|
+        variant = case key.to_sym
+                  when :notice then :success
+                  when :error  then :error
+                  else :info
+                  end
+        alert(variant: variant) { text message }
+      end
+    end
+
     def canvas_continue(message: "Processing...")
       components << Components::CanvasContinue.new(message: message)
     end
@@ -1232,10 +1265,7 @@ module StreamWeaver
         id = store.create(coerced)
       end
 
-      # Raw state[:_flash] write, not the `flash` accessor -- the accessor,
-      # rendering, and one-shot session-clear lifecycle ship in FAC-P3.2b
-      # (flash-prg.md); this is the same wire shape that commit will build on.
-      state[:_flash] = { notice: "#{singular.capitalize} #{is_update ? 'updated' : 'created'}." }
+      flash[:notice] = "#{singular.capitalize} #{is_update ? 'updated' : 'created'}."
 
       if on_success
         instance_exec(id, &on_success)
