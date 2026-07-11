@@ -12,18 +12,19 @@ module StreamWeaverBench
 
       def build(variant)
         metrics = Metrics.new
+        people = MemoryStore.new(PEOPLE)
         named = variant != :legacy_full
         scoped = %i[named_fragments update_filter].include?(variant)
         app = StreamWeaver::App.new("Ledger #{variant}") do
-          state[:people] ||= StreamWeaverBench.deep_copy(PEOPLE)
           state[:query] ||= ""
           state[:error] ||= ""
+          state[:selection] ||= nil
 
           if named
-            action(:create_person, updates: (scoped ? :people : nil)) { |s, _| metrics.callback!; s[:people] << { id: 51, name: "New Person", email: "new@example.test", touched: "2026-07-01" } }
-            action(:edit_person) { |s, key| metrics.callback!; s[:people].find { |p| p[:id] == key }[:name] = "Edited Person" }
+            action(:create_person, updates: (scoped ? :people : nil)) { |_s, _| metrics.callback!; people.create(id: 51, name: "New Person", email: "new@example.test", touched: "2026-07-01") }
+            action(:edit_person) { |_s, key| metrics.callback!; people.update(key, name: "Edited Person") }
             action(:invalid_person) { |s, _| metrics.callback!; s[:error] = "Name is required" }
-            action(:delete_person) { |s, key| metrics.callback!; s[:people].reject! { |p| p[:id] == key } }
+            action(:delete_person) { |_s, key| metrics.callback!; people.destroy(key) }
           end
 
           toolbar = proc do
@@ -31,7 +32,7 @@ module StreamWeaverBench
               button "Create", action: :create_person, key: "new"
               button "Invalid", action: :invalid_person, key: "invalid"
             else
-              button("Create") { |s| metrics.callback!; s[:people] << { id: 51, name: "New Person", email: "new@example.test", touched: "2026-07-01" } }
+              button("Create") { |_s| metrics.callback!; people.create(id: 51, name: "New Person", email: "new@example.test", touched: "2026-07-01") }
               button("Invalid") { |s| metrics.callback!; s[:error] = "Name is required" }
             end
             text state[:error]
@@ -45,7 +46,7 @@ module StreamWeaverBench
 
           people_view = proc do
             text_field :query, placeholder: "Search", on_change: ->(_s, _value) { metrics.callback! } if variant == :update_filter
-            shown = state[:people].select { |person| person[:name].downcase.include?(state[:query].to_s.downcase) }
+            shown = people.all.select { |person| person[:name].downcase.include?(state[:query].to_s.downcase) }
             table shown, row_key: ->(person) { person[:id] } do
               column :name
               column :email
@@ -58,8 +59,8 @@ module StreamWeaverBench
                   end
                 else
                   hstack do
-                    button("Edit", key: person[:id]) { |s| metrics.callback!; s[:people].find { |p| p[:id] == person[:id] }[:name] = "Edited Person" }
-                    button("Delete", key: person[:id]) { |s| metrics.callback!; s[:people].reject! { |p| p[:id] == person[:id] } }
+                    button("Edit", key: person[:id]) { |_s| metrics.callback!; people.update(person[:id], name: "Edited Person") }
+                    button("Delete", key: person[:id]) { |_s| metrics.callback!; people.destroy(person[:id]) }
                   end
                 end
               end

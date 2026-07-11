@@ -21,6 +21,24 @@ module StreamWeaverBench
     { id: id, title: format("Story %02d", id), column: %w[Ready Active Done][index % 3], notes: ["Seed note #{id}"] }
   end.freeze
 
+  class MemoryStore
+    def initialize(records)
+      @records = StreamWeaverBench.deep_copy(records)
+    end
+
+    def all = @records
+    def find(id) = @records.find { |record| record[:id] == id }
+    def create(attributes) = @records << attributes.dup
+
+    def update(id, attributes)
+      find(id)&.merge!(attributes)
+    end
+
+    def destroy(id)
+      @records.reject! { |record| record[:id] == id }
+    end
+  end
+
   class Metrics
     attr_accessor :rebuilds, :callbacks
 
