@@ -50,8 +50,28 @@ module StreamWeaver
       with_container(Components::Grid.new(columns: columns, gap: gap, template: template, template_areas: template_areas, template_rows: template_rows, template_columns: template_columns, **options), &block)
     end
 
-    def columns(widths: nil, **options, &block)
-      with_container(Components::Columns.new(widths: widths, **options), &block)
+    # @param n [Integer, nil] Optional column count, primarily used with
+    #   items:. With no widths:, columns already divide evenly (flex 1 1 0
+    #   per column) -- n alone is advisory. Combined with items:, it drives
+    #   auto-distribution (see below).
+    # @param widths [Array<String>, nil] Explicit per-column widths -- still
+    #   honored as before.
+    # @param items [Enumerable, nil] When given, items are split into n (or
+    #   widths.size, or 2) equal chunks via each_slice and each chunk is
+    #   wrapped in its own `column`; the block runs once per item (03
+    #   honorable mention: presidential_mockup hand-computed
+    #   `each_slice((size / 3.0).ceil)` for exactly this).
+    def columns(n = nil, widths: nil, items: nil, **options, &block)
+      return with_container(Components::Columns.new(widths: widths, **options), &block) unless items
+
+      n ||= widths&.size || 2
+      slice_size = [(items.size / n.to_f).ceil, 1].max
+
+      with_container(Components::Columns.new(widths: widths, **options)) do
+        items.each_slice(slice_size) do |slice|
+          column { slice.each { |item| block.call(item) } }
+        end
+      end
     end
 
     def column(**options, &block)
