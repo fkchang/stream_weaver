@@ -158,6 +158,8 @@ end
 # Like ref_for, but for an unlabeled textbox (no <label>, no placeholder) --
 # the accessibility snapshot renders those as `- textbox [ref=eN]: <current value>`
 # instead of `textbox "label" [ref=eN]`, so match on the current value instead.
+# (Unused now that quick-edit's fields render a visible <label> -- FAC-9u2 --
+# but kept for any future unlabeled-field case.)
 def ref_for_textbox_value(text, value)
   return nil unless text
   m = text.match(/textbox \[ref=(e\d+)\]: #{Regexp.escape(value)}/)
@@ -256,7 +258,9 @@ end
 
 after_save = nil
 check("fill name + Save: row shows new name, flash appears, no console errors") do
-  name_ref = ref_for_textbox_value(edit_snap, "Nora Albrecht")
+  # "Name" is the field's <label> text (FAC-9u2: quick-edit's fields are now
+  # labeled), so the accessible name comes from the label, not the value.
+  name_ref = ref_for(edit_snap, "textbox", "Name")
   save_ref = ref_for(edit_snap, "button", "Save")
   raise "no name textbox found in the quick-edit modal" unless name_ref
   raise "no Save button found in the quick-edit modal" unless save_ref
@@ -289,7 +293,9 @@ check("search: typing filters the table (live keyup, primary-target swap -- not 
   # A fresh snapshot, not `snap` -- refs from the pre-Edit/Save snapshot are
   # stale by now (accessibility ref ids are only valid for the snapshot they
   # were captured in; the intervening clicks reshaped the page).
-  query_ref = ref_for(pw_snapshot_text, "textbox", "Search name, relationship, tag...")
+  # "Search" is the field's <label> text (FAC-9u2), so the accessible name
+  # comes from the label now, not the placeholder.
+  query_ref = ref_for(pw_snapshot_text, "textbox", "Search")
   raise "no search textbox found" unless query_ref
 
   pw('click', query_ref)

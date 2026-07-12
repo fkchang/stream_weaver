@@ -887,6 +887,24 @@ module StreamWeaver
                   line-height: 1.5;
                 }
 
+                /* Visible label wrapper for text_field/text_area/select/chip_group
+                   (FAC-9u2 -- these silently dropped label: before). */
+                .sw-field {
+                  display: flex;
+                  flex-direction: column;
+                  gap: var(--sw-spacing-xs);
+                }
+
+                .sw-field__label {
+                  font-size: var(--sw-font-size-sm);
+                  font-weight: 600;
+                  color: var(--sw-color-text);
+                }
+
+                .sw-field input, .sw-field select, .sw-field textarea, .sw-field .sw-chip-group {
+                  margin-top: 0;
+                }
+
                 /* ===========================================
                    App Header - Full-width header bar
                    =========================================== */

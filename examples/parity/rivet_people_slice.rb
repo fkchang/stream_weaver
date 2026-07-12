@@ -165,7 +165,7 @@ App = app "Rivet People (parity slice)" do
       modal(:quick_edit, title: "Quick edit") do
         text_field :edit_name, label: "Name", submit: false
         text_field :edit_relationship, label: "Relationship", submit: false
-        chip_group :edit_tags, PeopleData::TAG_VOCAB, multi: true, submit: false
+        chip_group :edit_tags, PeopleData::TAG_VOCAB, multi: true, submit: false, label: "Tags"
 
         modal_footer do
           button "Save", action: :save_edit, key: :save, style: :primary

@@ -44,6 +44,25 @@ module StreamWeaver
         "#{@url_prefix}#{path}"
       end
 
+      # Render a visible label above a labeled input, unless label is nil
+      # (FAC-9u2: text_field/text_area/select/chip_group all accepted a
+      # label: option but silently dropped it -- only date_field rendered
+      # it). Wraps the field so label + input stack; when no label is given,
+      # yields directly with no extra markup (byte-for-byte unchanged).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param label [String, nil]
+      # @param for_id [String, nil] The input's id, for the label's `for` attribute
+      # @yield Renders the input/textarea/select itself
+      def wrap_with_label(view, label, for_id = nil)
+        return yield unless label
+
+        view.div(class: "sw-field") do
+          view.label(class: "sw-field__label", **(for_id ? { for: for_id } : {})) { label }
+          yield
+        end
+      end
+
       # Render a single-line text input field with Alpine.js binding
       #
       # @param view [Phlex::HTML] The Phlex view instance
@@ -58,56 +77,65 @@ module StreamWeaver
         form_context = options[:form_context]
         scope_name = options[:scope_name]
         should_submit = options.fetch(:submit, true)
-
-        if form_context
-          # Inside form: use form-scoped x-model, no HTMX
-          form_name = form_context[:name]
-          form_state = state[form_name] || {}
-          view.input(
-            id: "input-#{form_name}-#{key}",
-            type: "text",
-            name: "#{form_name}[#{key}]",  # Rails-style nested params
-            value: form_state[key] || "",
-            placeholder: options[:placeholder] || "",
-            "x-model" => "_form.#{key}"  # Form-local Alpine scope
-          )
+        input_id = if form_context
+          "input-#{form_context[:name]}-#{key}"
         elsif scope_name
-          # Inside a bare `scope` block (not `form`): nested name/x-model so a
-          # "live" field's HTMX submit lands in state[scope_name][key], not a
-          # same-named flat top-level key (FAC-P3.1 handoff, form-for.md).
-          scope_state = state[scope_name] || {}
-          trigger_str, endpoint = build_input_triggers(key, options)
-          view.input(
-            id: "input-#{scope_name}-#{key}",
-            type: "text",
-            name: "#{scope_name}[#{key}]",
-            value: scope_state[key] || "",
-            placeholder: options[:placeholder] || "",
-            "x-model" => "#{scope_name}.#{key}",
-            **(should_submit ? htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str) : {})
-          )
-        elsif should_submit
-          trigger_str, endpoint = build_input_triggers(key, options)
-
-          view.input(
-            id: "input-#{key}",
-            type: "text",
-            name: key.to_s,
-            value: state[key] || "",
-            placeholder: options[:placeholder] || "",
-            "x-model" => key.to_s,
-            **htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str)
-          )
+          "input-#{scope_name}-#{key}"
         else
-          # No auto-submit: just Alpine.js binding, no HTMX
-          view.input(
-            id: "input-#{key}",
-            type: "text",
-            name: key.to_s,
-            value: state[key] || "",
-            placeholder: options[:placeholder] || "",
-            "x-model" => key.to_s
-          )
+          "input-#{key}"
+        end
+
+        wrap_with_label(view, options[:label], input_id) do
+          if form_context
+            # Inside form: use form-scoped x-model, no HTMX
+            form_name = form_context[:name]
+            form_state = state[form_name] || {}
+            view.input(
+              id: "input-#{form_name}-#{key}",
+              type: "text",
+              name: "#{form_name}[#{key}]",  # Rails-style nested params
+              value: form_state[key] || "",
+              placeholder: options[:placeholder] || "",
+              "x-model" => "_form.#{key}"  # Form-local Alpine scope
+            )
+          elsif scope_name
+            # Inside a bare `scope` block (not `form`): nested name/x-model so a
+            # "live" field's HTMX submit lands in state[scope_name][key], not a
+            # same-named flat top-level key (FAC-P3.1 handoff, form-for.md).
+            scope_state = state[scope_name] || {}
+            trigger_str, endpoint = build_input_triggers(key, options)
+            view.input(
+              id: "input-#{scope_name}-#{key}",
+              type: "text",
+              name: "#{scope_name}[#{key}]",
+              value: scope_state[key] || "",
+              placeholder: options[:placeholder] || "",
+              "x-model" => "#{scope_name}.#{key}",
+              **(should_submit ? htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str) : {})
+            )
+          elsif should_submit
+            trigger_str, endpoint = build_input_triggers(key, options)
+
+            view.input(
+              id: "input-#{key}",
+              type: "text",
+              name: key.to_s,
+              value: state[key] || "",
+              placeholder: options[:placeholder] || "",
+              "x-model" => key.to_s,
+              **htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str)
+            )
+          else
+            # No auto-submit: just Alpine.js binding, no HTMX
+            view.input(
+              id: "input-#{key}",
+              type: "text",
+              name: key.to_s,
+              value: state[key] || "",
+              placeholder: options[:placeholder] || "",
+              "x-model" => key.to_s
+            )
+          end
         end
       end
 
@@ -126,50 +154,59 @@ module StreamWeaver
         form_context = options[:form_context]
         scope_name = options[:scope_name]
         should_submit = options.fetch(:submit, true)
-
-        if form_context
-          # Inside form: use form-scoped x-model, no HTMX
-          form_name = form_context[:name]
-          form_state = state[form_name] || {}
-          view.textarea(
-            id: "input-#{form_name}-#{key}",
-            name: "#{form_name}[#{key}]",  # Rails-style nested params
-            placeholder: options[:placeholder] || "",
-            rows: options[:rows] || 3,
-            "x-model" => "_form.#{key}"  # Form-local Alpine scope
-          ) { form_state[key] || "" }
+        input_id = if form_context
+          "input-#{form_context[:name]}-#{key}"
         elsif scope_name
-          # Inside a bare `scope` block: nested name/x-model (FAC-P3.1 handoff).
-          scope_state = state[scope_name] || {}
-          trigger_str, endpoint = build_input_triggers(key, options)
-          view.textarea(
-            id: "input-#{scope_name}-#{key}",
-            name: "#{scope_name}[#{key}]",
-            placeholder: options[:placeholder] || "",
-            rows: options[:rows] || 3,
-            "x-model" => "#{scope_name}.#{key}",
-            **(should_submit ? htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str) : {})
-          ) { scope_state[key] || "" }
-        elsif should_submit
-          trigger_str, endpoint = build_input_triggers(key, options)
-
-          view.textarea(
-            id: "input-#{key}",
-            name: key.to_s,
-            placeholder: options[:placeholder] || "",
-            rows: options[:rows] || 3,
-            "x-model" => key.to_s,
-            **htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str)
-          ) { state[key] || "" }
+          "input-#{scope_name}-#{key}"
         else
-          # No auto-submit: just Alpine.js binding, no HTMX
-          view.textarea(
-            id: "input-#{key}",
-            name: key.to_s,
-            placeholder: options[:placeholder] || "",
-            rows: options[:rows] || 3,
-            "x-model" => key.to_s
-          ) { state[key] || "" }
+          "input-#{key}"
+        end
+
+        wrap_with_label(view, options[:label], input_id) do
+          if form_context
+            # Inside form: use form-scoped x-model, no HTMX
+            form_name = form_context[:name]
+            form_state = state[form_name] || {}
+            view.textarea(
+              id: "input-#{form_name}-#{key}",
+              name: "#{form_name}[#{key}]",  # Rails-style nested params
+              placeholder: options[:placeholder] || "",
+              rows: options[:rows] || 3,
+              "x-model" => "_form.#{key}"  # Form-local Alpine scope
+            ) { form_state[key] || "" }
+          elsif scope_name
+            # Inside a bare `scope` block: nested name/x-model (FAC-P3.1 handoff).
+            scope_state = state[scope_name] || {}
+            trigger_str, endpoint = build_input_triggers(key, options)
+            view.textarea(
+              id: "input-#{scope_name}-#{key}",
+              name: "#{scope_name}[#{key}]",
+              placeholder: options[:placeholder] || "",
+              rows: options[:rows] || 3,
+              "x-model" => "#{scope_name}.#{key}",
+              **(should_submit ? htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str) : {})
+            ) { scope_state[key] || "" }
+          elsif should_submit
+            trigger_str, endpoint = build_input_triggers(key, options)
+
+            view.textarea(
+              id: "input-#{key}",
+              name: key.to_s,
+              placeholder: options[:placeholder] || "",
+              rows: options[:rows] || 3,
+              "x-model" => key.to_s,
+              **htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str)
+            ) { state[key] || "" }
+          else
+            # No auto-submit: just Alpine.js binding, no HTMX
+            view.textarea(
+              id: "input-#{key}",
+              name: key.to_s,
+              placeholder: options[:placeholder] || "",
+              rows: options[:rows] || 3,
+              "x-model" => key.to_s
+            ) { state[key] || "" }
+          end
         end
       end
 
@@ -345,85 +382,92 @@ module StreamWeaver
         form_context = options[:form_context]
         scope_name = options[:scope_name]
         should_submit = options.fetch(:submit, true)
+        select_id = "select-#{key}"
 
-        if form_context
-          # Inside form: use form-scoped x-model, no HTMX
-          form_name = form_context[:name]
-          form_state = state[form_name] || {}
-          current_value = form_state[key] || options[:default]
+        wrap_with_label(view, options[:label], select_id) do
+          if form_context
+            # Inside form: use form-scoped x-model, no HTMX
+            form_name = form_context[:name]
+            form_state = state[form_name] || {}
+            current_value = form_state[key] || options[:default]
 
-          view.select(
-            name: "#{form_name}[#{key}]",  # Rails-style nested params
-            "x-model" => "_form.#{key}",   # Form-local Alpine scope
-            autocomplete: "off",
-            "x-init" => "$el.value = _form.#{key}"
-          ) do
-            choices.each do |choice|
-              label, value = choice.is_a?(Array) ? choice : [choice, choice]
-              view.option(
-                value: value,
-                selected: current_value == value
-              ) { label }
+            view.select(
+              id: select_id,
+              name: "#{form_name}[#{key}]",  # Rails-style nested params
+              "x-model" => "_form.#{key}",   # Form-local Alpine scope
+              autocomplete: "off",
+              "x-init" => "$el.value = _form.#{key}"
+            ) do
+              choices.each do |choice|
+                option_label, value = choice.is_a?(Array) ? choice : [choice, choice]
+                view.option(
+                  value: value,
+                  selected: current_value == value
+                ) { option_label }
+              end
             end
-          end
-        elsif scope_name
-          # Inside a bare `scope` block: nested name/x-model (FAC-P3.1 handoff).
-          scope_state = state[scope_name] || {}
-          has_on_change = options[:on_change]
-          endpoint = has_on_change ? url("/event/#{key}") : url("/update")
-          current_value = scope_state[key] || options[:default]
+          elsif scope_name
+            # Inside a bare `scope` block: nested name/x-model (FAC-P3.1 handoff).
+            scope_state = state[scope_name] || {}
+            has_on_change = options[:on_change]
+            endpoint = has_on_change ? url("/event/#{key}") : url("/update")
+            current_value = scope_state[key] || options[:default]
 
-          view.select(
-            name: "#{scope_name}[#{key}]",
-            "x-model" => "#{scope_name}.#{key}",
-            autocomplete: "off",
-            "x-init" => "$el.value = #{scope_name}.#{key}",
-            **(should_submit ? htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => "change") : {})
-          ) do
-            choices.each do |choice|
-              label, value = choice.is_a?(Array) ? choice : [choice, choice]
-              view.option(
-                value: value,
-                selected: current_value == value
-              ) { label }
+            view.select(
+              id: select_id,
+              name: "#{scope_name}[#{key}]",
+              "x-model" => "#{scope_name}.#{key}",
+              autocomplete: "off",
+              "x-init" => "$el.value = #{scope_name}.#{key}",
+              **(should_submit ? htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => "change") : {})
+            ) do
+              choices.each do |choice|
+                option_label, value = choice.is_a?(Array) ? choice : [choice, choice]
+                view.option(
+                  value: value,
+                  selected: current_value == value
+                ) { option_label }
+              end
             end
-          end
-        elsif should_submit
-          # Use /event endpoint if there's a callback
-          has_on_change = options[:on_change]
-          endpoint = has_on_change ? url("/event/#{key}") : url("/update")
-          current_value = state[key] || options[:default]
+          elsif should_submit
+            # Use /event endpoint if there's a callback
+            has_on_change = options[:on_change]
+            endpoint = has_on_change ? url("/event/#{key}") : url("/update")
+            current_value = state[key] || options[:default]
 
-          view.select(
-            name: key.to_s,
-            "x-model" => key.to_s,
-            autocomplete: "off",
-            **htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => "change")
-          ) do
-            choices.each do |choice|
-              label, value = choice.is_a?(Array) ? choice : [choice, choice]
-              view.option(
-                value: value,
-                selected: current_value == value
-              ) { label }
+            view.select(
+              id: select_id,
+              name: key.to_s,
+              "x-model" => key.to_s,
+              autocomplete: "off",
+              **htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => "change")
+            ) do
+              choices.each do |choice|
+                option_label, value = choice.is_a?(Array) ? choice : [choice, choice]
+                view.option(
+                  value: value,
+                  selected: current_value == value
+                ) { option_label }
+              end
             end
-          end
-        else
-          # No auto-submit: just Alpine.js binding, no HTMX
-          current_value = state[key] || options[:default]
+          else
+            # No auto-submit: just Alpine.js binding, no HTMX
+            current_value = state[key] || options[:default]
 
-          view.select(
-            name: key.to_s,
-            "x-model" => key.to_s,
-            autocomplete: "off",
-            "x-init" => "$el.value = #{key}"
-          ) do
-            choices.each do |choice|
-              label, value = choice.is_a?(Array) ? choice : [choice, choice]
-              view.option(
-                value: value,
-                selected: current_value == value
-              ) { label }
+            view.select(
+              id: select_id,
+              name: key.to_s,
+              "x-model" => key.to_s,
+              autocomplete: "off",
+              "x-init" => "$el.value = #{key}"
+            ) do
+              choices.each do |choice|
+                option_label, value = choice.is_a?(Array) ? choice : [choice, choice]
+                view.option(
+                  value: value,
+                  selected: current_value == value
+                ) { option_label }
+              end
             end
           end
         end
@@ -1786,22 +1830,24 @@ module StreamWeaver
         end
         current = multi ? Array(current) : current
 
-        view.div(class: "sw-chip-group") do
-          choices.each do |choice|
-            chip_label, value = choice.is_a?(Array) ? choice : [choice, choice]
-            checked = multi ? current.include?(value) : current == value
+        wrap_with_label(view, options[:label]) do
+          view.div(class: "sw-chip-group") do
+            choices.each do |choice|
+              chip_label, value = choice.is_a?(Array) ? choice : [choice, choice]
+              checked = multi ? current.include?(value) : current == value
 
-            view.label(class: "sw-chip") do
-              view.input(
-                type: multi ? "checkbox" : "radio",
-                name: multi ? "#{name}[]" : name,
-                value: value,
-                checked: checked,
-                "x-model" => model,
-                class: "sw-chip__input",
-                **submit_attrs
-              )
-              view.span(class: "sw-chip__label") { chip_label }
+              view.label(class: "sw-chip") do
+                view.input(
+                  type: multi ? "checkbox" : "radio",
+                  name: multi ? "#{name}[]" : name,
+                  value: value,
+                  checked: checked,
+                  "x-model" => model,
+                  class: "sw-chip__input",
+                  **submit_attrs
+                )
+                view.span(class: "sw-chip__label") { chip_label }
+              end
             end
           end
         end
