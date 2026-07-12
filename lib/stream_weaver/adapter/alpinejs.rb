@@ -925,7 +925,20 @@ module StreamWeaver
               // - https://github.com/bigskysoftware/htmx-extensions/tree/main/ext/alpine-morph
               // =============================================================
 
-              // Before swap: save focus/scroll state + freeze viewport to prevent flash
+              // Before swap: save focus/scroll state + freeze viewport to prevent flash,
+              // and sync Alpine reactive data from the server response.
+              //
+              // The data sync MUST happen here, before the swap, not in
+              // afterSettle: alpine-morph initializes newly-morphed-in elements
+              // (evaluating their x-model/x-bind/x-text directives) as part of
+              // the swap itself, which runs after this event but before
+              // afterSettle. A field that becomes visible for the first time in
+              // this response (e.g. a modal's fields, seeded server-side by the
+              // action that opened it) references a state key the client's
+              // Alpine store has never held -- if the store isn't updated until
+              // afterSettle, Alpine throws "ReferenceError: <key> is not
+              // defined" while initializing that element, before the sync code
+              // ever runs (stream_weaver-ho5).
               document.addEventListener('htmx:beforeSwap', function(e) {
                 // Save focus
                 const active = document.activeElement;
@@ -952,9 +965,64 @@ module StreamWeaver
                 if (container) {
                   container.style.minHeight = container.offsetHeight + 'px';
                 }
+
+                // Parse the incoming response (not yet in the live DOM) so we
+                // can read #sw-state-data / #sw-state-patch and merge them into
+                // Alpine's reactive store before the morph inserts any element
+                // that binds to those keys. A <template> keeps embedded
+                // <script> tags inert while still queryable.
+                var raw = e.detail && e.detail.serverResponse;
+                if (!container || typeof raw !== 'string') return;
+                var data = Alpine.$data(container);
+                if (!data) return;
+                var incoming = document.createElement('template');
+                incoming.innerHTML = raw;
+
+                // Full state snapshot (plain `/update` responses).
+                var stateEl = incoming.content.getElementById('sw-state-data');
+                if (stateEl) {
+                  try {
+                    var fresh = JSON.parse(stateEl.textContent);
+                    var transientKeys = new Set(fresh._transient || []);
+                    if (typeof fresh._sw_version === 'number') {
+                      window.StreamWeaverStateVersion = fresh._sw_version;
+                    }
+                    Object.keys(fresh).forEach(function(k) {
+                      if (k === '_transient' || k === '_sw_version') return;
+                      if (transientKeys.has(k)) return;
+                      if (data[k] !== fresh[k]) data[k] = fresh[k];
+                    });
+                  } catch(err) {}
+                }
+
+                // Scoped swaps carry a versioned top-level patch instead of a
+                // full state snapshot. Deletions are authoritative; nested
+                // changed values arrive whole in `set`.
+                var patchEl = incoming.content.getElementById('sw-state-patch');
+                if (patchEl) {
+                  try {
+                    var patch = JSON.parse(patchEl.textContent);
+                    var currentVersion = window.StreamWeaverStateVersion;
+                    if (typeof currentVersion !== 'number') {
+                      currentVersion = Number(container.dataset.swStateVersion || 0);
+                    }
+                    if (typeof patch.version !== 'number' || patch.version !== currentVersion + 1) {
+                      window.location.reload();
+                      return;
+                    }
+                    Object.keys(patch.set || {}).forEach(function(k) { data[k] = patch.set[k]; });
+                    (patch.delete || []).forEach(function(k) { delete data[k]; });
+                    window.StreamWeaverStateVersion = patch.version;
+                  } catch(err) {
+                    window.location.reload();
+                  }
+                }
               });
 
-              // After settle: restore focus and scroll, unfreeze viewport
+              // After settle: restore focus and scroll, unfreeze viewport, and
+              // remove the now-morphed-in #sw-state-patch node (its data was
+              // already applied pre-swap; #sw-state-data stays -- morph updates
+              // it in place by id on every response instead of duplicating it).
               document.addEventListener('htmx:afterSettle', function(e) {
                 // Restore focus
                 if (focusState && focusState.id) {
@@ -980,57 +1048,8 @@ module StreamWeaver
                   container.style.minHeight = '';
                 }
 
-                // Sync Alpine reactive data from server state
-                // morph:innerHTML preserves Alpine x-data on the container but never
-                // updates it from the server response. The server embeds fresh state
-                // in #sw-state-data — merge it into Alpine's reactive store so
-                // x-model bindings reflect the latest server values.
-                var stateEl = document.getElementById('sw-state-data');
-                var container = document.getElementById('app-container');
-                if (stateEl && container) {
-                  try {
-                    var fresh = JSON.parse(stateEl.textContent);
-                    var transientKeys = new Set(fresh._transient || []);
-                    var data = Alpine.$data(container);
-                    if (typeof fresh._sw_version === 'number') {
-                      window.StreamWeaverStateVersion = fresh._sw_version;
-                    }
-                    if (data) {
-                      Object.keys(fresh).forEach(function(k) {
-                        if (k === '_transient' || k === '_sw_version') return;
-                        if (transientKeys.has(k)) return;
-                        if (data[k] !== fresh[k]) data[k] = fresh[k];
-                      });
-                    }
-                  } catch(e) {}
-                }
-
-                // Scoped swaps carry a versioned top-level patch instead of a
-                // full state snapshot. Deletions are authoritative; nested
-                // changed values arrive whole in `set`.
                 var patchEl = document.getElementById('sw-state-patch');
-                if (patchEl && container) {
-                  try {
-                    var patch = JSON.parse(patchEl.textContent);
-                    var currentVersion = window.StreamWeaverStateVersion;
-                    if (typeof currentVersion !== 'number') {
-                      currentVersion = Number(container.dataset.swStateVersion || 0);
-                    }
-                    if (typeof patch.version !== 'number' || patch.version !== currentVersion + 1) {
-                      window.location.reload();
-                      return;
-                    }
-                    var data = Alpine.$data(container);
-                    if (data) {
-                      Object.keys(patch.set || {}).forEach(function(k) { data[k] = patch.set[k]; });
-                      (patch.delete || []).forEach(function(k) { delete data[k]; });
-                    }
-                    window.StreamWeaverStateVersion = patch.version;
-                    patchEl.remove();
-                  } catch(e) {
-                    window.location.reload();
-                  }
-                }
+                if (patchEl) patchEl.remove();
               });
             })();
           JS
