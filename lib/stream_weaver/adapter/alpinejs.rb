@@ -586,11 +586,17 @@ module StreamWeaver
           # Disable on click; page morph from server response replaces the element, clearing disabled
           style.merge("@click" => "$el.disabled=true; sendEvent('action', {button: '#{action_target}', state: getFormState()})")
         elsif modal_context
-          # hx-on::before-request closes the modal before HTMX fires — ordering matters here
+          # Closing must never happen before HTMX collects hx-include values --
+          # doing so on before-request drops every field the modal is meant to
+          # submit (stream_weaver-ho5). Instead, after the response has swapped
+          # in, read the modal wrapper's fresh data-sw-open attribute (morph
+          # keeps that in sync even though it leaves the `open` reactive value
+          # alone) and apply it -- this naturally keeps the modal open on a
+          # validation failure that re-renders it with editing state intact.
           htmx_attrs(url("/action/#{action_target}"), view: view, loading: loading, indicator: "##{button_id}",
             sw_updates: options[:updates], sw_primary: options[:primary],
             "hx-disabled-elt" => "this",
-            "hx-on::before-request" => "open = false").merge(id: button_id).merge(style)
+            "hx-on::after-request" => "var m=this.closest('.sw-modal-wrapper'); if(m) open=(m.dataset.swOpen==='true')").merge(id: button_id).merge(style)
         else
           htmx_attrs(url("/action/#{action_target}"), view: view, loading: loading, indicator: "##{button_id}",
             sw_updates: options[:updates], sw_primary: options[:primary], "hx-disabled-elt" => "this").merge(id: button_id).merge(style)
@@ -2210,8 +2216,16 @@ module StreamWeaver
 
         # Modal container with Alpine.js state
         # Uses a reactive binding to the state key
+        #
+        # data-sw-open mirrors the server's current open/closed decision as a
+        # plain attribute. Alpine morph preserves the local `open` reactive
+        # value across re-renders of this node (that's the point of morph --
+        # it never re-runs x-data), so a fresh server value alone can't move
+        # the modal; button handlers read data-sw-open post-swap and assign it
+        # into `open` explicitly (stream_weaver-ho5).
         view.div(
           class: "sw-modal-wrapper",
+          "data-sw-open" => is_open.to_s,
           "x-data" => "{ open: #{is_open} }",
           "x-init" => "$watch('open', v => { if(!v) htmx.ajax('POST', '#{url("/update")}', {target:'#app-container', swap:'morph:innerHTML', values:{'#{open_key}': 'false'}}) })",
           "@keydown.escape.window" => "open = false"
