@@ -195,7 +195,7 @@ module StreamWeaver
 
     def primary_swap_headers(swap)
       case swap[:kind]
-      when :edit then { "HX-Retarget" => "##{swap[:row_dom_id]}", "HX-Reswap" => "morph:outerHTML" }
+      when :edit then { "HX-Retarget" => "##{swap[:row_dom_id]}", "HX-Reswap" => "outerHTML" }
       when :delete then { "HX-Retarget" => "##{swap[:row_dom_id]}", "HX-Reswap" => "delete" }
       when :create then { "HX-Retarget" => "##{swap[:table].dom_id} tbody", "HX-Reswap" => "beforeend" }
       end

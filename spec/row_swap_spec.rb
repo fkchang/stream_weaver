@@ -57,8 +57,10 @@ RSpec.describe "row-granular table swaps" do
 
       response = run(app, state, token, manifest: app.render_state.action_tokens.dup, headers: headers)
 
-      expect(headers["HX-Retarget"]).to match(/-row-1\z/)
-      expect(headers["HX-Reswap"]).to eq("morph:outerHTML")
+      target = headers.fetch("HX-Retarget")
+      expect(target).to match(/-row-1\z/)
+      expect(headers).to eq("HX-Retarget" => target, "HX-Reswap" => "outerHTML")
+      expect(response.lstrip).to start_with("<tr ")
       expect(response).to include("lead", "Ada")
       # Bo's row itself isn't re-sent -- "Bo" only shows up (as expected) inside
       # the JSON state patch, which always carries the whole `people` array
@@ -183,7 +185,7 @@ RSpec.describe "row-granular table swaps" do
 
       response = run(app, state, token, manifest: app.render_state.action_tokens.dup, headers: headers)
 
-      expect(headers["HX-Reswap"]).to eq("morph:outerHTML")
+      expect(headers["HX-Reswap"]).to eq("outerHTML")
       expect(response).to include("total 1", 'hx-swap-oob="morph:innerHTML"')
     end
   end
