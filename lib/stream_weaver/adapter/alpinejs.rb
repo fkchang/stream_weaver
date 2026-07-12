@@ -1024,15 +1024,22 @@ module StreamWeaver
               // already applied pre-swap; #sw-state-data stays -- morph updates
               // it in place by id on every response instead of duplicating it).
               document.addEventListener('htmx:afterSettle', function(e) {
-                // Restore focus
+                // Restore focus. A live field (e.g. a debounced search input)
+                // re-triggers this on every keystroke; wrapped in try/catch so
+                // a focus/selection failure (stream_weaver-tv4: e.g. a stale
+                // selectionStart past the new value's length) can never abort
+                // the rest of this listener -- scroll restore and viewport
+                // unfreeze below must still run even if this does not.
                 if (focusState && focusState.id) {
-                  const el = document.getElementById(focusState.id);
-                  if (el) {
-                    el.focus();
-                    if (typeof el.setSelectionRange === 'function' && focusState.selectionStart !== null) {
-                      el.setSelectionRange(focusState.selectionStart, focusState.selectionEnd);
+                  try {
+                    const el = document.getElementById(focusState.id);
+                    if (el) {
+                      el.focus();
+                      if (typeof el.setSelectionRange === 'function' && focusState.selectionStart !== null) {
+                        el.setSelectionRange(focusState.selectionStart, focusState.selectionEnd);
+                      }
                     }
-                  }
+                  } catch(err) {}
                   focusState = null;
                 }
 
