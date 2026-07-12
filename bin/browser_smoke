@@ -1,0 +1,297 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/browser_smoke — deterministic browser acceptance over the parity slices
+#
+# bin/smoke drives StreamWeaver over raw HTTP; it can prove the server emits
+# the right bytes but not that a real browser (Alpine reactivity, htmx swap
+# extensions, JS event ordering) does the right thing with them. This script
+# closes that gap: it boots the parity slice apps for real and drives them
+# with playwright-cli (a standalone CLI, NOT the playwright MCP tool -- see
+# /opt/homebrew/bin/playwright-cli), asserting on the live accessibility
+# snapshot, DOM state, and console output.
+#
+#   bin/browser_smoke
+#
+# Exits 0 only if every non-pending check passes. Checks marked "pending"
+# are printed but do not affect the exit code -- see the stream_weaver-e4p
+# block below for why two rivet_people_slice checks are currently pending.
+#
+# Requires playwright-cli on PATH (`brew install` or see its own docs) and a
+# StreamWeaver checkout with bundle installed.
+
+require 'open3'
+require 'json'
+require 'fileutils'
+require 'tmpdir'
+
+REPO_ROOT = File.expand_path('..', __dir__)
+PLAYWRIGHT = 'playwright-cli'
+SESSION = 'sw_browser_smoke'
+
+CHECK = "✓"
+CROSS = "✗"
+PENDING = "○"
+
+$results = []
+$pids = []
+
+# ---------------------------------------------------------------------------
+# App boot / port discovery
+# ---------------------------------------------------------------------------
+
+def portfile_path(app_title)
+  sanitized = app_title.downcase.gsub(/[^a-z0-9_-]/, "_")
+  File.expand_path("~/.streamweaver/apps/#{sanitized}.port")
+end
+
+def boot_app(script_path, app_title)
+  path = portfile_path(app_title)
+  FileUtils.rm_f(path) # stale portfile from a previous run would report the wrong (dead) port
+
+  log = File.join(Dir.mktmpdir('sw-browser-smoke-'), 'boot.log')
+  pid = Process.spawn('bundle', 'exec', 'ruby', script_path, chdir: REPO_ROOT, pgroup: true, out: log, err: log)
+  $pids << pid
+
+  deadline = Time.now + 15
+  until File.exist?(path)
+    if Time.now > deadline
+      raise "#{app_title} never wrote a portfile at #{path} -- boot log:\n#{File.read(log)}"
+    end
+    sleep 0.1
+  end
+
+  url = File.read(path)[/^url=(.+)$/, 1] or raise "malformed portfile at #{path}"
+  url
+end
+
+def kill_all_tracked
+  $pids.each do |pid|
+    Process.kill('TERM', -pid)
+  rescue Errno::ESRCH, Errno::EPERM
+    next
+  end
+  sleep 0.3
+  $pids.each do |pid|
+    Process.kill('KILL', -pid)
+  rescue Errno::ESRCH, Errno::EPERM
+    next
+  end
+  $pids.each do |pid|
+    Process.wait(pid)
+  rescue Errno::ECHILD
+    next
+  end
+  $pids.clear
+end
+
+at_exit do
+  kill_all_tracked
+  system(PLAYWRIGHT, '-s=' + SESSION, 'close', out: File::NULL, err: File::NULL)
+end
+
+# ---------------------------------------------------------------------------
+# playwright-cli driver
+# ---------------------------------------------------------------------------
+
+def pw(*args)
+  out, err, status = Open3.capture3(PLAYWRIGHT, '-s=' + SESSION, *args)
+  raise "playwright-cli #{args.join(' ')} failed (exit #{status.exitstatus}):\n#{out}\n#{err}" unless status.success?
+  out
+end
+
+# `eval` prints the result between "### Result" and the next "### " header,
+# JSON-encoded for strings. Falls back to the raw text for anything that
+# doesn't parse (e.g. `undefined`).
+def pw_eval(js)
+  out = pw('eval', "() => (#{js})")
+  body = out[/### Result\n(.*?)\n### /m, 1] || out[/### Result\n(.*)\z/m, 1]
+  body = body.to_s.strip
+  begin
+    JSON.parse(body)
+  rescue JSON::ParserError
+    body
+  end
+end
+
+def pw_snapshot_text
+  out = pw('snapshot')
+  rel = out[/\[Snapshot\]\((.+?\.yml)\)/, 1] or raise "no snapshot path in:\n#{out}"
+  File.read(File.join(REPO_ROOT, rel))
+end
+
+def pw_click(ref)
+  out = pw('click', ref)
+  rel = out[/\[Snapshot\]\((.+?\.yml)\)/, 1] or raise "no snapshot path in:\n#{out}"
+  File.read(File.join(REPO_ROOT, rel))
+end
+
+def pw_console_log_path
+  out = pw('console')
+  rel = out[/\[Console\]\((.+?\.log)\)/, 1] or raise "no console log path in:\n#{out}"
+  File.join(REPO_ROOT, rel)
+end
+
+# Slice of a snapshot from a "- row \"...<needle>...\"" line up to (but not
+# including) the next sibling row at the same indent -- lets a query target
+# "the Edit button in Nora Albrecht's row" instead of the first Edit on the
+# page.
+def row_block(snapshot_text, needle)
+  lines = snapshot_text.lines
+  start_idx = lines.index { |l| l =~ /- row "/ && l.include?(needle) }
+  return nil unless start_idx
+
+  indent = lines[start_idx][/^(\s*)/, 1].length
+  rest = lines[(start_idx + 1)..] || []
+  end_offset = rest.index { |l| l =~ /^\s*- row "/ && l[/^(\s*)/, 1].length <= indent }
+  end_idx = end_offset ? start_idx + 1 + end_offset : lines.length
+  lines[start_idx...end_idx].join
+end
+
+def ref_for(text, role, label)
+  return nil unless text
+  m = text.match(/#{role} "#{Regexp.escape(label)}"[^\[\n]*\[ref=(e\d+)\]/)
+  m && m[1]
+end
+
+# ---------------------------------------------------------------------------
+# Check runner
+# ---------------------------------------------------------------------------
+
+def check(description)
+  ok, detail = yield
+  $results << [:ok, description] if ok
+  if ok
+    puts "#{CHECK} #{description}"
+  else
+    $results << [:fail, description]
+    puts "#{CROSS} #{description}#{detail ? " -- #{detail}" : ''}"
+  end
+rescue StandardError => e
+  $results << [:fail, description]
+  puts "#{CROSS} #{description} -- raised #{e.class}: #{e.message}"
+end
+
+# A known, already-diagnosed defect blocks this assertion (see `reason`).
+# Recorded separately from real failures so the script can still exit 0 --
+# per bin/browser_smoke's own contract, a defect this script *discovers*
+# gets a bd bug filed and the assertion marked pending, not silently
+# dropped and not treated as this script's own failure.
+def pending(description, reason)
+  $results << [:pending, description]
+  puts "#{PENDING} #{description} -- PENDING: #{reason}"
+end
+
+def section(title)
+  puts
+  puts "-- #{title} --"
+end
+
+# ===========================================================================
+# Rivet People (parity slice)
+# ===========================================================================
+
+section "Rivet People (parity slice)"
+
+rivet_url = boot_app(File.join(REPO_ROOT, 'examples', 'parity', 'rivet_people_slice.rb'), 'Rivet People (parity slice)')
+
+pw('open')
+pw('goto', rivet_url)
+
+snap = pw_snapshot_text
+
+check("initial load: 30 rows, no nested rows") do
+  row_count = snap.scan(/- row "/).size
+  # The header row plus 30 data rows == 31 total "- row" matches; a nesting
+  # regression (a <tr> rendered inside another <tr>) would double-count the
+  # affected row's cells but not add a second "- row" line, so this alone
+  # doesn't fully rule out nesting -- pair it with the DOM check below.
+  ok = row_count == 31
+  [ok, ok ? nil : "expected 31 \"- row\" entries (1 header + 30 data), got #{row_count}"]
+end
+
+nora_block = row_block(snap, "Nora Albrecht")
+touch_ref = ref_for(nora_block, "button", "Touch")
+
+check("Touch: row updates (Last column moves to \"today\") and no <tr> nests inside another <tr>") do
+  raise "no Touch button found in Nora Albrecht's row" unless touch_ref
+
+  after = pw_click(touch_ref)
+  nested = pw_eval("Array.from(document.querySelectorAll('tr')).some(function(tr){ return tr.querySelector('tr') !== null; })")
+  after_block = row_block(after, "Nora Albrecht")
+  ok = after_block && after_block.include?("today") && nested == false
+  [ok, ok ? nil : "row block after touch: #{after_block.inspect}, nested tr check: #{nested.inspect}"]
+end
+
+# --- stream_weaver-e4p: full-fragment OOB updates (hx-swap-oob="morph:...")
+# never swap in a real browser -- htmx core's OOB scanning doesn't dispatch
+# through swap-style extensions, so `Alpine.morph` is never invoked for
+# these elements even though the server response is complete and correct
+# (verified by curl and by spec/modal_save_round_trip_spec.rb). This is
+# how the "Edit" button delivers the quick-edit modal (`updates:
+# :quick_edit_modal`, not row-local, so it falls back to the full-OOB-div
+# path), and how flash auto-delivers under scoped responses -- both are
+# blocked by the same root cause, independent of and pre-existing before
+# stream_weaver-ho5's fix (reproduces identically on unmodified de0302d).
+edit_reason = "stream_weaver-e4p: hx-swap-oob=\"morph:innerHTML\" never swaps in a real browser " \
+              "(htmx core doesn't dispatch OOB elements through swap-style extensions), so the " \
+              "quick-edit modal's fields never enter the DOM at all -- verified server-side via " \
+              "curl and spec/modal_save_round_trip_spec.rb; blocked in-browser regardless of the " \
+              "stream_weaver-ho5 fix (reproduces on unmodified de0302d too)."
+
+pending("Edit: modal fields present in live DOM (x-model + name)", edit_reason)
+pending("fill name + Save: row shows new name, flash appears, no console errors", edit_reason)
+pending("Edit again: modal reopens", edit_reason)
+
+check("search: typing filters the table (live keyup, primary-target swap -- not OOB)") do
+  query_ref = ref_for(snap, "textbox", "Search name, relationship, tag...")
+  raise "no search textbox found" unless query_ref
+
+  pw('click', query_ref)
+  pw('press', 'M')
+  pw('press', 'i')
+  pw('press', 'l')
+  pw('press', 'o')
+  sleep 0.5 # debounce: 250ms
+
+  row_count = pw_eval("document.querySelectorAll('#sw-frag-people table tbody tr').length")
+  ok = row_count.is_a?(Integer) && row_count.positive? && row_count < 30
+  [ok, ok ? nil : "expected a partial row count after searching \"Milo\", got #{row_count.inspect}"]
+end
+
+# ===========================================================================
+# Tyrion War Room (parity slice)
+# ===========================================================================
+
+section "Tyrion War Room (parity slice)"
+
+tyrion_url = boot_app(File.join(REPO_ROOT, 'examples', 'parity', 'tyrion_warroom_slice.rb'), 'Tyrion War Room (parity slice)')
+
+pw('goto', tyrion_url)
+tyrion_snap = pw_snapshot_text
+
+check("View: detail pane contains the story title (primary: :detail -- not OOB, so unaffected by stream_weaver-e4p)") do
+  idx = tyrion_snap.index('forge-the-beacon-relay')
+  raise "fixture story \"forge-the-beacon-relay\" not found on the board" unless idx
+
+  view_ref = tyrion_snap[idx..].match(/button "View"[^\[\n]*\[ref=(e\d+)\]/)&.captures&.first
+  raise "no View button found near forge-the-beacon-relay" unless view_ref
+
+  after = pw_click(view_ref)
+  ok = after.include?('heading "forge-the-beacon-relay"')
+  [ok, ok ? nil : "detail pane snapshot did not contain the story heading:\n#{after}"]
+end
+
+# ===========================================================================
+# Summary
+# ===========================================================================
+
+puts
+passed = $results.count { |status, _| status == :ok }
+pendings = $results.count { |status, _| status == :pending }
+failed = $results.count { |status, _| status == :fail }
+total = $results.size
+
+puts "#{passed}/#{total} passed, #{pendings} pending (bd bug filed), #{failed} failed"
+
+exit(failed.zero? ? 0 : 1)
