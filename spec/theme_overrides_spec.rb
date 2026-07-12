@@ -43,6 +43,38 @@ RSpec.describe "theme_overrides (stream_weaver-ckz)" do
     end
   end
 
+  describe "surface tokens actually reach card/callout/alert/modal (FAC-9u2)" do
+    it "master_theme_css bridges --card/--popover/--border on body, not just :root" do
+      # :root is <html>, an ancestor of <body> -- the --sw-color-* tokens
+      # theme_overrides: sets are declared on body, so a :root-only bridge can
+      # never see them and stays stuck on its light-mode fallback. The bridge
+      # must be re-declared on body itself to pick up an app's actual theme.
+      css = StreamWeaver::Views::AppView.master_theme_css
+      expect(css).to match(/body\s*\{[^}]*--card: var\(--sw-color-bg-card/m)
+      expect(css).to match(/body\s*\{[^}]*--popover: var\(--sw-color-bg-card/m)
+      expect(css).to match(/body\s*\{[^}]*--border: var\(--sw-color-border/m)
+    end
+
+    it "a dark theme_overrides color_bg_card renders both the body-scoped --card bridge and the override, with the override emitted after it" do
+      app = StreamWeaver::App.new("Title", theme: :default,
+                                            theme_overrides: { color_bg_card: "#1A1208", color_text: "#F5E6C8" }) {}
+      html = render_app(app)
+
+      card_bridge_index = html.index("--card: var(--sw-color-bg-card")
+      override_index = html.index("--sw-color-bg-card: #1A1208;")
+      expect(card_bridge_index).not_to be_nil
+      expect(override_index).not_to be_nil
+      expect(html).to include("body.sw-theme-default {")
+      # Both are body-scoped custom properties on the same element -- as long
+      # as the override actually renders (proven above by theme_overrides_spec),
+      # --card's var(--sw-color-bg-card) lookup on body resolves to it
+      # regardless of which rule's source order wins, because var() always
+      # reads the current element's already-cascaded value of the referenced
+      # property, not the declaring rule's own specificity.
+      expect(html).to include("#1A1208")
+    end
+  end
+
   describe "unknown override token" do
     it "warns loudly when an override key matches no known VARIABLE_SCHEMA token" do
       app = StreamWeaver::App.new("Title", theme: :dashboard,

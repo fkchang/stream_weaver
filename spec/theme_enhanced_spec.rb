@@ -50,6 +50,14 @@ RSpec.describe "Theme Enhancement + CSS Foundation (T2)" do
       expect(css).to include("var(--sw-color-border")
     end
 
+    it "re-bridges on body so per-theme/theme_overrides --sw-color-* actually reach --sw-surface (FAC-9u2)" do
+      # --sw-color-* is declared on body (per-theme, theme_overrides:), a
+      # descendant of :root -- the :root bridge above can never see it, so it
+      # must be redeclared at body scope to track anything but the light default.
+      expect(css).to match(/body\s*\{[^}]*--sw-surface: var\(--sw-color-bg-card/m)
+      expect(css).to match(/body\s*\{[^}]*--sw-text: var\(--sw-color-text/m)
+    end
+
     it "includes sw-theme-toggle CSS" do
       expect(css).to include(".sw-theme-toggle")
       expect(css).to include(".sw-theme-toggle__btn")

@@ -157,6 +157,33 @@ module StreamWeaver
                   --info-foreground: #fff;
                 }
 
+                /* Re-bridge on body: the --sw-color-* tokens these vars fall back to
+                   are themselves declared on body (body.sw-theme-*, theme_overrides:,
+                   html.dark body -- see below), which is a descendant of :root/<html>.
+                   A custom property's var() fallback resolves against what's in scope
+                   AT THE ELEMENT declaring it, so the :root block above can never see
+                   a per-theme override made on body -- it's always stuck on its own
+                   fallback. Redeclaring here, on body itself, lets these tokens see
+                   whatever --sw-color-* body ends up with (default theme, a custom
+                   registered theme, or an app's theme_overrides:) instead of only ever
+                   reflecting the light default (stream_weaver-9u2). */
+                body {
+                  --background: var(--sw-color-bg, oklch(1 0 0));
+                  --foreground: var(--sw-color-text, oklch(0.145 0 0));
+                  --card: var(--sw-color-bg-card, oklch(1 0 0));
+                  --card-foreground: var(--sw-color-text, oklch(0.145 0 0));
+                  --popover: var(--sw-color-bg-card, oklch(1 0 0));
+                  --popover-foreground: var(--sw-color-text, oklch(0.145 0 0));
+                  --primary: var(--sw-color-primary, oklch(0.205 0 0));
+                  --secondary: var(--sw-color-secondary, oklch(0.97 0 0));
+                  --muted: var(--sw-color-bg-elevated, oklch(0.97 0 0));
+                  --muted-foreground: var(--sw-color-text-muted, oklch(0.556 0 0));
+                  --accent: var(--sw-color-accent, oklch(0.97 0 0));
+                  --border: var(--sw-color-border, oklch(0.922 0 0));
+                  --input: var(--sw-color-border, oklch(0.922 0 0));
+                  --radius: var(--sw-radius-md, 0.5rem);
+                }
+
                 .dark {
                   --background: oklch(0.145 0 0);
                   --foreground: oklch(0.985 0 0);

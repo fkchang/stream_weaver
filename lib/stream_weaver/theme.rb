@@ -362,6 +362,24 @@ module StreamWeaver
           --sw-info: #2563eb;
         }
 
+        /* Re-bridge on body: --sw-color-* (what these fall back to) is itself
+           declared on body (per-theme, or an app's theme_overrides:), a
+           descendant of :root -- so the :root block above can never see it and
+           is stuck on its own light-mode fallback. Redeclaring here lets these
+           short tokens track whatever theme body actually ends up with
+           (stream_weaver-9u2). */
+        body {
+          --sw-bg: var(--sw-color-bg, #f8f8f8);
+          --sw-surface: var(--sw-color-bg-card, #ffffff);
+          --sw-surface-elevated: var(--sw-color-bg-elevated, #f3f3f3);
+          --sw-border: var(--sw-color-border, #e0e0e0);
+          --sw-text: var(--sw-color-text, #111111);
+          --sw-text-dim: var(--sw-color-text-muted, #444444);
+          --sw-accent: var(--sw-color-accent, #0d9488);
+          --sw-node-a: var(--sw-color-primary, #c2410c);
+          --sw-node-b: var(--sw-color-accent, #0d9488);
+        }
+
         /* Theme toggle button (sw- prefixed, BEM) */
         .sw-theme-toggle {
           display: inline-flex;
