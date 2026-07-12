@@ -14,8 +14,9 @@
 #   bin/browser_smoke
 #
 # Exits 0 only if every non-pending check passes. Checks marked "pending"
-# are printed but do not affect the exit code -- see the stream_weaver-e4p
-# block below for why two rivet_people_slice checks are currently pending.
+# are printed but do not affect the exit code -- a defect this script itself
+# discovers gets a bd bug filed and the assertion marked pending, not
+# silently dropped (see the `pending` helper below).
 #
 # Requires playwright-cli on PATH (`brew install` or see its own docs) and a
 # StreamWeaver checkout with bundle installed.
@@ -154,6 +155,15 @@ def ref_for(text, role, label)
   m && m[1]
 end
 
+# Like ref_for, but for an unlabeled textbox (no <label>, no placeholder) --
+# the accessibility snapshot renders those as `- textbox [ref=eN]: <current value>`
+# instead of `textbox "label" [ref=eN]`, so match on the current value instead.
+def ref_for_textbox_value(text, value)
+  return nil unless text
+  m = text.match(/textbox \[ref=(e\d+)\]: #{Regexp.escape(value)}/)
+  m && m[1]
+end
+
 # ---------------------------------------------------------------------------
 # Check runner
 # ---------------------------------------------------------------------------
@@ -213,38 +223,73 @@ end
 nora_block = row_block(snap, "Nora Albrecht")
 touch_ref = ref_for(nora_block, "button", "Touch")
 
+after_touch = nil
 check("Touch: row updates (Last column moves to \"today\") and no <tr> nests inside another <tr>") do
   raise "no Touch button found in Nora Albrecht's row" unless touch_ref
 
-  after = pw_click(touch_ref)
+  after_touch = pw_click(touch_ref)
   nested = pw_eval("Array.from(document.querySelectorAll('tr')).some(function(tr){ return tr.querySelector('tr') !== null; })")
-  after_block = row_block(after, "Nora Albrecht")
+  after_block = row_block(after_touch, "Nora Albrecht")
   ok = after_block && after_block.include?("today") && nested == false
   [ok, ok ? nil : "row block after touch: #{after_block.inspect}, nested tr check: #{nested.inspect}"]
 end
 
-# --- stream_weaver-e4p: full-fragment OOB updates (hx-swap-oob="morph:...")
-# never swap in a real browser -- htmx core's OOB scanning doesn't dispatch
-# through swap-style extensions, so `Alpine.morph` is never invoked for
-# these elements even though the server response is complete and correct
-# (verified by curl and by spec/modal_save_round_trip_spec.rb). This is
-# how the "Edit" button delivers the quick-edit modal (`updates:
-# :quick_edit_modal`, not row-local, so it falls back to the full-OOB-div
-# path), and how flash auto-delivers under scoped responses -- both are
-# blocked by the same root cause, independent of and pre-existing before
-# stream_weaver-ho5's fix (reproduces identically on unmodified de0302d).
-edit_reason = "stream_weaver-e4p: hx-swap-oob=\"morph:innerHTML\" never swaps in a real browser " \
-              "(htmx core doesn't dispatch OOB elements through swap-style extensions), so the " \
-              "quick-edit modal's fields never enter the DOM at all -- verified server-side via " \
-              "curl and spec/modal_save_round_trip_spec.rb; blocked in-browser regardless of the " \
-              "stream_weaver-ho5 fix (reproduces on unmodified de0302d too)."
+# --- stream_weaver-e4p: the "Edit" button delivers the quick-edit modal via
+# `updates: :quick_edit_modal` (not row-local, so it falls back to the
+# full-OOB-div path) -- this is the exact shape that used to be silently
+# skipped by htmx core's OOB scanning (hx-swap-oob="morph:innerHTML" never
+# dispatches through swap-style extensions). Now that OOB elements use plain
+# native swap styles (hx-swap-oob="innerHTML"), the modal actually appears.
+# Uses the post-Touch snapshot -- Nora Albrecht's row refs shifted after
+# that click's DOM update.
+edit_ref = ref_for(row_block(after_touch, "Nora Albrecht"), "button", "Edit")
 
-pending("Edit: modal fields present in live DOM (x-model + name)", edit_reason)
-pending("fill name + Save: row shows new name, flash appears, no console errors", edit_reason)
-pending("Edit again: modal reopens", edit_reason)
+edit_snap = nil
+check("Edit: modal fields present in live DOM (x-model + name)") do
+  raise "no Edit button found in Nora Albrecht's row" unless edit_ref
+
+  edit_snap = pw_click(edit_ref)
+  modal_html = pw_eval("document.getElementById('sw-frag-quick-edit-modal').innerHTML")
+  ok = modal_html.is_a?(String) && modal_html.include?('x-model="edit_name"') && modal_html.include?('value="Nora Albrecht"')
+  [ok, ok ? nil : "modal innerHTML: #{modal_html.inspect}"]
+end
+
+after_save = nil
+check("fill name + Save: row shows new name, flash appears, no console errors") do
+  name_ref = ref_for_textbox_value(edit_snap, "Nora Albrecht")
+  save_ref = ref_for(edit_snap, "button", "Save")
+  raise "no name textbox found in the quick-edit modal" unless name_ref
+  raise "no Save button found in the quick-edit modal" unless save_ref
+
+  pw('fill', name_ref, "Nora Updated")
+  after_save = pw_click(save_ref)
+  console_log = File.read(pw_console_log_path)
+  ok = after_save.include?("Nora Updated") && after_save.include?("Saved Nora Updated.") &&
+       console_log.include?("Errors: 0")
+  [ok, ok ? nil : "after-save snapshot: #{after_save[0, 300].inspect}, console: #{console_log.inspect}"]
+end
+
+check("Edit again: modal reopens") do
+  reopen_edit_ref = ref_for(row_block(after_save, "Nora Updated"), "button", "Edit")
+  raise "no Edit button found in the renamed row" unless reopen_edit_ref
+
+  reopened = pw_click(reopen_edit_ref)
+  modal_html = pw_eval("document.getElementById('sw-frag-quick-edit-modal').innerHTML")
+  ok = reopened.include?('heading "Quick edit"') && modal_html.is_a?(String) && modal_html.include?('value="Nora Updated"')
+
+  # Close the modal again so later checks (search) aren't blocked by its
+  # full-viewport backdrop intercepting clicks.
+  cancel_ref = ref_for(reopened, "button", "Cancel")
+  pw_click(cancel_ref) if cancel_ref
+
+  [ok, ok ? nil : "reopen snapshot: #{reopened[0, 200].inspect}, modal innerHTML: #{modal_html.inspect}"]
+end
 
 check("search: typing filters the table (live keyup, primary-target swap -- not OOB)") do
-  query_ref = ref_for(snap, "textbox", "Search name, relationship, tag...")
+  # A fresh snapshot, not `snap` -- refs from the pre-Edit/Save snapshot are
+  # stale by now (accessibility ref ids are only valid for the snapshot they
+  # were captured in; the intervening clicks reshaped the page).
+  query_ref = ref_for(pw_snapshot_text, "textbox", "Search name, relationship, tag...")
   raise "no search textbox found" unless query_ref
 
   pw('click', query_ref)

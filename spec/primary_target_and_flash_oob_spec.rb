@@ -97,7 +97,7 @@ RSpec.describe "primary: sibling target + flash OOB (stream_weaver-78a, stream_w
       response = run(app, state, token, manifest: app.render_state.action_tokens.dup, headers: headers)
 
       expect(headers).to eq("HX-Retarget" => "#sw-frag-detail")
-      expect(response).to include("Selected: 1", "count: 1", 'hx-swap-oob="morph:innerHTML"')
+      expect(response).to include("Selected: 1", "count: 1", 'hx-swap-oob="innerHTML"')
     end
   end
 
@@ -148,7 +148,7 @@ RSpec.describe "primary: sibling target + flash OOB (stream_weaver-78a, stream_w
 
       response = run(app, state, token, manifest: app.render_state.action_tokens.dup)
 
-      expect(response).to include("Saved!", 'id="sw-frag-flash"', 'hx-swap-oob="morph:innerHTML"')
+      expect(response).to include("Saved!", 'id="sw-frag-flash"', 'hx-swap-oob="innerHTML"')
       expect(response).not_to include("UNRELATED PAGE COPY")
     end
 

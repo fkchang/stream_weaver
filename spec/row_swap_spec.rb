@@ -186,7 +186,7 @@ RSpec.describe "row-granular table swaps" do
       response = run(app, state, token, manifest: app.render_state.action_tokens.dup, headers: headers)
 
       expect(headers["HX-Reswap"]).to eq("outerHTML")
-      expect(response).to include("total 1", 'hx-swap-oob="morph:innerHTML"')
+      expect(response).to include("total 1", 'hx-swap-oob="innerHTML"')
     end
   end
 

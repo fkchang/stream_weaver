@@ -3591,13 +3591,18 @@ module StreamWeaver
     # whose own fragment has nothing to narrow can still narrow an extra
     # fragment's table (the common "Add" button outside the table, `updates:`
     # pointing at the table's fragment, is exactly this shape). Falls back to
-    # the full-fragment OOB morph (pre-existing FAC-P1 behavior) whenever
+    # the full-fragment OOB swap (pre-existing FAC-P1 behavior) whenever
     # `swap` is nil -- i.e. that extra's mutation wasn't provably row-local.
+    # OOB elements always use htmx's native swap styles (plain innerHTML/
+    # outerHTML), never an extension-only style like "morph:innerHTML" --
+    # htmx core's own hx-swap-oob scanning doesn't dispatch through swap-style
+    # extensions, so those are silently skipped in a real browser
+    # (stream_weaver-e4p). Morph stays available for the PRIMARY target only.
     module ExtraFragmentRendering
       def render_extra(fragment, swap)
         return render_row_oob(swap) if swap
 
-        div(id: fragment.id, "hx-swap-oob" => "morph:innerHTML") do
+        div(id: fragment.id, "hx-swap-oob" => "innerHTML") do
           with_fragment(fragment.id) { fragment.children.each { |child| child.render(self, @state) } }
         end
       end
@@ -3607,7 +3612,7 @@ module StreamWeaver
         case swap[:kind]
         when :edit
           adapter.render_table_row(self, table.resolved_rows[swap[:idx]], swap[:idx], table.table_options, @state, table.dom_id,
-                                    extra_attrs: { "hx-swap-oob" => "morph:outerHTML" })
+                                    extra_attrs: { "hx-swap-oob" => "outerHTML" })
         when :delete
           tr(id: swap[:row_dom_id], "hx-swap-oob" => "delete")
         when :create

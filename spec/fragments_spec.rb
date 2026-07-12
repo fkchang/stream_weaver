@@ -101,7 +101,7 @@ RSpec.describe "fragments" do
       interaction: :action, target: button_id, adapter: adapter, persist: ->(_value) {}
     ).call
 
-    expect(response).to include("updated", 'hx-swap-oob="morph:innerHTML"')
+    expect(response).to include("updated", 'hx-swap-oob="innerHTML"')
     expect(response).not_to include('id="sw-state-data"')
   end
 
@@ -163,7 +163,7 @@ RSpec.describe "fragments" do
     response = run(app, state, token, manifest: manifest)
 
     expect(app).to have_received(:rebuild_with_state).once
-    expect(response).to include("result 2", "sidebar 2", 'hx-swap-oob="morph:innerHTML"')
+    expect(response).to include("result 2", "sidebar 2", 'hx-swap-oob="innerHTML"')
     expect(response).not_to include("UNRELATED PAGE COPY")
     patch = JSON.parse(response[%r{<script[^>]+id="sw-state-patch"[^>]*>(.*?)</script>}m, 1])
     expect(patch).to eq("set" => { "count" => 2 }, "delete" => ["obsolete"], "version" => 5)
