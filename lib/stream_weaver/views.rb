@@ -701,6 +701,12 @@ module StreamWeaver
                 body.sw-layout-full { max-width: 1400px; }
                 body.sw-layout-fluid { max-width: 100%; padding-left: var(--sw-spacing-xl); padding-right: var(--sw-spacing-xl); }
 
+                /* chrome: false gets a minimal padding baseline so content isn't
+                   glued to the viewport edge -- still just one low-specificity
+                   class rule, easily overridden to zero by an app's own CSS
+                   (FAC-9u2). */
+                body.sw-chromeless { padding: var(--sw-spacing-lg); }
+
                 /* Page title outside container */
                 body > h1 {
                   font-size: 2.5rem;

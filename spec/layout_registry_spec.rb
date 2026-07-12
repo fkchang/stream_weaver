@@ -109,8 +109,13 @@ RSpec.describe StreamWeaver::LayoutRegistry do
       html = render_app(a)
 
       expect(html).not_to include("<h1>No Chrome</h1>")
-      expect(html).to include('<body class="sw-theme-default">')
+      expect(html).to include('<body class="sw-chromeless sw-theme-default">')
       expect(html).to match(/<div id="app-container"[^>]*><p>bare content<\/p><\/div>/)
+    end
+
+    it "the sw-chromeless CSS rule gives bare mode a token-driven, non-zero padding baseline (FAC-9u2)" do
+      css = StreamWeaver::Views::AppView.master_theme_css
+      expect(css).to match(/body\.sw-chromeless\s*\{[^}]*padding:\s*var\(--sw-spacing/m)
     end
 
     it "leaves default app chrome unchanged" do

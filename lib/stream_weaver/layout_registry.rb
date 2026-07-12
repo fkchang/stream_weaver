@@ -25,7 +25,10 @@ module StreamWeaver
   module LayoutRegistry
     CHROMELESS_ENTRY = {
       exclusive: true,
-      body_classes: [].freeze,
+      # sw-chromeless carries a minimal, token-driven padding baseline (see
+      # views.rb) so bare content isn't glued to the viewport edge -- still
+      # overridable to zero by an app's own CSS (FAC-9u2).
+      body_classes: ["sw-chromeless"].freeze,
       css_path: nil,
       render_block: proc { main_content_region }
     }.freeze
