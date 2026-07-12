@@ -1180,6 +1180,8 @@ module StreamWeaver
 
     # Header component for semantic headers (h1-h6)
     class Header < Base
+      attr_reader :level
+
       # @param content [String, Proc] The header text (can be a proc for dynamic content)
       # @param level [Integer] Header level (1-6, default: 2)
       def initialize(content, level: 2)

@@ -102,7 +102,12 @@ module StreamWeaver
             if layout_entry&.dig(:exclusive) && layout_entry[:render_block]
               instance_exec(&layout_entry[:render_block])
             else
-              h1 { @app.title }
+              # Skip the chrome's own h1 when the app already renders its
+              # leading content as a header1 -- otherwise the page doubles up
+              # (FAC-9u2).
+              first_content = @app.components.first
+              own_leading_h1 = first_content.is_a?(Components::Header) && first_content.level == 1
+              h1 { @app.title } unless own_leading_h1
               # Merge adapter-specific container attributes with container id
               div(id: "app-container", "data-sw-state-version" => @app.render_state.state_version,
                   **@adapter.container_attributes(@state)) do

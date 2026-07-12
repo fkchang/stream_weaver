@@ -123,6 +123,40 @@ RSpec.describe StreamWeaver::LayoutRegistry do
     end
   end
 
+  describe "HTML rendering — h1 dedup (FAC-9u2)" do
+    it "suppresses the chrome h1 when the app's first content element is its own header1" do
+      a = StreamWeaver::App.new("Rivet People (parity slice)") do
+        header1 "People"
+        text "hello"
+      end
+      html = render_app(a)
+
+      expect(html).not_to include("<h1>Rivet People (parity slice)</h1>")
+      expect(html.scan("<h1>").length).to eq(1)
+      expect(html).to include("<h1>People</h1>")
+    end
+
+    it "leaves the chrome h1 in place when the app has no leading header1 (backward compatible)" do
+      a = StreamWeaver::App.new("Default Chrome") { text "content" }
+      html = render_app(a)
+
+      expect(html).to include("<h1>Default Chrome</h1>")
+      expect(html.scan("<h1>").length).to eq(1)
+    end
+
+    it "leaves the chrome h1 in place when header1 exists but isn't the first content element" do
+      a = StreamWeaver::App.new("Default Chrome") do
+        text "before"
+        header1 "Later Header"
+      end
+      html = render_app(a)
+
+      expect(html).to include("<h1>Default Chrome</h1>")
+      expect(html).to include("<h1>Later Header</h1>")
+      expect(html.scan("<h1>").length).to eq(2)
+    end
+  end
+
   describe "HTML rendering — exclusive layout" do
     before do
       StreamWeaver::LayoutRegistry.register(
