@@ -1021,6 +1021,34 @@ module StreamWeaver
                   color: var(--accent-foreground);
                 }
 
+                /* Quiet -- minimal chrome, for inline row/table actions (rivet grammar) */
+                .btn-quiet {
+                  background: transparent;
+                  box-shadow: none;
+                  color: var(--foreground);
+                  font-weight: 500;
+                }
+
+                .btn-quiet:hover {
+                  background: var(--accent);
+                  color: var(--accent-foreground);
+                }
+
+                /* Size: sm -- compact, for inline table actions */
+                .btn-sm {
+                  padding: var(--sw-spacing-xs) var(--sw-spacing-sm);
+                  font-size: var(--sw-font-size-sm);
+                  font-weight: 500;
+                }
+
+                /* Table action cells: inline row of buttons instead of stacked (FAC-9u2) */
+                .sw-table__actions {
+                  display: flex;
+                  align-items: center;
+                  gap: var(--sw-spacing-xs);
+                  flex-wrap: wrap;
+                }
+
                 /* Button focus states */
                 button:focus-visible {
                   outline: none;

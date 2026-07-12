@@ -210,7 +210,7 @@ module StreamWeaver
 
     # Button component that executes actions on click
     class Button < Base
-      attr_reader :id, :modal_context
+      attr_reader :id, :modal_context, :options
 
       # @param label [String] Button label
       # @param stable_id [String] Stable ID suffix (hash of source location or counter)
@@ -223,6 +223,15 @@ module StreamWeaver
         @options = options
         # stable_id is derived from source location (for buttons with blocks) or counter (for blockless)
         @button_id = "btn_#{label.downcase.gsub(/[^a-z0-9]+/, '_')}_#{stable_id}"
+      end
+
+      # Fill in options the author didn't already set (e.g. a table action
+      # cell defaulting to size: :sm, variant: :quiet). Explicit @options
+      # values always win.
+      #
+      # @param defaults [Hash]
+      def apply_default_options(defaults)
+        @options = defaults.merge(@options)
       end
 
       def render(view, state)

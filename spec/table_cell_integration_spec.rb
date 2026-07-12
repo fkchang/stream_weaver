@@ -98,4 +98,44 @@ RSpec.describe "StreamWeaver table cell composition end-to-end (FAC-P2.1)" do
       expect(last_response.body).to include("$1,200")
     end
   end
+
+  describe "action cells default to compact inline buttons (FAC-9u2)" do
+    let(:described_app) do
+      StreamWeaver::App.new("Rivet-style actions") do
+        people = [{ id: 1, name: "Nora" }]
+
+        action(:touch) { |_state, _key| }
+
+        table people, row_key: ->(p) { p[:id] } do
+          column :name
+          column(:actions, header: "") do |p|
+            hstack(spacing: :xs) do
+              button "Touch", action: :touch, key: p[:id]
+              button "Pin", style: :primary, size: :md, variant: :outline, key: p[:id]
+            end
+          end
+        end
+      end
+    end
+
+    it "defaults undeclared buttons to size: sm, variant: quiet" do
+      get '/'
+      touch_button = last_response.body[/<button[^>]*id="btn_touch_[^"]*"[^>]*>/]
+      expect(touch_button).to include("btn-sm")
+      expect(touch_button).to include("btn-quiet")
+    end
+
+    it "never overrides a button's explicit size/variant" do
+      get '/'
+      pin_button = last_response.body[/<button[^>]*id="btn_pin_[^"]*"[^>]*>/]
+      expect(pin_button).to include("btn-outline")
+      expect(pin_button).not_to include("btn-quiet")
+      expect(pin_button).not_to include("btn-sm")
+    end
+
+    it "lays out the action cell inline" do
+      get '/'
+      expect(last_response.body).to include('class="sw-table__actions"')
+    end
+  end
 end

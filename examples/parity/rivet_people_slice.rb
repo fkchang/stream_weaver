@@ -147,8 +147,8 @@ App = app "Rivet People (parity slice)" do
       column :mentions, header: "Ment."
       column(:actions, header: "") do |p|
         hstack(spacing: :xs) do
-          button "Touch", action: :touch, key: p[:id]
-          button "Edit", key: p[:id], updates: :quick_edit_modal do |s|
+          button "Touch", action: :touch, key: p[:id], size: :sm, variant: :quiet
+          button "Edit", key: p[:id], size: :sm, variant: :quiet, updates: :quick_edit_modal do |s|
             s[:editing_id] = p[:id]
             s[:edit_name] = p[:name]
             s[:edit_relationship] = p[:relationship]

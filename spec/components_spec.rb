@@ -50,6 +50,20 @@ RSpec.describe StreamWeaver::Components do
         expect(registry).to be_empty
       end
     end
+
+    describe "#apply_default_options" do
+      it "fills in options the author didn't set" do
+        btn = described_class.new("Edit", "btn_3")
+        btn.apply_default_options(size: :sm, variant: :quiet)
+        expect(btn.options).to include(size: :sm, variant: :quiet)
+      end
+
+      it "never overrides an option the author explicitly set" do
+        btn = described_class.new("Save", "btn_4", style: :primary, size: :md)
+        btn.apply_default_options(size: :sm, variant: :quiet)
+        expect(btn.options).to include(style: :primary, size: :md, variant: :quiet)
+      end
+    end
   end
 
   describe StreamWeaver::Components::TextField do

@@ -343,6 +343,46 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
 
       adapter.render_button(mock_view, "btn_submit_1", "Submit", {})
     end
+
+    it "adds btn-sm class when size: :sm" do
+      expect(mock_view).to receive(:button).with(
+        hash_including(class: "btn btn-primary btn-sm")
+      ).and_yield
+
+      adapter.render_button(mock_view, "btn_submit_1", "Submit", { size: :sm })
+    end
+
+    it "omits size class by default (:md)" do
+      expect(mock_view).to receive(:button).with(
+        hash_including(class: "btn btn-primary")
+      ).and_yield
+
+      adapter.render_button(mock_view, "btn_submit_1", "Submit", {})
+    end
+
+    it "adds btn-quiet class when variant: :quiet" do
+      expect(mock_view).to receive(:button).with(
+        hash_including(class: "btn btn-primary btn-quiet")
+      ).and_yield
+
+      adapter.render_button(mock_view, "btn_submit_1", "Submit", { variant: :quiet })
+    end
+
+    it "adds btn-outline class when variant: :outline" do
+      expect(mock_view).to receive(:button).with(
+        hash_including(class: "btn btn-primary btn-outline")
+      ).and_yield
+
+      adapter.render_button(mock_view, "btn_submit_1", "Submit", { variant: :outline })
+    end
+
+    it "composes size, variant, and style together" do
+      expect(mock_view).to receive(:button).with(
+        hash_including(class: "btn btn-secondary btn-outline btn-sm")
+      ).and_yield
+
+      adapter.render_button(mock_view, "btn_submit_1", "Submit", { style: :secondary, variant: :outline, size: :sm })
+    end
   end
 
   describe "#container_attributes" do

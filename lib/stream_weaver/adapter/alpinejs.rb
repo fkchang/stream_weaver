@@ -603,13 +603,20 @@ module StreamWeaver
         end
       end
 
+      # @option options [Symbol] :size Button size -- :md (default) or :sm (compact,
+      #   used by table action cells; rivet grammar -- small quiet inline actions)
+      # @option options [Symbol] :variant Button chrome -- :quiet or :outline, composes
+      #   with :style (which still picks the color intent)
       def button_style_attrs(options, loading = true)
         style_option = options[:style]
         attrs = if style_option == :none || style_option.is_a?(String)
           { class: options[:class], style: (style_option if style_option.is_a?(String)) }.compact
         else
           style_class = style_option == :secondary ? "secondary" : "primary"
-          { class: "btn btn-#{style_class}" }
+          classes = ["btn", "btn-#{style_class}"]
+          classes << "btn-#{options[:variant]}" if %i[quiet outline].include?(options[:variant])
+          classes << "btn-sm" if options[:size] == :sm
+          { class: classes.join(" ") }
         end
         attrs[:class] = [attrs[:class], "sw-no-loading-indicator"].compact.join(" ") unless loading
         attrs
@@ -1576,6 +1583,7 @@ module StreamWeaver
             td_attrs["data-sort-value"] = sort_value.to_s unless sort_value.nil?
 
             if cell.is_a?(Array)
+              apply_action_cell_defaults!(cell, td_attrs)
               view.td(**td_attrs) { cell.each { |component| component.render(view, state) } }
             elsif options[:markdown]
               cell_content = parse_cell_markdown(cell.to_s)
@@ -1584,6 +1592,32 @@ module StreamWeaver
               view.td(**td_attrs) { cell.to_s }
             end
           end
+        end
+      end
+
+      # Rivet grammar: a component cell containing at least one button is an
+      # "action cell" -- default its buttons to compact/quiet unless the
+      # author already set size:/variant:, and lay the cell out inline so
+      # several actions read as one row instead of stacking (FAC-9u2).
+      #
+      # @param cell [Array<Components::Base>] The resolved component cell
+      # @param td_attrs [Hash] Mutated in place to add the inline-actions class
+      # @return [void]
+      def apply_action_cell_defaults!(cell, td_attrs)
+        buttons = []
+        each_nested_component(cell) { |component| buttons << component if component.is_a?(Components::Button) }
+        return if buttons.empty?
+
+        buttons.each { |button| button.apply_default_options(size: :sm, variant: :quiet) }
+        td_attrs[:class] = [td_attrs[:class], "sw-table__actions"].compact.join(" ")
+      end
+
+      # @param components [Array<Components::Base>]
+      # @yieldparam component [Components::Base]
+      def each_nested_component(components, &block)
+        components.each do |component|
+          block.call(component)
+          each_nested_component(component.children, &block) if component.respond_to?(:children)
         end
       end
 
