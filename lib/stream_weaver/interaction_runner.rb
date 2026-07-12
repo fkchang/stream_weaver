@@ -110,6 +110,35 @@ module StreamWeaver
         return Views::AppContentView.new(app, state, adapter, agentic).call
       end
 
+      # `primary: :fragment_name` (stream_weaver-78a): a button can name a
+      # sibling fragment as the response's actual primary swap target
+      # instead of its own enclosing fragment -- e.g. a board's "View"
+      # button refreshing a detail pane without resending the whole board.
+      # Resolved against the post-rebuild tree exactly like `updates:`; a
+      # name that no longer matches any fragment (conditionally removed by
+      # this very interaction) falls back to a full-container response
+      # rather than silently doing nothing.
+      primary_fragment = nil
+      if scope[:primary]
+        primary_fragment = find_fragment_by_name(app.components, scope[:primary])
+        unless primary_fragment
+          response_headers&.call("HX-Retarget" => "#app-container")
+          return Views::AppContentView.new(app, state, adapter, agentic).call
+        end
+      end
+      primary_content = primary_fragment || fragment
+
+      # Flash OOB under scoped responses (stream_weaver-m3t). A fragment
+      # named `:flash` is StreamWeaver's flash-placement convention
+      # (`fragment(:flash) { flash_messages }`); any scoped response that
+      # just set a flash message auto-delivers that fragment as an extra OOB
+      # swap so authors don't have to remember `updates: [:flash]` on every
+      # single action for flash to ever be visible.
+      unless (state[:_flash] || {}).empty?
+        flash_fragment = find_fragment_by_name(app.components, "flash")
+        extras += [flash_fragment] if flash_fragment && !extras.include?(flash_fragment)
+      end
+
       version = state_version + 1
       persist_state_version&.call(version)
       patch = state_patch(before_state, state, version)
@@ -120,19 +149,25 @@ module StreamWeaver
       # common shape is actually the latter (an "Add" button living in a
       # toolbar fragment, with `updates: :the_table_fragment`), so both are
       # analyzed independently and each narrows or falls back on its own.
-      if named_action? && components_before
-        primary_swap = row_swap_for(components_before, fragment)
+      # Skipped when `primary:` redirects the response to an unrelated
+      # sibling fragment -- narrowing is a size optimization only (never a
+      # state-semantics change), so falling back to full fragment content is
+      # always correct.
+      if named_action? && components_before && !primary_fragment
+        row_swap = row_swap_for(components_before, primary_content)
         extra_swaps = extras.map { |extra| row_swap_for(components_before, extra) }
       end
       extra_swaps ||= []
 
-      if primary_swap
-        response_headers&.call(primary_swap_headers(primary_swap))
+      if row_swap
+        response_headers&.call(primary_swap_headers(row_swap))
         return Views::RowSwapView.new(app, state, adapter, updates: extras, extra_swaps: extra_swaps,
-                                       state_patch: patch, primary: primary_swap_proc(primary_swap)).call
+                                       state_patch: patch, primary: primary_swap_proc(row_swap)).call
       end
 
-      Views::FragmentContentView.new(app, state, adapter, fragment, updates: extras, extra_swaps: extra_swaps,
+      response_headers&.call("HX-Retarget" => "##{primary_fragment.id}") if primary_fragment
+
+      Views::FragmentContentView.new(app, state, adapter, primary_content, updates: extras, extra_swaps: extra_swaps,
                                       state_patch: patch).call
     end
 
@@ -212,7 +247,7 @@ module StreamWeaver
     def declared_scope
       payload = named_action? ? decoded_action : decoded_fragment_param
       return unless payload && payload[:f]
-      { fragment: payload[:f].to_s, updates: Array(payload[:u]).map(&:to_s) }
+      { fragment: payload[:f].to_s, updates: Array(payload[:u]).map(&:to_s), primary: payload[:p]&.to_s }
     end
 
     def decoded_fragment_param

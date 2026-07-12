@@ -102,7 +102,10 @@ App = StreamWeaver::App.new(
                 board_card do
                   text story[:slug]
                   text story[:context], tone: :muted
-                  button "View", key: story[:id], updates: :detail do |s|
+                  # primary: (stream_weaver-78a) makes :detail the response's
+                  # actual swap target instead of resending the whole board
+                  # fragment just to trigger this sibling pane's refresh.
+                  button "View", key: story[:id], primary: :detail do |s|
                     s[:selected_story] = story[:id]
                   end
                 end

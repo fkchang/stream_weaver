@@ -112,7 +112,9 @@ App = app "Rivet People (parity slice)" do
   # response to that one <tr> instead of the whole :people fragment.
   action(:touch) { |_state, key| PeopleStore.touch!(key) }
 
-  action(:save_edit, updates: %i[people flash]) do |state, _key|
+  # flash isn't listed in updates: -- a fragment named :flash auto-delivers
+  # as an OOB swap whenever a scoped response sets one (stream_weaver-m3t).
+  action(:save_edit, updates: :people) do |state, _key|
     person = PeopleStore.find(state[:editing_id])
     name = state[:edit_name].to_s.strip
 

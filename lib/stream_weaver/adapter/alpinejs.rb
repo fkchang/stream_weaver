@@ -588,12 +588,12 @@ module StreamWeaver
         elsif modal_context
           # hx-on::before-request closes the modal before HTMX fires — ordering matters here
           htmx_attrs(url("/action/#{action_target}"), view: view, loading: loading, indicator: "##{button_id}",
-            sw_updates: options[:updates],
+            sw_updates: options[:updates], sw_primary: options[:primary],
             "hx-disabled-elt" => "this",
             "hx-on::before-request" => "open = false").merge(id: button_id).merge(style)
         else
           htmx_attrs(url("/action/#{action_target}"), view: view, loading: loading, indicator: "##{button_id}",
-            sw_updates: options[:updates], "hx-disabled-elt" => "this").merge(id: button_id).merge(style)
+            sw_updates: options[:updates], sw_primary: options[:primary], "hx-disabled-elt" => "this").merge(id: button_id).merge(style)
         end
       end
 
@@ -1150,6 +1150,7 @@ module StreamWeaver
       # @return [Hash] HTMX attribute hash
       def htmx_attrs(post_url, view: nil, loading: true, indicator: nil, **overrides)
         fragment_updates = Array(overrides.delete(:sw_updates)).compact.map(&:to_s)
+        fragment_primary = overrides.delete(:sw_primary)
         fragment_id = view.current_fragment_id if view&.respond_to?(:current_fragment_id)
         target = fragment_id ? "##{fragment_id}" : HTMX_TARGET
         named_action_scope = begin
@@ -1162,6 +1163,7 @@ module StreamWeaver
           separator = post_url.to_s.include?("?") ? "&" : "?"
           fragment_payload = { f: fragment_id }
           fragment_payload[:u] = fragment_updates unless fragment_updates.empty?
+          fragment_payload[:p] = fragment_primary.to_s if fragment_primary
           signed_fragment = ActionToken.encode(fragment_payload)
           post_url = "#{post_url}#{separator}_sw_fragment=#{CGI.escape(signed_fragment)}"
         end

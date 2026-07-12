@@ -40,7 +40,7 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions, :action_updates
+    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions, :action_updates, :action_primary
 
     # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
     ENDPOINT_VERBS = %i[get post put patch delete].freeze
@@ -82,6 +82,7 @@ module StreamWeaver
       @endpoints     = []  # Array<{verb:, path:, block:}> — persistent, never cleared in rebuild
       @actions = {}
       @action_updates = {}
+      @action_primary = {}
       @scope_registry = {}  # name(sym) → {kind:, retain:} — persistent, never cleared in rebuild
       components.each { |mod| singleton_class.include(mod) }
     end
@@ -348,7 +349,7 @@ module StreamWeaver
 
     public
 
-    def action(name, updates: nil, &handler)
+    def action(name, updates: nil, primary: nil, &handler)
       raise ArgumentError, "action: block required" unless handler
       name = name.to_sym
       existing = @actions[name]
@@ -361,19 +362,36 @@ module StreamWeaver
         raise ArgumentError, "action #{name.inspect} is already registered with different updates"
       end
       @action_updates[name] ||= normalized_updates
+
+      normalized_primary = primary&.to_sym
+      if @action_primary.key?(name) && @action_primary[name] != normalized_primary
+        raise ArgumentError, "action #{name.inspect} is already registered with a different primary:"
+      end
+      @action_primary[name] = normalized_primary unless @action_primary.key?(name)
     end
 
     def action_definition_digest
       Digest::SHA256.hexdigest(([StreamWeaver::VERSION] + actions.keys.map(&:to_s).sort).join("\0"))
     end
 
-    def action_token(name, key, fragment: nil, updates: nil)
+    # @param primary [Symbol, String, nil] Names a sibling fragment to swap as
+    #   this response's primary target instead of the button's own enclosing
+    #   fragment (stream_weaver-78a) -- e.g. a board's "View" button
+    #   refreshing a detail pane without resending the whole board. Falls
+    #   back to the action-level default (registered via `action(...,
+    #   primary:)`) the same way `updates:` does; resolved against the
+    #   post-rebuild tree by InteractionRunner, so a name that doesn't match
+    #   any fragment there falls back to a full-container response rather
+    #   than silently doing nothing.
+    def action_token(name, key, fragment: nil, updates: nil, primary: nil)
       name = name.to_sym
       raise ArgumentError, "unknown named action #{name.inspect}" unless actions.key?(name)
       scopes = Array(updates.nil? ? action_updates[name] : updates).compact.map(&:to_s)
+      primary_target = primary.nil? ? action_primary[name] : primary
       payload = { a: name, k: key, d: action_definition_digest, g: render_state.generation }
       payload[:f] = fragment if fragment
       payload[:u] = scopes unless scopes.empty?
+      payload[:p] = primary_target.to_s if primary_target
       token = ActionToken.encode(payload)
       render_state.action_tokens << ActionToken.fingerprint(token)
       token
@@ -685,7 +703,8 @@ module StreamWeaver
         options[:action_token] = action_token(
           action, action_key,
           fragment: render_state.fragment_stack.last,
-          updates: options.delete(:updates)
+          updates: options.delete(:updates),
+          primary: options.delete(:primary)
         )
       end
       # Generate stable ID: use source location for buttons with blocks,
