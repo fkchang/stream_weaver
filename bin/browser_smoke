@@ -25,6 +25,7 @@ require 'open3'
 require 'json'
 require 'fileutils'
 require 'tmpdir'
+require 'socket'
 
 REPO_ROOT = File.expand_path('..', __dir__)
 PLAYWRIGHT = 'playwright-cli'
@@ -51,7 +52,8 @@ def boot_app(script_path, app_title)
   FileUtils.rm_f(path) # stale portfile from a previous run would report the wrong (dead) port
 
   log = File.join(Dir.mktmpdir('sw-browser-smoke-'), 'boot.log')
-  pid = Process.spawn('bundle', 'exec', 'ruby', script_path, chdir: REPO_ROOT, pgroup: true, out: log, err: log)
+  # SW_NO_OPEN suppresses auto-opening a browser tab per boot (scripted runs only)
+  pid = Process.spawn({ 'SW_NO_OPEN' => '1' }, 'bundle', 'exec', 'ruby', script_path, chdir: REPO_ROOT, pgroup: true, out: log, err: log)
   $pids << pid
 
   deadline = Time.now + 15

@@ -1140,7 +1140,7 @@ module StreamWeaver
       end
 
       host, port = resolve_host_and_port(options)
-      auto_open = options.fetch(:open_browser, !ENV['PORT'])
+      auto_open = options.fetch(:open_browser, !ENV['PORT'] && !ENV['SW_NO_OPEN'])
       @reset_state_pending = ARGV.delete('--reset') ? true : false
 
       configure_server!(host, port)
@@ -1222,7 +1222,7 @@ module StreamWeaver
       set :auto_close_window, auto_close_window
 
       host, port = resolve_host_and_port(options)
-      auto_open = options.fetch(:open_browser, true)
+      auto_open = options.fetch(:open_browser, !ENV['SW_NO_OPEN'])
 
       configure_server!(host, port)
 
