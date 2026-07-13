@@ -1414,20 +1414,35 @@ module StreamWeaver
       def render_board(view, children, options, state)
         inject_board_css(view)
 
-        view.div(class: "sw-board") do
+        css_classes = ["sw-board", options[:class]].compact.join(" ")
+        style = [options[:style]].compact.join(" ")
+        attrs = { class: css_classes }
+        attrs[:style] = style unless style.empty?
+
+        view.div(**attrs) do
           children.each { |lane| lane.render(view, state) }
         end
       end
 
-      # Render a single board lane (column): header + stacked cards.
+      # Render a single board lane (column): header (title + optional
+      # subtitle + auto card count, tinted by tone:) + stacked cards.
       #
       # @param view [Phlex::HTML] The Phlex view instance
       # @param component [Components::Lane]
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_lane(view, component, state)
+        header_classes = ["sw-board__lane-header"]
+        header_classes << "sw-board__lane-header--#{component.tone}" if component.tone
+
         view.div(class: "sw-board__lane") do
-          view.div(class: "sw-board__lane-header") { component.title }
+          view.div(class: header_classes.join(" ")) do
+            view.div(class: "sw-board__lane-heading") do
+              view.div(class: "sw-board__lane-title") { component.title }
+              view.div(class: "sw-board__lane-subtitle") { component.subtitle } if component.subtitle
+            end
+            view.div(class: "sw-board__lane-count") { component.count.to_s }
+          end
           view.div(class: "sw-board__lane-body") do
             component.children.each { |child| child.render(view, state) }
           end
@@ -1438,11 +1453,17 @@ module StreamWeaver
       #
       # @param view [Phlex::HTML] The Phlex view instance
       # @param children [Array] Child components
-      # @param options [Hash] Component options
+      # @param options [Hash] Component options (:tone, :class, :style)
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_board_card(view, children, options, state)
-        view.div(class: "sw-board__card") do
+        css_classes = ["sw-board__card"]
+        css_classes << "sw-board__card--#{options[:tone]}" if options[:tone]
+        css_classes << options[:class] if options[:class]
+        attrs = { class: css_classes.join(" ") }
+        attrs[:style] = options[:style] if options[:style]
+
+        view.div(**attrs) do
           children.each { |child| child.render(view, state) }
         end
       end
@@ -4891,9 +4912,59 @@ module StreamWeaver
           }
 
           .sw-board__lane-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
             padding: 0.75rem 1rem;
             font-weight: 700;
             border-bottom: 1px solid var(--sw-color-border, #e0e0e0);
+          }
+
+          .sw-board__lane-heading {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+          }
+
+          .sw-board__lane-title {
+            font-weight: 700;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .sw-board__lane-subtitle {
+            font-size: var(--sw-font-size-sm, 0.75rem);
+            font-weight: 400;
+            opacity: 0.75;
+          }
+
+          .sw-board__lane-count {
+            font-size: 1.1rem;
+            font-weight: 700;
+            opacity: 0.85;
+            flex-shrink: 0;
+          }
+
+          /* Semantic lane header tones -- reuse the existing --sw-success/
+             warning/error/info tokens (Theme::VARIABLE_SCHEMA) so any theme
+             or theme_overrides already flows through, no new tokens needed. */
+          .sw-board__lane-header--neutral {
+            background: var(--sw-color-bg-elevated, var(--sw-surface-elevated, #e5e5e5));
+          }
+          .sw-board__lane-header--success {
+            background: linear-gradient(180deg, color-mix(in srgb, var(--sw-success, #16a34a) 35%, white), color-mix(in srgb, var(--sw-success, #16a34a) 55%, white));
+          }
+          .sw-board__lane-header--warning {
+            background: linear-gradient(180deg, color-mix(in srgb, var(--sw-warning, #d97706) 45%, white), color-mix(in srgb, var(--sw-warning, #d97706) 65%, white));
+          }
+          .sw-board__lane-header--error {
+            background: linear-gradient(180deg, color-mix(in srgb, var(--sw-error, #dc2626) 40%, white), color-mix(in srgb, var(--sw-error, #dc2626) 60%, white));
+          }
+          .sw-board__lane-header--info {
+            background: linear-gradient(180deg, color-mix(in srgb, var(--sw-info, #2563eb) 35%, white), color-mix(in srgb, var(--sw-info, #2563eb) 55%, white));
           }
 
           .sw-board__lane-body {
@@ -4910,6 +4981,14 @@ module StreamWeaver
             padding: 0.75rem;
             box-shadow: var(--sw-shadow-sm);
           }
+
+          /* Semantic card accents -- same BOARD_TONES vocabulary as the lane
+             header, so a card can flag itself (blocked/stale/done) without
+             a bespoke style: string at every call site. */
+          .sw-board__card--success { border-left: 3px solid var(--sw-success, #16a34a); }
+          .sw-board__card--warning { border-left: 3px solid var(--sw-warning, #d97706); }
+          .sw-board__card--error   { border-left: 3px solid var(--sw-error, #dc2626); }
+          .sw-board__card--info    { border-left: 3px solid var(--sw-info, #2563eb); }
         CSS
       end
 

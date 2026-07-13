@@ -1,14 +1,43 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# FAC-P5.1 early-gate rebuild: Tyrion's War Room slice (see
-# gsd/analysis/07-parity-early-gate.md for the parity assessment).
+# FAC-8mj design-parity rebuild: chases the REAL tyrion War Room (crest
+# topbar + horizontal nav, story sidebar, war-table hero background with
+# translucent parchment cards, per-lane color identity, Cinzel display type,
+# "Here Be Dragons" empty-state) using every existing DSL affordance first.
+# Every place that needed raw CSS/style: passthrough/the endpoint escape
+# hatch instead of a one-line DSL call is catalogued in
+# gsd/analysis/08-design-parity-fights.md.
+#
 # Fixture data only -- invented story titles, no real Tyrion project data.
-# Styled toward tyrion's gold/parchment palette via theme_overrides (tokens
-# only, translating the FEEL of public/shared.css, not vendoring its CSS).
+# Reference read (READ-ONLY, never copied): ~/work/tyrion web/app.rb,
+# views/layout.rb, views/war_room.rb, public/shared.css.
+#
+# Optional real art: export SW_PARITY_ASSETS=/path/to/tyrion/web/public/assets
+# to see the actual crest/dragon/war-table art via a local-file endpoint.
+# Unset (the committed default), everything falls back to a CSS gradient +
+# unicode glyph -- no tyrion asset is ever vendored into this repo.
+#
 # Run: ruby examples/parity/tyrion_warroom_slice.rb
 
 require_relative "../../lib/stream_weaver"
+require "time"
+
+# ---------------------------------------------------------------------------
+# Optional local art (never committed) -- see class comment above.
+# ---------------------------------------------------------------------------
+PARITY_ASSETS_DIR = ENV["SW_PARITY_ASSETS"]
+SLICE_CSS_PATH = File.expand_path("assets/tyrion_slice.css", __dir__)
+ASSET_MIME = {
+  ".png" => "image/png", ".jpg" => "image/jpeg", ".jpeg" => "image/jpeg",
+  ".svg" => "image/svg+xml", ".webp" => "image/webp"
+}.freeze
+
+def parity_asset_url(basename)
+  return nil unless PARITY_ASSETS_DIR
+  path = File.join(PARITY_ASSETS_DIR, basename)
+  File.exist?(path) ? "/parity/asset?name=#{basename}" : nil
+end
 
 # ---------------------------------------------------------------------------
 # Store: in-memory, DB-shaped -- records live here, never in the state hash
@@ -35,7 +64,8 @@ module StoryStore
       slug: slug,
       state: state,
       context: context,
-      notes: state == :active ? ["Kickoff logged.", "First checkpoint hit."] : ["Kickoff logged."]
+      notes: state == :active ? ["Kickoff logged.", "First checkpoint hit."] : ["Kickoff logged."],
+      completed_at: state == :done ? (Time.now - ((i + 1) * 3600 * 5)) : nil
     }
   end
 
@@ -50,11 +80,32 @@ module StoryStore
   end
 end
 
-LANES = [[:queue, "Queue"], [:active, "Active Campaign"], [:blocked, "Blocked Frontier"], [:done, "Shipped Keep"]].freeze
+# state -> [label, tone, subtitle] -- tone reuses the framework's semantic
+# success/warning/error tokens (gold=:warning, red=:error, green=:success);
+# see gsd/analysis/08-design-parity-fights.md for why an exact-hex match
+# would still need a style: override.
+LANES = [
+  [:queue, "Queue", :neutral, "Pending"],
+  [:active, "Active Campaign", :warning, "In Progress"],
+  [:blocked, "Blocked Frontier", :error, "Blocked"],
+  [:done, "Shipped Keep", :success, "Done"]
+].freeze
+
+DOT_STATUS = { queue: :gray, active: :yellow, blocked: :red, done: :green }.freeze
+
+def relative_time(t)
+  return "" unless t
+  mins = ((Time.now - t) / 60).round
+  return "#{mins}m ago" if mins < 60
+  hours = mins / 60
+  return "#{hours}h ago" if hours < 24
+  "#{hours / 24}d ago"
+end
 
 App = StreamWeaver::App.new(
   "Tyrion War Room (parity slice)",
   chrome: false,
+  layout: :fluid,
   theme: :dashboard,
   theme_overrides: {
     font_display: "'Cinzel', 'Lora', Georgia, serif",
@@ -70,10 +121,50 @@ App = StreamWeaver::App.new(
     color_border_strong: "#6B4E2A",
     color_accent: "#F59E0B",
     card_border_left: "3px solid var(--sw-color-primary)"
-  }
+  },
+  fonts: ["Cinzel:wght@400;600;700", "IBM+Plex+Mono:wght@300;400", "Lora:ital,wght@0,400;1,400;1,600"],
+  stylesheets: ["/parity/tyrion_slice.css"]
 ) do
-  header1 "War Room"
-  text "Field Ops Ledger -- parity slice", tone: :muted
+  # ---- local-file escape hatch (never serves outside SW_PARITY_ASSETS) ----
+  endpoint :get, "/parity/tyrion_slice.css" do |_req|
+    [200, { "Content-Type" => "text/css" }, [File.read(SLICE_CSS_PATH)]]
+  end
+
+  endpoint :get, "/parity/asset" do |req|
+    name = File.basename(req.params["name"].to_s)
+    path = PARITY_ASSETS_DIR && File.join(PARITY_ASSETS_DIR, name)
+    if path && File.exist?(path)
+      [200, { "Content-Type" => ASSET_MIME[File.extname(path).downcase] || "application/octet-stream" }, [File.binread(path)]]
+    else
+      [404, { "Content-Type" => "text/plain" }, ["not found"]]
+    end
+  end
+
+  crest_url = parity_asset_url("LionCrest.png")
+  dragon_url = parity_asset_url("dragon.png")
+  map_url = parity_asset_url("strategy_map.png")
+
+  topbar_bg = map_url ? "--tyrion-topbar-bg: linear-gradient(to bottom, rgba(0,0,0,.48), rgba(13,10,7,.88)), url('#{map_url}'); --tyrion-board-bg: linear-gradient(180deg, rgba(8,10,11,.2), rgba(8,10,11,.3)), url('#{map_url}');" : ""
+  crest_bg = crest_url ? "--tyrion-crest-bg: url('#{crest_url}');" : ""
+  dragon_bg = dragon_url ? "--tyrion-dragon-bg: url('#{dragon_url}');" : ""
+
+  fullbleed do
+    div(class: "tyrion-topbar", style: topbar_bg) do
+      div(class: "tyrion-topbar-main") do
+        div(class: "tyrion-crest", style: crest_bg) { phrase(crest_url ? "" : "🦁") }
+        div(class: "tyrion-wordmark") { phrase "TYRION" }
+        div(class: "tyrion-sep") { phrase "·" }
+        div(class: "tyrion-crumb") { phrase "field-ops › warroom-parity" }
+      end
+      navbar(class: "tyrion-topbar-nav") do
+        nav_item("⚔ War Room", href: "#", active: true)
+        nav_item("🗺 Roadmap", href: "#")
+        nav_item("📖 Active Story", href: "#")
+        nav_item("🌍 Global View", href: "#")
+        nav_item("💡 Discoveries", href: "#")
+      end
+    end
+  end
 
   fragment(:flash) { flash_messages }
 
@@ -91,48 +182,93 @@ App = StreamWeaver::App.new(
     end
   end
 
-  columns(widths: ["65%", "35%"]) do
-    column do
-      fragment(:board) do
-        board do
-          LANES.each do |state_key, label|
-            stories = StoryStore.by_state(state_key)
-            lane("#{label} (#{stories.size})") do
-              stories.each do |story|
-                board_card do
-                  text story[:slug]
-                  text story[:context], tone: :muted
-                  # primary: (stream_weaver-78a) makes :detail the response's
-                  # actual swap target instead of resending the whole board
-                  # fragment just to trigger this sibling pane's refresh.
-                  button "View", key: story[:id], primary: :detail do |s|
-                    s[:selected_story] = story[:id]
+  app_shell(sidebar_width: "230px", sidebar_position: :left, gap: "0") do
+    sidebar(header: nil, sticky: false) do
+      div(class: "tyrion-sidebar-label") { phrase "Stories · field-ops" }
+
+      StoryStore.all.each do |story|
+        div(class: "tyrion-story-row tyrion-story-row--#{story[:state]}") do
+          hstack(spacing: :sm) do
+            status_dot(status: DOT_STATUS.fetch(story[:state]), pulse: story[:state] == :active, size: :sm)
+            text story[:slug]
+          end
+        end
+      end
+
+      div(class: "tyrion-discoveries") do
+        div(class: "tyrion-sidebar-label") { phrase "Discoveries" }
+        badge "spike", variant: :info, size: :sm
+        badge "2 ready", variant: :success, size: :sm
+        badge "3 marks", variant: :default, size: :sm
+      end
+    end
+
+    main do
+      columns(widths: ["76%", "24%"]) do
+        column do
+          fragment(:board) do
+            board(class: "tyrion-board", style: "position: relative;") do
+              overlay(z: 1, class: "tyrion-dragon-zone") do
+                div(class: "tyrion-dragon-glyph", style: dragon_bg) { phrase(dragon_url ? "" : "🐉") }
+                header3 "Here Be Dragons"
+                text "Uncertain requirements"
+                text "External dependency"
+                text "Needs human decision"
+              end
+
+              LANES.each do |state_key, label, tone, subtitle|
+                stories = StoryStore.by_state(state_key)
+                title = state_key == :blocked ? "🐉 #{label}" : label
+
+                lane(title, tone: tone, subtitle: subtitle) do
+                  stories.each do |story|
+                    if state_key == :done
+                      board_card(tone: :success, class: "tyrion-card tyrion-card--done") do
+                        header4 story[:slug]
+                        text "✓ done · #{relative_time(story[:completed_at])}", tone: :success
+                        button "View", key: story[:id], primary: :detail, style: :none, class: "tyrion-view-link" do |s|
+                          s[:selected_story] = story[:id]
+                        end
+                      end
+                    else
+                      board_card(tone: (state_key == :blocked ? :error : nil), class: "tyrion-card") do
+                        header4 story[:slug]
+                        text story[:context], tone: :muted
+                        badge story[:state].to_s, variant: :default, size: :sm
+                        # primary: (stream_weaver-78a) makes :detail the response's
+                        # actual swap target instead of resending the whole board
+                        # fragment just to trigger this sibling pane's refresh.
+                        button "View", key: story[:id], primary: :detail do |s|
+                          s[:selected_story] = story[:id]
+                        end
+                      end
+                    end
                   end
                 end
               end
             end
           end
         end
-      end
-    end
 
-    column do
-      fragment(:detail) do
-        story = state[:selected_story] && StoryStore.find(state[:selected_story])
+        column do
+          fragment(:detail) do
+            story = state[:selected_story] && StoryStore.find(state[:selected_story])
 
-        if story.nil?
-          card { text "Select a story to see its detail.", tone: :muted }
-        else
-          card do
-            header3 story[:slug]
-            text story[:state].to_s.capitalize, tone: :caption
-            text story[:context]
+            if story.nil?
+              card { text "Select a story to see its detail.", tone: :muted }
+            else
+              card do
+                header3 story[:slug]
+                text story[:state].to_s.capitalize, tone: :caption
+                text story[:context]
 
-            header3 "Notes"
-            story[:notes].each { |note| text "- #{note}" }
+                header3 "Notes"
+                story[:notes].each { |note| text "- #{note}" }
 
-            text_area :note_body, placeholder: "Add a note...", rows: 3, submit: false
-            button "Add Note", action: :add_note, key: story[:id], style: :primary
+                text_area :note_body, placeholder: "Add a note...", rows: 3, submit: false
+                button "Add Note", action: :add_note, key: story[:id], style: :primary
+              end
+            end
           end
         end
       end

@@ -1,0 +1,239 @@
+/* Tyrion War Room -- design-parity slice CSS (stream_weaver-8mj)
+ *
+ * Everything here is a slice-local skin, not a fork of tyrion's own
+ * public/shared.css: no rules or values were copied from that file, only
+ * re-derived from reading it (colors/type choices happen to land close on
+ * purpose -- that's the point of a parity slice). Scoped to elements this
+ * page actually renders; nothing here is meant to ship as framework CSS
+ * (see gsd/analysis/08-design-parity-fights.md for what *should* graduate).
+ */
+
+/* ---- Topbar (crest + wordmark + breadcrumb + horizontal nav) ---- */
+
+.tyrion-topbar {
+  background-image: var(--tyrion-topbar-bg, linear-gradient(160deg, #241a0e, #0d0a07));
+  background-size: cover;
+  background-position: center 35%;
+  border-bottom: 2px solid #6b4e2a;
+}
+
+.tyrion-topbar-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.35), rgba(13, 10, 7, 0.75));
+}
+
+.tyrion-crest {
+  height: 40px;
+  width: 40px;
+  flex-shrink: 0;
+  background-image: var(--tyrion-crest-bg, none);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+}
+
+.tyrion-wordmark {
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #f59e0b;
+  letter-spacing: 0.12em;
+}
+
+.tyrion-sep { color: #9b7d5a; }
+
+.tyrion-crumb {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  color: #d4b896;
+}
+
+.tyrion-topbar-nav {
+  display: flex;
+  gap: 2px;
+  padding: 0 10px;
+  background: rgba(0, 0, 0, 0.42);
+  border-top: 1px solid rgba(107, 78, 42, 0.45);
+}
+
+.tyrion-topbar-nav .sw-navbar-item,
+.tyrion-topbar-nav .sw-navbar-item-active {
+  padding: 10px 14px;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  color: #d4b896;
+}
+
+.tyrion-topbar-nav .sw-navbar-item-active {
+  color: #f59e0b;
+  font-weight: 600;
+  border-bottom-color: #f59e0b;
+}
+
+/* ---- Sidebar (story roster + discoveries) ---- */
+
+body .sw-sidebar-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.tyrion-sidebar-label {
+  padding: 12px 14px 4px;
+  font-family: 'Cinzel', serif;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #d4b896;
+}
+
+.tyrion-story-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 8px;
+  padding: 6px 10px;
+  border: 1px solid #b8a070;
+  border-radius: 3px;
+  background: #d9cdb0;
+  color: #1a0e05;
+  font-size: 14px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.tyrion-story-row--active { background: #f5edd8; border-color: #f59e0b; font-weight: 600; }
+.tyrion-story-row--done { opacity: 0.65; }
+
+/* `text` renders a plain <p> with its own explicit color (the theme's
+ * --sw-color-text-muted) -- an inherited color on the wrapping row div never
+ * wins against that (inheritance always loses to *any* explicit rule,
+ * regardless of specificity), so the slug needs its own explicit override. */
+.tyrion-story-row p { color: #1a0e05; margin: 0; }
+.tyrion-story-row--active p { font-weight: 600; }
+.tyrion-story-row--done p { color: #3d2410; }
+
+.tyrion-discoveries {
+  margin-top: auto;
+  border-top: 1px solid #4a3520;
+  padding: 10px 14px 12px;
+}
+
+.tyrion-discoveries .sw-badge { margin-right: 6px; }
+
+/* ---- War table board ---- */
+
+body .tyrion-board {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(215, 176, 102, 0.28);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  background-image: var(--tyrion-board-bg, radial-gradient(circle at 50% 30%, #2e2010, #0d0a07 70%));
+  background-size: cover;
+  background-position: center;
+}
+
+.tyrion-board .sw-board__lane {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid rgba(0, 0, 0, 0.25);
+  position: relative;
+  z-index: 2;
+}
+
+.tyrion-board .sw-board__lane:last-child { border-right: none; }
+
+.tyrion-board .sw-board__lane-title {
+  font-family: 'Cinzel', Georgia, serif;
+  letter-spacing: 0.04em;
+}
+
+.tyrion-board .sw-board__lane-count {
+  font-family: 'Cinzel', Georgia, serif;
+}
+
+/* `body` prefix (not !important) beats the framework's own inline-injected
+ * .sw-board__card{background:...} rule, which is re-emitted per-fragment
+ * *after* this stylesheet's <link> in DOM order -- at equal specificity
+ * (single class vs. single class), later-in-document wins, so a bare
+ * `.tyrion-card{background:...}` silently lost every time (dark text on
+ * the framework's dark default card = invisible). See catalog entry #1. */
+body .tyrion-card {
+  background: linear-gradient(180deg, rgba(236, 220, 184, 0.97), rgba(209, 186, 141, 0.96));
+  color: #231b12;
+  border-radius: 12px;
+  border: 1px solid rgba(96, 73, 32, 0.35);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28);
+}
+
+.tyrion-card h4 {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 16px;
+  color: #1a0e05;
+  margin-bottom: 4px;
+}
+
+/* `body` prefix again -- .sw-column p (framework, base <style>) ties this
+ * selector's specificity and wins on source order otherwise. Same root
+ * cause as the .tyrion-card background fight above. */
+body .tyrion-card p {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: #4a3318;
+}
+
+.tyrion-card--done { opacity: 0.82; }
+
+/* ---- "Here Be Dragons" empty-state overlay ---- */
+
+.tyrion-dragon-zone {
+  left: 50%;
+  top: 78px;
+  bottom: 16px;
+  width: 22%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #ead7ba;
+  pointer-events: none;
+}
+
+.tyrion-dragon-zone .tyrion-dragon-glyph {
+  font-size: 46px;
+  opacity: 0.85;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.5));
+  background-image: var(--tyrion-dragon-bg, none);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  width: 70px;
+  height: 70px;
+  line-height: 70px;
+}
+
+.tyrion-dragon-zone h3 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+  color: #f0cdb4;
+  margin-bottom: 6px;
+}
+
+body .tyrion-dragon-zone p {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: #d2be9a;
+  line-height: 1.5;
+}

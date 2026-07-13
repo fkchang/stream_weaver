@@ -14,11 +14,37 @@ RSpec.describe StreamWeaver::Components::Lane do
   it "initializes with empty children" do
     expect(described_class.new("To Do").children).to eq([])
   end
+
+  it "accepts a tone from BOARD_TONES" do
+    expect(described_class.new("To Do", tone: :warning).tone).to eq(:warning)
+  end
+
+  it "ignores an unrecognized tone" do
+    expect(described_class.new("To Do", tone: :nope).tone).to be_nil
+  end
+
+  it "stores a subtitle" do
+    expect(described_class.new("To Do", subtitle: "Pending").subtitle).to eq("Pending")
+  end
+
+  it "derives count from children, never drifting from what renders" do
+    lane = described_class.new("To Do")
+    lane.children = [StreamWeaver::Components::BoardCard.new, StreamWeaver::Components::BoardCard.new]
+    expect(lane.count).to eq(2)
+  end
 end
 
 RSpec.describe StreamWeaver::Components::BoardCard do
   it "initializes with empty children" do
     expect(described_class.new.children).to eq([])
+  end
+
+  it "accepts a tone from BOARD_TONES" do
+    expect(described_class.new(tone: :error).tone).to eq(:error)
+  end
+
+  it "ignores an unrecognized tone" do
+    expect(described_class.new(tone: :nope).tone).to be_nil
   end
 end
 
@@ -100,5 +126,46 @@ RSpec.describe "board HTML rendering" do
 
     html = render_html(board)
     expect(html).not_to include("draggable")
+  end
+
+  it "renders board style:/class: passthrough" do
+    board = StreamWeaver::Components::Board.new(style: "background: url(x.png);", class: "my-board")
+    html = render_html(board)
+    expect(html).to include("my-board")
+    expect(html).to include("background: url(x.png);")
+  end
+
+  it "renders a lane's tone as a header modifier class, subtitle, and auto count" do
+    board = StreamWeaver::Components::Board.new
+    lane = StreamWeaver::Components::Lane.new("Blocked", tone: :error, subtitle: "Frontier")
+    lane.children = [StreamWeaver::Components::BoardCard.new, StreamWeaver::Components::BoardCard.new]
+    board.children = [lane]
+
+    html = render_html(board)
+    expect(html).to include("sw-board__lane-header--error")
+    expect(html).to include("Frontier")
+    expect(html).to include(">2<") # auto count from children.size
+  end
+
+  it "omits the tone modifier class when no tone is given" do
+    board = StreamWeaver::Components::Board.new
+    lane = StreamWeaver::Components::Lane.new("To Do")
+    board.children = [lane]
+
+    html = render_html(board)
+    expect(html).to include('class="sw-board__lane-header"')
+  end
+
+  it "renders a board_card's tone as an accent modifier class, plus style:/class: passthrough" do
+    board = StreamWeaver::Components::Board.new
+    lane = StreamWeaver::Components::Lane.new("Done")
+    card = StreamWeaver::Components::BoardCard.new(tone: :success, class: "done-card", style: "opacity: .8;")
+    lane.children = [card]
+    board.children = [lane]
+
+    html = render_html(board)
+    expect(html).to include("sw-board__card--success")
+    expect(html).to include("done-card")
+    expect(html).to include("opacity: .8;")
   end
 end

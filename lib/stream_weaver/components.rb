@@ -735,10 +735,20 @@ module StreamWeaver
       end
     end
 
+    # Semantic accent tones shared by Lane headers and BoardCard accents --
+    # reuse the existing --sw-success/warning/error/info theme tokens (FAC-8mj
+    # tyrion parity: per-lane color identity -- gold/red/green -- had no
+    # first-class option before this) rather than inventing app-specific
+    # color names. An app that wants tyrion's exact gold/red/green still
+    # picks the closest tone (:warning/:error/:success) and layers its own
+    # CSS on top for the exact hue.
+    BOARD_TONES = %i[neutral success warning error info].freeze
+
     # Static Kanban board -- groups Lane children. No drag-and-drop (03 gap
     # #9); a future primitive can add it without changing this shape.
     class Board < Base
       attr_accessor :children
+      attr_reader :options
 
       def initialize(**options)
         @options = options
@@ -752,15 +762,25 @@ module StreamWeaver
 
     # Single column within a Board. Children are typically BoardCards, but
     # any component is accepted directly (e.g. an empty-state text).
+    #
+    # @option tone [Symbol] one of BOARD_TONES -- colors the lane header band
+    # @option subtitle [String] small text under the title (e.g. "In Progress")
     class Lane < Base
       attr_accessor :children
-      attr_reader :title
+      attr_reader :title, :tone, :subtitle
 
-      def initialize(title, **options)
+      def initialize(title, tone: nil, subtitle: nil, **options)
         @title = title
+        @tone = tone if BOARD_TONES.include?(tone)
+        @subtitle = subtitle
         @options = options
         @children = []
       end
+
+      # Card count for the lane header -- derived from children so it can
+      # never drift from what's actually rendered (Forrest's Law: anything
+      # that can happen automatically, must).
+      def count = @children.size
 
       def render(view, state)
         view.adapter.render_lane(view, self, state)
@@ -768,16 +788,20 @@ module StreamWeaver
     end
 
     # A single card within a Lane.
+    #
+    # @option tone [Symbol] one of BOARD_TONES -- left-border accent color
     class BoardCard < Base
       attr_accessor :children
+      attr_reader :tone, :options
 
-      def initialize(**options)
+      def initialize(tone: nil, **options)
+        @tone = tone if BOARD_TONES.include?(tone)
         @options = options
         @children = []
       end
 
       def render(view, state)
-        view.adapter.render_board_card(view, @children, @options, state)
+        view.adapter.render_board_card(view, @children, @options.merge(tone: @tone), state)
       end
     end
 
