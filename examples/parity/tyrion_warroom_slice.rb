@@ -69,10 +69,16 @@ module StoryStore
     }
   end
 
+  # Demo-only lane emptying (stream_weaver-8mj empty-state proof): set
+  # SW_PARITY_EMPTY_LANE=blocked (or queue/active/done) to see the "Here Be
+  # Dragons" empty-state render for that lane. Unset by default -- the normal
+  # demo shows all four lanes populated.
+  EMPTY_LANE = ENV["SW_PARITY_EMPTY_LANE"]&.to_sym
+
   class << self
     def all = @stories
     def find(id) = @stories.find { |s| s[:id] == id.to_i }
-    def by_state(state) = @stories.select { |s| s[:state] == state }
+    def by_state(state) = state == EMPTY_LANE ? [] : @stories.select { |s| s[:state] == state }
 
     def add_note!(id, body)
       find(id)&.[](:notes)&.push(body)
@@ -144,7 +150,14 @@ App = StreamWeaver::App.new(
   dragon_url = parity_asset_url("dragon.png")
   map_url = parity_asset_url("strategy_map.png")
 
-  topbar_bg = map_url ? "--tyrion-topbar-bg: linear-gradient(to bottom, rgba(0,0,0,.48), rgba(13,10,7,.88)), url('#{map_url}'); --tyrion-board-bg: linear-gradient(180deg, rgba(8,10,11,.2), rgba(8,10,11,.3)), url('#{map_url}');" : ""
+  # `--tyrion-board-bg` must be set on the board's own element (below), not
+  # here on the topbar -- a CSS custom property only cascades to *this*
+  # element's descendants, and the board lives outside the topbar's subtree
+  # (sibling under app_shell), so setting it here left `.tyrion-board` always
+  # falling back to its plain gradient default -- the hero image never made
+  # it past the topbar strip.
+  topbar_bg = map_url ? "--tyrion-topbar-bg: linear-gradient(to bottom, rgba(0,0,0,.48), rgba(13,10,7,.88)), url('#{map_url}');" : ""
+  board_bg = map_url ? "--tyrion-board-bg: linear-gradient(180deg, rgba(8,10,11,.2), rgba(8,10,11,.3)), url('#{map_url}');" : ""
   crest_bg = crest_url ? "--tyrion-crest-bg: url('#{crest_url}');" : ""
   dragon_bg = dragon_url ? "--tyrion-dragon-bg: url('#{dragon_url}');" : ""
 
@@ -207,13 +220,28 @@ App = StreamWeaver::App.new(
       columns(widths: ["76%", "24%"]) do
         column do
           fragment(:board) do
-            board(class: "tyrion-board", style: "position: relative;") do
-              overlay(z: 1, class: "tyrion-dragon-zone") do
-                div(class: "tyrion-dragon-glyph", style: dragon_bg) { phrase(dragon_url ? "" : "🐉") }
-                header3 "Here Be Dragons"
-                text "Uncertain requirements"
-                text "External dependency"
-                text "Needs human decision"
+            # Empty-state renders only over the one lane that's actually
+            # empty (index into LANES' left-to-right order), and only when
+            # such a lane exists -- it used to render unconditionally,
+            # bleeding through card gaps in every populated lane. It's kept
+            # as a board-level sibling rather than a Lane child: Lane#count
+            # is auto-derived from children.size (any component is a valid
+            # child per the framework's own doc comment), so nesting it
+            # inside the empty lane would count the empty-state itself as a
+            # "card" and show e.g. "1" instead of "0" in that lane's header.
+            empty_lane_index = LANES.find_index { |state_key, *| StoryStore.by_state(state_key).empty? }
+
+            board(class: "tyrion-board", style: "position: relative; #{board_bg}") do
+              if empty_lane_index
+                dragon_style = "left: calc(#{empty_lane_index} * (100% / #{LANES.size})); " \
+                               "width: calc(100% / #{LANES.size});"
+                overlay(z: 1, class: "tyrion-dragon-zone", style: dragon_style) do
+                  div(class: "tyrion-dragon-glyph", style: dragon_bg) { phrase(dragon_url ? "" : "🐉") }
+                  header3 "Here Be Dragons"
+                  text "Uncertain requirements"
+                  text "External dependency"
+                  text "Needs human decision"
+                end
               end
 
               LANES.each do |state_key, label, tone, subtitle|

@@ -2105,6 +2105,7 @@ module StreamWeaver
         css_classes << component.options[:class] if component.options[:class]
         parts = ["position: absolute;", "z-index: #{component.z};"]
         parts << "pointer-events: #{component.pointer_events};" if component.pointer_events
+        parts << component.options[:style] if component.options[:style]
         view.div(class: css_classes.join(" "), style: parts.join(" ")) do
           component.children.each { |child| child.render(view, state) }
         end

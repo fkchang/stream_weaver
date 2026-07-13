@@ -160,6 +160,16 @@ body .tyrion-board {
   font-family: 'Cinzel', Georgia, serif;
 }
 
+/* Queue's tone is :neutral, which the framework paints with the raw
+ * --sw-color-bg-elevated token -- fine on a light theme, but this slice's
+ * theme_overrides sets that token to near-black (#241A0E), so Queue alone
+ * rendered as a flat black band next to the other lanes' warm gradients.
+ * Reuse the palette's own border-strong/border browns for a dark-parchment
+ * band that matches the reference's Queue tone instead. */
+.tyrion-board .sw-board__lane-header--neutral {
+  background: linear-gradient(180deg, #6b4e2a, #4a3520);
+}
+
 /* `body` prefix (not !important) beats the framework's own inline-injected
  * .sw-board__card{background:...} rule, which is re-emitted per-fragment
  * *after* this stylesheet's <link> in DOM order -- at equal specificity
@@ -192,19 +202,21 @@ body .tyrion-card p {
 
 .tyrion-card--done { opacity: 0.82; }
 
-/* ---- "Here Be Dragons" empty-state overlay ---- */
+/* ---- "Here Be Dragons" empty-state overlay ----
+ * Only rendered (see tyrion_warroom_slice.rb) when a lane has zero stories;
+ * `left`/`width` come in as an inline style computed per-render to match
+ * that lane's index/count out of LANES, so the box lands over that lane's
+ * region instead of spanning (and bleeding through) the whole board. */
 
 .tyrion-dragon-zone {
-  left: 50%;
   top: 78px;
   bottom: 16px;
-  width: 22%;
-  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
+  padding: 0 10px;
   color: #ead7ba;
   pointer-events: none;
 }
