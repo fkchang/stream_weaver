@@ -1600,6 +1600,41 @@ module StreamWeaver
       end
     end
 
+    # Wraps arbitrary composed content as a single click target -- either a
+    # named-action dispatcher (wired exactly like a named-action button:
+    # token, fragment context, loading indicator on the wrapper) or a plain
+    # navigation link (routed pages). See App#clickable, which builds the
+    # action_token/wrapper_id the same way App#button builds a named-action
+    # button's (stream_weaver-1lo).
+    class Clickable < Base
+      attr_accessor :children
+      attr_reader :href, :options
+
+      # @param href [String, nil] Plain-navigation form -- renders a real <a>.
+      #   Mutually exclusive with the action: form (see App#clickable).
+      # @param wrapper_id [String, nil] Stable id for the action: form
+      # @param options [Hash] :class/:style, plus (action: form only)
+      #   :action_token/:updates/:primary
+      def initialize(href: nil, wrapper_id: nil, **options)
+        @href = href
+        @wrapper_id = wrapper_id
+        @options = options
+        @children = []
+      end
+
+      def id
+        @wrapper_id
+      end
+
+      def id=(new_id)
+        @wrapper_id = new_id
+      end
+
+      def render(view, state)
+        view.adapter.render_clickable(view, self, state)
+      end
+    end
+
     class Navbar < Base
       attr_accessor :children
       attr_reader :options

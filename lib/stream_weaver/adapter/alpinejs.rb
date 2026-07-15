@@ -2304,6 +2304,80 @@ module StreamWeaver
         view.a(href: component.href, class: css) { component.label }
       end
 
+      # Render a `clickable` wrapper: any composed content as a single click
+      # target. href: renders a plain navigation <a>; the action: form is
+      # wired exactly like a named-action button (App#clickable already
+      # built the token) via the same htmx_attrs machinery render_button
+      # uses, so it dispatches identically -- including from inside a table
+      # cell or fragment (stream_weaver-1lo).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::Clickable]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_clickable(view, component, state)
+        inject_component_css(view, :clickable, clickable_css)
+
+        if component.href
+          css_classes = ["sw-clickable", "sw-clickable--link"]
+          css_classes << component.options[:class] if component.options[:class]
+          attrs = { class: css_classes.join(" "), href: component.href }
+          attrs[:style] = component.options[:style] if component.options[:style]
+
+          view.a(**attrs) do
+            component.children.each { |child| child.render(view, state) }
+          end
+          return
+        end
+
+        wrapper_id = component.id
+        action_target = component.options[:action_token] || wrapper_id
+        loading = loading_indicators_enabled?(view)
+
+        css_classes = ["sw-clickable"]
+        css_classes << component.options[:class] if component.options[:class]
+        attrs = { class: css_classes.join(" ") }
+        attrs[:style] = component.options[:style] if component.options[:style]
+
+        # A click (or Enter) that originates inside a nested interactive
+        # element -- e.g. a `button` glued to a board_card for its own
+        # action -- dispatches only that element's own request, not the
+        # wrapper's; otherwise every click on a nested control would also
+        # fire the wrapper's action.
+        not_nested_interactive = "!event.target.closest('a,button,input,select,textarea,label,[data-sw-stop]')"
+        trigger = "click[#{not_nested_interactive}], keydown[event.key=='Enter'&&#{not_nested_interactive}]"
+
+        attrs.merge!(htmx_attrs(
+          url("/action/#{action_target}"), view: view, loading: loading, indicator: "##{wrapper_id}",
+          sw_updates: component.options[:updates], sw_primary: component.options[:primary],
+          "hx-disabled-elt" => "this", "hx-trigger" => trigger
+        ))
+        attrs[:id] = wrapper_id
+        attrs[:role] = "button"
+        attrs[:tabindex] = "0"
+
+        view.div(**attrs) do
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      def clickable_css
+        <<~CSS
+          .sw-clickable {
+            cursor: pointer;
+          }
+          .sw-clickable:focus-visible {
+            outline: 2px solid var(--sw-color-primary, #3b82f6);
+            outline-offset: 2px;
+          }
+          .sw-clickable--link {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+          }
+        CSS
+      end
+
       def render_navbar(view, component, state)
         css_classes = ["sw-navbar"]
         css_classes << component.options[:class] if component.options[:class]

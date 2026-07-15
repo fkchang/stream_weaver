@@ -323,14 +323,16 @@ tyrion_url = boot_app(File.join(REPO_ROOT, 'examples', 'parity', 'tyrion_warroom
 pw('goto', tyrion_url)
 tyrion_snap = pw_snapshot_text
 
-check("View: detail pane contains the story title (primary: :detail -- not OOB, so unaffected by stream_weaver-e4p)") do
-  idx = tyrion_snap.index('forge-the-beacon-relay')
-  raise "fixture story \"forge-the-beacon-relay\" not found on the board" unless idx
+check("clickable card: detail pane contains the story title (whole board_card is one click target, primary: :detail -- not OOB, so unaffected by stream_weaver-e4p)") do
+  raise "fixture story \"forge-the-beacon-relay\" not found on the board" unless tyrion_snap.include?('forge-the-beacon-relay')
 
-  view_ref = tyrion_snap[idx..].match(/button "View"[^\[\n]*\[ref=(e\d+)\]/)&.captures&.first
-  raise "no View button found near forge-the-beacon-relay" unless view_ref
+  # The card itself is now the click target (role=button), so its
+  # accessible name starts with the story slug -- no separate "View"
+  # button to search forward for anymore.
+  card_ref = tyrion_snap.match(/button "forge-the-beacon-relay[^\[\n]*\[ref=(e\d+)\]/)&.captures&.first
+  raise "no clickable card found for forge-the-beacon-relay" unless card_ref
 
-  after = pw_click(view_ref)
+  after = pw_click(card_ref)
   ok = after.include?('heading "forge-the-beacon-relay"')
   [ok, ok ? nil : "detail pane snapshot did not contain the story heading:\n#{after}"]
 end

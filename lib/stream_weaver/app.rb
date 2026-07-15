@@ -731,6 +731,49 @@ module StreamWeaver
       components << btn
     end
 
+    # Wraps arbitrary composed content (any DSL components) as a single
+    # click target -- the click-target equivalent of what card/div already
+    # do for layout, so a whole card/row can be one dispatch target instead
+    # of a trailing "View" button glued to the bottom.
+    #
+    #   clickable(action: :select, key: story[:id]) { header4 story[:slug]; badge story[:state] }
+    #   clickable(href: "/stories/#{story[:id]}") { header4 story[:slug] }
+    #
+    # action: dispatches exactly like a named-action button (same token,
+    # fragment context, and current-row key: inside a table cell); href:
+    # renders a plain navigation <a> for routed pages. Mutually exclusive.
+    def clickable(action: nil, href: nil, key: nil, **options, &block)
+      if action.nil? == href.nil?
+        raise ArgumentError, "clickable requires exactly one of action: or href:"
+      end
+
+      if href
+        component = Components::Clickable.new(href: href, **options)
+        return with_container(component, &block)
+      end
+
+      require 'digest/md5'
+      row_key = render_state.current_row_key_thunk&.value
+      action_key = key || row_key
+      action_key = validate_scalar_key!(action_key, context: "clickable")
+      raise ArgumentError, "clickable action: key: is required" if action_key.nil?
+      options[:action_token] = action_token(
+        action, action_key,
+        fragment: render_state.fragment_stack.last,
+        updates: options.delete(:updates),
+        primary: options.delete(:primary)
+      )
+
+      combined_key = [row_key, key].compact
+      id_input = combined_key.any? ? "clickable:#{action}:#{combined_key.join(':')}" : "clickable:#{action}:#{block&.source_location&.join(':')}"
+      stable_id = Digest::MD5.hexdigest(id_input)[0..7]
+      wrapper_id = "clickable_#{action}_#{stable_id}"
+
+      component = Components::Clickable.new(wrapper_id: wrapper_id, **options)
+      component.id = disambiguate_component_id(component.id, label: "clickable_#{action}", source_loc: block&.source_location)
+      with_container(component, &block)
+    end
+
     # =========================================
     # Chart DSL methods
     # =========================================

@@ -195,6 +195,11 @@ App = StreamWeaver::App.new(
     end
   end
 
+  # primary: (stream_weaver-78a) makes :detail the response's actual swap
+  # target instead of resending the whole board fragment just to trigger
+  # this sibling pane's refresh.
+  action(:select_story, primary: :detail) { |state, key| state[:selected_story] = key }
+
   app_shell(sidebar_width: "230px", sidebar_position: :left, gap: "0") do
     sidebar(header: nil, sticky: false) do
       div(class: "tyrion-sidebar-label") { phrase "Stories · field-ops" }
@@ -252,22 +257,17 @@ App = StreamWeaver::App.new(
                   stories.each do |story|
                     if state_key == :done
                       board_card(tone: :success, class: "tyrion-card tyrion-card--done") do
-                        header4 story[:slug]
-                        text "✓ done · #{relative_time(story[:completed_at])}", tone: :success
-                        button "View", key: story[:id], primary: :detail, style: :none, class: "tyrion-view-link" do |s|
-                          s[:selected_story] = story[:id]
+                        clickable(action: :select_story, key: story[:id]) do
+                          header4 story[:slug]
+                          text "✓ done · #{relative_time(story[:completed_at])}", tone: :success
                         end
                       end
                     else
                       board_card(tone: (state_key == :blocked ? :error : nil), class: "tyrion-card") do
-                        header4 story[:slug]
-                        text story[:context], tone: :muted
-                        badge story[:state].to_s, variant: :default, size: :sm
-                        # primary: (stream_weaver-78a) makes :detail the response's
-                        # actual swap target instead of resending the whole board
-                        # fragment just to trigger this sibling pane's refresh.
-                        button "View", key: story[:id], primary: :detail do |s|
-                          s[:selected_story] = story[:id]
+                        clickable(action: :select_story, key: story[:id]) do
+                          header4 story[:slug]
+                          text story[:context], tone: :muted
+                          badge story[:state].to_s, variant: :default, size: :sm
                         end
                       end
                     end
