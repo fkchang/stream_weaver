@@ -265,22 +265,28 @@ module StreamWeaver
     class Text < Base
       TONES = %i[muted caption error success].freeze
 
-      attr_reader :tone
+      attr_reader :tone, :options
 
       # @param content [String, Proc] The text content (can be a proc for dynamic content)
       # @param tone [Symbol, nil] Visual tone -- :muted, :caption, :error, :success (03
       #   honorable mention: hand-coded hex/padding divs standing in for text variants)
-      def initialize(content, tone: nil)
+      # @param options [Hash] :class/:style passthrough (stream_weaver-1lo)
+      def initialize(content, tone: nil, **options)
         @content = content
         @tone = TONES.include?(tone) ? tone : nil
+        @options = options
       end
 
       def render(view, state)
         content = @content.is_a?(Proc) ? @content.call(state) : @content
         if @tone
-          view.adapter.render_text(view, content.to_s, @tone)
+          view.adapter.render_text(view, content.to_s, @tone, @options)
         else
-          view.p { content.to_s }
+          classes = [@options[:class]].compact
+          attrs = {}
+          attrs[:class] = classes.join(" ") unless classes.empty?
+          attrs[:style] = @options[:style] if @options[:style]
+          view.p(**attrs) { content.to_s }
         end
       end
     end
@@ -619,13 +625,21 @@ module StreamWeaver
 
     # Phrase component for plain text within lesson content
     class Phrase < Base
+      attr_reader :options
+
       # @param content [String] The text content
-      def initialize(content)
+      # @param options [Hash] :class/:style passthrough (stream_weaver-1lo)
+      def initialize(content, **options)
         @content = content
+        @options = options
       end
 
       def render(view, state)
-        view.span { @content }
+        classes = [@options[:class]].compact
+        attrs = {}
+        attrs[:class] = classes.join(" ") unless classes.empty?
+        attrs[:style] = @options[:style] if @options[:style]
+        view.span(**attrs) { @content }
       end
     end
 
@@ -1191,31 +1205,37 @@ module StreamWeaver
 
     # Markdown component for rendering markdown-formatted content
     class Markdown < Base
+      attr_reader :options
+
       # @param content [String, Proc] The markdown content (can be a proc for dynamic content)
-      def initialize(content)
+      # @param options [Hash] :class/:style passthrough (stream_weaver-1lo)
+      def initialize(content, **options)
         @content = content
+        @options = options
       end
 
       def render(view, state)
         content = @content.is_a?(Proc) ? @content.call(state) : @content
-        view.adapter.render_markdown(view, content.to_s, state)
+        view.adapter.render_markdown(view, content.to_s, state, @options)
       end
     end
 
     # Header component for semantic headers (h1-h6)
     class Header < Base
-      attr_reader :level
+      attr_reader :level, :options
 
       # @param content [String, Proc] The header text (can be a proc for dynamic content)
       # @param level [Integer] Header level (1-6, default: 2)
-      def initialize(content, level: 2)
+      # @param options [Hash] :class/:style passthrough (stream_weaver-1lo)
+      def initialize(content, level: 2, **options)
         @content = content
         @level = level.clamp(1, 6)
+        @options = options
       end
 
       def render(view, state)
         content = @content.is_a?(Proc) ? @content.call(state) : @content
-        view.adapter.render_header(view, content.to_s, @level, state)
+        view.adapter.render_header(view, content.to_s, @level, state, @options)
       end
     end
 

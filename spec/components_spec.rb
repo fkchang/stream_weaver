@@ -329,20 +329,20 @@ RSpec.describe StreamWeaver::Components do
     describe "rendering" do
       it "delegates to adapter render_markdown" do
         md = described_class.new("**bold** and *italic*")
-        expect(adapter).to receive(:render_markdown).with(mock_view, "**bold** and *italic*", state)
+        expect(adapter).to receive(:render_markdown).with(mock_view, "**bold** and *italic*", state, {})
         md.render(mock_view, state)
       end
 
       it "evaluates proc content with state" do
         md = described_class.new(-> (s) { "**#{s[:name]}** is bold" })
         state[:name] = "Alice"
-        expect(adapter).to receive(:render_markdown).with(mock_view, "**Alice** is bold", state)
+        expect(adapter).to receive(:render_markdown).with(mock_view, "**Alice** is bold", state, {})
         md.render(mock_view, state)
       end
 
       it "converts content to string" do
         md = described_class.new(42)
-        expect(adapter).to receive(:render_markdown).with(mock_view, "42", state)
+        expect(adapter).to receive(:render_markdown).with(mock_view, "42", state, {})
         md.render(mock_view, state)
       end
     end
@@ -373,27 +373,27 @@ RSpec.describe StreamWeaver::Components do
     describe "rendering" do
       it "delegates to adapter render_header" do
         header = described_class.new("Section Title", level: 2)
-        expect(adapter).to receive(:render_header).with(mock_view, "Section Title", 2, state)
+        expect(adapter).to receive(:render_header).with(mock_view, "Section Title", 2, state, {})
         header.render(mock_view, state)
       end
 
       it "evaluates proc content with state" do
         header = described_class.new(-> (s) { "Welcome #{s[:name]}" }, level: 1)
         state[:name] = "Alice"
-        expect(adapter).to receive(:render_header).with(mock_view, "Welcome Alice", 1, state)
+        expect(adapter).to receive(:render_header).with(mock_view, "Welcome Alice", 1, state, {})
         header.render(mock_view, state)
       end
 
       it "converts content to string" do
         header = described_class.new(42, level: 3)
-        expect(adapter).to receive(:render_header).with(mock_view, "42", 3, state)
+        expect(adapter).to receive(:render_header).with(mock_view, "42", 3, state, {})
         header.render(mock_view, state)
       end
 
       it "renders all header levels correctly" do
         (1..6).each do |level|
           header = described_class.new("Level #{level}", level: level)
-          expect(adapter).to receive(:render_header).with(mock_view, "Level #{level}", level, state)
+          expect(adapter).to receive(:render_header).with(mock_view, "Level #{level}", level, state, {})
           header.render(mock_view, state)
         end
       end

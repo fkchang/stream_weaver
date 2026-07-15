@@ -252,11 +252,16 @@ module StreamWeaver
       # @param view [Phlex::HTML] The Phlex view instance
       # @param content [String] Already-resolved text content
       # @param tone [Symbol, nil] :muted, :caption, :error, :success, or nil
+      # @param options [Hash] :class/:style passthrough (stream_weaver-1lo)
       # @return [void] Renders to view
-      def render_text(view, content, tone = nil)
+      def render_text(view, content, tone = nil, options = {})
         if tone
           inject_text_tone_css(view)
-          view.p(class: "sw-text sw-text--#{tone}") { content }
+          css_classes = ["sw-text", "sw-text--#{tone}"]
+          css_classes << options[:class] if options[:class]
+          attrs = { class: css_classes.join(" ") }
+          attrs[:style] = options[:style] if options[:style]
+          view.p(**attrs) { content }
         else
           view.p { content }
         end
@@ -1733,8 +1738,9 @@ module StreamWeaver
       # @param view [Phlex::HTML] The Phlex view instance
       # @param content [String] The markdown content
       # @param state [Hash] Current state hash (symbol keys)
+      # @param options [Hash] :class/:style passthrough (stream_weaver-1lo)
       # @return [void] Renders to view
-      def render_markdown(view, content, state)
+      def render_markdown(view, content, state, options = {})
         html = Kramdown::Document.new(
           content,
           input: 'GFM',
@@ -1742,7 +1748,11 @@ module StreamWeaver
           syntax_highlighter: nil,
           typographic_symbols: { mdash: '---', ndash: '--' }
         ).to_html
-        view.div(class: "markdown-content") do
+        css_classes = ["markdown-content"]
+        css_classes << options[:class] if options[:class]
+        attrs = { class: css_classes.join(" ") }
+        attrs[:style] = options[:style] if options[:style]
+        view.div(**attrs) do
           view.raw view.safe(html)
         end
       end
@@ -1753,16 +1763,20 @@ module StreamWeaver
       # @param content [String] The header text
       # @param level [Integer] Header level (1-6)
       # @param state [Hash] Current state hash (symbol keys)
+      # @param options [Hash] :class/:style passthrough (stream_weaver-1lo)
       # @return [void] Renders to view
-      def render_header(view, content, level, state)
+      def render_header(view, content, level, state, options = {})
+        attrs = {}
+        attrs[:class] = options[:class] if options[:class]
+        attrs[:style] = options[:style] if options[:style]
         case level
-        when 1 then view.h1 { content }
-        when 2 then view.h2 { content }
-        when 3 then view.h3 { content }
-        when 4 then view.h4 { content }
-        when 5 then view.h5 { content }
-        when 6 then view.h6 { content }
-        else view.h2 { content }
+        when 1 then view.h1(**attrs) { content }
+        when 2 then view.h2(**attrs) { content }
+        when 3 then view.h3(**attrs) { content }
+        when 4 then view.h4(**attrs) { content }
+        when 5 then view.h5(**attrs) { content }
+        when 6 then view.h6(**attrs) { content }
+        else view.h2(**attrs) { content }
         end
       end
 

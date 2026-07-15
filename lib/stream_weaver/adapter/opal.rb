@@ -7,9 +7,12 @@ module StreamWeaver
   module Adapter
     class Opal < Base
       # Not in Base — defined fresh here
-      def render_header(view, content, level, _state)
+      def render_header(view, content, level, _state, options = {})
         level = [[level.to_i, 1].max, 6].min
-        view.send(:"h#{level}") { view.plain(content.to_s) }
+        attrs = {}
+        attrs[:class] = options[:class] if options[:class]
+        attrs[:style] = options[:style] if options[:style]
+        view.send(:"h#{level}", **attrs) { view.plain(content.to_s) }
       end
 
       # Not in Base — defined fresh here
@@ -21,8 +24,12 @@ module StreamWeaver
       end
 
       # Not in Base — defined fresh here
-      def render_markdown(view, content, _state)
-        view.div(class: "sw-markdown") { view.raw(md_to_html(content.to_s)) }
+      def render_markdown(view, content, _state, options = {})
+        css_classes = ["sw-markdown"]
+        css_classes << options[:class] if options[:class]
+        attrs = { class: css_classes.join(" ") }
+        attrs[:style] = options[:style] if options[:style]
+        view.div(**attrs) { view.raw(md_to_html(content.to_s)) }
       end
 
       # Overrides Base

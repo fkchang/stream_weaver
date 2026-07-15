@@ -136,22 +136,22 @@ module StreamWeaver
     # Text / display
     # =========================================
 
-    def text(content, tone: nil)
-      components << Components::Text.new(content, tone: tone)
+    def text(content, tone: nil, **options)
+      components << Components::Text.new(content, tone: tone, **options)
     end
 
-    def md(content)
-      components << Components::Markdown.new(content)
+    def md(content, **options)
+      components << Components::Markdown.new(content, **options)
     end
     alias_method :markdown, :md
 
     (1..6).each do |level|
-      define_method(:"header#{level}") { |content| components << Components::Header.new(content, level: level) }
+      define_method(:"header#{level}") { |content, **options| components << Components::Header.new(content, level: level, **options) }
     end
     alias_method :header, :header2
 
-    def phrase(content)
-      components << Components::Phrase.new(content)
+    def phrase(content, **options)
+      components << Components::Phrase.new(content, **options)
     end
 
     # =========================================
