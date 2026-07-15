@@ -2213,7 +2213,7 @@ module StreamWeaver
     # AppShell component for two-column app layouts
     # Provides a main content area with optional fixed sidebar
     class AppShell < Base
-      attr_reader :sidebar_width, :sidebar_position, :gap
+      attr_reader :sidebar_width, :sidebar_position, :gap, :options
       attr_accessor :main_children, :sidebar_children
 
       POSITIONS = %i[left right].freeze
@@ -2246,7 +2246,7 @@ module StreamWeaver
     # Sidebar component for fixed sidebar content
     # Used within AppShell to define sidebar content
     class Sidebar < Base
-      attr_reader :header, :sticky
+      attr_reader :header, :sticky, :options
       attr_accessor :children
 
       # @param header [String, nil] Optional header text for sidebar

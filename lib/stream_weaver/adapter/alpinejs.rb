@@ -2305,7 +2305,13 @@ module StreamWeaver
       end
 
       def render_navbar(view, component, state)
-        view.nav(class: "sw-navbar") do
+        css_classes = ["sw-navbar"]
+        css_classes << component.options[:class] if component.options[:class]
+
+        attrs = { class: css_classes.join(" ") }
+        attrs[:style] = component.options[:style] if component.options[:style]
+
+        view.nav(**attrs) do
           component.children.each { |child| child.render(view, state) }
         end
       end
@@ -7700,8 +7706,10 @@ module StreamWeaver
       def render_app_shell(view, component, state)
         css_classes = ["sw-app-shell"]
         css_classes << "sw-app-shell-sidebar-#{component.sidebar_position}"
+        css_classes << component.options[:class] if component.options[:class]
 
         style = "--sw-shell-sidebar-width: #{component.sidebar_width}; --sw-shell-gap: #{component.gap};"
+        style += " #{component.options[:style]}" if component.options[:style]
 
         view.div(class: css_classes.join(" "), style: style) do
           # Render main content
@@ -7725,8 +7733,12 @@ module StreamWeaver
       def render_sidebar(view, component, state)
         css_classes = ["sw-sidebar"]
         css_classes << "sw-sidebar-sticky" if component.sticky
+        css_classes << component.options[:class] if component.options[:class]
 
-        view.div(class: css_classes.join(" ")) do
+        attrs = { class: css_classes.join(" ") }
+        attrs[:style] = component.options[:style] if component.options[:style]
+
+        view.div(**attrs) do
           if component.header
             view.div(class: "sw-sidebar-header") do
               view.h3(class: "sw-sidebar-title") { component.header }
