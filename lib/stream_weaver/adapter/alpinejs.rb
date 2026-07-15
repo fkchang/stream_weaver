@@ -3010,11 +3010,7 @@ module StreamWeaver
       # @param component [Pipeline] The pipeline component
       # @param state [Hash] Current state hash
       def render_pipeline(view, component, state)
-        # Inject CSS once per render
-        unless view.instance_variable_get(:@_pipeline_css_injected)
-          view.instance_variable_set(:@_pipeline_css_injected, true)
-          view.style { view.raw(view.safe(PIPELINE_CSS)) }
-        end
+        inject_component_css(view, :pipeline, PIPELINE_CSS)
 
         view.div(class: "sw-pipeline", role: "list") do
           component.steps.each_with_index do |step, idx|
@@ -3122,11 +3118,7 @@ module StreamWeaver
       # @param component [KpiDashboard] The KPI dashboard component
       # @param state [Hash] Current state hash
       def render_kpi_dashboard(view, component, state)
-        # Inject CSS once per render
-        unless view.instance_variable_get(:@_kpi_css_injected)
-          view.instance_variable_set(:@_kpi_css_injected, true)
-          view.style { view.raw(view.safe(KPI_DASHBOARD_CSS)) }
-        end
+        inject_component_css(view, :kpi, KPI_DASHBOARD_CSS)
 
         view.div(class: "sw-kpi-dashboard") do
           component.metrics.each_with_index do |metric, idx|
@@ -3718,10 +3710,7 @@ module StreamWeaver
       end
 
       def inject_diff_block_css(view)
-        return if view.instance_variable_get(:@_diff_block_css_injected)
-
-        view.instance_variable_set(:@_diff_block_css_injected, true)
-        view.style { view.raw(view.safe(diff_block_css)) }
+        inject_component_css(view, :diff_block, diff_block_css)
       end
 
       def diff_block_css
@@ -3874,10 +3863,7 @@ module StreamWeaver
       end
 
       def inject_api_endpoint_css(view)
-        return if view.instance_variable_get(:@_api_endpoint_css_injected)
-
-        view.instance_variable_set(:@_api_endpoint_css_injected, true)
-        view.style { view.raw(view.safe(api_endpoint_css)) }
+        inject_component_css(view, :api_endpoint, api_endpoint_css)
       end
 
       def api_endpoint_css
@@ -4081,10 +4067,7 @@ module StreamWeaver
       end
 
       def inject_doc_header_css(view)
-        return if view.instance_variable_get(:@_doc_header_css_injected)
-
-        view.instance_variable_set(:@_doc_header_css_injected, true)
-        view.style { view.raw(view.safe(doc_header_css)) }
+        inject_component_css(view, :doc_header, doc_header_css)
       end
 
       DOC_HEADER_CSS = <<~CSS
@@ -4206,11 +4189,30 @@ module StreamWeaver
 
       # -- T11 CSS/JS injection helpers --
 
+      # Registers a component's CSS once per view (deduped by key). On a
+      # full-page render (AppView), the view collects this CSS and hoists it
+      # into <head> before user stylesheets: links, so equal-specificity
+      # ties resolve in the user's favor (document order) instead of always
+      # losing to the framework's own rule (stream_weaver-1lo). Fragment
+      # views have no <head> to hoist into, so they keep the pre-existing
+      # inline-at-first-use behavior.
+      def inject_component_css(view, key, css)
+        ivar = :"@_#{key}_css_injected"
+        return if view.instance_variable_get(ivar)
+
+        view.instance_variable_set(ivar, true)
+        if view.respond_to?(:register_component_css)
+          view.register_component_css(key, css)
+        else
+          view.style { view.raw(view.safe(css)) }
+        end
+      end
+
       def inject_sidebar_toc_assets(view)
         return if view.instance_variable_get(:@_sidebar_toc_assets_injected)
 
         view.instance_variable_set(:@_sidebar_toc_assets_injected, true)
-        view.style { view.raw(view.safe(sidebar_toc_css)) }
+        inject_component_css(view, :sidebar_toc, sidebar_toc_css)
         js_path = File.join(__dir__, '..', 'assets', 'js', 'sw-sidebar-toc.js')
         if File.exist?(js_path)
           view.script { view.raw(view.safe(File.read(js_path))) }
@@ -4218,66 +4220,39 @@ module StreamWeaver
       end
 
       def inject_callout_css(view)
-        return if view.instance_variable_get(:@_callout_css_injected)
-
-        view.instance_variable_set(:@_callout_css_injected, true)
-        view.style { view.raw(view.safe(callout_css)) }
+        inject_component_css(view, :callout, callout_css)
       end
 
       def inject_date_field_css(view)
-        return if view.instance_variable_get(:@_date_field_css_injected)
-
-        view.instance_variable_set(:@_date_field_css_injected, true)
-        view.style { view.raw(view.safe(date_field_css)) }
+        inject_component_css(view, :date_field, date_field_css)
       end
 
       def inject_accordion_css(view)
-        return if view.instance_variable_get(:@_accordion_css_injected)
-
-        view.instance_variable_set(:@_accordion_css_injected, true)
-        view.style { view.raw(view.safe(accordion_css)) }
+        inject_component_css(view, :accordion, accordion_css)
       end
 
       def inject_chip_group_css(view)
-        return if view.instance_variable_get(:@_chip_group_css_injected)
-
-        view.instance_variable_set(:@_chip_group_css_injected, true)
-        view.style { view.raw(view.safe(chip_group_css)) }
+        inject_component_css(view, :chip_group, chip_group_css)
       end
 
       def inject_board_css(view)
-        return if view.instance_variable_get(:@_board_css_injected)
-
-        view.instance_variable_set(:@_board_css_injected, true)
-        view.style { view.raw(view.safe(board_css)) }
+        inject_component_css(view, :board, board_css)
       end
 
       def inject_text_tone_css(view)
-        return if view.instance_variable_get(:@_text_tone_css_injected)
-
-        view.instance_variable_set(:@_text_tone_css_injected, true)
-        view.style { view.raw(view.safe(text_tone_css)) }
+        inject_component_css(view, :text_tone, text_tone_css)
       end
 
       def inject_comparison_css(view)
-        return if view.instance_variable_get(:@_comparison_css_injected)
-
-        view.instance_variable_set(:@_comparison_css_injected, true)
-        view.style { view.raw(view.safe(comparison_css)) }
+        inject_component_css(view, :comparison, comparison_css)
       end
 
       def inject_implementation_map_css(view)
-        return if view.instance_variable_get(:@_impl_map_css_injected)
-
-        view.instance_variable_set(:@_impl_map_css_injected, true)
-        view.style { view.raw(view.safe(implementation_map_css)) }
+        inject_component_css(view, :impl_map, implementation_map_css)
       end
 
       def inject_decision_css(view)
-        return if view.instance_variable_get(:@_decision_css_injected)
-
-        view.instance_variable_set(:@_decision_css_injected, true)
-        view.style { view.raw(view.safe(decision_css)) }
+        inject_component_css(view, :decision, decision_css)
       end
 
       def decision_css
@@ -4370,10 +4345,7 @@ module StreamWeaver
       end
 
       def inject_annotated_code_css(view)
-        return if view.instance_variable_get(:@_annotated_code_css_injected)
-
-        view.instance_variable_set(:@_annotated_code_css_injected, true)
-        view.style { view.raw(view.safe(annotated_code_css)) }
+        inject_component_css(view, :annotated_code, annotated_code_css)
       end
 
       def annotated_code_css
@@ -5727,9 +5699,7 @@ module StreamWeaver
 
       # Inject deck CSS once per render
       def inject_deck_css(view)
-        return if view.instance_variable_get(:@_deck_css_injected)
-        view.instance_variable_set(:@_deck_css_injected, true)
-        view.style { view.raw(view.safe(DECK_CSS)) }
+        inject_component_css(view, :deck, DECK_CSS)
       end
 
       # Inject deck selection JS once per render (T8)
@@ -5877,9 +5847,7 @@ module StreamWeaver
 
       # Inject generate-more CSS once per render (T10)
       def inject_generate_more_css(view)
-        return if view.instance_variable_get(:@_generate_more_css_injected)
-        view.instance_variable_set(:@_generate_more_css_injected, true)
-        view.style { view.raw(view.safe(GENERATE_MORE_CSS)) }
+        inject_component_css(view, :generate_more, GENERATE_MORE_CSS)
       end
 
       # Inject generate-more JS once per render (T10)
@@ -6109,9 +6077,7 @@ module StreamWeaver
 
       # Inject deck polish CSS once per render (T14)
       def inject_deck_polish_css(view)
-        return if view.instance_variable_get(:@_deck_polish_css_injected)
-        view.instance_variable_set(:@_deck_polish_css_injected, true)
-        view.style { view.raw(view.safe(DECK_POLISH_CSS)) }
+        inject_component_css(view, :deck_polish, DECK_POLISH_CSS)
       end
 
       # CSS for deck polish components: ModelSelector, ConfirmationBar, CloseOverlay (T14)
@@ -6744,9 +6710,7 @@ module StreamWeaver
 
       # Inject slide container CSS once per render
       def inject_slide_container_css(view)
-        return if view.instance_variable_get(:@_slide_css_injected)
-        view.instance_variable_set(:@_slide_css_injected, true)
-        view.style { view.raw(view.safe(SLIDE_CONTAINER_CSS)) }
+        inject_component_css(view, :slide, SLIDE_CONTAINER_CSS)
       end
 
       # CSS for slide containers
@@ -7416,10 +7380,7 @@ module StreamWeaver
 
       def render_wireframe(view, component, state)
         inject_wireframe_css(view)
-        unless view.instance_variable_get(:@_wireframe_chrome_css_injected)
-          view.instance_variable_set(:@_wireframe_chrome_css_injected, true)
-          view.style { view.raw(view.safe(wireframe_chrome_css)) }
-        end
+        inject_component_css(view, :wireframe_chrome, wireframe_chrome_css)
         view.div(
           class: "sw-wireframe sw-wireframe--#{component.surface}",
           "data-surface" => component.surface
@@ -7434,10 +7395,7 @@ module StreamWeaver
       end
 
       def inject_wireframe_css(view)
-        return if view.instance_variable_get(:@_wireframe_css_injected)
-
-        view.instance_variable_set(:@_wireframe_css_injected, true)
-        view.style { view.raw(view.safe(wireframe_css)) }
+        inject_component_css(view, :wireframe, wireframe_css)
       end
 
       def wireframe_css
@@ -8120,10 +8078,7 @@ module StreamWeaver
 
       # Inject CSS-only helpers stylesheet once
       def inject_helpers_css(view)
-        return if view.instance_variable_get(:@_helpers_css_injected)
-
-        view.instance_variable_set(:@_helpers_css_injected, true)
-        view.style { view.raw(view.safe(helpers_css)) }
+        inject_component_css(view, :helpers, helpers_css)
       end
 
       def helpers_css

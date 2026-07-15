@@ -26,6 +26,15 @@ module StreamWeaver
       end
 
       def view_template
+        # Render the body content first so that any component CSS injected
+        # along the way (adapter#inject_component_css) lands in
+        # @component_css_registry before <head> is built below -- <head>
+        # must come first in document order, but which components (and thus
+        # which CSS) will render is only known by actually rendering them
+        # (stream_weaver-1lo). Captured rather than appended directly so it
+        # can be replayed into <body> after <head> is emitted.
+        body_html = capture { render_page_body }
+
         doctype
         html do
           head do
@@ -38,6 +47,13 @@ module StreamWeaver
             end
             # Inject adapter-specific CDN scripts using Phlex methods
             @adapter.render_cdn_scripts(self)
+
+            # Framework-injected component CSS (collected during the body
+            # render above), before user stylesheets: below -- so that at
+            # equal specificity, user stylesheets win on document order
+            # instead of always losing to the framework's own rule
+            # (stream_weaver-1lo).
+            component_css_registry.each_value { |css| style { raw(safe(css)) } }
 
             # Add custom stylesheets
             @stylesheets.each do |href|
@@ -92,30 +108,48 @@ module StreamWeaver
             end
           end
           body(class: body_classes) do
-            # Custom theme CSS (for registered themes)
-            render_custom_theme_css
-
-            # Theme overrides as inline CSS
-            render_theme_overrides if @app.theme_overrides.any?
-
-            layout_entry = @app.layout_entry
-            if layout_entry&.dig(:exclusive) && layout_entry[:render_block]
-              instance_exec(&layout_entry[:render_block])
-            else
-              # Skip the chrome's own h1 when the app already renders its
-              # leading content as a header1 -- otherwise the page doubles up
-              # (FAC-9u2).
-              first_content = @app.components.first
-              own_leading_h1 = first_content.is_a?(Components::Header) && first_content.level == 1
-              h1 { @app.title } unless own_leading_h1
-              # Merge adapter-specific container attributes with container id
-              div(id: "app-container", "data-sw-state-version" => @app.render_state.state_version,
-                  **@adapter.container_attributes(@state)) do
-                render_components
-              end
-            end
+            raw(safe(body_html))
           end
         end
+      end
+
+      # Everything that lives inside <body> -- extracted so view_template
+      # can render it once via `capture` (see the comment there) and replay
+      # the resulting string after <head> is built.
+      def render_page_body
+        # Custom theme CSS (for registered themes)
+        render_custom_theme_css
+
+        # Theme overrides as inline CSS
+        render_theme_overrides if @app.theme_overrides.any?
+
+        layout_entry = @app.layout_entry
+        if layout_entry&.dig(:exclusive) && layout_entry[:render_block]
+          instance_exec(&layout_entry[:render_block])
+        else
+          # Skip the chrome's own h1 when the app already renders its
+          # leading content as a header1 -- otherwise the page doubles up
+          # (FAC-9u2).
+          first_content = @app.components.first
+          own_leading_h1 = first_content.is_a?(Components::Header) && first_content.level == 1
+          h1 { @app.title } unless own_leading_h1
+          # Merge adapter-specific container attributes with container id
+          div(id: "app-container", "data-sw-state-version" => @app.render_state.state_version,
+              **@adapter.container_attributes(@state)) do
+            render_components
+          end
+        end
+      end
+
+      # Collects component CSS registered via adapter#inject_component_css
+      # during the body render, keyed so re-registering the same key is a
+      # no-op (cross-instance dedup within one page render).
+      def component_css_registry
+        @component_css_registry ||= {}
+      end
+
+      def register_component_css(key, css)
+        component_css_registry[key] = css
       end
 
       def with_fragment(id)
