@@ -323,18 +323,30 @@ tyrion_url = boot_app(File.join(REPO_ROOT, 'examples', 'parity', 'tyrion_warroom
 pw('goto', tyrion_url)
 tyrion_snap = pw_snapshot_text
 
-check("clickable card: detail pane contains the story title (whole board_card is one click target, primary: :detail -- not OOB, so unaffected by stream_weaver-e4p)") do
+check("clickable card: whole board_card is a real <a href> to /stories/:id (stream_weaver-8mj pixel-parity rewrite -- navigates like the real war room, not an in-page detail pane)") do
   raise "fixture story \"forge-the-beacon-relay\" not found on the board" unless tyrion_snap.include?('forge-the-beacon-relay')
 
-  # The card itself is now the click target (role=button), so its
-  # accessible name starts with the story slug -- no separate "View"
-  # button to search forward for anymore.
-  card_ref = tyrion_snap.match(/button "forge-the-beacon-relay[^\[\n]*\[ref=(e\d+)\]/)&.captures&.first
+  # The card itself is the click target, rendered via clickable(href:) as a
+  # real <a> (accessibility role "link", not "button" -- a plain <a>
+  # triggers genuine browser navigation, not an htmx swap).
+  card_ref = tyrion_snap.match(/link "field-ops forge-the-beacon-relay[^\[\n]*\[ref=(e\d+)\]/)&.captures&.first
   raise "no clickable card found for forge-the-beacon-relay" unless card_ref
 
   after = pw_click(card_ref)
-  ok = after.include?('heading "forge-the-beacon-relay"')
-  [ok, ok ? nil : "detail pane snapshot did not contain the story heading:\n#{after}"]
+  path = pw_eval("window.location.pathname")
+  # The real active_story.rb hero title is a plain <div> (as-hero-title),
+  # not a heading tag -- this slice matches that DOM faithfully, so the
+  # accessibility snapshot reports it as "generic", not "heading".
+  ok = path == "/stories/1" && after.include?('MISSION BRIEF') && after.include?('forge-the-beacon-relay')
+  [ok, ok ? nil : "expected path /stories/1 with the story detail rendered, got path=#{path.inspect}:\n#{after}"]
+end
+
+check("card navigation is real browser history: back returns to / and re-shows the board") do
+  pw('go-back')
+  path = pw_eval("window.location.pathname")
+  after = pw_snapshot_text
+  ok = path == "/" && after.include?('forge-the-beacon-relay')
+  [ok, ok ? nil : "expected path / with the board visible after go-back, got path=#{path.inspect}"]
 end
 
 # ===========================================================================
