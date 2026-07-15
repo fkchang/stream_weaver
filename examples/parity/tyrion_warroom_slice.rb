@@ -94,17 +94,24 @@ end
 # Store: in-memory, DB-shaped -- records live here, never in the state hash.
 # ---------------------------------------------------------------------------
 module StoryStore
+  # Mirrors the real tyrion server's *current* lane shape (stream_weaver-8mj
+  # A/B fidelity pass): Queue 6 / Active 0 / Blocked 0 / Done 8, curled from
+  # http://127.0.0.1:4579/warroom -- fixture slugs below are invented
+  # (slug-style, matching this file's existing medieval theme), never the
+  # real project's story names. With Active and Blocked both empty, the
+  # "Here Be Dragons" watermark (unconditionally rendered in both this
+  # slice and the real war_room.rb -- see the render_wr_col call below) has
+  # nothing to be covered by in those two lanes and reads exactly as it
+  # does live: centered, undimmed, not fighting card backgrounds for the
+  # gaps it shows through.
   DEFS = [
-    { slug: "forge-the-beacon-relay", epic_slug: "field-ops", status: :in_progress,
-      context: "Wiring the beacon-relay handshake between outposts.",
+    { slug: "forge-the-beacon-relay", epic_slug: "field-ops", status: :done,
+      context: "Beacon-relay handshake wired between both outposts.",
       intent: "Two outposts need a shared signal before the muster begins.",
-      next_action: "Confirm the relay holds signal past 4 leagues before wiring the second tower.",
-      criteria: [["Relay reaches both towers", :met], ["Signal survives storm interference", :pending], ["Watch rotation briefed", :pending]],
-      notes: [[:progress, "First handshake test succeeded at half range."], [:plan, "Push to full 4-league range before dusk."]],
+      next_action: nil,
+      criteria: [["Relay reaches both towers", :met], ["Signal survives storm interference", :met], ["Watch rotation briefed", :met]],
+      notes: [[:progress, "First handshake test succeeded at half range."], [:progress, "Full 4-league range held through the night watch."]],
       stale: false },
-    { slug: "chart-the-southern-vault", epic_slug: "field-ops", status: :pending,
-      context: "Survey pass before the vault dig begins.",
-      intent: nil, next_action: nil, criteria: [], notes: [], stale: false },
     { slug: "mend-the-gate-hinge", epic_slug: "field-ops", status: :done,
       context: "Gate hinge replaced and load-tested.",
       intent: "Keep the east gate from seizing before winter.",
@@ -112,56 +119,81 @@ module StoryStore
       criteria: [["Hinge replaced", :met], ["Load test passed", :met]],
       notes: [[:progress, "New hinge forged and fitted."], [:progress, "Load-tested to double the rated weight."]],
       stale: false },
-    { slug: "negotiate-toll-rights", epic_slug: "river-trade", status: :blocked,
-      context: "Waiting on the river guild's council decision.",
-      intent: "Toll rights unlock the southern supply route.",
-      next_action: "Escalate to the guild's seneschal if no word by week's end.",
-      criteria: [["Guild proposal submitted", :met], ["Council vote scheduled", :pending]],
-      notes: [[:blocker, "Council postponed the vote a second time."]], stale: false },
-    { slug: "restock-the-armory", epic_slug: "field-ops", status: :pending,
-      context: "Quartermaster count due before the next campaign.",
-      intent: nil, next_action: nil, criteria: [], notes: [], stale: false },
-    { slug: "scout-the-ashwood-pass", epic_slug: "field-ops", status: :in_progress,
-      context: "Two riders sent, awaiting the return signal.",
-      intent: "Confirm the ashwood pass is clear before the muster marches through.",
-      next_action: "Debrief the riders and mark the pass safe or hazardous.",
-      criteria: [["Riders dispatched", :met], ["Pass condition confirmed", :pending]],
-      notes: [[:progress, "Riders departed at first light."]], stale: true },
     { slug: "seal-the-old-cistern", epic_slug: "river-trade", status: :done,
       context: "Cistern sealed; pressure test passed.",
       intent: "Stop the slow leak before the dry season.",
       next_action: nil,
       criteria: [["Cistern sealed", :met], ["Pressure test passed", :met]],
       notes: [[:progress, "Seal held at full pressure for a full day."]], stale: false },
-    { slug: "translate-the-sunken-tablet", epic_slug: "river-trade", status: :blocked,
-      context: "Needs a scholar fluent in the old script.",
+    { slug: "clear-the-ashwood-pass", epic_slug: "field-ops", status: :done,
+      context: "Riders confirmed the pass safe for the muster.",
+      intent: "Confirm the ashwood pass is clear before the muster marches through.",
+      next_action: nil,
+      criteria: [["Riders dispatched", :met], ["Pass condition confirmed", :met]],
+      notes: [[:progress, "Riders returned at dusk -- pass reported clear."]], stale: false },
+    { slug: "repair-the-north-bridge", epic_slug: "field-ops", status: :done,
+      context: "Crossbeams placed; load-bearing test passed.",
+      intent: "The north bridge must hold before the autumn floods.",
+      next_action: nil,
+      criteria: [["Timber delivered", :met], ["Crossbeams placed", :met], ["Load-bearing test", :met]],
+      notes: [[:progress, "Timber arrived a day ahead of schedule."], [:progress, "Load test held at double the rated weight."]],
+      stale: false },
+    { slug: "translate-the-sunken-tablet", epic_slug: "river-trade", status: :done,
+      context: "Scriptorium translator resolved the old script.",
       intent: "The tablet may name the vault's true owner.",
-      next_action: "Send word to the scriptorium for a translator.",
-      criteria: [["Tablet recovered", :met], ["Translator found", :pending]],
-      notes: [[:blocker, "No scholar in the keep reads the old script."]], stale: false },
+      next_action: nil,
+      criteria: [["Tablet recovered", :met], ["Translator found", :met]],
+      notes: [[:progress, "Scriptorium translator confirmed the vault's owner."]], stale: false },
+    { slug: "negotiate-toll-rights", epic_slug: "river-trade", status: :done,
+      context: "Guild council approved the toll rights.",
+      intent: "Toll rights unlock the southern supply route.",
+      next_action: nil,
+      criteria: [["Guild proposal submitted", :met], ["Council vote scheduled", :met]],
+      notes: [[:progress, "Council vote passed on the second reading."]], stale: false },
+    { slug: "draft-the-harvest-ledger", epic_slug: "field-ops", status: :done,
+      context: "Ledger reconciled against the quartermaster's count.",
+      intent: "The harvest ledger must balance before winter stores are sealed.",
+      next_action: nil,
+      criteria: [["Ledger drafted", :met], ["Counts reconciled", :met]],
+      notes: [[:progress, "Ledger balanced on the first reconciliation pass."]], stale: false },
+    { slug: "chart-the-southern-vault", epic_slug: "field-ops", status: :pending,
+      context: "Survey pass before the vault dig begins.",
+      intent: nil, next_action: nil, criteria: [], notes: [], stale: false },
+    { slug: "restock-the-armory", epic_slug: "field-ops", status: :pending,
+      context: "Quartermaster count due before the next campaign.",
+      intent: nil, next_action: nil, criteria: [], notes: [], stale: false },
     { slug: "draft-the-spring-muster", epic_slug: "field-ops", status: :pending,
       context: "First pass on troop assignments.",
       intent: nil, next_action: nil, criteria: [], notes: [], stale: false },
-    { slug: "repair-the-north-bridge", epic_slug: "field-ops", status: :in_progress,
-      context: "Timber delivered, carpentry crew starting.",
-      intent: "The north bridge must hold before the autumn floods.",
-      next_action: "Confirm the crossbeam count matches the carpenter's estimate.",
-      criteria: [["Timber delivered", :met], ["Crossbeams placed", :pending], ["Load-bearing test", :pending]],
-      notes: [[:progress, "Timber arrived a day ahead of schedule."]], stale: false }
+    { slug: "ready-the-siege-engines", epic_slug: "field-ops", status: :pending,
+      context: "Inventory pass before the engines are wheeled out.",
+      intent: nil, next_action: nil, criteria: [], notes: [], stale: false },
+    { slug: "survey-the-flooded-cellar", epic_slug: "river-trade", status: :pending,
+      context: "Waiting on a dry spell before the survey crew goes down.",
+      intent: nil, next_action: nil, criteria: [], notes: [], stale: false },
+    { slug: "catalog-the-relic-hoard", epic_slug: "river-trade", status: :pending,
+      context: "First pass on the recovered hoard, pending an appraiser.",
+      intent: nil, next_action: nil, criteria: [], notes: [], stale: false }
   ].freeze
+
+  # Demo-only lane emptying (stream_weaver-8mj empty-state proof): set
+  # SW_PARITY_EMPTY_LANE=pending (or done/active/blocked) to force that
+  # lane empty regardless of the fixture above. Unset by default -- the
+  # mirrored shape above (Active/Blocked already empty) is the normal demo.
+  EMPTY_LANE = ENV["SW_PARITY_EMPTY_LANE"]&.to_sym
 
   @stories = DEFS.each_with_index.map do |d, i|
     d.merge(
       id: i + 1,
       last_note_at: d[:status] == :in_progress ? (d[:stale] ? Time.now - (9 * 3600) : Time.now - (i + 1) * 240) : nil,
-      completed_at: d[:status] == :done ? Time.now - ((i + 1) * 3600 * 5) : nil
+      completed_at: d[:status] == :done ? Time.now - ((i + 1) * 3600 * 9) : nil
     )
   end
 
   class << self
     def all = @stories
     def find(id) = @stories.find { |s| s[:id] == id.to_i }
-    def by_status(status) = @stories.select { |s| s[:status] == status }
+    def by_status(status) = status == EMPTY_LANE ? [] : @stories.select { |s| s[:status] == status }
   end
 end
 
@@ -259,18 +291,18 @@ App = StreamWeaver::App.new(
         end
       end
 
+      # Mirrors the reference's current discoveries shape: an active spike,
+      # zero promotable ("ready") discoveries -- so no ready row, matching
+      # Layout's `if disc[:ready_count] > 0` gate in the real app -- and 5
+      # unformalized marks.
       div(class: "disc-strip") do
         div(class: "sidebar-section") { phrase("Discoveries") }
         clickable(href: "#", class: "disc-row") do
           phrase("spike", class: "d-pill spike")
-          phrase("the ashwood pass approach", class: "d-label")
+          phrase("the flooded cellar timing", class: "d-label")
         end
         clickable(href: "#", class: "disc-row") do
-          phrase("2 ready", class: "d-pill ready")
-          phrase("promote to story →", class: "d-label")
-        end
-        clickable(href: "#", class: "disc-row") do
-          phrase("3 marks", class: "d-pill mark")
+          phrase("5 marks", class: "d-pill mark")
           phrase("unformalized", class: "d-label")
         end
       end

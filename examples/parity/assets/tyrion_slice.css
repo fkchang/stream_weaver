@@ -57,3 +57,38 @@ html body.sw-chromeless {
  * data:-URI stylesheet (see PARITY_BG_CSS in the script) with the real
  * resolved asset URL, appended after this file so it wins ties here too.
  */
+
+/* Same root cause as gsd/analysis/08-design-parity-fights.md finding #1
+ * (StreamWeaver's own <style> block -- views.rb's master_theme_css --
+ * always renders after `stylesheets:` in document order, so it wins ties
+ * at equal specificity), but this time it's not from using a
+ * StreamWeaver component: this rewrite deliberately calls none of
+ * Board/Lane/Sidebar. It's collateral damage from master_theme_css being
+ * one big always-injected bundle, unscoped and un-namespaced, that
+ * happens to declare `.sidebar-section` ("Monica-style sidebar sections",
+ * demoed in examples/advanced/all_components.rb -- a real, documented
+ * utility class, not dead code) and `.status-badge` ("Status Badge"),
+ * both of which collide with tyrion's own real class names by pure
+ * coincidence. Confirmed via getComputedStyle: .sidebar-section rendered
+ * with a solid white background (StreamWeaver's --sw-color-bg-card
+ * fallback) instead of transparent -- the "light-gray band" -- and
+ * .status-badge's gap/padding/border-radius/font-size/margin were
+ * StreamWeaver's --sw-spacing-* values, not the real 6px/3px 10px/3px/
+ * 11px/0. Same fix as finding #1: bump specificity with a `body .shell`
+ * prefix (real values, copied from shared.css) rather than `!important`,
+ * so a future, more-specific framework rule can still win legitimately.
+ */
+body .shell .sidebar-section {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 12px 14px 4px;
+}
+
+body .shell .status-badge {
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-size: 11px;
+  margin: 0;
+}
