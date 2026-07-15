@@ -24,19 +24,18 @@ require_relative "../../lib/stream_weaver"
 require "time"
 
 # ---------------------------------------------------------------------------
-# Optional local art (never committed) -- see class comment above.
+# Optional local art (never committed) -- see class comment above. Served via
+# App#local_asset (stream_weaver-1lo) instead of a hand-rolled endpoint --
+# SW_PARITY_ASSETS lives outside this script's own directory, so it's passed
+# as assets_dirs: below to allow it explicitly.
 # ---------------------------------------------------------------------------
 PARITY_ASSETS_DIR = ENV["SW_PARITY_ASSETS"]
 SLICE_CSS_PATH = File.expand_path("assets/tyrion_slice.css", __dir__)
-ASSET_MIME = {
-  ".png" => "image/png", ".jpg" => "image/jpeg", ".jpeg" => "image/jpeg",
-  ".svg" => "image/svg+xml", ".webp" => "image/webp"
-}.freeze
 
-def parity_asset_url(basename)
+def parity_asset_url(app, basename)
   return nil unless PARITY_ASSETS_DIR
   path = File.join(PARITY_ASSETS_DIR, basename)
-  File.exist?(path) ? "/parity/asset?name=#{basename}" : nil
+  File.exist?(path) ? app.local_asset(path) : nil
 end
 
 # ---------------------------------------------------------------------------
@@ -129,26 +128,12 @@ App = StreamWeaver::App.new(
     card_border_left: "3px solid var(--sw-color-primary)"
   },
   fonts: ["Cinzel:wght@400;600;700", "IBM+Plex+Mono:wght@300;400", "Lora:ital,wght@0,400;1,400;1,600"],
-  stylesheets: ["/parity/tyrion_slice.css"]
+  stylesheets: [SLICE_CSS_PATH],
+  assets_dirs: [PARITY_ASSETS_DIR].compact
 ) do
-  # ---- local-file escape hatch (never serves outside SW_PARITY_ASSETS) ----
-  endpoint :get, "/parity/tyrion_slice.css" do |_req|
-    [200, { "Content-Type" => "text/css" }, [File.read(SLICE_CSS_PATH)]]
-  end
-
-  endpoint :get, "/parity/asset" do |req|
-    name = File.basename(req.params["name"].to_s)
-    path = PARITY_ASSETS_DIR && File.join(PARITY_ASSETS_DIR, name)
-    if path && File.exist?(path)
-      [200, { "Content-Type" => ASSET_MIME[File.extname(path).downcase] || "application/octet-stream" }, [File.binread(path)]]
-    else
-      [404, { "Content-Type" => "text/plain" }, ["not found"]]
-    end
-  end
-
-  crest_url = parity_asset_url("LionCrest.png")
-  dragon_url = parity_asset_url("dragon.png")
-  map_url = parity_asset_url("strategy_map.png")
+  crest_url = parity_asset_url(self, "LionCrest.png")
+  dragon_url = parity_asset_url(self, "dragon.png")
+  map_url = parity_asset_url(self, "strategy_map.png")
 
   # `--tyrion-board-bg` must be set on the board's own element (below), not
   # here on the topbar -- a CSS custom property only cascades to *this*

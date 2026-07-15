@@ -52,7 +52,19 @@ module StreamWeaver
     RESERVED_ENDPOINT_EXACT = %w[/update /submit].freeze
     RESERVED_ENDPOINT_PREFIXES = %w[/action/ /event/ /form/ /theme/ /sw/].freeze
 
-    def initialize(title, layout: :default, chrome: true, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], strict_ids: false, loading_indicators: true, &block)
+    # Content-type by extension for local files served via the /sw-asset/
+    # route (App#local_asset, stylesheets: auto-detection). Shared with
+    # server.rb's /sw-asset/ route handler.
+    LOCAL_ASSET_MIME_TYPES = {
+      'css' => 'text/css', 'js' => 'application/javascript', 'mjs' => 'application/javascript',
+      'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
+      'gif' => 'image/gif', 'svg' => 'image/svg+xml', 'webp' => 'image/webp', 'ico' => 'image/x-icon'
+    }.freeze
+
+    # @param assets_dirs [Array<String>] Extra directories (besides the
+    #   calling script's own directory) that local_asset/stylesheets: are
+    #   allowed to serve local files from (stream_weaver-1lo).
+    def initialize(title, layout: :default, chrome: true, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], strict_ids: false, loading_indicators: true, assets_dirs: [], &block)
       @title = title
       @layout = layout
       @chrome = chrome
@@ -67,7 +79,9 @@ module StreamWeaver
       @loading_indicators = loading_indicators
       @_warned_duplicate_ids = Set.new
       @scripts = scripts
-      @stylesheets = stylesheets
+      @script_dir = File.dirname(File.expand_path(caller_locations(1, 1).first.path))
+      @allowed_asset_dirs = ([@script_dir] + assets_dirs.map { |d| File.expand_path(d) }).uniq
+      @stylesheets = stylesheets.map { |href| resolve_stylesheet_href(href) }
       @fonts = fonts
       @transient_keys = Set.new
       @timers = []
@@ -1220,6 +1234,25 @@ module StreamWeaver
       'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'gif' => 'image/gif', 'webp' => 'image/webp'
     }.freeze
 
+    # Serves a local file (stylesheet, image, ...) via the /sw-asset/ route
+    # -- content-type by extension, ETag, and path-traversal-safe: the
+    # resolved path must be under this app's own script directory or one of
+    # its assets_dirs: (stream_weaver-1lo). Generalizes the local-path
+    # detection favicon already did one-off (build_favicon_href) to any
+    # asset, and to a real served/cacheable route instead of a base64 data
+    # URI (so a large stylesheet doesn't bloat every page load).
+    #
+    # @param path [String] Absolute path, or relative to the calling script's directory
+    # @return [String] URL to serve the file, e.g. "/sw-asset/<key>/name.css"
+    # @raise [ArgumentError] if the file doesn't exist, or resolves outside the allowed directories
+    def local_asset(path)
+      abs_path = resolve_asset_path(path)
+      raise ArgumentError, "local_asset: file not found: #{path}" unless abs_path
+
+      ensure_asset_path_allowed!(abs_path, path)
+      "/sw-asset/#{ComponentAssets.register_file(abs_path)}/#{File.basename(abs_path)}"
+    end
+
     # =========================================
     # Layout components (Cabinet Control style)
     # =========================================
@@ -1292,6 +1325,42 @@ module StreamWeaver
       else
         v
       end
+    end
+
+    # Resolves a `stylesheets:` entry: a local file (relative to the script
+    # dir, or absolute) becomes a served /sw-asset/ URL; anything else
+    # (a real URL, or a string that just doesn't resolve to a local file)
+    # passes through unchanged, same as always. Unlike local_asset, a
+    # missing file is not an error here -- most stylesheets: entries are
+    # ordinary hrefs, not local paths, so a non-match must stay silent.
+    # A real local file outside the allowed directories still raises,
+    # though -- that IS the traversal case this feature guards against.
+    def resolve_stylesheet_href(href)
+      abs_path = resolve_asset_path(href)
+      return href unless abs_path
+
+      ensure_asset_path_allowed!(abs_path, href)
+      "/sw-asset/#{ComponentAssets.register_file(abs_path)}/#{File.basename(abs_path)}"
+    end
+
+    # @return [String, nil] absolute path if `path` resolves to a real local
+    #   file (as given, or relative to the script dir); nil for a URL or
+    #   anything that doesn't exist on disk
+    def resolve_asset_path(path)
+      return nil if path.to_s.match?(%r{\A[a-z][a-z0-9+.\-]*://}i)
+
+      [path, File.expand_path(path, @script_dir)].each do |candidate|
+        expanded = File.expand_path(candidate)
+        return expanded if File.exist?(expanded)
+      end
+      nil
+    end
+
+    def ensure_asset_path_allowed!(abs_path, original)
+      return if @allowed_asset_dirs.any? { |dir| abs_path == dir || abs_path.start_with?("#{dir}/") }
+
+      raise ArgumentError, "local_asset: #{original} resolves outside the app's script directory " \
+                            "(#{@script_dir}) or its assets_dirs: -- pass assets_dirs: [...] to App.new to allow it"
     end
 
     # Captures children then appends the component (for item, column patterns)

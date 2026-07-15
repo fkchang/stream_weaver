@@ -6,6 +6,7 @@ require 'stringio'
 require 'socket'
 require 'json'
 require 'fileutils'
+require 'digest'
 require_relative 'session_store'
 
 module StreamWeaver
@@ -207,18 +208,19 @@ module StreamWeaver
         ""
       end
 
-      # Serve component-scoped asset files registered via css_path/js_path class macros.
-      # Only files whose absolute path was explicitly registered are served (no traversal).
+      # Serve local files registered via css_path/js_path class macros, or via
+      # App#local_asset / auto-detected stylesheets: entries (stream_weaver-1lo).
+      # Only files whose absolute path was explicitly registered are served
+      # (no traversal -- the key is a hash of that path, never derived from
+      # the request), and registration itself already validated the path was
+      # under the app's script dir / assets_dirs: (see App#local_asset).
       get '/sw-asset/:key/:filename' do
         abs_path = StreamWeaver::ComponentAssets.resolve_file(params[:key])
         halt 404 unless abs_path && File.exist?(abs_path)
         halt 404 unless File.basename(abs_path) == params[:filename]
-        content_type case File.extname(abs_path)
-                     when ".css" then "text/css"
-                     when ".js"  then "application/javascript"
-                     else             "application/octet-stream"
-                     end
-        File.read(abs_path)
+        etag Digest::MD5.hexdigest("#{File.mtime(abs_path).to_i}-#{File.size(abs_path)}")
+        content_type StreamWeaver::App::LOCAL_ASSET_MIME_TYPES[File.extname(abs_path).delete('.').downcase] || "application/octet-stream"
+        File.binread(abs_path)
       end
 
       # Define routes
