@@ -4,6 +4,11 @@ RSpec.describe StreamWeaver::Components::Board do
   it "initializes with empty children" do
     expect(described_class.new.children).to eq([])
   end
+
+  it "opts into pinned lane headers explicitly" do
+    expect(described_class.new(pinned_headers: true)).to be_pinned_headers
+    expect(described_class.new).not_to be_pinned_headers
+  end
 end
 
 RSpec.describe StreamWeaver::Components::Lane do
@@ -143,6 +148,23 @@ RSpec.describe "board HTML rendering" do
     expect(html).to include("background: url(x.png);")
   end
 
+  it "emits the pinned-header modifier and state attribute when requested" do
+    board = StreamWeaver::Components::Board.new(pinned_headers: true)
+    board.children = [StreamWeaver::Components::Lane.new("Queue")]
+
+    html = render_html(board)
+    expect(html).to include('class="sw-board sw-board--pinned-headers"')
+    expect(html).to include('data-sw-pinned-headers="true"')
+    expect(html).to match(/sw-board--pinned-headers \.sw-board__lane[^}]*overflow-y:\s*auto/m)
+    expect(html).to match(/sw-board--pinned-headers[^}]*\.sw-board__lane-header[^}]*position:\s*sticky/m)
+  end
+
+  it "omits pinned-header markup by default" do
+    html = render_html(StreamWeaver::Components::Board.new)
+    expect(html).not_to match(/<div[^>]*class="[^"]*sw-board--pinned-headers/)
+    expect(html).not_to match(/<div[^>]*data-sw-pinned-headers/)
+  end
+
   it "renders a lane's tone as a header modifier class, subtitle, and auto count" do
     board = StreamWeaver::Components::Board.new
     lane = StreamWeaver::Components::Lane.new("Blocked", tone: :error, subtitle: "Frontier")
@@ -276,5 +298,22 @@ RSpec.describe "topbar/nav_item DSL and rendering" do
     html = render_html(topbar)
     expect(html).to include("sw-topbar tyrion-topbar")
     expect(html).to include("height: 60px;")
+  end
+
+  it "renders optional decorative close chrome with stable hooks" do
+    nav_item = StreamWeaver::Components::NavItem.new("War Room", active: true, close: true)
+
+    html = render_html(nav_item)
+    expect(html).to include('<span class="sw-navbar-item__label">War Room</span>')
+    expect(html).to include('<span class="sw-navbar-item__close" aria-hidden="true">×</span>')
+  end
+
+  it "accepts a custom close chrome glyph and omits chrome by default" do
+    custom_html = render_html(StreamWeaver::Components::NavItem.new("War Room", active: true, close: "✕"))
+    plain_html = render_html(StreamWeaver::Components::NavItem.new("Roadmap", href: "/roadmap"))
+
+    expect(custom_html).to include('class="sw-navbar-item__close" aria-hidden="true">✕</span>')
+    expect(plain_html).not_to include("sw-navbar-item__close")
+    expect(plain_html).to include(">Roadmap</a>")
   end
 end

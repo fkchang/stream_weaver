@@ -1426,9 +1426,13 @@ module StreamWeaver
       def render_board(view, children, options, state)
         inject_board_css(view)
 
-        css_classes = ["sw-board", options[:class]].compact.join(" ")
+        pinned_headers = options[:pinned_headers]
+        css_classes = ["sw-board"]
+        css_classes << "sw-board--pinned-headers" if pinned_headers
+        css_classes << options[:class] if options[:class]
         style = [options[:style]].compact.join(" ")
-        attrs = { class: css_classes }
+        attrs = { class: css_classes.join(" ") }
+        attrs["data-sw-pinned-headers"] = "true" if pinned_headers
         attrs[:style] = style unless style.empty?
 
         view.div(**attrs) do
@@ -2476,11 +2480,16 @@ module StreamWeaver
         attrs = { class: classes.join(" ") }
         attrs[:style] = component.options[:style] if component.options[:style]
 
-        if component.active?
-          view.span(**attrs) { component.label }
-        else
-          view.a(**attrs.merge(href: component.href)) { component.label }
+        content = proc do
+          if component.close_label
+            view.span(class: "sw-navbar-item__label") { component.label }
+            view.span(class: "sw-navbar-item__close", "aria-hidden" => "true") { component.close_label }
+          else
+            component.label
+          end
         end
+
+        component.active? ? view.span(**attrs, &content) : view.a(**attrs.merge(href: component.href), &content)
       end
 
       # Render a modal dialog
@@ -5070,6 +5079,22 @@ module StreamWeaver
             border-radius: var(--sw-radius-md, 6px);
             display: flex;
             flex-direction: column;
+          }
+
+          .sw-board--pinned-headers {
+            align-items: stretch;
+            overflow-y: hidden;
+          }
+
+          .sw-board--pinned-headers .sw-board__lane {
+            max-height: 100%;
+            overflow-y: auto;
+          }
+
+          .sw-board--pinned-headers .sw-board__lane-header {
+            position: sticky;
+            top: 0;
+            z-index: 2;
           }
 
           .sw-board__lane-header {

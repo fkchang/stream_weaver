@@ -1641,6 +1641,12 @@ module StreamWeaver
                   cursor: default;
                 }
 
+                .sw-navbar-item__close {
+                  margin-left: 0.35em;
+                  opacity: 0.65;
+                  font-weight: 400;
+                }
+
                 /* ===========================================
                    Dropdown/Menu Component
                    =========================================== */

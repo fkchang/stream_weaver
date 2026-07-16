@@ -792,10 +792,15 @@ module StreamWeaver
       attr_accessor :children
       attr_reader :options
 
-      def initialize(**options)
-        @options = options
+      # @option pinned_headers [Boolean] keep lane header bands visible while
+      #   the board scrolls vertically
+      def initialize(pinned_headers: false, **options)
+        @pinned_headers = pinned_headers
+        @options = options.merge(pinned_headers: pinned_headers)
         @children = []
       end
+
+      def pinned_headers? = @pinned_headers
 
       def render(view, state)
         view.adapter.render_board(view, @children, @options, state)
@@ -1711,16 +1716,25 @@ module StreamWeaver
     end
 
     class NavItem < Base
-      attr_reader :label, :href, :options
+      attr_reader :label, :href, :close, :options
 
-      def initialize(label, href: nil, active: false, **options)
+      # @option close [Boolean, String] decorative tab-close chrome. true uses
+      #   the conventional multiplication sign; a String supplies the glyph.
+      def initialize(label, href: nil, active: false, close: false, **options)
         @label = label
         @href = href
         @active = active
+        @close = close
         @options = options
       end
 
       def active? = @active
+
+      def close_label
+        return nil unless @close
+
+        @close == true ? "×" : @close.to_s
+      end
 
       def render(view, state)
         view.adapter.render_nav_item(view, self, state)

@@ -34,6 +34,7 @@ every element you'd want to skin. The contract:
 | Element | Hook |
 |---|---|
 | Board container | `.sw-board` |
+| Board with pinned lane headers | `.sw-board--pinned-headers` |
 | Lane container | `.sw-board__lane` |
 | Lane header band | `.sw-board__lane-header`, `.sw-board__lane-header--{tone}` |
 | Lane heading wrapper | `.sw-board__lane-heading` |
@@ -52,6 +53,9 @@ every element you'd want to skin. The contract:
 
 `tone:` on `lane`/`board_card` is one of `%i[neutral success warning error info]`.
 `board`, `lane`, and `board_card` all accept `class:`/`style:`.
+`board(pinned_headers: true)` adds `.sw-board--pinned-headers` and
+`data-sw-pinned-headers="true"`; its lane header bands remain sticky while the
+board scrolls vertically.
 
 `lane` accepts `icon:` (stream_weaver-oeo) -- an emoji/glyph string, or a
 URL/path (an `App#local_asset` result, `/sw-asset/...`, or any http(s)/data
@@ -83,6 +87,8 @@ workaround (design-parity-fights.md) that both tyrion parity slices used.
 | Navbar container | `.sw-navbar` |
 | Nav item | `.sw-navbar-item` |
 | Active nav item | `.sw-navbar-item-active` |
+| Nav item label (when close chrome is present) | `.sw-navbar-item__label` |
+| Decorative close chrome | `.sw-navbar-item__close` |
 
 ```css
 .sw-navbar { border-bottom: 2px solid gold; }
@@ -91,6 +97,10 @@ workaround (design-parity-fights.md) that both tyrion parity slices used.
 
 Both `navbar` and `nav_item` accept `class:`/`style:` (nav_item forwarding
 added in stream_weaver-oeo).
+`nav_item(..., close: true)` adds a decorative `×`; pass a string to `close:`
+for a different glyph. This option is visual tab chrome, not an interactive
+close action. Apps that close tabs should wire that behavior through their own
+action component.
 
 ### Topbar
 
