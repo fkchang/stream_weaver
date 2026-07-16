@@ -37,12 +37,14 @@
 #
 # Env vars (optional; the slice degrades gracefully without it):
 #   SW_PARITY_ASSETS=/path/to/tyrion/web/public/assets
-#     Real crest/dragon/lantern art via a local-file endpoint. Unset:
-#     unicode glyph fallbacks (🦁/🐉/🏮).
+#     Real crest/dragon/lantern/map art via a local-file endpoint. Unset:
+#     unicode glyph fallbacks (🦁/🐉/🏮) and no war-table photo (the
+#     gradient-only fallback already baked into tyrion_components.css).
 #
 # Run: SW_PARITY_ASSETS=... ruby examples/parity/tyrion_warroom_components.rb
 
 require_relative "../../lib/stream_weaver"
+require "base64"
 require "time"
 
 PARITY_ASSETS_DIR = ENV["SW_PARITY_ASSETS"]
@@ -60,6 +62,25 @@ end
 CREST_URL   = parity_art_url("LionCrest.png")
 DRAGON_URL  = parity_art_url("dragon.png")
 LANTERN_URL = parity_art_url("lantern.png")
+MAP_URL     = parity_art_url("strategy_map.png")
+
+# Same seam tyrion_warroom_slice.rb's own header comment documents: the
+# real .topbar/.wr-board background-image is a *relative*
+# url("assets/strategy_map.png") in the real CSS, so there's no `class:`
+# hook that can carry a resolved /sw-asset/ URL -- it has to be a CSS
+# background-image rule. This slice never loads the real CSS at all
+# (that's the whole point), so it's a small inline override targeting
+# this slice's OWN hook classes (.sw-topbar, .tc-board-hero), appended
+# after tyrion_components.css so it wins ties. Unset MAP_URL: no override,
+# tyrion_components.css's own gradient-only fallback stands as-is.
+stylesheet_list = [COMPONENTS_CSS_PATH]
+if MAP_URL
+  bg_css = <<~CSS
+    .sw-topbar { background-image: linear-gradient(to bottom, rgba(0,0,0,.48), rgba(13,10,7,.88)), url('#{MAP_URL}'); background-size: cover; background-position: center 35%; }
+    .tc-board-hero { background-image: linear-gradient(180deg, rgba(8,10,11,.18), rgba(8,10,11,.28)), url('#{MAP_URL}'); background-size: cover; background-position: center; }
+  CSS
+  stylesheet_list << "data:text/css;base64,#{Base64.strict_encode64(bg_css)}"
+end
 
 # ---------------------------------------------------------------------------
 # Store: identical fixture data to tyrion_warroom_slice.rb (same shape,
@@ -180,7 +201,7 @@ App = StreamWeaver::App.new(
   # Local-path auto-detection (App#resolve_stylesheet_href) serves this
   # file via /sw-asset/... -- no hand-rolled endpoint needed, unlike the
   # pixel slice's SW_PARITY_CSS proxy for the (much larger, real) shared.css.
-  stylesheets: [COMPONENTS_CSS_PATH],
+  stylesheets: stylesheet_list,
   assets_dirs: [PARITY_ASSETS_DIR].compact
 ) do
   def art_glyph(url, glyph, css_class:)
@@ -195,24 +216,14 @@ App = StreamWeaver::App.new(
   current_story  = current_action.is_a?(Symbol) && current_action.to_s.start_with?("story_") ? StoryStore.find(current_action.to_s.delete_prefix("story_")) : nil
 
   # =========================================================================
-  # Topbar chrome: no dedicated `topbar`/`hero` component exists
-  # (design-parity-fights.md finding #6, still open) -- hand-assembled with
-  # div/phrase/navbar, same as the pixel slice, using tc- prefixed classes
-  # (never a generic name that could collide with an app's own CSS).
+  # Topbar chrome: the real `topbar` component (stream_weaver-oeo) --
+  # design-parity-fights.md finding #6 closed, no more hand-assembled
+  # div/phrase soup here.
   # =========================================================================
-  div(class: "tc-topbar") do
-    div(class: "tc-topbar-brand") do
-      art_glyph(CREST_URL, "🦁", css_class: "tc-crest")
-      header1("TYRION", class: "tc-wordmark")
-    end
-    phrase("·", class: "tc-topbar-sep")
-    phrase("field-ops", class: "tc-topbar-crumb")
-    phrase("·", class: "tc-topbar-sep")
-    phrase(current_story ? current_story[:slug] : "warroom-components", class: "tc-topbar-crumb tc-topbar-crumb--active")
-    div(class: "tc-topbar-git") do
-      phrase("⎇ parity/warroom-components", class: "tc-pill")
-      phrase("✗ 2", class: "tc-pill tc-pill--amber")
-    end
+  topbar(icon: CREST_URL || "🦁", wordmark: "TYRION",
+         breadcrumbs: ["field-ops", current_story ? current_story[:slug] : "warroom-components"]) do
+    phrase("⎇ parity/warroom-components", class: "tc-pill")
+    phrase("✗ 2", class: "tc-pill tc-pill--amber")
   end
   navbar(class: "tc-navbar") do
     nav_item("⚔ War Room", href: "/", active: current_story.nil?)
@@ -271,11 +282,9 @@ App = StreamWeaver::App.new(
             [[:pending, "Queue", "Pending"], [:in_progress, "Active Campaign", "In Progress"],
              [:blocked, "Blocked Frontier", "Blocked"], [:done, "Shipped Keep", "Done"]].each do |status, title, sub|
               stories = StoryStore.by_status(status)
-              # Lane has no icon slot (design-parity-fights.md's title_prefix
-              # workaround, still the only option) -- prefixing the glyph
-              # into title: is the same approach the pixel slice used.
-              lane_title = status == :blocked ? "🐉 #{title}" : title
-              lane(lane_title, tone: LANE_TONE.fetch(status), subtitle: sub) do
+              # lane's icon: slot (stream_weaver-oeo) replaces the
+              # title-prefix workaround design-parity-fights.md catalogued.
+              lane(title, tone: LANE_TONE.fetch(status), subtitle: sub, icon: status == :blocked ? (DRAGON_URL || "🐉") : nil) do
                 stories.each { |story| render_wr_card(story) }
               end
             end
@@ -382,8 +391,13 @@ App = StreamWeaver::App.new(
 end
 
 def render_wr_card(story)
+  card_class = if story[:stale]
+    "tc-card--stale"
+  elsif story[:status] == :done
+    "tc-card--done"
+  end
   clickable(href: "/stories/#{story[:id]}") do
-    board_card(tone: story[:status] == :blocked ? :error : nil, class: story[:stale] ? "tc-card--stale" : nil) do
+    board_card(tone: story[:status] == :blocked ? :error : nil, class: card_class) do
       phrase("⚠ STALE #{relative_time(story[:last_note_at])}", class: "tc-stale-badge") if story[:stale]
       phrase(story[:epic_slug], class: "tc-card-epic")
       header4(story[:slug])
