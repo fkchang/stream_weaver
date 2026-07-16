@@ -40,7 +40,8 @@
   --tc-font-serif: 'Lora', Georgia, serif;
   --tc-font-mono: 'IBM Plex Mono', monospace;
   --tc-sidebar-w: 240px;
-  --tc-topbar-h: 60px;
+  --tc-topbar-h: 52px;
+  --tc-navbar-h: 40px;
 }
 
 html, body {
@@ -58,10 +59,11 @@ body.sw-chromeless {
    =========================================================== */
 .sw-topbar {
   height: var(--tc-topbar-h);
-  padding: 0 20px;
+  min-height: var(--tc-topbar-h);
+  padding: 0 16px;
   background: var(--tc-surface);
-  border-bottom: 1px solid var(--tc-border);
-  gap: 10px;
+  border-bottom: 0;
+  gap: 8px;
   /* Real .topbar carries the war-table photo too (re-derived from
      ~/work/tyrion/web/public/shared.css, read-only) -- MAP_URL's
      resolved value is appended by the .rb file as a small inline
@@ -72,8 +74,8 @@ body.sw-chromeless {
 }
 
 .sw-topbar-icon {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
 }
 
 .sw-topbar-wordmark {
@@ -115,18 +117,22 @@ body.sw-chromeless {
 
 /* navbar (real sw-navbar/sw-navbar-item hooks) */
 .tc-navbar.sw-navbar {
-  background: var(--tc-surface);
-  border-bottom: 1px solid var(--tc-border);
-  padding: 0 20px;
+  height: var(--tc-navbar-h);
+  background: rgba(0, 0, 0, 0.42);
+  border-top: 1px solid rgba(107, 78, 42, 0.45);
+  border-bottom: 2px solid var(--tc-border);
+  padding: 0 8px;
   margin-bottom: 0;
-  gap: 4px;
+  gap: 0;
 }
 
 .sw-navbar-item {
+  display: inline-flex;
+  align-items: center;
   font-family: var(--tc-font-mono);
   font-size: 13px;
   color: var(--tc-text-muted);
-  padding: 10px 12px;
+  padding: 8px 12px 7px;
   text-decoration: none;
 }
 
@@ -135,11 +141,18 @@ body.sw-chromeless {
   border-bottom: 2px solid var(--tc-gold-bright);
 }
 
+.sw-navbar-item__close {
+  order: -1;
+  margin: 0 6px 0 0;
+  opacity: 1;
+  font-weight: 400;
+}
+
 /* ===========================================================
    Shell / Sidebar (sw-app-shell / sw-sidebar hooks)
    =========================================================== */
 .tc-shell.sw-app-shell {
-  height: calc(100% - var(--tc-topbar-h) - 41px);
+  height: calc(100% - var(--tc-topbar-h) - var(--tc-navbar-h));
 }
 
 .sw-app-shell-main {
@@ -150,13 +163,13 @@ body.sw-chromeless {
 .tc-sidebar.sw-sidebar {
   background: var(--tc-surface);
   border-right: 1px solid var(--tc-border);
-  overflow-y: auto;
-  padding-bottom: 12px;
+  overflow: hidden;
+  padding-bottom: 0;
 }
 
 .tc-sidebar-path {
-  padding: 10px 14px 0;
-  font-size: 12px;
+  padding: 8px 14px 0;
+  font-size: 11px;
   color: var(--tc-text-faint);
   font-family: var(--tc-font-mono);
 }
@@ -175,29 +188,50 @@ body.sw-chromeless {
   border-radius: 0;
   padding: 12px 14px 4px;
   font-size: 11px;
-  font-weight: 600;
+  font-family: var(--tc-font-display);
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--tc-text-faint);
+  letter-spacing: 0.14em;
+  color: var(--tc-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tc-story-row.sw-clickable {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
+  padding: 6px 10px 6px 12px;
+  margin: 2px 8px;
   font-family: var(--tc-font-mono);
-  font-size: 13px;
-  color: var(--tc-text-dim);
+  font-size: 15px;
+  color: var(--tc-ink-dim);
   text-decoration: none;
+  border: 1px solid #B8A070;
+  border-radius: 3px;
+  background: var(--tc-parchment-aged);
+  min-width: 0;
 }
 
 .tc-story-row:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: #F5EDD8;
+  border-color: var(--tc-amber);
 }
 
 .tc-story-row--done .tc-story-icon {
   color: var(--tc-emerald);
+}
+
+.tc-story-row--done {
+  opacity: 0.65;
+}
+
+.tc-story-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tc-story-row--in_progress .tc-story-icon {
@@ -209,7 +243,9 @@ body.sw-chromeless {
 }
 
 .tc-discoveries {
-  margin-top: 16px;
+  margin-top: auto;
+  border-top: 1px solid var(--tc-border);
+  padding: 10px 0 8px;
 }
 
 .tc-disc-row.sw-clickable {
@@ -248,35 +284,59 @@ body.sw-chromeless {
    =========================================================== */
 .tc-board-hero {
   position: relative;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   /* War-table photo goes here (MAP_URL, appended by the .rb file as a
      small inline override -- see its header comment); unset MAP_URL
      falls back to this gradient-only look. */
   background:
     radial-gradient(circle at 50% 52%, rgba(255, 180, 60, 0.08), transparent 32%),
     linear-gradient(180deg, rgba(8, 10, 11, 0.55), rgba(8, 10, 11, 0.75)), var(--tc-bg);
-  padding: 24px;
+  padding: 0;
+  overflow: hidden;
 }
 
 .tc-dragon-zone {
   position: absolute;
-  top: 50%;
+  top: 88px;
+  bottom: 196px;
   left: 50%;
-  transform: translate(-50%, -50%);
+  width: 22%;
+  transform: translateX(-50%);
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   text-align: center;
-  color: var(--tc-text-faint);
+  color: #ead7ba;
+  padding: 24px 16px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255, 80, 20, 0.28), rgba(0, 0, 0, 0) 26%),
+    radial-gradient(circle at 50% 45%, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.24) 55%, rgba(0, 0, 0, 0) 82%);
   pointer-events: none;
+}
+
+.tc-dragon-zone::before {
+  content: "";
+  position: absolute;
+  inset: 8% 12%;
+  background: radial-gradient(circle at 50% 48%, rgba(255, 112, 54, 0.28), rgba(255, 80, 20, 0.08) 22%, transparent 50%);
+  filter: blur(14px);
 }
 
 .tc-dragon-glyph.tc-art-img {
   width: 70px;
   height: 70px;
   margin: 0 auto 10px;
+  position: relative;
+  z-index: 2;
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
   opacity: 0.82;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.5));
 }
 
 .tc-dragon-glyph.tc-art-glyph {
@@ -288,12 +348,21 @@ body.sw-chromeless {
 
 .tc-dragon-zone h3 {
   font-family: var(--tc-font-display);
-  color: var(--tc-text-dim);
+  position: relative;
+  z-index: 2;
+  margin: 0 0 8px;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  color: #f0cdb4;
 }
 
 .tc-dragon-zone p {
-  color: var(--tc-text-faint);
+  position: relative;
+  z-index: 2;
+  color: var(--tc-text-dim);
   margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* Board frame: rounded/bordered/shadowed like the real .wr-board so the
@@ -305,6 +374,9 @@ body.sw-chromeless {
   position: relative;
   z-index: 2;
   gap: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   align-items: stretch;
   border-radius: 16px;
   border: 1px solid rgba(215, 176, 102, 0.28);
@@ -312,11 +384,39 @@ body.sw-chromeless {
   overflow: hidden;
 }
 
+.sw-board--pinned-headers {
+  overflow-x: hidden;
+  overflow-y: hidden;
+}
+
+.sw-board--pinned-headers .sw-board__lane {
+  max-height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(215, 176, 102, 0.2) transparent;
+}
+
+.sw-board::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 52%, rgba(255, 180, 60, 0.07), transparent 22%),
+    linear-gradient(180deg, rgba(18, 18, 18, 0.06), rgba(3, 4, 5, 0.22));
+  pointer-events: none;
+  z-index: 1;
+}
+
 /* Lane containers stay transparent so the war-table photo shows through
    uninterrupted -- only a soft vertical rule separates them (softer
    than the framework default's solid 1px box border all around, per
    stream_weaver-oeo review's "softer lane container borders" note). */
 .sw-board__lane {
+  flex: 1 0 25%;
+  min-width: 0;
+  min-height: 100%;
+  position: relative;
+  z-index: 2;
   background: transparent;
   border: none;
   border-right: 1px solid rgba(215, 176, 102, 0.18);
@@ -335,7 +435,13 @@ body.sw-chromeless {
 .sw-board__lane-header {
   background: linear-gradient(180deg, rgba(236, 220, 184, 0.94), rgba(187, 164, 122, 0.92));
   color: #2b2418;
-  padding: 10px 14px;
+  height: 78px;
+  padding: 0 14px;
+  justify-content: center;
+  text-align: center;
+  border-bottom: 1px solid rgba(89, 70, 40, 0.3);
+  box-shadow: inset 0 -4px 18px rgba(64, 43, 14, 0.1);
+  z-index: 4;
 }
 
 .sw-board__lane-header--neutral {
@@ -359,24 +465,34 @@ body.sw-chromeless {
 }
 
 .sw-board__lane-icon {
-  margin-right: 6px;
+  width: 22px;
+  height: 22px;
+  margin-right: 0;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
 }
 
 .sw-board__lane-title {
   font-family: var(--tc-font-display);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  line-height: 1.1;
+  text-align: center;
 }
 
 .sw-board__lane-subtitle {
   font-size: 11px;
   opacity: 0.7;
+  text-align: center;
+  margin-top: 2px;
 }
 
 .sw-board__lane-count {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
   font-family: var(--tc-font-display);
   font-size: 20px;
   opacity: 1;
@@ -385,6 +501,7 @@ body.sw-chromeless {
 .sw-board__lane-body {
   background: transparent;
   padding: 14px;
+  gap: 0;
   min-height: 60px;
 }
 
@@ -438,21 +555,40 @@ body.sw-chromeless {
 
 .sw-board__card h4 {
   font-family: var(--tc-font-serif);
-  font-size: 14px;
-  margin: 2px 0 4px;
+  font-size: 17px;
+  line-height: 1.25;
+  font-weight: 500;
+  margin: 0;
   color: var(--tc-ink);
 }
 
 .tc-card-epic {
   font-family: var(--tc-font-mono);
-  font-size: 10px;
-  color: var(--tc-ink-muted);
-  text-transform: uppercase;
+  display: block;
+  font-size: 13px;
+  color: #564327;
+  margin-bottom: 6px;
 }
 
 .tc-card-ctx {
   font-size: 12px;
-  color: var(--tc-ink-dim);
+  color: #4a3318;
+  margin-top: 6px;
+  font-family: var(--tc-font-mono);
+  line-height: 1.4;
+}
+
+.sw-board__card .sw-badge {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 3px 8px;
+  border: 1px solid rgba(88, 70, 41, 0.2);
+  border-radius: 6px;
+  background: rgba(113, 92, 58, 0.14);
+  color: #3e3222;
+  font-family: var(--tc-font-mono);
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .tc-card-done-meta {

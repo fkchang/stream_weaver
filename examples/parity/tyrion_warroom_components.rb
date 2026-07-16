@@ -226,7 +226,7 @@ App = StreamWeaver::App.new(
     phrase("✗ 2", class: "tc-pill tc-pill--amber")
   end
   navbar(class: "tc-navbar") do
-    nav_item("⚔ War Room", href: "/", active: current_story.nil?)
+    nav_item("⚔ War Room", href: "/", active: current_story.nil?, close: current_story.nil?)
     nav_item("🗺 Roadmap", href: "#")
     nav_item("📖 Active Story", href: "#")
     nav_item("🌍 Global View", href: "#")
@@ -278,7 +278,7 @@ App = StreamWeaver::App.new(
             text("Needs human decision")
           end
 
-          board do
+          board(pinned_headers: true) do
             [[:pending, "Queue", "Pending"], [:in_progress, "Active Campaign", "In Progress"],
              [:blocked, "Blocked Frontier", "Blocked"], [:done, "Shipped Keep", "Done"]].each do |status, title, sub|
               stories = StoryStore.by_status(status)
