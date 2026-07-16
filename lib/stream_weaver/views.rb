@@ -38,6 +38,14 @@ module StreamWeaver
         doctype
         html do
           head do
+            # Pins cascade layer order before any framework CSS is emitted
+            # (stream_weaver-oeo). All framework CSS lives in this one named
+            # layer; any unlayered user stylesheet always wins the cascade
+            # regardless of specificity or document order, so the
+            # stream_weaver-1lo hoist-to-<head> trick below is now belt-and-
+            # suspenders rather than the only thing making user CSS win.
+            style { raw(safe("@layer #{StreamWeaver::CSS::LAYER_NAME};")) }
+
             title { @app.title }
             meta(charset: "utf-8")
             meta(name: "viewport", content: "width=device-width, initial-scale=1")
@@ -52,8 +60,13 @@ module StreamWeaver
             # render above), before user stylesheets: below -- so that at
             # equal specificity, user stylesheets win on document order
             # instead of always losing to the framework's own rule
-            # (stream_weaver-1lo).
-            component_css_registry.each_value { |css| style { raw(safe(css)) } }
+            # (stream_weaver-1lo). Also wrapped in the shared layer
+            # (stream_weaver-oeo) so this ordering is now a nicety, not a
+            # requirement -- an unlayered user rule wins even if it lands
+            # earlier in the document.
+            unless component_css_registry.empty?
+              style { raw(safe(StreamWeaver::CSS.layer_wrap(component_css_registry.values.join("\n")))) }
+            end
 
             # Add custom stylesheets
             @stylesheets.each do |href|
@@ -92,12 +105,12 @@ module StreamWeaver
               link(rel: "stylesheet", href: custom_href) if custom_href
             end
             style do
-              raw(safe(self.class.master_theme_css))
+              raw(safe(StreamWeaver::CSS.layer_wrap(self.class.master_theme_css)))
             end
 
             # Visual Skills CSS foundation (--sw-* semantic tokens)
             style do
-              raw(safe(StreamWeaver::Theme.visual_skills_css))
+              raw(safe(StreamWeaver::CSS.layer_wrap(StreamWeaver::Theme.visual_skills_css)))
             end
 
             # Dark mode: check localStorage / system preference, apply .dark on <html>
@@ -3571,7 +3584,7 @@ module StreamWeaver
         end.join("\n  ")
 
         style do
-          raw(safe("body.sw-theme-#{effective_theme} { #{css_vars} }"))
+          raw(safe(StreamWeaver::CSS.layer_wrap("body.sw-theme-#{effective_theme} { #{css_vars} }")))
         end
       end
 
@@ -3594,7 +3607,7 @@ module StreamWeaver
         return unless custom_theme
 
         style do
-          raw(safe(custom_theme.to_css))
+          raw(safe(StreamWeaver::CSS.layer_wrap(custom_theme.to_css)))
         end
       end
 

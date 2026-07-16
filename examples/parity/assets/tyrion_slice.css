@@ -26,14 +26,13 @@ html, body {
 /* chrome: false gives every StreamWeaver body.sw-chromeless page a
  * var(--sw-spacing-lg) padding baseline -- a reasonable default in
  * general, wrong here since .shell is meant to fill the viewport
- * edge-to-edge. That base rule is emitted in <head> *after*
- * `stylesheets:` (views.rb's master theme <style> block renders after the
- * stylesheets loop), so an equal-specificity `body.sw-chromeless{}` here
- * would still lose on document order -- same root cause as the
- * injected-component-CSS ordering in finding #1 below, just hitting body
- * itself instead of a component. Bumped specificity with an `html` prefix
- * rather than `!important`. */
-html body.sw-chromeless {
+ * edge-to-edge. Formerly needed an `html` specificity-bump prefix because
+ * this equal-specificity rule still lost to master_theme_css's own
+ * body.sw-chromeless on document order (views.rb's <style> block renders
+ * after `stylesheets:`); now unnecessary -- master_theme_css lives in
+ * @layer stream-weaver (stream_weaver-oeo), so this unlayered rule always
+ * wins regardless of specificity or order. */
+body.sw-chromeless {
   padding: 0;
 }
 
@@ -58,34 +57,27 @@ html body.sw-chromeless {
  * resolved asset URL, appended after this file so it wins ties here too.
  */
 
-/* Same root cause as gsd/analysis/08-design-parity-fights.md finding #1
- * (StreamWeaver's own <style> block -- views.rb's master_theme_css --
- * always renders after `stylesheets:` in document order, so it wins ties
- * at equal specificity), but this time it's not from using a
- * StreamWeaver component: this rewrite deliberately calls none of
- * Board/Lane/Sidebar. It's collateral damage from master_theme_css being
- * one big always-injected bundle, unscoped and un-namespaced, that
- * happens to declare `.sidebar-section` ("Monica-style sidebar sections",
- * demoed in examples/advanced/all_components.rb -- a real, documented
- * utility class, not dead code) and `.status-badge` ("Status Badge"),
- * both of which collide with tyrion's own real class names by pure
- * coincidence. Confirmed via getComputedStyle: .sidebar-section rendered
- * with a solid white background (StreamWeaver's --sw-color-bg-card
- * fallback) instead of transparent -- the "light-gray band" -- and
- * .status-badge's gap/padding/border-radius/font-size/margin were
- * StreamWeaver's --sw-spacing-* values, not the real 6px/3px 10px/3px/
- * 11px/0. Same fix as finding #1: bump specificity with a `body .shell`
- * prefix (real values, copied from shared.css) rather than `!important`,
- * so a future, more-specific framework rule can still win legitimately.
+/* master_theme_css is one big always-injected bundle, unscoped and
+ * un-namespaced, that happens to declare `.sidebar-section` ("Monica-style
+ * sidebar sections", demoed in examples/advanced/all_components.rb -- a
+ * real, documented utility class, not dead code) and `.status-badge`
+ * ("Status Badge"), both of which collide with tyrion's own real class
+ * names by pure coincidence (stream_weaver-lyb). This rewrite deliberately
+ * calls none of Board/Lane/Sidebar, so the collision comes purely from
+ * these generic framework selectors, not from using a StreamWeaver
+ * component. Formerly needed a `body .shell` specificity-bump prefix
+ * (values copied from shared.css) to win the tie; now unnecessary --
+ * master_theme_css lives in @layer stream-weaver (stream_weaver-oeo), so
+ * these unlayered plain-class rules always win regardless of specificity.
  */
-body .shell .sidebar-section {
+.sidebar-section {
   background: transparent;
   border: none;
   border-radius: 0;
   padding: 12px 14px 4px;
 }
 
-body .shell .status-badge {
+.status-badge {
   gap: 6px;
   padding: 3px 10px;
   border-radius: 3px;

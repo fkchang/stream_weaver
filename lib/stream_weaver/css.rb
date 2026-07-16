@@ -4,7 +4,25 @@ module StreamWeaver
   # Shared CSS for StreamWeaver themes and components
   # Used by both AppView (standalone) and live session pages
   module CSS
+    # Every framework-emitted style block (master theme, theme presets/
+    # overrides, component inject_*_css) is wrapped in this single named
+    # layer so any unlayered user stylesheet -- regardless of selector
+    # specificity or document order -- always wins the cascade
+    # (stream_weaver-oeo). User-authored CSS (App.new stylesheets:, and the
+    # `css`/`css_path` class macros a custom Component subclass can declare
+    # for itself) is deliberately left unlayered.
+    LAYER_NAME = "stream-weaver"
+
     class << self
+      # Wraps framework CSS in the shared @layer so user CSS always wins
+      # the cascade regardless of specificity or document order.
+      # @param css [String] framework-emitted CSS
+      # @return [String] the CSS wrapped in `@layer stream-weaver { ... }`
+      def layer_wrap(css)
+        return css if css.nil? || css.strip.empty?
+
+        "@layer #{LAYER_NAME} {\n#{css}\n}"
+      end
       # Returns the full StreamWeaver CSS (themes + components)
       # @return [String] CSS content
       def full_stylesheet

@@ -2801,13 +2801,13 @@ module StreamWeaver
 
         # Inject CSS custom properties for both modes + font-family rules
         css = StreamWeaver::Theme::Presets.generate_preset_css(component.preset_name)
-        view.style { view.raw(view.safe(css)) }
+        view.style { view.raw(view.safe(StreamWeaver::CSS.layer_wrap(css))) }
 
         # Inject animation CSS (once per render)
         unless view.instance_variable_get(:@_sw_animations_injected)
           view.instance_variable_set(:@_sw_animations_injected, true)
           animations_css = StreamWeaver::Theme::Presets.animations_css
-          view.style { view.raw(view.safe(animations_css)) }
+          view.style { view.raw(view.safe(StreamWeaver::CSS.layer_wrap(animations_css))) }
         end
       end
 
@@ -2826,7 +2826,7 @@ module StreamWeaver
         view.script(src: "https://cdn.jsdelivr.net/npm/roughjs@4/bundled/rough.js")
 
         # Sketch mode CSS: hand-drawn font scoped to wireframe surfaces only
-        view.style { view.raw(view.safe(sketch_mode_css)) }
+        view.style { view.raw(view.safe(StreamWeaver::CSS.layer_wrap(sketch_mode_css))) }
 
         # Sketch mode JS: set data-sketch on body + roughify wireframe surfaces
         view.script { view.raw(view.safe(sketch_mode_js)) }
@@ -2945,7 +2945,7 @@ module StreamWeaver
         # Lazy-inject CSS and JS on first mermaid component render
         unless view.instance_variable_get(:@_mermaid_assets_injected)
           view.instance_variable_set(:@_mermaid_assets_injected, true)
-          view.style { view.raw(view.safe(MERMAID_CSS)) }
+          view.style { view.raw(view.safe(StreamWeaver::CSS.layer_wrap(MERMAID_CSS))) }
           render_mermaid_cdn_scripts(view)
         end
 
@@ -3307,7 +3307,7 @@ module StreamWeaver
         # Inject CSS and Chart.js CDN loader once per render
         unless view.instance_variable_get(:@_chart_assets_injected)
           view.instance_variable_set(:@_chart_assets_injected, true)
-          view.style { view.raw(view.safe(CHART_CSS)) }
+          view.style { view.raw(view.safe(StreamWeaver::CSS.layer_wrap(CHART_CSS))) }
           render_chart_cdn_scripts(view)
         end
 
@@ -4298,7 +4298,7 @@ module StreamWeaver
         if view.respond_to?(:register_component_css)
           view.register_component_css(key, css)
         else
-          view.style { view.raw(view.safe(css)) }
+          view.style { view.raw(view.safe(StreamWeaver::CSS.layer_wrap(css))) }
         end
       end
 
@@ -7222,7 +7222,7 @@ module StreamWeaver
           style: "height: #{component.height};"
         ) do
           # CSS to hide original textarea when CodeMirror is present (use > to avoid hiding CM's internal textarea)
-          view.style { ".sw-code-editor-wrapper > textarea { display: none !important; }" }
+          view.style { StreamWeaver::CSS.layer_wrap(".sw-code-editor-wrapper > textarea { display: none !important; }") }
           # Textarea with content - CodeMirror will replace this
           # x-model is required for hx-include="[x-model]" to include this in button submissions
           view.textarea(
@@ -8009,7 +8009,7 @@ module StreamWeaver
 
         # Inline CSS for sw-code-block and sw-image-block components
         view.style do
-          view.raw(view.safe(code_block_css))
+          view.raw(view.safe(StreamWeaver::CSS.layer_wrap(code_block_css)))
         end
       end
 
