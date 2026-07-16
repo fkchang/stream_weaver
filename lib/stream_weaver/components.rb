@@ -411,7 +411,10 @@ module StreamWeaver
       end
 
       def render(view, state)
-        classes = ["card"]
+        # "card" is the legacy, unprefixed hook (still emitted for
+        # back-compat -- deprecated, removed at 1.0); "sw-card" is the
+        # documented stable hook (stream_weaver-oeo / stream_weaver-lyb).
+        classes = ["card", "sw-card"]
         classes << "sw-card--#{@depth}" if @depth && VALID_DEPTHS.include?(@depth)
         classes << "sw-card--accent-#{@accent}" if @accent.is_a?(Symbol)
         classes << "sw-card--accent" if @accent && !@accent.is_a?(Symbol)
@@ -452,7 +455,16 @@ module StreamWeaver
 
       def render(view, state)
         badged = @badge || @meta
-        view.div(class: badged ? "card-header card-header--badged" : "card-header") do
+        # "card-header" is the legacy, unprefixed hook (still emitted for
+        # back-compat -- deprecated, removed at 1.0); "sw-card-header" is
+        # the documented stable hook (stream_weaver-oeo / stream_weaver-lyb).
+        classes = ["card-header", "sw-card-header"]
+        classes << "card-header--badged" if badged
+        classes << @options[:class] if @options[:class]
+        attrs = { class: classes.join(" ") }
+        attrs[:style] = @options[:style] if @options[:style]
+
+        view.div(**attrs) do
           view.span(class: "card-header__badge") { @badge } if @badge
           if @content
             badged ? view.h4(class: "card-header__title") { @content } : view.h4 { @content }
@@ -474,7 +486,15 @@ module StreamWeaver
       end
 
       def render(view, state)
-        view.div(class: "card-body") do
+        # "card-body" is the legacy, unprefixed hook (still emitted for
+        # back-compat -- deprecated, removed at 1.0); "sw-card-body" is the
+        # documented stable hook (stream_weaver-oeo / stream_weaver-lyb).
+        classes = ["card-body", "sw-card-body"]
+        classes << @options[:class] if @options[:class]
+        attrs = { class: classes.join(" ") }
+        attrs[:style] = @options[:style] if @options[:style]
+
+        view.div(**attrs) do
           @children.each { |child| child.render(view, state) }
         end
       end
@@ -491,7 +511,15 @@ module StreamWeaver
       end
 
       def render(view, state)
-        view.div(class: "card-footer") do
+        # "card-footer" is the legacy, unprefixed hook (still emitted for
+        # back-compat -- deprecated, removed at 1.0); "sw-card-footer" is
+        # the documented stable hook (stream_weaver-oeo / stream_weaver-lyb).
+        classes = ["card-footer", "sw-card-footer"]
+        classes << @options[:class] if @options[:class]
+        attrs = { class: classes.join(" ") }
+        attrs[:style] = @options[:style] if @options[:style]
+
+        view.div(**attrs) do
           @children.each { |child| child.render(view, state) }
         end
       end
@@ -781,7 +809,7 @@ module StreamWeaver
     # @option subtitle [String] small text under the title (e.g. "In Progress")
     class Lane < Base
       attr_accessor :children
-      attr_reader :title, :tone, :subtitle
+      attr_reader :title, :tone, :subtitle, :options
 
       def initialize(title, tone: nil, subtitle: nil, **options)
         @title = title

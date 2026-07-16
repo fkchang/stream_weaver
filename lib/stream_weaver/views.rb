@@ -2398,8 +2398,15 @@ module StreamWeaver
 
                 /* ===========================================
                    Status Badge
+
+                   "status-badge"/"status-badge-*" are the legacy,
+                   unprefixed hooks (still styled for back-compat --
+                   deprecated, removed at 1.0; this generic name is the
+                   exact collision stream_weaver-lyb was filed for).
+                   "sw-status-badge"/"sw-status-badge--*"/"sw-status-badge__*"
+                   are the documented stable hooks (stream_weaver-oeo).
                    =========================================== */
-                .status-badge {
+                .status-badge, .sw-status-badge {
                   display: inline-flex;
                   align-items: center;
                   gap: var(--sw-spacing-xs);
@@ -2409,30 +2416,30 @@ module StreamWeaver
                   margin: var(--sw-spacing-xs) var(--sw-spacing-sm) var(--sw-spacing-xs) 0;
                 }
 
-                .status-badge-strong {
+                .status-badge-strong, .sw-status-badge--strong {
                   background-color: rgba(16, 185, 129, 0.1);
                   color: #059669;
                 }
 
-                .status-badge-maybe {
+                .status-badge-maybe, .sw-status-badge--maybe {
                   background-color: rgba(245, 158, 11, 0.1);
                   color: #d97706;
                 }
 
-                .status-badge-skip {
+                .status-badge-skip, .sw-status-badge--skip {
                   background-color: rgba(239, 68, 68, 0.1);
                   color: #dc2626;
                 }
 
-                .status-badge-icon {
+                .status-badge-icon, .sw-status-badge__icon {
                   font-size: 1em;
                 }
 
-                .status-badge-label {
+                .status-badge-label, .sw-status-badge__label {
                   font-weight: 600;
                 }
 
-                .status-badge-reasoning {
+                .status-badge-reasoning, .sw-status-badge__reasoning {
                   color: var(--sw-color-text-muted);
                 }
 
@@ -2520,14 +2527,22 @@ module StreamWeaver
                   gap: var(--sw-spacing-sm);
                 }
 
-                .sidebar-section {
+                /* "sidebar-section" is the legacy, unprefixed name (still
+                   styled for back-compat -- deprecated, removed at 1.0;
+                   this generic name is the exact collision stream_weaver-lyb
+                   was filed for, e.g. a real app's own ".sidebar-section").
+                   "sw-sidebar-section" is the documented stable hook
+                   (stream_weaver-oeo) -- apply it via `class: "sw-sidebar-section"`
+                   on any div/text call; there is no dedicated component for
+                   this utility class. */
+                .sidebar-section, .sw-sidebar-section {
                   background: var(--sw-color-bg-card);
                   border: 1px solid var(--sw-color-border);
                   border-radius: var(--sw-radius-md);
                   padding: var(--sw-spacing-md);
                 }
 
-                .sidebar-section h4 {
+                .sidebar-section h4, .sw-sidebar-section h4 {
                   margin: 0 0 var(--sw-spacing-xs) 0;
                   color: var(--sw-color-text-muted);
                   font-size: 11px;
@@ -2536,18 +2551,18 @@ module StreamWeaver
                   letter-spacing: 0.05em;
                 }
 
-                .sidebar-section p {
+                .sidebar-section p, .sw-sidebar-section p {
                   margin: 0;
                   color: var(--sw-color-text);
                   font-size: var(--sw-font-size-sm);
                 }
 
-                .sidebar-section a {
+                .sidebar-section a, .sw-sidebar-section a {
                   color: var(--sw-color-primary);
                   text-decoration: none;
                 }
 
-                .sidebar-section a:hover {
+                .sidebar-section a:hover, .sw-sidebar-section a:hover {
                   text-decoration: underline;
                 }
 

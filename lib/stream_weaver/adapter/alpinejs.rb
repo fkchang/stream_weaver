@@ -659,12 +659,19 @@ module StreamWeaver
       def button_style_attrs(options, loading = true)
         style_option = options[:style]
         attrs = if style_option == :none || style_option.is_a?(String)
-          { class: options[:class], style: (style_option if style_option.is_a?(String)) }.compact
+          { class: ["sw-button", options[:class]].compact.join(" "), style: (style_option if style_option.is_a?(String)) }.compact
         else
           style_class = style_option == :secondary ? "secondary" : "primary"
-          classes = ["btn", "btn-#{style_class}"]
+          # "btn"/"btn-primary" etc. are the legacy, unprefixed hooks (still
+          # emitted for back-compat -- deprecated, removed at 1.0);
+          # "sw-button" is the documented stable hook (stream_weaver-oeo /
+          # stream_weaver-lyb). No CSS rule targets sw-button itself --
+          # styling stays keyed off .btn* so style: :none's "no framework
+          # look" contract is unaffected by this identifying hook.
+          classes = ["sw-button", "btn", "btn-#{style_class}"]
           classes << "btn-#{options[:variant]}" if %i[quiet outline].include?(options[:variant])
           classes << "btn-sm" if options[:size] == :sm
+          classes << options[:class] if options[:class]
           { class: classes.join(" ") }
         end
         attrs[:class] = [attrs[:class], "sw-no-loading-indicator"].compact.join(" ") unless loading
@@ -1440,7 +1447,12 @@ module StreamWeaver
         header_classes = ["sw-board__lane-header"]
         header_classes << "sw-board__lane-header--#{component.tone}" if component.tone
 
-        view.div(class: "sw-board__lane") do
+        lane_classes = ["sw-board__lane"]
+        lane_classes << component.options[:class] if component.options[:class]
+        attrs = { class: lane_classes.join(" ") }
+        attrs[:style] = component.options[:style] if component.options[:style]
+
+        view.div(**attrs) do
           view.div(class: header_classes.join(" ")) do
             view.div(class: "sw-board__lane-heading") do
               view.div(class: "sw-board__lane-title") { component.title }
@@ -1493,6 +1505,7 @@ module StreamWeaver
         table_classes << "sw-table--alternating" if options[:alternating]
         table_classes << "sw-table--hover" if options[:hover]
         table_classes << "sw-table--sticky-header" if options[:sticky_header]
+        table_classes << options[:class] if options[:class]
 
         columns = options[:columns] || []
         component_columns = options[:component_columns] || []
@@ -1523,7 +1536,9 @@ module StreamWeaver
 
         view.div(**wrapper_attrs) do
           alpine_data = options[:sortable] ? "{ sortCol: null, sortAsc: true }" : nil
-          table_attrs = { class: table_classes.join(" "), style: "width: 100%; border-collapse: collapse;" }
+          table_style = "width: 100%; border-collapse: collapse;"
+          table_style += " #{options[:style]}" if options[:style]
+          table_attrs = { class: table_classes.join(" "), style: table_style }
           table_attrs["x-data"] = alpine_data if options[:sortable]
           table_attrs[:id] = table_id if table_id
 
@@ -1788,17 +1803,23 @@ module StreamWeaver
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_status_badge(view, status, reasoning, state)
-        icon, label, css_class = case status
-        when :strong then ["🟢", "Strong", "status-badge-strong"]
-        when :maybe then ["🟡", "Maybe", "status-badge-maybe"]
-        when :skip then ["🔴", "Skip", "status-badge-skip"]
-        else ["⚪", "Unknown", "status-badge-unknown"]
+        icon, label, css_class, sw_class = case status
+        when :strong then ["🟢", "Strong", "status-badge-strong", "sw-status-badge--strong"]
+        when :maybe then ["🟡", "Maybe", "status-badge-maybe", "sw-status-badge--maybe"]
+        when :skip then ["🔴", "Skip", "status-badge-skip", "sw-status-badge--skip"]
+        else ["⚪", "Unknown", "status-badge-unknown", "sw-status-badge--unknown"]
         end
 
-        view.span(class: "status-badge #{css_class}") do
-          view.span(class: "status-badge-icon") { icon }
-          view.span(class: "status-badge-label") { label }
-          view.span(class: "status-badge-reasoning") { " — #{reasoning}" }
+        # "status-badge"/"status-badge-*" are the legacy, unprefixed hooks
+        # (still emitted for back-compat -- deprecated, removed at 1.0;
+        # this is the exact collision stream_weaver-lyb was filed for --
+        # tyrion's own real CSS declares its own `.status-badge`).
+        # "sw-status-badge"/"sw-status-badge--*" are the documented stable
+        # hooks (stream_weaver-oeo).
+        view.span(class: "status-badge sw-status-badge #{css_class} #{sw_class}") do
+          view.span(class: "status-badge-icon sw-status-badge__icon") { icon }
+          view.span(class: "status-badge-label sw-status-badge__label") { label }
+          view.span(class: "status-badge-reasoning sw-status-badge__reasoning") { " — #{reasoning}" }
         end
       end
 
@@ -2391,10 +2412,16 @@ module StreamWeaver
       end
 
       def render_nav_item(view, component, state)
+        classes = ["sw-navbar-item"]
+        classes << "sw-navbar-item-active" if component.active?
+        classes << component.options[:class] if component.options[:class]
+        attrs = { class: classes.join(" ") }
+        attrs[:style] = component.options[:style] if component.options[:style]
+
         if component.active?
-          view.span(class: "sw-navbar-item sw-navbar-item-active") { component.label }
+          view.span(**attrs) { component.label }
         else
-          view.a(href: component.href, class: "sw-navbar-item") { component.label }
+          view.a(**attrs.merge(href: component.href)) { component.label }
         end
       end
 
@@ -2441,8 +2468,10 @@ module StreamWeaver
           )
 
           # Modal dialog
-          view.div(
-            class: "sw-modal #{size_class}",
+          dialog_classes = ["sw-modal", size_class]
+          dialog_classes << component.options[:class] if component.options[:class]
+          dialog_attrs = {
+            class: dialog_classes.join(" "),
             "x-show" => "open",
             "x-cloak" => true,
             "x-transition:enter" => "sw-transition-modal-enter",
@@ -2452,7 +2481,10 @@ module StreamWeaver
             "x-transition:leave-start" => "sw-transition-modal-leave-start",
             "x-transition:leave-end" => "sw-transition-modal-leave-end",
             "@click.stop" => ""  # Prevent clicks inside modal from closing it
-          ) do
+          }
+          dialog_attrs[:style] = component.options[:style] if component.options[:style]
+
+          view.div(**dialog_attrs) do
             # Header with title and close button
             if component.title
               view.div(class: "sw-modal-header") do

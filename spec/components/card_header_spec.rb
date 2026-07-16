@@ -6,16 +6,16 @@ RSpec.describe StreamWeaver::Components::CardHeader do
   let(:state) { {} }
 
   describe "plain call (no badge/meta)" do
-    it "renders exactly as before: plain div + h4, no new classes/layout" do
+    it "renders a plain div (+ sw-card-header hook) + h4, no other new classes/layout" do
       header = described_class.new("Section Title")
-      expect(mock_view).to receive(:div).with(class: "card-header").and_yield
+      expect(mock_view).to receive(:div).with(class: "card-header sw-card-header").and_yield
       expect(mock_view).to receive(:h4).and_yield
       header.render(mock_view, state)
     end
 
     it "renders plain div with no h4 when no content given" do
       header = described_class.new
-      expect(mock_view).to receive(:div).with(class: "card-header").and_yield
+      expect(mock_view).to receive(:div).with(class: "card-header sw-card-header").and_yield
       expect(mock_view).not_to receive(:h4)
       header.render(mock_view, state)
     end
@@ -25,7 +25,7 @@ RSpec.describe StreamWeaver::Components::CardHeader do
     it "renders a flex-row layout with badge, title (as h4), and meta" do
       header = described_class.new("C1 — Title", badge: "C1", meta: "scheduler secretary")
 
-      expect(mock_view).to receive(:div).with(class: "card-header card-header--badged").and_yield
+      expect(mock_view).to receive(:div).with(class: "card-header sw-card-header card-header--badged").and_yield
       expect(mock_view).to receive(:span).with(class: "card-header__badge").and_yield
       expect(mock_view).to receive(:h4).with(class: "card-header__title").and_yield
       expect(mock_view).to receive(:span).with(class: "card-header__meta").and_yield
@@ -36,7 +36,7 @@ RSpec.describe StreamWeaver::Components::CardHeader do
     it "renders only the badge when meta is not given" do
       header = described_class.new("Title", badge: "C1")
 
-      expect(mock_view).to receive(:div).with(class: "card-header card-header--badged").and_yield
+      expect(mock_view).to receive(:div).with(class: "card-header sw-card-header card-header--badged").and_yield
       expect(mock_view).to receive(:span).with(class: "card-header__badge").and_yield
       expect(mock_view).to receive(:h4).with(class: "card-header__title").and_yield
       expect(mock_view).not_to receive(:span).with(class: "card-header__meta")
@@ -47,7 +47,7 @@ RSpec.describe StreamWeaver::Components::CardHeader do
     it "renders only the meta when badge is not given" do
       header = described_class.new("Title", meta: "scheduler secretary")
 
-      expect(mock_view).to receive(:div).with(class: "card-header card-header--badged").and_yield
+      expect(mock_view).to receive(:div).with(class: "card-header sw-card-header card-header--badged").and_yield
       expect(mock_view).not_to receive(:span).with(class: "card-header__badge")
       expect(mock_view).to receive(:h4).with(class: "card-header__title").and_yield
       expect(mock_view).to receive(:span).with(class: "card-header__meta").and_yield

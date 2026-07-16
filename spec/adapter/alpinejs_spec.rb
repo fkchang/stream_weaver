@@ -301,7 +301,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
     it "renders button with HTMX attributes" do
       expect(mock_view).to receive(:button).with(
         hash_including(
-          class: "btn btn-primary",
+          class: "sw-button btn btn-primary",
           "hx-post" => "/action/btn_submit_1",
           "hx-include" => "[x-model]",
           "hx-target" => "#app-container",
@@ -314,7 +314,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
 
     it "uses primary style by default" do
       expect(mock_view).to receive(:button).with(
-        hash_including(class: "btn btn-primary")
+        hash_including(class: "sw-button btn btn-primary")
       ).and_yield
 
       adapter.render_button(mock_view, "btn_submit_1", "Submit", {})
@@ -322,7 +322,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
 
     it "uses secondary style when specified" do
       expect(mock_view).to receive(:button).with(
-        hash_including(class: "btn btn-secondary")
+        hash_including(class: "sw-button btn btn-secondary")
       ).and_yield
 
       adapter.render_button(mock_view, "btn_submit_1", "Submit", { style: :secondary })
@@ -346,7 +346,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
 
     it "adds btn-sm class when size: :sm" do
       expect(mock_view).to receive(:button).with(
-        hash_including(class: "btn btn-primary btn-sm")
+        hash_including(class: "sw-button btn btn-primary btn-sm")
       ).and_yield
 
       adapter.render_button(mock_view, "btn_submit_1", "Submit", { size: :sm })
@@ -354,7 +354,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
 
     it "omits size class by default (:md)" do
       expect(mock_view).to receive(:button).with(
-        hash_including(class: "btn btn-primary")
+        hash_including(class: "sw-button btn btn-primary")
       ).and_yield
 
       adapter.render_button(mock_view, "btn_submit_1", "Submit", {})
@@ -362,7 +362,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
 
     it "adds btn-quiet class when variant: :quiet" do
       expect(mock_view).to receive(:button).with(
-        hash_including(class: "btn btn-primary btn-quiet")
+        hash_including(class: "sw-button btn btn-primary btn-quiet")
       ).and_yield
 
       adapter.render_button(mock_view, "btn_submit_1", "Submit", { variant: :quiet })
@@ -370,7 +370,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
 
     it "adds btn-outline class when variant: :outline" do
       expect(mock_view).to receive(:button).with(
-        hash_including(class: "btn btn-primary btn-outline")
+        hash_including(class: "sw-button btn btn-primary btn-outline")
       ).and_yield
 
       adapter.render_button(mock_view, "btn_submit_1", "Submit", { variant: :outline })
@@ -378,7 +378,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
 
     it "composes size, variant, and style together" do
       expect(mock_view).to receive(:button).with(
-        hash_including(class: "btn btn-secondary btn-outline btn-sm")
+        hash_including(class: "sw-button btn btn-secondary btn-outline btn-sm")
       ).and_yield
 
       adapter.render_button(mock_view, "btn_submit_1", "Submit", { style: :secondary, variant: :outline, size: :sm })

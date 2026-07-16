@@ -210,7 +210,7 @@ RSpec.describe StreamWeaver::Components do
       it "renders button element" do
         expect(mock_view).to receive(:button).with(
           hash_including(
-            class: "btn btn-primary",
+            class: "sw-button btn btn-primary",
             "hx-post" => "/action/btn_submit_1",
             "hx-include" => "[x-model]",
             "hx-target" => "#app-container",
@@ -221,13 +221,13 @@ RSpec.describe StreamWeaver::Components do
       end
 
       it "applies primary style by default" do
-        expect(mock_view).to receive(:button).with(hash_including(class: "btn btn-primary")).and_yield
+        expect(mock_view).to receive(:button).with(hash_including(class: "sw-button btn btn-primary")).and_yield
         button.render(mock_view, state)
       end
 
       it "applies secondary style when specified" do
         button = described_class.new("Cancel", 1, style: :secondary)
-        expect(mock_view).to receive(:button).with(hash_including(class: "btn btn-secondary")).and_yield
+        expect(mock_view).to receive(:button).with(hash_including(class: "sw-button btn btn-secondary")).and_yield
         button.render(mock_view, state)
       end
     end
@@ -700,13 +700,13 @@ RSpec.describe StreamWeaver::Components do
       let(:card) { described_class.new }
 
       it "renders div element with card class" do
-        expect(mock_view).to receive(:div).with(class: "card").and_yield
+        expect(mock_view).to receive(:div).with(class: "card sw-card").and_yield
         card.render(mock_view, state)
       end
 
       it "combines card class with custom class" do
         card_with_class = described_class.new(class: "question-card")
-        expect(mock_view).to receive(:div).with(class: "card question-card").and_yield
+        expect(mock_view).to receive(:div).with(class: "card sw-card question-card").and_yield
         card_with_class.render(mock_view, state)
       end
 

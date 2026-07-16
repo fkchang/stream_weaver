@@ -8,43 +8,43 @@ RSpec.describe StreamWeaver::Components::Card do
   describe "depth option" do
     it "renders default card without depth class when no depth specified" do
       card = described_class.new
-      expect(mock_view).to receive(:div).with(class: "card").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card").and_yield
       card.render(mock_view, state)
     end
 
     it "renders hero depth with sw-card--hero class" do
       card = described_class.new(depth: :hero)
-      expect(mock_view).to receive(:div).with(class: "card sw-card--hero").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card sw-card--hero").and_yield
       card.render(mock_view, state)
     end
 
     it "renders elevated depth with sw-card--elevated class" do
       card = described_class.new(depth: :elevated)
-      expect(mock_view).to receive(:div).with(class: "card sw-card--elevated").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card sw-card--elevated").and_yield
       card.render(mock_view, state)
     end
 
     it "renders default depth with sw-card--default class" do
       card = described_class.new(depth: :default)
-      expect(mock_view).to receive(:div).with(class: "card sw-card--default").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card sw-card--default").and_yield
       card.render(mock_view, state)
     end
 
     it "renders recessed depth with sw-card--recessed class" do
       card = described_class.new(depth: :recessed)
-      expect(mock_view).to receive(:div).with(class: "card sw-card--recessed").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card sw-card--recessed").and_yield
       card.render(mock_view, state)
     end
 
     it "renders glass depth with sw-card--glass class" do
       card = described_class.new(depth: :glass)
-      expect(mock_view).to receive(:div).with(class: "card sw-card--glass").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card sw-card--glass").and_yield
       card.render(mock_view, state)
     end
 
     it "ignores invalid depth values" do
       card = described_class.new(depth: :invalid)
-      expect(mock_view).to receive(:div).with(class: "card").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card").and_yield
       card.render(mock_view, state)
     end
 
@@ -57,26 +57,26 @@ RSpec.describe StreamWeaver::Components::Card do
   describe "accent option" do
     it "renders accent :a with sw-card--accent-a class" do
       card = described_class.new(accent: :a)
-      expect(mock_view).to receive(:div).with(class: "card sw-card--accent-a").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card sw-card--accent-a").and_yield
       card.render(mock_view, state)
     end
 
     it "renders accent :b with sw-card--accent-b class" do
       card = described_class.new(accent: :b)
-      expect(mock_view).to receive(:div).with(class: "card sw-card--accent-b").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card sw-card--accent-b").and_yield
       card.render(mock_view, state)
     end
 
     it "renders accent :c with sw-card--accent-c class" do
       card = described_class.new(accent: :c)
-      expect(mock_view).to receive(:div).with(class: "card sw-card--accent-c").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card sw-card--accent-c").and_yield
       card.render(mock_view, state)
     end
 
     it "renders custom CSS color accent with inline style" do
       card = described_class.new(accent: "#ff6600")
       expect(mock_view).to receive(:div).with(
-        class: "card sw-card--accent",
+        class: "card sw-card sw-card--accent",
         style: "border-left-color: #ff6600;"
       ).and_yield
       card.render(mock_view, state)
@@ -91,14 +91,14 @@ RSpec.describe StreamWeaver::Components::Card do
   describe "label option" do
     it "renders a corner label span when label is provided" do
       card = described_class.new(label: "RISK")
-      expect(mock_view).to receive(:div).with(class: "card", style: "position: relative;").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card", style: "position: relative;").and_yield
       expect(mock_view).to receive(:span).with(class: "sw-card__label").and_yield
       card.render(mock_view, state)
     end
 
     it "does not render label span when label is nil" do
       card = described_class.new
-      expect(mock_view).to receive(:div).with(class: "card").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card").and_yield
       expect(mock_view).not_to receive(:span).with(class: "sw-card__label")
       card.render(mock_view, state)
     end
@@ -113,7 +113,7 @@ RSpec.describe StreamWeaver::Components::Card do
     it "renders depth + accent together" do
       card = described_class.new(depth: :hero, accent: :a)
       expect(mock_view).to receive(:div).with(
-        class: "card sw-card--hero sw-card--accent-a"
+        class: "card sw-card sw-card--hero sw-card--accent-a"
       ).and_yield
       card.render(mock_view, state)
     end
@@ -121,7 +121,7 @@ RSpec.describe StreamWeaver::Components::Card do
     it "renders depth + accent + custom class" do
       card = described_class.new(depth: :elevated, accent: :b, class: "my-card")
       expect(mock_view).to receive(:div).with(
-        class: "card sw-card--elevated sw-card--accent-b my-card"
+        class: "card sw-card sw-card--elevated sw-card--accent-b my-card"
       ).and_yield
       card.render(mock_view, state)
     end
@@ -132,7 +132,7 @@ RSpec.describe StreamWeaver::Components::Card do
       card.children = [child]
 
       expect(mock_view).to receive(:div).with(
-        class: "card sw-card--recessed",
+        class: "card sw-card sw-card--recessed",
         style: "position: relative;"
       ).and_yield
       expect(mock_view).to receive(:span).with(class: "sw-card__label").and_yield
@@ -153,7 +153,7 @@ RSpec.describe StreamWeaver::Components::Card do
 
     it "still accepts class: option" do
       card = described_class.new(class: "question-card")
-      expect(mock_view).to receive(:div).with(class: "card question-card").and_yield
+      expect(mock_view).to receive(:div).with(class: "card sw-card question-card").and_yield
       card.render(mock_view, state)
     end
 
