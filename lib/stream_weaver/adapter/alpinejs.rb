@@ -1454,6 +1454,7 @@ module StreamWeaver
 
         view.div(**attrs) do
           view.div(class: header_classes.join(" ")) do
+            render_icon_hook(view, component.icon, "sw-board__lane-icon") if component.icon
             view.div(class: "sw-board__lane-heading") do
               view.div(class: "sw-board__lane-title") { component.title }
               view.div(class: "sw-board__lane-subtitle") { component.subtitle } if component.subtitle
@@ -1462,6 +1463,63 @@ module StreamWeaver
           end
           view.div(class: "sw-board__lane-body") do
             component.children.each { |child| child.render(view, state) }
+          end
+        end
+      end
+
+      # Renders an icon/glyph slot shared by Lane and Topbar: a URL/path
+      # (local_asset result, /sw-asset/..., http(s)/data URI) becomes an
+      # <img>; anything else (an emoji or short text glyph) is rendered as
+      # plain text. Both branches carry the same hook class so a theming
+      # stylesheet can size/position either without caring which it got.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param icon [String] emoji/glyph text, or an image URL/path
+      # @param hook_class [String] the sw- hook class to apply
+      # @return [void] Renders to view
+      def render_icon_hook(view, icon, hook_class)
+        if icon.match?(%r{\A(https?://|/|data:)}i)
+          view.img(src: icon, alt: "", class: hook_class)
+        else
+          view.span(class: hook_class) { icon }
+        end
+      end
+
+      # Render the app-chrome topbar: brand (icon + wordmark), breadcrumb
+      # trail, and trailing block content.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::Topbar]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_topbar(view, component, state)
+        inject_topbar_css(view)
+
+        css_classes = ["sw-topbar", component.options[:class]].compact.join(" ")
+        attrs = { class: css_classes }
+        attrs[:style] = component.options[:style] if component.options[:style]
+
+        view.div(**attrs) do
+          if component.icon || component.wordmark
+            view.div(class: "sw-topbar-brand") do
+              render_icon_hook(view, component.icon, "sw-topbar-icon") if component.icon
+              view.div(class: "sw-topbar-wordmark") { component.wordmark } if component.wordmark
+            end
+          end
+          if component.breadcrumbs.any?
+            view.div(class: "sw-topbar-breadcrumbs") do
+              component.breadcrumbs.each_with_index do |crumb, index|
+                view.span(class: "sw-topbar-separator") { "·" } if index.positive?
+                crumb_classes = ["sw-topbar-crumb"]
+                crumb_classes << "sw-topbar-crumb--active" if index == component.breadcrumbs.size - 1
+                view.span(class: crumb_classes.join(" ")) { crumb }
+              end
+            end
+          end
+          unless component.children.empty?
+            view.div(class: "sw-topbar-trailing") do
+              component.children.each { |child| child.render(view, state) }
+            end
           end
         end
       end
@@ -4365,6 +4423,10 @@ module StreamWeaver
         inject_component_css(view, :board, board_css)
       end
 
+      def inject_topbar_css(view)
+        inject_component_css(view, :topbar, topbar_css)
+      end
+
       def inject_text_tone_css(view)
         inject_component_css(view, :text_tone, text_tone_css)
       end
@@ -5020,6 +5082,17 @@ module StreamWeaver
             border-bottom: 1px solid var(--sw-color-border, #e0e0e0);
           }
 
+          .sw-board__lane-icon {
+            width: 1.1em;
+            height: 1.1em;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            font-size: 1.1em;
+            line-height: 1;
+            object-fit: contain;
+          }
+
           .sw-board__lane-heading {
             display: flex;
             flex-direction: column;
@@ -5088,6 +5161,69 @@ module StreamWeaver
           .sw-board__card--warning { border-left: 3px solid var(--sw-warning, #d97706); }
           .sw-board__card--error   { border-left: 3px solid var(--sw-error, #dc2626); }
           .sw-board__card--info    { border-left: 3px solid var(--sw-info, #2563eb); }
+        CSS
+      end
+
+      def topbar_css
+        <<~CSS
+          /* ===========================================
+             Topbar (app chrome) Styles (sw- prefix, stream_weaver-oeo)
+             =========================================== */
+          .sw-topbar {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.6rem 1.25rem;
+            background: var(--sw-color-bg-card, #ffffff);
+            border-bottom: 1px solid var(--sw-color-border, #e0e0e0);
+          }
+
+          .sw-topbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+          }
+
+          .sw-topbar-icon {
+            width: 1.6em;
+            height: 1.6em;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            font-size: 1.6em;
+            line-height: 1;
+            object-fit: contain;
+          }
+
+          .sw-topbar-wordmark {
+            font-weight: 700;
+            font-size: 1.1rem;
+          }
+
+          .sw-topbar-breadcrumbs {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: var(--sw-font-size-sm, 0.875rem);
+            color: var(--sw-color-text-muted, #6b7280);
+            min-width: 0;
+          }
+
+          .sw-topbar-separator {
+            opacity: 0.6;
+          }
+
+          .sw-topbar-crumb--active {
+            color: var(--sw-color-text, #111111);
+            font-weight: 600;
+          }
+
+          .sw-topbar-trailing {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-left: auto;
+          }
         CSS
       end
 

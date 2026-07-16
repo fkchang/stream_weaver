@@ -249,6 +249,10 @@ module StreamWeaver
       with_container(Components::Navbar.new(**options), &block)
     end
 
+    def topbar(**options, &block)
+      with_container(Components::Topbar.new(**options), &block)
+    end
+
     def nav_item(label, href: nil, active: false, **options)
       components << Components::NavItem.new(label, href: href, active: active, **options)
     end

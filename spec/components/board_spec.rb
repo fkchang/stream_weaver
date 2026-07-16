@@ -27,6 +27,14 @@ RSpec.describe StreamWeaver::Components::Lane do
     expect(described_class.new("To Do", subtitle: "Pending").subtitle).to eq("Pending")
   end
 
+  it "stores an icon" do
+    expect(described_class.new("To Do", icon: "🐉").icon).to eq("🐉")
+  end
+
+  it "has a nil icon by default" do
+    expect(described_class.new("To Do").icon).to be_nil
+  end
+
   it "derives count from children, never drifting from what renders" do
     lane = described_class.new("To Do")
     lane.children = [StreamWeaver::Components::BoardCard.new, StreamWeaver::Components::BoardCard.new]
@@ -167,5 +175,106 @@ RSpec.describe "board HTML rendering" do
     expect(html).to include("sw-board__card--success")
     expect(html).to include("done-card")
     expect(html).to include("opacity: .8;")
+  end
+
+  it "renders a lane's icon: as a glyph before the title when it's plain text" do
+    board = StreamWeaver::Components::Board.new
+    lane = StreamWeaver::Components::Lane.new("Blocked Frontier", icon: "🐉")
+    board.children = [lane]
+
+    html = render_html(board)
+    expect(html).to match(/<span class="sw-board__lane-icon">🐉<\/span>.*sw-board__lane-heading/m)
+  end
+
+  it "renders a lane's icon: as an <img> when it looks like a URL/path" do
+    board = StreamWeaver::Components::Board.new
+    lane = StreamWeaver::Components::Lane.new("Blocked Frontier", icon: "/sw-asset/abc123/dragon.png")
+    board.children = [lane]
+
+    html = render_html(board)
+    expect(html).to include('<img src="/sw-asset/abc123/dragon.png" alt="" class="sw-board__lane-icon"')
+  end
+
+  it "omits the lane icon element entirely when icon: is absent" do
+    board = StreamWeaver::Components::Board.new
+    lane = StreamWeaver::Components::Lane.new("Queue")
+    board.children = [lane]
+
+    html = render_html(board)
+    # The .sw-board__lane-icon rule is always in the injected stylesheet;
+    # only the <span>/<img> element itself is conditional on icon:.
+    expect(html).not_to match(/<(span|img)[^>]*class="sw-board__lane-icon/)
+  end
+end
+
+RSpec.describe "topbar/nav_item DSL and rendering" do
+  let(:app) { StreamWeaver::App.new("Test") {} }
+  let(:adapter) { StreamWeaver::Adapter::AlpineJS.new }
+  let(:state) { {} }
+
+  def render_html(component)
+    StreamWeaver::ComponentRenderer.render_html(adapter, [component], state)
+  end
+
+  it "adds a Topbar component with brand/breadcrumbs stored" do
+    app.topbar(icon: "🦁", wordmark: "TYRION", breadcrumbs: ["field-ops", "warroom"]) {}
+
+    topbar = app.components.first
+    expect(topbar).to be_a(StreamWeaver::Components::Topbar)
+    expect(topbar.icon).to eq("🦁")
+    expect(topbar.wordmark).to eq("TYRION")
+    expect(topbar.breadcrumbs).to eq(["field-ops", "warroom"])
+  end
+
+  it "captures trailing block content as children" do
+    app.topbar(wordmark: "TYRION") do
+      badge("main")
+    end
+
+    topbar = app.components.first
+    expect(topbar.children.first).to be_a(StreamWeaver::Components::Badge)
+  end
+
+  it "defaults to no breadcrumbs and no icon" do
+    topbar = StreamWeaver::Components::Topbar.new(wordmark: "TYRION")
+    expect(topbar.breadcrumbs).to eq([])
+    expect(topbar.icon).to be_nil
+  end
+
+  it "renders the brand (icon + wordmark), breadcrumb trail with the last crumb active, and trailing content" do
+    topbar = StreamWeaver::Components::Topbar.new(icon: "🦁", wordmark: "TYRION", breadcrumbs: ["field-ops", "warroom-components"])
+    topbar.children = [StreamWeaver::Components::Badge.new("✗ 2")]
+
+    html = render_html(topbar)
+    expect(html).to include("sw-topbar-brand")
+    expect(html).to include('<span class="sw-topbar-icon">🦁</span>')
+    expect(html).to include('<div class="sw-topbar-wordmark">TYRION</div>')
+    expect(html).to include("sw-topbar-breadcrumbs")
+    expect(html).to include('<span class="sw-topbar-crumb">field-ops</span>')
+    expect(html).to include('<span class="sw-topbar-crumb sw-topbar-crumb--active">warroom-components</span>')
+    expect(html).to include("sw-topbar-separator")
+    expect(html).to include("sw-topbar-trailing")
+  end
+
+  it "renders an image icon when icon: looks like a URL/path" do
+    topbar = StreamWeaver::Components::Topbar.new(icon: "/sw-asset/xyz/crest.png", wordmark: "TYRION")
+    html = render_html(topbar)
+    expect(html).to include('<img src="/sw-asset/xyz/crest.png" alt="" class="sw-topbar-icon"')
+  end
+
+  it "omits the breadcrumbs and trailing wrapper when neither is given" do
+    topbar = StreamWeaver::Components::Topbar.new(wordmark: "TYRION")
+    html = render_html(topbar)
+    # Both class names also appear in the always-injected stylesheet;
+    # only the <div> element itself is conditional.
+    expect(html).not_to match(/<div[^>]*class="sw-topbar-breadcrumbs/)
+    expect(html).not_to match(/<div[^>]*class="sw-topbar-trailing/)
+  end
+
+  it "forwards class:/style: onto the topbar container" do
+    topbar = StreamWeaver::Components::Topbar.new(wordmark: "TYRION", class: "tyrion-topbar", style: "height: 60px;")
+    html = render_html(topbar)
+    expect(html).to include("sw-topbar tyrion-topbar")
+    expect(html).to include("height: 60px;")
   end
 end

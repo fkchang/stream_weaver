@@ -41,6 +41,7 @@ every element you'd want to skin. The contract:
 | Lane subtitle | `.sw-board__lane-subtitle` |
 | Lane card count | `.sw-board__lane-count` |
 | Lane body (card stack) | `.sw-board__lane-body` |
+| Lane icon (before the title) | `.sw-board__lane-icon` |
 | Board card | `.sw-board__card`, `.sw-board__card--{tone}` |
 
 ```css
@@ -51,6 +52,13 @@ every element you'd want to skin. The contract:
 
 `tone:` on `lane`/`board_card` is one of `%i[neutral success warning error info]`.
 `board`, `lane`, and `board_card` all accept `class:`/`style:`.
+
+`lane` accepts `icon:` (stream_weaver-oeo) -- an emoji/glyph string, or a
+URL/path (an `App#local_asset` result, `/sw-asset/...`, or any http(s)/data
+URI), rendered before the title. A value is treated as an image when it
+starts with `http://`, `https://`, `/`, or `data:`; anything else renders
+as plain text/emoji. Replaces the `title_prefix` string-concatenation
+workaround (design-parity-fights.md) that both tyrion parity slices used.
 
 ### Sidebar
 
@@ -83,6 +91,43 @@ every element you'd want to skin. The contract:
 
 Both `navbar` and `nav_item` accept `class:`/`style:` (nav_item forwarding
 added in stream_weaver-oeo).
+
+### Topbar
+
+App-chrome header bar: brand (icon/glyph + wordmark), a breadcrumb trail,
+and trailing block content (badges/pills/whatever you render in the
+block). Added in stream_weaver-oeo to replace the hand-rolled
+div/phrase topbar both tyrion parity slices needed (design-parity-
+fights.md finding #6).
+
+| Element | Hook |
+|---|---|
+| Container | `.sw-topbar` |
+| Brand wrapper | `.sw-topbar-brand` |
+| Brand icon | `.sw-topbar-icon` |
+| Wordmark | `.sw-topbar-wordmark` |
+| Breadcrumb trail | `.sw-topbar-breadcrumbs` |
+| Breadcrumb item | `.sw-topbar-crumb`, `.sw-topbar-crumb--active` (last item) |
+| Breadcrumb separator | `.sw-topbar-separator` |
+| Trailing content | `.sw-topbar-trailing` |
+
+```css
+.sw-topbar { background: #1a1208; border-bottom: 1px solid #4a3520; }
+.sw-topbar-wordmark { font-family: 'Cinzel', serif; letter-spacing: 0.1em; }
+```
+
+```ruby
+topbar(icon: "🦁", wordmark: "TYRION", breadcrumbs: ["field-ops", "warroom"]) do
+  badge("main")
+end
+```
+
+`icon:` follows the same URL-vs-glyph detection as `lane`'s `icon:`.
+`breadcrumbs:` is a plain array of strings; the last one gets
+`.sw-topbar-crumb--active`. The brand wrapper, breadcrumb trail, and
+trailing wrapper are each omitted from the DOM when they have nothing to
+render (no icon/wordmark, empty breadcrumbs, or an empty block).
+`topbar` accepts `class:`/`style:`.
 
 ### AppShell
 

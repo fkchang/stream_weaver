@@ -807,14 +807,19 @@ module StreamWeaver
     #
     # @option tone [Symbol] one of BOARD_TONES -- colors the lane header band
     # @option subtitle [String] small text under the title (e.g. "In Progress")
+    # @option icon [String] emoji/glyph, or a URL/path (local_asset or
+    #   /sw-asset/... http(s)/data URI) rendered as an image -- shown in the
+    #   header before the title (stream_weaver-oeo, replaces the
+    #   title-prefix workaround design-parity-fights.md catalogued)
     class Lane < Base
       attr_accessor :children
-      attr_reader :title, :tone, :subtitle, :options
+      attr_reader :title, :tone, :subtitle, :icon, :options
 
-      def initialize(title, tone: nil, subtitle: nil, **options)
+      def initialize(title, tone: nil, subtitle: nil, icon: nil, **options)
         @title = title
         @tone = tone if BOARD_TONES.include?(tone)
         @subtitle = subtitle
+        @icon = icon
         @options = options
         @children = []
       end
@@ -1674,6 +1679,34 @@ module StreamWeaver
 
       def render(view, state)
         view.adapter.render_navbar(view, self, state)
+      end
+    end
+
+    # App-chrome header bar: brand (icon/glyph + wordmark), breadcrumb
+    # trail, and trailing content (block children -- e.g. badge/pill
+    # status). Replaces the hand-rolled tc-topbar div/phrase soup both
+    # tyrion parity slices needed (stream_weaver-oeo, design-parity-
+    # fights.md finding #6).
+    #
+    # @option icon [String] emoji/glyph, or a URL/path rendered as an
+    #   image (same detection as Lane#icon)
+    # @option wordmark [String] brand name text
+    # @option breadcrumbs [Array<String>] trail items; the last one is
+    #   marked active
+    class Topbar < Base
+      attr_accessor :children
+      attr_reader :icon, :wordmark, :breadcrumbs, :options
+
+      def initialize(icon: nil, wordmark: nil, breadcrumbs: [], **options)
+        @icon = icon
+        @wordmark = wordmark
+        @breadcrumbs = Array(breadcrumbs)
+        @options = options
+        @children = []
+      end
+
+      def render(view, state)
+        view.adapter.render_topbar(view, self, state)
       end
     end
 
