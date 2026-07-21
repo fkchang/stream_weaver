@@ -190,7 +190,7 @@ module StreamWeaver
                   --primary: var(--sw-color-primary, oklch(0.205 0 0));
                   --primary-foreground: oklch(0.985 0 0);
                   --secondary: var(--sw-color-secondary, oklch(0.97 0 0));
-                  --secondary-foreground: oklch(0.205 0 0);
+                  --secondary-foreground: var(--sw-color-secondary-foreground, oklch(0.205 0 0));
                   --muted: var(--sw-color-bg-elevated, oklch(0.97 0 0));
                   --muted-foreground: var(--sw-color-text-muted, oklch(0.556 0 0));
                   --accent: var(--sw-color-accent, oklch(0.97 0 0));
@@ -228,6 +228,7 @@ module StreamWeaver
                   --popover-foreground: var(--sw-color-text, oklch(0.145 0 0));
                   --primary: var(--sw-color-primary, oklch(0.205 0 0));
                   --secondary: var(--sw-color-secondary, oklch(0.97 0 0));
+                  --secondary-foreground: var(--sw-color-secondary-foreground, oklch(0.205 0 0));
                   --muted: var(--sw-color-bg-elevated, oklch(0.97 0 0));
                   --muted-foreground: var(--sw-color-text-muted, oklch(0.556 0 0));
                   --accent: var(--sw-color-accent, oklch(0.97 0 0));
@@ -348,6 +349,7 @@ module StreamWeaver
                   /* Colors - Secondary */
                   --sw-color-secondary: #333333;
                   --sw-color-secondary-hover: #1a1a1a;
+                  --sw-color-secondary-foreground: #ffffff;
 
                   /* Colors - Accent (teal for links/highlights) */
                   --sw-color-accent: #0d9488;
@@ -431,6 +433,7 @@ module StreamWeaver
 
                   --sw-color-secondary: #333333;
                   --sw-color-secondary-hover: #1a1a1a;
+                  --sw-color-secondary-foreground: #ffffff;
 
                   --sw-color-accent: #0d9488;
                   --sw-color-accent-light: #e6fffa;
@@ -514,6 +517,7 @@ module StreamWeaver
 
                   --sw-color-secondary: #4a4a4a;
                   --sw-color-secondary-hover: #2a2a2a;
+                  --sw-color-secondary-foreground: #ffffff;
 
                   --sw-color-accent: #2563eb;
                   --sw-color-accent-light: #eff6ff;
@@ -622,6 +626,7 @@ module StreamWeaver
 
                   --sw-color-secondary: #6B6860;
                   --sw-color-secondary-hover: #4a4845;
+                  --sw-color-secondary-foreground: #ffffff;
 
                   --sw-color-accent: #1E4ED8;
                   --sw-color-accent-light: #EEF2FF;
@@ -680,6 +685,7 @@ module StreamWeaver
 
                   --sw-color-secondary: #A8A399;
                   --sw-color-secondary-hover: #C5C0B5;
+                  --sw-color-secondary-foreground: #1A1714;
 
                   --sw-color-accent: #6699FF;
                   --sw-color-accent-light: #1B2740;
@@ -3411,6 +3417,7 @@ module StreamWeaver
                   /* Secondary */
                   --sw-color-secondary: #8b949e;
                   --sw-color-secondary-hover: #adbac7;
+                  --sw-color-secondary-foreground: #0a0e14;
 
                   /* Spacing */
                   --sw-spacing-xs: 0.375rem;

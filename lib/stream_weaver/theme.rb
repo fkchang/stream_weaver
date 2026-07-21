@@ -83,6 +83,7 @@ module StreamWeaver
       # Colors - Secondary
       color_secondary: { css: "--sw-color-secondary", type: :color },
       color_secondary_hover: { css: "--sw-color-secondary-hover", type: :color },
+      color_secondary_foreground: { css: "--sw-color-secondary-foreground", type: :color },
 
       # Colors - Accent
       color_accent: { css: "--sw-color-accent", type: :color },
@@ -316,7 +317,7 @@ module StreamWeaver
         typography: %i[font_display font_body font_family font_size_base font_size_sm font_size_lg font_size_xl line_height],
         colors_primary: %i[color_primary color_primary_hover color_primary_light color_primary_glow],
         colors_neutral: %i[color_text color_text_muted color_text_light color_bg color_bg_card color_bg_elevated color_border color_border_strong color_border_focus],
-        colors_secondary: %i[color_secondary color_secondary_hover color_accent color_accent_light],
+        colors_secondary: %i[color_secondary color_secondary_hover color_secondary_foreground color_accent color_accent_light],
         spacing: %i[spacing_xs spacing_sm spacing_md spacing_lg spacing_xl spacing_2xl],
         border_radius: %i[radius_sm radius_md radius_lg radius_xl],
         shadows: %i[shadow_sm shadow_md shadow_lg shadow_xl shadow_inner],
