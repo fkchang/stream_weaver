@@ -158,4 +158,66 @@ RSpec.describe StreamWeaver::CLI do
       end
     end
   end
+
+  describe '.canvas_push (--stylesheet, stream_weaver-9uk)' do
+    let(:session_name) { 'mytest' }
+    let(:dsl) { "header1 'Hi'" }
+
+    around do |ex|
+      prev = ENV['STREAMWEAVER_HISTORY_ROOT']
+      Dir.mktmpdir do |d|
+        ENV['STREAMWEAVER_HISTORY_ROOT'] = d
+        if described_class.instance_variable_defined?(:@history_cleaned)
+          described_class.remove_instance_variable(:@history_cleaned)
+        end
+        ex.run
+      end
+    ensure
+      ENV['STREAMWEAVER_HISTORY_ROOT'] = prev
+    end
+
+    before do
+      allow($stdin).to receive(:tty?).and_return(false)
+      allow($stdin).to receive(:read).and_return(dsl)
+    end
+
+    def capture_io
+      old_stdout = $stdout
+      old_stderr = $stderr
+      $stdout = StringIO.new
+      $stderr = StringIO.new
+      yield
+      [$stdout.string, $stderr.string]
+    ensure
+      $stdout = old_stdout
+      $stderr = old_stderr
+    end
+
+    it 'reads the local CSS file and prepends a use_stylesheet call to the pushed DSL' do
+      Dir.mktmpdir do |dir|
+        css_path = File.join(dir, 'x.css')
+        File.write(css_path, '.sw-x { color: red; }')
+
+        sent_dsl = nil
+        allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+          sent_dsl = msg[:dsl]
+          nil
+        end
+
+        capture_io { described_class.canvas_push([session_name, '--stylesheet', css_path]) }
+
+        expect(sent_dsl).to eq("use_stylesheet(\".sw-x { color: red; }\")\n#{dsl}")
+      end
+    end
+
+    it 'exits with an error and does not push when the stylesheet file is missing' do
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message)
+
+      expect do
+        capture_io { described_class.canvas_push([session_name, '--stylesheet', '/no/such/file.css']) }
+      end.to raise_error(SystemExit)
+
+      expect(StreamWeaver::Canvas::Client).not_to have_received(:send_message)
+    end
+  end
 end

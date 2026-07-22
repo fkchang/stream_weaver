@@ -40,7 +40,7 @@ module StreamWeaver
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 
-    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions, :action_updates, :action_primary
+    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :inline_stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions, :action_updates, :action_primary
 
     # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
     ENDPOINT_VERBS = %i[get post put patch delete].freeze
@@ -82,6 +82,7 @@ module StreamWeaver
       @script_dir = File.dirname(File.expand_path(caller_locations(1, 1).first.path))
       @allowed_asset_dirs = ([@script_dir] + assets_dirs.map { |d| File.expand_path(d) }).uniq
       @stylesheets = stylesheets.map { |href| resolve_stylesheet_href(href) }
+      @inline_stylesheets = []
       @fonts = fonts
       @transient_keys = Set.new
       @timers = []
@@ -1271,6 +1272,22 @@ module StreamWeaver
       "/sw-asset/#{ComponentAssets.register_file(abs_path)}/#{File.basename(abs_path)}"
     end
 
+    # Adds CSS as an inline <style> block, usable inside the DSL body itself
+    # (unlike `stylesheets:`, which is only an App.new kwarg) -- so a single
+    # shared-DSL file can carry its own re-skin whether it's require'd
+    # standalone or instance_eval'd by canvas-push (stream_weaver-9uk).
+    # Canvas has no route to serve a referenced asset file across processes
+    # the way local_asset/stylesheets: do, so inlining the raw CSS text is
+    # the one mechanism that works in both contexts.
+    #
+    # @param source [String] a local path (resolved relative to the calling
+    #   script's directory, same rule as stylesheets:) or literal CSS text
+    #   if it doesn't resolve to a file
+    def use_stylesheet(source)
+      css = resolve_stylesheet_content(source)
+      @inline_stylesheets << css unless @inline_stylesheets.include?(css)
+    end
+
     # =========================================
     # Layout components (Cabinet Control style)
     # =========================================
@@ -1359,6 +1376,22 @@ module StreamWeaver
 
       ensure_asset_path_allowed!(abs_path, href)
       "/sw-asset/#{ComponentAssets.register_file(abs_path)}/#{File.basename(abs_path)}"
+    end
+
+    # Resolves a `use_stylesheet` argument to raw CSS text: a local file
+    # (same resolution/traversal rules as stylesheets:) is read and its
+    # content returned; anything else is treated as literal CSS. A source
+    # containing a newline is assumed to already be CSS text and skips file
+    # resolution entirely -- avoids stat-ing a multi-KB string as a path.
+    def resolve_stylesheet_content(source)
+      return source unless source.is_a?(String)
+      return source if source.include?("\n")
+
+      abs_path = resolve_asset_path(source)
+      return source unless abs_path
+
+      ensure_asset_path_allowed!(abs_path, source)
+      File.read(abs_path)
     end
 
     # @return [String, nil] absolute path if `path` resolves to a real local

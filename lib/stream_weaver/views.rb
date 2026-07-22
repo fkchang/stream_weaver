@@ -23,6 +23,7 @@ module StreamWeaver
         @session_theme = session_theme
         @scripts = app.scripts
         @stylesheets = app.stylesheets
+        @inline_stylesheets = app.inline_stylesheets
       end
 
       def view_template
@@ -71,6 +72,13 @@ module StreamWeaver
             # Add custom stylesheets
             @stylesheets.each do |href|
               link(rel: "stylesheet", href: href)
+            end
+
+            # Inline stylesheets declared via `use_stylesheet` in the DSL
+            # body (stream_weaver-9uk) -- same document-order/cascade
+            # position as the linked stylesheets above.
+            @inline_stylesheets.each do |css|
+              style { raw(safe(css)) }
             end
 
             # Add custom scripts

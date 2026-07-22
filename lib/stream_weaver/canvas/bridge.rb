@@ -11,7 +11,7 @@ module StreamWeaver
       DEFAULT_PORT = 4568
 
       # Result of rendering DSL to HTML
-      RenderResult = Struct.new(:html, :error, keyword_init: true)
+      RenderResult = Struct.new(:html, :error, :stylesheets, keyword_init: true)
 
       attr_reader :sessions, :port
 
@@ -126,9 +126,11 @@ module StreamWeaver
         if result.error
           { type: 'push_error', message: result.error }
         else
-          # Persist raw DSL only on successful render so a later failed push
-          # doesn't clobber the user's last-good content.
+          # Persist raw DSL and its inline stylesheets only on successful
+          # render so a later failed push doesn't clobber the user's
+          # last-good content or re-skin (stream_weaver-9uk).
           session.set_dsl(dsl)
+          session.set_stylesheets(result.stylesheets)
           { type: 'push_ok' }
         end
       end
@@ -208,11 +210,12 @@ module StreamWeaver
         # Render to HTML
         state = {}
         html = StreamWeaver::Views::AppContentView.new(mini_app, state, adapter, false).call
-        RenderResult.new(html: html, error: nil)
+        RenderResult.new(html: html, error: nil, stylesheets: mini_app.inline_stylesheets)
       rescue => e
         RenderResult.new(
           html: "<div class='error'>Error: #{e.message}</div>",
-          error: e.message
+          error: e.message,
+          stylesheets: []
         )
       end
     end

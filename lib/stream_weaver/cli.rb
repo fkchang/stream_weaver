@@ -1133,10 +1133,16 @@ module StreamWeaver
 
     # Push DSL content to a canvas session
     def self.canvas_push(args)
-      session_name = args.first
+      stylesheet_paths = []
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver canvas-push <session-name> [options] < dsl.rb"
+        opts.on('-s', '--stylesheet PATH', 'Local CSS file to inline into the canvas head (repeatable)') { |p| stylesheet_paths << p }
+      end
+      remaining = parser.parse(args)
+      session_name = remaining.first
 
       unless session_name
-        $stderr.puts "Usage: streamweaver canvas-push <session-name> < dsl.rb"
+        $stderr.puts "Usage: streamweaver canvas-push <session-name> [--stylesheet PATH] < dsl.rb"
         exit 1
       end
 
@@ -1150,6 +1156,7 @@ module StreamWeaver
       end
 
       dsl = $stdin.read.strip
+      dsl = prepend_stylesheets(dsl, stylesheet_paths) unless stylesheet_paths.empty?
 
       require_relative 'canvas/client'
 
@@ -1175,6 +1182,26 @@ module StreamWeaver
     rescue Canvas::Client::ConnectionError => e
       $stderr.puts "Error: #{e.message}"
       exit 1
+    end
+
+    # Reads each --stylesheet PATH from local disk (resolved against the
+    # invoking shell's cwd, which the CLI process shares -- unlike the
+    # bridge process on the other end of the socket) and prepends a
+    # `use_stylesheet(...)` call per file so the pushed DSL text carries its
+    # own CSS content for the bridge to inline (stream_weaver-9uk). Paths
+    # are read here, not in the DSL body, precisely because canvas-push has
+    # no reliable notion of "the DSL's own directory" once it's plain text.
+    def self.prepend_stylesheets(dsl, paths)
+      declarations = paths.map do |path|
+        abs_path = File.expand_path(path)
+        unless File.exist?(abs_path)
+          $stderr.puts "Error: stylesheet not found: #{path}"
+          exit 1
+        end
+        "use_stylesheet(#{File.read(abs_path).inspect})"
+      end
+
+      (declarations + [dsl]).join("\n")
     end
 
     # Auto-save a successful canvas-push to ephemeral history (Tier 1).

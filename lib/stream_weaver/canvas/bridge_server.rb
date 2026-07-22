@@ -225,6 +225,7 @@ module StreamWeaver
             </style>
             <style>#{StreamWeaver::Views::AppView.master_theme_css}</style>
             <style>#{StreamWeaver::Theme.visual_skills_css}</style>
+            #{inline_stylesheets_html(session)}
             <script>#{StreamWeaver::Theme::AutoMode.inline_script}</script>
             #{adapter.cdn_scripts.join("\n")}
             <!-- Chart.js for charts -->
@@ -248,6 +249,16 @@ module StreamWeaver
           </body>
           </html>
         HTML
+      end
+
+      # CSS carried by the pushed DSL's `use_stylesheet` calls (stream_weaver-9uk)
+      # -- canvas has no route to serve a referenced asset file across
+      # processes, so the bridge inlines the raw content it was handed
+      # instead. `session.stylesheets` is already deduped/replaced per push
+      # (Session#set_stylesheets), so no further digest bookkeeping is
+      # needed here to avoid stacking duplicate tags across re-pushes.
+      def inline_stylesheets_html(session)
+        session.stylesheets.map { |css| "<style>#{css}</style>" }.join("\n")
       end
 
       # Floating "Save as doc" button + Alpine.js modal that POSTs the

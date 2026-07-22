@@ -8,7 +8,7 @@ module StreamWeaver
     class Session
       VALID_LAYOUTS = %i[default wide full fluid].freeze
 
-      attr_reader :name, :state, :websockets, :created_at, :layout, :dsl, :theme
+      attr_reader :name, :state, :websockets, :created_at, :layout, :dsl, :theme, :stylesheets
       attr_accessor :html, :html_version, :pane_id
 
       # @param name [String] Session name
@@ -24,6 +24,7 @@ module StreamWeaver
         @html = nil
         @html_version = 0
         @dsl = nil
+        @stylesheets = []
         @pending_toasts = []
         @pane_id = nil
         @mutex = Mutex.new
@@ -42,6 +43,14 @@ module StreamWeaver
       # @param content [String] Raw DSL source
       def set_dsl(content)
         @dsl = content
+      end
+
+      # Replace the inline stylesheets carried by the current DSL (stream_weaver-9uk).
+      # Replacing rather than accumulating means a re-push with the same (or no)
+      # `use_stylesheet` calls never stacks duplicate <style> tags across pushes.
+      # @param list [Array<String>] CSS text, deduped
+      def set_stylesheets(list)
+        @stylesheets = list.uniq
       end
 
       # Update session state
@@ -72,6 +81,7 @@ module StreamWeaver
       def reset!
         @state.clear
         @html = nil
+        @stylesheets = []
         @html_version += 1
         @mutex.synchronize { @pending_toasts.clear }
         broadcast(type: 'reset')
