@@ -25,6 +25,13 @@ Reach for `Artifact` instead only when:
 
 Don't assume canvas-push is limited to throwaway mockups — Tier 2 persistence (Save-as-doc, below) can grow a quick brainstorm into a fully polished, long-form document. `examples/doc-parity-example.rb` (bundled with this skill) is proof: it reached 1:1 visual parity with a real claude.ai Artifact. For building documents like it, hand off to the `streamweaver-doc-builder` skill, which owns the `:doc` theme and component vocabulary in depth.
 
+## Example Gallery
+
+Bundled proof examples, each demonstrating 1:1 visual parity with a real claude.ai Artifact for a different document genre. Read the closer-matching one before generating a new port from scratch, and see `docs/porting-artifacts.md` for the general process behind both (and for adding a new gallery entry).
+
+- **`doc-parity-example.rb` + `_dsl.rb`** — long-form PRD/report genre. Techniques proven: `:doc` theme reaching Artifact parity with almost no extra CSS, `doc_header`/`doc_section_header`/`sidebar_toc`, `callout`, `mermaid`, `comparison` (before/after scope grid), `code_block`, `card`/`card_header`/`card_body`.
+- **`design-review-example.rb` + `_dsl.rb` + `.css`** — editorial "design options" review genre (numbered sections, option cards, a comparison matrix, a verified/unverified checklist split). Techniques proven: status-dot chips (`div` + `phrase` + `status_dot`), a "picked/winning" state reused across both a card and a table row, checklist tiles built from `div`/`phrase` (no dedicated component), and a full bespoke re-skin via **one** unlayered CSS file targeting only documented `sw-` hooks — no framework CSS fights, per `docs/theming-hooks.md`.
+
 ## !! DO NOT LAUNCH STANDALONE SERVERS PER QUESTION !!
 
 **This is the most common failure mode. Read carefully.**

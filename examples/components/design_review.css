@@ -1,0 +1,467 @@
+/* Design Review — component-parity port of a claude.ai-hosted Artifact
+ * (an editorial "design review" document: numbered sections, option cards
+ * with chips, a comparison matrix, and a verified/unverified checklist
+ * split). See docs/porting-artifacts.md for the general porting process
+ * this file is an example of.
+ *
+ * ONE stylesheet, targeting ONLY the documented sw- hooks
+ * (docs/theming-hooks.md) plus this file's own ad- prefixed classes for
+ * the handful of elements with no dedicated component (chips, checklist
+ * tiles, meta-row, legend, footer, sources). No specificity workaround
+ * anywhere -- every framework rule lives in @layer stream-weaver, so this
+ * plain unlayered stylesheet always wins regardless of document order.
+ *
+ * Palette/type values transcribed directly from the source artifact's own
+ * <style> block (both light and dark custom-property sets). Renamed to an
+ * ad- prefix so these custom properties can never collide with
+ * StreamWeaver's own --sw-* tokens.
+ */
+
+:root {
+  --ad-bg: #eef2f2;
+  --ad-surface: #ffffff;
+  --ad-surface-2: #e4eaea;
+  --ad-border: #d3dcdb;
+  --ad-ink: #14191b;
+  --ad-body: #333b3d;
+  --ad-muted: #677375;
+  --ad-accent: #2b6c7a;
+  --ad-accent-ink: #ffffff;
+  --ad-accent-soft: #dcedee;
+  --ad-accent-soft-border: #b7d6d9;
+  --ad-good: #3f7d4f;
+  --ad-good-soft: #e4f1e6;
+  --ad-mid: #9a6c17;
+  --ad-mid-soft: #f5ecd8;
+  --ad-weak: #b0503e;
+  --ad-weak-soft: #f6e4e0;
+  --ad-code-bg: #e7edec;
+  --ad-shadow: 0 1px 2px rgba(20, 25, 27, .06), 0 6px 16px -8px rgba(20, 25, 27, .12);
+  --ad-serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Charter, Georgia, serif;
+  --ad-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+}
+
+/* OS-level dark preference -- fallback when no explicit toggle has run. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ad-bg: #14181a;
+    --ad-surface: #1b2123;
+    --ad-surface-2: #20282a;
+    --ad-border: #2c3639;
+    --ad-ink: #eef2f1;
+    --ad-body: #c6cdcc;
+    --ad-muted: #8b9a9a;
+    --ad-accent: #6fb8c4;
+    --ad-accent-ink: #0d2226;
+    --ad-accent-soft: #1c3437;
+    --ad-accent-soft-border: #2d5459;
+    --ad-good: #7fc190;
+    --ad-good-soft: #1c2f22;
+    --ad-mid: #d9ab5c;
+    --ad-mid-soft: #332a18;
+    --ad-weak: #e08670;
+    --ad-weak-soft: #33221e;
+    --ad-code-bg: #20282a;
+    --ad-shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 24px -10px rgba(0, 0, 0, .5);
+  }
+}
+
+/* StreamWeaver's own manual toggle (theme_toggle) sets html.dark, not
+   the artifact's original data-theme attribute -- higher specificity
+   than :root, so it always wins over the media-query fallback above. */
+html.dark {
+  --ad-bg: #14181a;
+  --ad-surface: #1b2123;
+  --ad-surface-2: #20282a;
+  --ad-border: #2c3639;
+  --ad-ink: #eef2f1;
+  --ad-body: #c6cdcc;
+  --ad-muted: #8b9a9a;
+  --ad-accent: #6fb8c4;
+  --ad-accent-ink: #0d2226;
+  --ad-accent-soft: #1c3437;
+  --ad-accent-soft-border: #2d5459;
+  --ad-good: #7fc190;
+  --ad-good-soft: #1c2f22;
+  --ad-mid: #d9ab5c;
+  --ad-mid-soft: #332a18;
+  --ad-weak: #e08670;
+  --ad-weak-soft: #33221e;
+  --ad-code-bg: #20282a;
+  --ad-shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 24px -10px rgba(0, 0, 0, .5);
+}
+
+body {
+  background: var(--ad-bg);
+  color: var(--ad-body);
+  font-family: var(--ad-serif);
+  font-size: 16.5px;
+  line-height: 1.65;
+}
+
+/* Neutralize the app chrome StreamWeaver normally wraps content in --
+ * `body.sw-layout-default` caps width/adds padding, and its `#app-container`
+ * child gets its OWN background/border/shadow (from --sw-color-bg-card,
+ * still keyed to the :doc theme's beige-light/warm-charcoal-dark palette,
+ * not this app's cool teal one) -- both would otherwise show through as a
+ * visible "card within a card" boundary around .ad-doc. .ad-doc becomes the
+ * sole layout/background authority so the page reads as one continuous
+ * edge-to-edge surface, matching the artifact. */
+body[class*="sw-layout-"] {
+  max-width: none;
+  padding: 0;
+  background: var(--ad-bg);
+}
+#app-container {
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  max-width: none;
+}
+
+.ad-doc {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 6rem;
+}
+
+.ad-doc ::selection { background: var(--ad-accent-soft); color: var(--ad-ink); }
+
+.ad-doc code {
+  font-family: var(--ad-mono);
+  background: var(--ad-code-bg);
+  border: 1px solid var(--ad-border);
+  border-radius: 3px;
+  padding: .08em .38em;
+  font-size: .87em;
+  color: var(--ad-ink);
+}
+
+.ad-doc a { color: var(--ad-accent); text-underline-offset: 3px; }
+.ad-doc a:focus-visible { outline: 2px solid var(--ad-accent); outline-offset: 2px; border-radius: 2px; }
+
+.ad-doc p,
+.ad-doc .sw-markdown p { margin: .85rem 0; max-width: 65ch; color: var(--ad-body); }
+
+/* ---------- Header (doc_header + hand-rolled dek/meta-row) ---------- */
+.ad-doc .sw-doc-header {
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+.ad-doc .sw-doc-header__eyebrow {
+  font-family: var(--ad-mono);
+  font-size: .72rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ad-accent);
+  display: flex;
+  align-items: center;
+  gap: .6em;
+}
+.ad-doc .sw-doc-header__eyebrow::before {
+  content: "";
+  width: 1.4em;
+  height: 1px;
+  background: var(--ad-accent);
+  display: inline-block;
+  opacity: .55;
+}
+.ad-doc .sw-doc-header__title {
+  font-family: var(--ad-serif);
+  font-weight: 600;
+  font-size: clamp(1.8rem, 1.35rem + 1.9vw, 2.7rem);
+  line-height: 1.12;
+  letter-spacing: -.01em;
+  color: var(--ad-ink);
+  margin: .5rem 0 .6rem;
+  text-wrap: balance;
+}
+.ad-dek { font-size: 1.1rem; color: var(--ad-body); max-width: 62ch; margin: 0 0 1.6rem; }
+.ad-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem 1.4rem;
+  font-family: var(--ad-mono);
+  font-size: .78rem;
+  color: var(--ad-muted);
+  border-top: 1px solid var(--ad-border);
+  border-bottom: 1px solid var(--ad-border);
+  padding: .75rem 0;
+  margin-bottom: 1rem;
+}
+.ad-meta-label { color: var(--ad-body); font-weight: 600; margin-right: .3em; }
+
+/* ---------- Section numbering ---------- */
+.ad-doc .sw-doc-section-header { margin-top: 3.4rem; margin-bottom: 0; }
+.ad-doc .sw-doc-section-header__eyebrow {
+  font-family: var(--ad-mono);
+  font-size: .72rem;
+  letter-spacing: .1em;
+  color: var(--ad-muted);
+  text-transform: uppercase;
+}
+/* The framework's own DocSectionHeader draws an extending horizontal rule
+   after the eyebrow label (a deliberate feature of that component) -- the
+   artifact's own section-num label is bare text with no rule. */
+.ad-doc .sw-doc-section-header__eyebrow::after { display: none; content: none; }
+.ad-doc .sw-doc-section-header__title {
+  font-family: var(--ad-serif);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--ad-ink);
+  letter-spacing: -.005em;
+  text-wrap: balance;
+  margin: .3rem 0 0;
+}
+/* Sections 01/05 have only an eyebrow line, no second headline. */
+.ad-doc .sw-doc-section-header__title:empty { display: none; }
+
+/* ---------- Callout (section 01 framing box) ---------- */
+.ad-doc .sw-callout {
+  background: var(--ad-surface);
+  border: 1px solid var(--ad-border);
+  border-left: 3px solid var(--ad-accent);
+  border-radius: 4px;
+  padding: 1.1rem 1.3rem;
+  box-shadow: var(--ad-shadow);
+}
+.ad-doc .sw-callout__icon { display: none; }
+.ad-doc .sw-callout__title {
+  color: var(--ad-accent);
+  font-size: .75rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  font-family: var(--ad-mono);
+  margin-bottom: .5rem;
+}
+.ad-doc .sw-callout__content p { margin: .4rem 0; }
+
+/* Recommendation panel -- stronger accent-soft version of the same idiom. */
+.ad-reco .sw-callout {
+  background: var(--ad-accent-soft);
+  border: 1px solid var(--ad-accent-soft-border);
+  border-left: 4px solid var(--ad-accent);
+  border-radius: 5px;
+  padding: 1.4rem 1.6rem;
+}
+.ad-reco .sw-callout__title { color: var(--ad-accent); }
+.ad-reco h3 {
+  font-family: var(--ad-serif);
+  color: var(--ad-ink);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: .9rem 0 .3rem;
+}
+
+/* Dashed secondary aside -- deliberately quieter than .ad-reco. */
+.ad-aside .sw-callout {
+  border: 1px dashed var(--ad-border);
+  border-radius: 5px;
+  padding: 1rem 1.2rem;
+  background: var(--ad-surface);
+  font-size: .95rem;
+  box-shadow: none;
+}
+.ad-aside .sw-callout__title { color: var(--ad-mid); }
+
+/* ---------- Tables ---------- */
+.ad-tbl-scroll { overflow-x: auto; border: 1px solid var(--ad-border); border-radius: 5px; box-shadow: var(--ad-shadow); }
+.ad-doc .sw-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--ad-surface);
+  min-width: 640px;
+  font-family: var(--ad-serif);
+}
+.ad-doc .sw-table.mono { font-family: var(--ad-mono); }
+.ad-doc .sw-table thead th {
+  text-align: left;
+  font-family: var(--ad-mono);
+  font-size: .72rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ad-muted);
+  background: var(--ad-surface-2);
+  padding: .7rem .9rem;
+  border-bottom: 1px solid var(--ad-border);
+  white-space: nowrap;
+}
+.ad-doc .sw-table tbody td {
+  padding: .75rem .9rem;
+  border-bottom: 1px solid var(--ad-border);
+  font-size: .92rem;
+  vertical-align: top;
+  color: var(--ad-body);
+}
+.ad-doc .sw-table tbody tr:last-child td { border-bottom: none; }
+.ad-doc .sw-table tbody td:first-child { font-weight: 600; color: var(--ad-ink); white-space: nowrap; }
+
+/* Comparison-matrix "pick" row (Option F is always the last row). */
+.ad-matrix-table tbody tr:last-child { background: var(--ad-accent-soft); }
+.ad-matrix-table tbody tr:last-child td:first-child { color: var(--ad-accent); }
+
+.ad-cell-rating { display: flex; align-items: baseline; gap: .5em; }
+
+/* ---------- Option cards ---------- */
+.ad-option.sw-card {
+  background: var(--ad-surface);
+  border: 1px solid var(--ad-border);
+  border-radius: 6px;
+  box-shadow: var(--ad-shadow);
+  padding: 1.5rem 1.6rem 1.7rem;
+  margin-top: 1.4rem;
+}
+.ad-option--pick.sw-card {
+  border-color: var(--ad-accent-soft-border);
+  background: linear-gradient(var(--ad-accent-soft), var(--ad-accent-soft)), var(--ad-surface);
+}
+.ad-option .sw-card-header,
+.ad-option .card-header {
+  display: grid;
+  grid-template-columns: 2.1rem 1fr auto;
+  column-gap: .9rem;
+  align-items: start;
+  /* Framework's .card-header--badged paints a shaded band (--sw-surface-elevated,
+     falls back to a hardcoded beige) behind badge/title/subtitle -- the artifact's
+     option-card header sits directly on the plain white card surface. */
+  background: transparent;
+  border-bottom: none;
+}
+.ad-option .card-header__badge {
+  grid-column: 1;
+  grid-row: 1 / 3;
+  width: 2.1rem;
+  height: 2.1rem;
+  border: 1.5px solid var(--ad-border);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--ad-mono);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--ad-muted);
+  /* Framework default tints this with --sw-accent at 12% -- the artifact's
+     .opt-badge has no fill of its own, just a border on the plain card surface. */
+  background: transparent;
+  margin-top: .1rem;
+}
+.ad-option--pick .card-header__badge { border-color: var(--ad-accent); color: var(--ad-accent); }
+.ad-option .card-header__title {
+  grid-column: 2;
+  grid-row: 1;
+  font-family: var(--ad-serif);
+  font-size: 1.22rem;
+  font-weight: 600;
+  color: var(--ad-ink);
+  margin: 0;
+  text-wrap: balance;
+}
+.ad-option .card-header__meta,
+.ad-option .ad-option-mech {
+  grid-column: 2;
+  grid-row: 2;
+  margin: .15rem 0 0;
+  color: var(--ad-muted);
+  font-size: .94rem;
+  font-family: var(--ad-serif);
+}
+.ad-option .ad-option-mech p { margin: 0; }
+.ad-option .ad-option-mech code { font-size: .87em; }
+.ad-option .sw-badge {
+  grid-column: 3;
+  grid-row: 1 / 3;
+  align-self: start;
+  justify-self: end;
+  font-family: var(--ad-mono);
+  font-size: .68rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ad-accent-ink);
+  background: var(--ad-accent);
+  padding: .22em .55em;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.ad-chips { display: flex; flex-wrap: wrap; gap: .45rem .5rem; margin: 1.05rem 0 .2rem; }
+.ad-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .4em;
+  font-family: var(--ad-mono);
+  font-size: .74rem;
+  padding: .28em .6em .28em .5em;
+  border-radius: 3px;
+  border: 1px solid var(--ad-border);
+  background: var(--ad-surface-2);
+  color: var(--ad-body);
+  line-height: 1.3;
+}
+.ad-chip-dim { color: var(--ad-muted); text-transform: uppercase; letter-spacing: .05em; font-size: .9em; }
+.ad-chip .sw-status-dot { width: .5em; height: .5em; }
+
+.ad-option .sw-card-body p { margin: .9rem 0 0; font-size: .98rem; }
+
+/* Semantic status-dot color mapping (good/mid/weak), reused in chips,
+   the legend, and the matrix table's rating cells. */
+.ad-doc .sw-status-dot-green { background: var(--ad-good); }
+.ad-doc .sw-status-dot-yellow { background: var(--ad-mid); }
+.ad-doc .sw-status-dot-red { background: var(--ad-weak); }
+
+/* ---------- Legend (section 04) ---------- */
+.ad-legend { display: flex; flex-wrap: wrap; gap: 1.2rem; margin: .6rem 0 1rem; font-family: var(--ad-mono); font-size: .76rem; color: var(--ad-muted); }
+.ad-legend-item { display: inline-flex; align-items: center; gap: .4em; }
+.ad-legend-item .sw-status-dot { width: .55em; height: .55em; }
+
+/* ---------- Split grid + checklist tiles (section 06) ---------- */
+.ad-split.sw-columns { gap: 1.2rem; margin-top: 1rem; }
+@media (max-width: 700px) {
+  .ad-split.sw-columns { flex-direction: column; }
+}
+.ad-col-h { font-family: var(--ad-mono); font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; margin-bottom: .6rem; display: block; }
+.ad-col-h--v { color: var(--ad-good); }
+.ad-col-h--u { color: var(--ad-mid); }
+
+.ad-checklist { display: flex; flex-direction: column; gap: .6rem; }
+.ad-check-item {
+  background: var(--ad-surface);
+  border: 1px solid var(--ad-border);
+  border-radius: 5px;
+  padding: .7rem .85rem;
+  font-size: .89rem;
+  display: flex;
+  gap: .6rem;
+  box-shadow: var(--ad-shadow);
+  color: var(--ad-body);
+}
+.ad-check-item p { margin: 0; }
+.ad-check-mark { flex: none; width: 1.1rem; text-align: center; font-family: var(--ad-mono); font-weight: 700; }
+.ad-checklist--verified .ad-check-mark { color: var(--ad-good); }
+.ad-checklist--unverified .ad-check-mark { color: var(--ad-mid); }
+
+/* ---------- Sources / footer ---------- */
+.ad-sources { margin-top: 1rem; font-family: var(--ad-mono); font-size: .78rem; line-height: 1.9; color: var(--ad-muted); word-break: break-word; }
+/* The shared `.ad-doc p { max-width: 65ch }` prose rule was truncating this
+   block to a narrow column, wrapping every URL -- the artifact's own
+   .sources div has no <p> inside it at all (bare text), so it never hit
+   that rule; ours goes through `md`, which always wraps in <p>. */
+.ad-sources p { margin: 0; max-width: none; }
+
+.ad-footer {
+  margin-top: 4rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--ad-border);
+  font-family: var(--ad-mono);
+  font-size: .76rem;
+  color: var(--ad-muted);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
