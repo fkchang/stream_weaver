@@ -386,6 +386,48 @@ RSpec.describe StreamWeaver::App do
     end
   end
 
+  describe "lazy tabs skip inactive block evaluation" do
+    def lazy_app(evaluated)
+      described_class.new("Test") do
+        tabs :nav, lazy: true do
+          tab("A") { evaluated << :a; text "tab a" }
+          tab("B") { evaluated << :b; text "tab b" }
+          tab("C") { evaluated << :c; text "tab c" }
+        end
+      end
+    end
+
+    it "evaluates only the active tab's block" do
+      evaluated = []
+      lazy_app(evaluated).rebuild_with_state({ nav: 1 })
+      expect(evaluated).to eq([:b])
+    end
+
+    it "defaults to tab 0 and leaves inactive tabs childless" do
+      evaluated = []
+      app = lazy_app(evaluated)
+      app.rebuild_with_state({})
+      expect(evaluated).to eq([:a])
+
+      tabs = app.components.find { |c| c.is_a?(StreamWeaver::Components::Tabs) }
+      expect(tabs.children.length).to eq(3)
+      expect(tabs.children[0].children).not_to be_empty
+      expect(tabs.children[1].children).to be_empty
+    end
+
+    it "non-lazy tabs still evaluate every block" do
+      evaluated = []
+      app = described_class.new("Test") do
+        tabs :nav do
+          tab("A") { evaluated << :a }
+          tab("B") { evaluated << :b }
+        end
+      end
+      app.rebuild_with_state({})
+      expect(evaluated).to eq(%i[a b])
+    end
+  end
+
   describe "#rebuild_with_state" do
     it "re-evaluates DSL block" do
       app = described_class.new("Test") do

@@ -853,6 +853,24 @@ module StreamWeaver
 
     def tab(label, **options, &block)
       tab_component = Components::Tab.new(label, **options)
+
+      # Lazy tabs: skip EVALUATING inactive tab blocks entirely, not just
+      # rendering them. The block is where apps load data, so lazy that only
+      # skipped the render layer (adapter) still paid the full data cost for
+      # every hidden tab. The adapter already renders inactive lazy panels as
+      # a placeholder comment, so an empty-children Tab is consistent; tab
+      # switches post the new index and the full morph re-render evaluates
+      # the newly-active block.
+      current = render_state.current_tabs
+      if current&.lazy
+        index = components.size
+        active = (@_state[current.key] || 0).to_i
+        if index != active
+          components << tab_component
+          return tab_component
+        end
+      end
+
       capture_children_then_append(tab_component, &block)
     end
 
