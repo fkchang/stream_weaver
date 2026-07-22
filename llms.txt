@@ -625,6 +625,7 @@ For comprehensive reference, see these docs:
 | `docs/routing.md` | URL routing: `route_by`, `route_with`, parameterized paths, edit routes |
 | `docs/crud-patterns.md` | CRUD: create/edit/delete modals, URL-addressable edit pages, store adapters |
 | `docs/streamweaver-frontend-vision.md` | Strategic direction: htmx + Alpine + Idiomorph as a Hotwire-equivalent stack for Ruby devs |
+| `docs/porting-artifacts.md` | Porting a claude.ai Artifact into StreamWeaver at visual parity: dissect, gap-assess, port, verify, promote |
 
 ## Live Streaming with `every` Timers
 

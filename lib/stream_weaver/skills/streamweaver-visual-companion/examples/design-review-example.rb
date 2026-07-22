@@ -8,7 +8,8 @@
 # copied in isolation from the rest of the repo.
 #
 # Demonstrates: a full bespoke re-skin (one unlayered CSS file targeting
-# only documented sw- hooks) reaching 1:1 visual parity with a claude.ai-
+# only stable sw- hooks; doc-component hook documentation is tracked in
+# stream_weaver-d11) reaching 1:1 visual parity with a claude.ai-
 # hosted Artifact for the "editorial design review" genre -- option cards
 # with status-dot chips, a picked/winning state reused across both a card
 # and a table row, and checklist tiles with no dedicated component. See

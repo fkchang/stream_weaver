@@ -14,8 +14,9 @@
 # comparison-matrix tables, one with a highlighted pick row), status_dot
 # (chips, legend, matrix rating cells), columns/column (verified/unverified
 # split), badge (recommended tag) -- re-skinned end to end via ONE
-# unlayered stylesheet (design_review.css) targeting only documented
-# sw- hooks, per docs/theming-hooks.md.
+# unlayered stylesheet (design_review.css) targeting only stable sw- hooks
+# (structural hooks per docs/theming-hooks.md; doc-component hooks pending
+# documentation there, stream_weaver-d11).
 #
 # Run: ruby examples/components/design_review_demo.rb
 
@@ -30,7 +31,7 @@ CSS_PATH = File.join(__dir__, "design_review.css")
 # #initialize), which resolves to lib/stream_weaver.rb itself when routed
 # through the helper. Same workaround examples/parity/tyrion_warroom_components.rb
 # uses for its own stylesheets:.
-App = StreamWeaver::App.new(
+DesignReviewDemo = StreamWeaver::App.new(
   "Design Review — Wayfinder & Beacon",
   theme: :doc,
   stylesheets: [CSS_PATH],
@@ -38,6 +39,6 @@ App = StreamWeaver::App.new(
 ) do
   theme_toggle mode: :auto
   instance_eval(File.read(DSL_PATH), DSL_PATH)
-end
+end.generate
 
-App.generate.run! if __FILE__ == $0
+DesignReviewDemo.run! if __FILE__ == $0

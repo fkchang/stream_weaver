@@ -50,7 +50,11 @@ things:
 For each checklist item, check in this order:
 
 1. `docs/theming-hooks.md` -- does an existing component already emit a
-   stable `sw-` hook you can restyle?
+   stable `sw-` hook you can restyle? (Coverage note: that doc lists the
+   structural components; the doc-component family -- `doc_header`,
+   `doc_section_header`, `callout`, `columns`, `markdown` -- also emits
+   stable hooks not yet listed there (stream_weaver-d11). When a component
+   is missing from the doc, read the classes the adapter actually emits.)
 2. The doc/component family (`doc_header`, `doc_section_header`,
    `callout`, `card`/`card_header`/`card_body`, `table`, `comparison`,
    `columns`/`column`, `status_dot`, `badge`) -- proven to reach 1:1
@@ -86,7 +90,12 @@ For each checklist item, check in this order:
 Follow `prd_dsl.rb`/`prd_demo.rb`'s split:
 
 - `<name>_dsl.rb` -- a bare DSL body (no `app` wrapper), safe to load via
-  `instance_eval` from either a standalone demo or `canvas-push`.
+  `instance_eval` from either a standalone demo or `canvas-push`. Caveat:
+  the canvas bridge currently injects only master-theme CSS, so a port
+  whose look lives in its own stylesheet renders on a canvas as correct
+  structure without the re-skin (stream_weaver-9uk) -- the standalone demo
+  is the faithful rendering until that lands or the genre's vocabulary is
+  promoted into a theme (step g).
 - `<name>_demo.rb` -- the standalone wrapper.
 - `<name>.css` -- **one** stylesheet, targeting only the `sw-` hooks
   documented in `docs/theming-hooks.md` plus your own invented classes for

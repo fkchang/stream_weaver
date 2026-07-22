@@ -4,8 +4,9 @@
  * split). See docs/porting-artifacts.md for the general porting process
  * this file is an example of.
  *
- * ONE stylesheet, targeting ONLY the documented sw- hooks
- * (docs/theming-hooks.md) plus this file's own ad- prefixed classes for
+ * ONE stylesheet, targeting ONLY stable sw- hooks (the structural set is
+ * documented in docs/theming-hooks.md; the doc-component hooks used here
+ * are stable but not yet documented there -- stream_weaver-d11) plus this file's own ad- prefixed classes for
  * the handful of elements with no dedicated component (chips, checklist
  * tiles, meta-row, legend, footer, sources). No specificity workaround
  * anywhere -- every framework rule lives in @layer stream-weaver, so this

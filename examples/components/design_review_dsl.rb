@@ -11,7 +11,10 @@
 #
 # Intended for canvas-push:
 #   streamweaver canvas-push <session> < examples/components/design_review_dsl.rb
-# For standalone app with theme: ruby examples/components/design_review_demo.rb
+# CAVEAT: the canvas bridge injects only master-theme CSS -- it cannot carry
+# this example's own stylesheet yet (stream_weaver-9uk), so a canvas push shows
+# correct structure without the bespoke re-skin. The standalone app is the
+# faithful rendering: ruby examples/components/design_review_demo.rb
 
 # ---------------------------------------------------------------------------
 # Small helpers, local to this DSL body (same pattern as
@@ -76,10 +79,10 @@ div(class: "ad-doc") do
     title: "Getting Wayfinder and Beacon in front of every agent, without a human having to introduce them"
   )
   div(class: "ad-dek") do
-    md "Six ways to make the project registry and the wiki-of-wikis self-discoverable to Claude Code, Codex, Gemini CLI, and Copilot — scored against discovery, friction, and cognitive-load principles, drafted by a research subagent, July 2026."
+    md "Six ways to make the project registry and the federated knowledge base self-discoverable to Claude Code, Codex, Gemini CLI, and Copilot — scored against discovery, friction, and cognitive-load principles, drafted by a research subagent, July 2026."
   end
   div(class: "ad-meta-row") do
-    div { phrase("Subject", class: "ad-meta-label"); phrase(" Wayfinder + Beacon, pre‑launch") }
+    div { phrase("Subject", class: "ad-meta-label"); phrase(" Wayfinder + Beacon, pre-launch") }
     div { phrase("Client", class: "ad-meta-label"); phrase(" the agent, not the human") }
     div { phrase("Options", class: "ad-meta-label"); phrase(" 6, one recommended") }
   end
@@ -250,7 +253,7 @@ div(class: "ad-doc") do
 
         ### Ship-now fallback
 
-        A weekend, pre‑launch: Option E (hours — `--agent` help mode, gate-failure remediation text, `_hint` fields) plus Option A (`wayfinder agents init`, generalizing the existing `init.rb` machinery to the CLAUDE.md-imports-AGENTS.md pattern and a GEMINI.md stub). That alone takes Codex from "incidentally best-served" to all four CLIs covered per-repo, from one template. Layer in the MCP server (B) as the flagship feature for the actual launch — it also happens to be the strongest marketing artifact for a public gem, since MCP is what 2026 readers scan for first.
+        A weekend, pre-launch: Option E (hours — `--agent` help mode, gate-failure remediation text, `_hint` fields) plus Option A (`wayfinder agents init`, generalizing the existing `init.rb` machinery to the CLAUDE.md-imports-AGENTS.md pattern and a GEMINI.md stub). That alone takes Codex from "incidentally best-served" to all four CLIs covered per-repo, from one template. Layer in the MCP server (B) as the flagship feature for the actual launch — it also happens to be the strongest marketing artifact for a public gem, since MCP is what 2026 readers scan for first.
       MD
     end
   end
