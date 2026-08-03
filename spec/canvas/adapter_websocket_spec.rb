@@ -97,6 +97,65 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
         expect(attrs['x-data']).to include('wsConnected')
       end
     end
+
+    describe '#render_tabs' do
+      let(:tabs) do
+        component = StreamWeaver::Components::Tabs.new(:view)
+        %w[Alpha Beta].each do |label|
+          component.children << StreamWeaver::Components::Tab.new(label)
+        end
+        component
+      end
+
+      before do
+        allow(view).to receive(:div).and_yield
+        allow(view).to receive(:input)
+      end
+
+      context 'in websocket mode' do
+        it 'omits the state-sync HTMX attributes on eager tab triggers' do
+          expect(view).to receive(:button).with(
+            hash_not_including('hx-post', 'hx-vals', 'hx-swap')
+          ).twice
+
+          adapter.render_tabs(view, tabs, state)
+        end
+
+        it 'keeps the Alpine attributes on eager tab triggers' do
+          expect(view).to receive(:button).with(
+            hash_including('@click' => 'activeTab = 0', ':class' => /sw-tab-active/)
+          ).ordered
+          expect(view).to receive(:button).with(
+            hash_including('@click' => 'activeTab = 1')
+          ).ordered
+
+          adapter.render_tabs(view, tabs, state)
+        end
+      end
+
+      context 'in http mode' do
+        let(:http_adapter) { described_class.new }
+
+        it 'still posts tab state to the server on eager tab triggers' do
+          expect(view).to receive(:button).with(
+            hash_including(
+              'hx-post' => '/update',
+              'hx-vals' => '{"view":0}',
+              'hx-swap' => 'none'
+            )
+          ).ordered
+          expect(view).to receive(:button).with(
+            hash_including(
+              'hx-post' => '/update',
+              'hx-vals' => '{"view":1}',
+              'hx-swap' => 'none'
+            )
+          ).ordered
+
+          http_adapter.render_tabs(view, tabs, state)
+        end
+      end
+    end
   end
 end
 

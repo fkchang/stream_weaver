@@ -2275,15 +2275,20 @@ module StreamWeaver
                 ) { tab.label }
               else
                 # Standard mode: Alpine handles UI instantly, server response discarded
-                view.button(
+                trigger_attrs = {
                   type: "button",
                   class: tab_classes.join(" "),
                   ":class" => "{ 'sw-tab-active': activeTab === #{index} }",
-                  "@click" => "activeTab = #{index}",
-                  "hx-post" => url("/update"),
-                  "hx-vals" => JSON.generate({ key.to_s => index }),
-                  "hx-swap" => "none"
-                ) { tab.label }
+                  "@click" => "activeTab = #{index}"
+                }
+                # Canvas has no server session to sync -- the next push rebuilds state
+                unless websocket_mode?
+                  trigger_attrs["hx-post"] = url("/update")
+                  trigger_attrs["hx-vals"] = JSON.generate({ key.to_s => index })
+                  trigger_attrs["hx-swap"] = "none"
+                end
+
+                view.button(**trigger_attrs) { tab.label }
               end
             end
           end
