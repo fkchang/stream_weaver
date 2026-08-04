@@ -62,7 +62,9 @@ RSpec.describe "Input labels render visibly by default (FAC-9u2)" do
 
     it "still renders the label" do
       get '/'
-      expect(last_response.body).to include(%(<label class="sw-date-field__label" for="input-dob">Date of birth</label>))
+      # date_field now shares the sw-field/sw-field__label wrapper with every
+      # other input (previously bespoke .sw-date-field__label).
+      expect(last_response.body).to include(%(<label class="sw-field__label" for="input-dob">Date of birth</label>))
     end
   end
 

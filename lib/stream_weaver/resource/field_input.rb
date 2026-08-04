@@ -16,7 +16,7 @@ module StreamWeaver
         when :enum             then select     field.name, field.opts[:values] || [], submit: false
         when :boolean           then checkbox   field.name, label, submit: false
         when :integer, :number then text_field field.name, submit: false
-        when :date              then text_field field.name, submit: false
+        when :date              then date_field  field.name, label: label, submit: false
         else                         text_field field.name, submit: false
         end
       end

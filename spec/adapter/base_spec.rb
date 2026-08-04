@@ -23,6 +23,14 @@ RSpec.describe StreamWeaver::Adapter::Base do
     end
   end
 
+  describe "#render_date_field" do
+    it "raises NotImplementedError" do
+      expect {
+        adapter.render_date_field(mock_view, :due_on, {}, state)
+      }.to raise_error(NotImplementedError, /must implement #render_date_field/)
+    end
+  end
+
   describe "#render_checkbox" do
     it "raises NotImplementedError" do
       expect {

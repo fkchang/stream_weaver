@@ -83,6 +83,33 @@ RSpec.describe StreamWeaver::Components::DateField do
       expect(html).not_to include("min=")
       expect(html).not_to include("max=")
     end
+
+    it "defaults to the change-aware trigger and /update endpoint" do
+      field = described_class.new(:birthday)
+      html = render_html(field)
+      expect(html).to include('hx-trigger="keyup changed delay:500ms, change"')
+      expect(html).to include('hx-post="/update"')
+    end
+
+    it "routes to /event/:key when on_change is given" do
+      field = described_class.new(:birthday, on_change: ->(_s, _v) {})
+      html = render_html(field)
+      expect(html).to include('hx-post="/event/birthday"')
+    end
+
+    it "renders nested name/x-model when inside a form block" do
+      field = described_class.new(:due_on, form_context: { name: :prefs })
+      html = render_html(field)
+      expect(html).to include('name="prefs[due_on]"')
+      expect(html).to include('x-model="_form.due_on"')
+    end
+
+    it "renders nested name/x-model when inside a scope block" do
+      field = described_class.new(:due_on, scope_name: :filters)
+      html = StreamWeaver::ComponentRenderer.render_html(adapter, [field], { filters: { due_on: "2026-07-09" } })
+      expect(html).to include('name="filters[due_on]"')
+      expect(html).to include('x-model="filters.due_on"')
+    end
   end
 end
 
@@ -113,5 +140,32 @@ RSpec.describe "date_field DSL" do
     component = app.components.find { |c| c.is_a?(StreamWeaver::Components::DateField) }
     options = component.instance_variable_get(:@options)
     expect(options).to include(label: "Birthday", min: "2020-01-01", max: "2030-12-31")
+  end
+
+  it "works inside a form block (form-scoped, no top-level state key)" do
+    app = StreamWeaver::App.new("Test") do
+      form :prefs do
+        date_field :due_on
+      end
+    end
+    app.rebuild_with_state({})
+    component = app.components.first.children.find { |c| c.is_a?(StreamWeaver::Components::DateField) }
+    expect(component).not_to be_nil
+    options = component.instance_variable_get(:@options)
+    expect(options[:form_context]).to eq(name: :prefs)
+    expect(app.state[:prefs][:due_on]).to eq("")
+  end
+
+  it "works inside a scope block (scope-scoped)" do
+    app = StreamWeaver::App.new("Test") do
+      scope :filters, kind: :fragment do |_s|
+        date_field :due_on
+      end
+    end
+    app.rebuild_with_state({})
+    component = app.components.find { |c| c.is_a?(StreamWeaver::Components::DateField) }
+    options = component.instance_variable_get(:@options)
+    expect(options[:scope_name]).to eq(:filters)
+    expect(app.state[:filters][:due_on]).to eq("")
   end
 end

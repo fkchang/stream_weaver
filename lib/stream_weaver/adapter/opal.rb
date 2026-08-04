@@ -53,6 +53,22 @@ module StreamWeaver
       end
 
       # Overrides Base
+      def render_date_field(view, key, options, state)
+        attrs = { type: "date", name: key.to_s, value: state[key] || "", data_sw_update: key.to_s }
+        attrs[:min] = options[:min] if options[:min]
+        attrs[:max] = options[:max] if options[:max]
+
+        if options[:label]
+          view.div(style: "margin-bottom:8px") do
+            view.label(style: "display:block;font-weight:500;margin-bottom:4px") { view.plain(options[:label]) }
+            view.input(**attrs)
+          end
+        else
+          view.input(**attrs)
+        end
+      end
+
+      # Overrides Base
       def render_checkbox(view, key, label, _options, state)
         view.label do
           view.input(type: "checkbox", name: key.to_s,

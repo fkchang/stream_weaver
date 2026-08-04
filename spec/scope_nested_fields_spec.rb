@@ -17,6 +17,7 @@ RSpec.describe "Scope-nested live field rendering (FAC-P3.1 handoff)" do
           text_field :query, label: "Search"
           checkbox :active_only, "Active only"
           select :domain, %w[all work personal]
+          date_field :joined_after
         end
       end
     end
@@ -41,6 +42,12 @@ RSpec.describe "Scope-nested live field rendering (FAC-P3.1 handoff)" do
       expect(last_response.body).to include('name="people_filters[domain]"')
       expect(last_response.body).to include('x-model="people_filters.domain"')
     end
+
+    it "renders a scope-nested date_field with a nested name and dot-path x-model" do
+      get '/'
+      expect(last_response.body).to include('name="people_filters[joined_after]"')
+      expect(last_response.body).to include('x-model="people_filters.joined_after"')
+    end
   end
 
   describe "POST /update nested-param-sync" do
@@ -64,6 +71,31 @@ RSpec.describe "Scope-nested live field rendering (FAC-P3.1 handoff)" do
       state = last_request.session[:streamlit_state]
       expect(state[:people_filters][:query]).to eq('widgets')
       expect(state[:people_filters][:domain]).to eq('work') # untouched sibling
+    end
+  end
+
+  describe "POST /update nested-param-sync for date_field" do
+    let(:stream_app) do
+      StreamWeaver::App.new("Filter Panel") do
+        scope :people_filters, kind: :fragment, retain: true do |s|
+          s[:joined_after] ||= ""
+          s[:domain]       ||= "all"
+          date_field :joined_after
+          select :domain, %w[all work personal]
+        end
+      end
+    end
+
+    let(:app) { stream_app.generate }
+
+    it "lands the date value in the scope sub-hash, not a flat top-level key" do
+      env 'rack.session', { streamlit_state: { people_filters: { joined_after: "", domain: "work" } } }
+      post '/update', 'people_filters' => { 'joined_after' => '2026-07-09' }
+
+      state = last_request.session[:streamlit_state]
+      expect(state[:people_filters][:joined_after]).to eq('2026-07-09')
+      expect(state[:people_filters][:domain]).to eq('work') # untouched sibling
+      expect(state[:joined_after]).to be_nil # regression guard: no flat top-level leak
     end
   end
 

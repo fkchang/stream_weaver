@@ -59,6 +59,35 @@ text_area :key, placeholder: "Multi-line", rows: 5
 text_field :key, placeholder: "Edit me", submit: false
 ```
 
+## Dates
+
+```ruby
+date_field :due_on, label: "Due date"
+
+# Constrain the selectable range (both are ISO 8601 strings)
+date_field :due_on, min: "2026-01-01", max: "2027-12-31"
+
+# Disable auto-submit
+date_field :due_on, submit: false
+```
+
+Renders a native `<input type="date">` — no custom JS, no bundled calendar
+widget. The browser supplies the calendar popup and, on mobile, its own
+native date picker. Works the same as `text_field` inside `form`/`scope`
+blocks.
+
+State always holds an **ISO 8601 string** (`"YYYY-MM-DD"`), never a `Date`
+object — coerce it yourself when you need one:
+
+```ruby
+if (parsed = StreamWeaver::Components::DateField.to_date(state[:due_on]))
+  text "Parsed as a Date: #{parsed.iso8601}"
+end
+```
+
+`DateField.to_date` returns `nil` for blank or unparsable input instead of
+raising.
+
 ## Selection
 
 ```ruby

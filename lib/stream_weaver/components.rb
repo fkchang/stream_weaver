@@ -178,20 +178,25 @@ module StreamWeaver
     # DateField component for native date input, state-bound like TextField.
     # Value is stored/read as an ISO 8601 string ("YYYY-MM-DD").
     class DateField < Base
+      include Callbacks
       attr_reader :key
 
       # @param key [Symbol] The state key
       # @param label [String, nil] Optional label rendered above the input
       # @param min [String, nil] Minimum selectable date (ISO 8601)
       # @param max [String, nil] Maximum selectable date (ISO 8601)
+      # @param on_change [Proc, nil] Callback when value changes: ->(state, value) { ... }
+      # @param on_blur [Proc, nil] Callback when field loses focus: ->(state, value) { ... }
+      # @param debounce [Integer, nil] Milliseconds to wait before triggering on_change
       # @param options [Hash] Additional options (e.g. submit: false)
-      def initialize(key, label: nil, min: nil, max: nil, **options)
+      def initialize(key, label: nil, min: nil, max: nil, on_change: nil, on_blur: nil, debounce: nil, **options)
         @key = key
         @options = options.merge(label: label, min: min, max: max)
+        init_callbacks(on_change: on_change, on_blur: on_blur, debounce: debounce)
       end
 
       def render(view, state)
-        view.adapter.render_date_field(view, @key, @options, state)
+        view.adapter.render_date_field(view, @key, callback_options, state)
       end
 
       # Coerce an ISO 8601 date string (as stored in state) to a Date.
@@ -205,6 +210,12 @@ module StreamWeaver
         Date.iso8601(value.to_s)
       rescue ArgumentError
         nil
+      end
+
+      private
+
+      def callback_options
+        @options.merge(on_change: on_change, on_blur: on_blur, debounce: debounce)
       end
     end
 

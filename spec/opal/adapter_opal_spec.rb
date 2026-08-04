@@ -41,6 +41,35 @@ RSpec.describe StreamWeaver::Adapter::Opal do
     end
   end
 
+  describe "#render_date_field" do
+    it "renders a date input with data-sw-update attribute" do
+      adapter.render_date_field(view, :due_on, {}, state)
+      html = view.to_html
+      expect(html).to include('type="date"')
+      expect(html).to include('name="due_on"')
+      expect(html).to include('data-sw-update="due_on"')
+    end
+
+    it "sets value from state" do
+      adapter.render_date_field(view, :due_on, {}, { due_on: "2026-07-09" })
+      expect(view.to_html).to include('value="2026-07-09"')
+    end
+
+    it "renders min/max attributes when provided" do
+      adapter.render_date_field(view, :due_on, { min: "2020-01-01", max: "2030-12-31" }, state)
+      html = view.to_html
+      expect(html).to include('min="2020-01-01"')
+      expect(html).to include('max="2030-12-31"')
+    end
+
+    it "renders the label when provided" do
+      adapter.render_date_field(view, :due_on, { label: "Due" }, state)
+      html = view.to_html
+      expect(html).to include("<label")
+      expect(html).to include("Due")
+    end
+  end
+
   describe "#render_checkbox" do
     it "renders a checkbox input" do
       adapter.render_checkbox(view, :agree, "I agree", {}, state)

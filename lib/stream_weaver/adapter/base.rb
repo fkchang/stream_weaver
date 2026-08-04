@@ -56,6 +56,25 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_text_area"
       end
 
+      # Render a native date input, state-bound like a text field. Value is
+      # stored/read as an ISO 8601 string ("YYYY-MM-DD").
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param key [Symbol] The state key for this input
+      # @param options [Hash] Component options
+      # @option options [String] :label Optional label rendered above the input
+      # @option options [String] :min Minimum selectable date (ISO 8601)
+      # @option options [String] :max Maximum selectable date (ISO 8601)
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      #
+      # @example
+      #   adapter.render_date_field(view, :due_on, { label: "Due" }, state)
+      def render_date_field(view, key, options, state)
+        raise NotImplementedError, "#{self.class} must implement #render_date_field"
+      end
+
       # Render a checkbox input
       #
       # @param view [Phlex::HTML] The Phlex view instance

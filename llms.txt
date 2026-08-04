@@ -85,6 +85,7 @@ text_area :paste, transient: true           # excluded from session cookie (for 
 checkbox :key, "Label"                      # state[:key] = true/false
 select :role, ["Admin", "User"], default: "User"
 radio_group :choice, ["A", "B", "C"]
+date_field :due_on, label: "Due date"       # native <input type=date>; state[:due_on] = "YYYY-MM-DD" (ISO 8601)
 ```
 
 ### IMPORTANT: Form Input Auto-Submit Behavior
