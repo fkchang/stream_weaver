@@ -84,11 +84,17 @@ RSpec.describe StreamWeaver::Components::DateField do
       expect(html).not_to include("max=")
     end
 
-    it "defaults to the change-aware trigger and /update endpoint" do
+    it "defaults to the change-aware, debounced trigger and /update endpoint" do
       field = described_class.new(:birthday)
       html = render_html(field)
-      expect(html).to include('hx-trigger="keyup changed delay:500ms, change"')
+      expect(html).to include('hx-trigger="keyup changed delay:500ms, change changed delay:500ms"')
       expect(html).to include('hx-post="/update"')
+    end
+
+    it "debounces the change trigger using the debounce: option" do
+      field = described_class.new(:birthday, debounce: 200)
+      html = render_html(field)
+      expect(html).to include('hx-trigger="keyup changed delay:200ms, change changed delay:200ms"')
     end
 
     it "routes to /event/:key when on_change is given" do

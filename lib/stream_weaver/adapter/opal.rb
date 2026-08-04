@@ -54,9 +54,8 @@ module StreamWeaver
 
       # Overrides Base
       def render_date_field(view, key, options, state)
-        attrs = { type: "date", name: key.to_s, value: state[key] || "", data_sw_update: key.to_s }
-        attrs[:min] = options[:min] if options[:min]
-        attrs[:max] = options[:max] if options[:max]
+        bounds = { min: options[:min], max: options[:max] }.compact
+        attrs = { type: "date", name: key.to_s, value: state[key] || "", data_sw_update: key.to_s, **bounds }
 
         if options[:label]
           view.div(style: "margin-bottom:8px") do

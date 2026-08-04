@@ -8,6 +8,7 @@
 # Run: ruby examples/components/todo_due_dates.rb
 
 require_relative '../../lib/stream_weaver'
+require 'securerandom'
 
 App = app "Todo List with Due Dates" do
   header1 "📝 Todo List"
@@ -24,7 +25,7 @@ App = app "Todo List with Due Dates" do
       title = form_values[:title].to_s.strip
       next if title.empty?
 
-      state[:tasks] << { title: title, due_on: form_values[:due_on] }
+      state[:tasks] << { id: SecureRandom.uuid, title: title, due_on: form_values[:due_on] }
       state[:new_task] = { title: "", due_on: "" }
     end
   end
@@ -39,7 +40,7 @@ App = app "Todo List with Due Dates" do
       [due ? 0 : 1, due || Date.new(9999, 12, 31)]
     end
 
-    sorted_tasks.each_with_index do |task, idx|
+    sorted_tasks.each do |task|
       due = StreamWeaver::Components::DateField.to_date(task[:due_on])
       overdue = due && due < Date.today
 
@@ -50,8 +51,9 @@ App = app "Todo List with Due Dates" do
         else
           text "No due date", tone: :muted
         end
-        button "✓", style: :secondary do |s|
-          s[:tasks].delete_at(idx)
+        # key: a stable per-task id, so reordering by due date can't misroute the click
+        button "✓", key: task[:id], style: :secondary do |s|
+          s[:tasks].reject! { |t| t[:id] == task[:id] }
         end
       end
     end

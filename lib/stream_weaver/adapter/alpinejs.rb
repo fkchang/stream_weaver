@@ -235,73 +235,78 @@ module StreamWeaver
         else
           "input-#{key}"
         end
+        bounds = { min: options[:min], max: options[:max] }.compact
 
         wrap_with_label(view, options[:label], input_id) do
           if form_context
             # Inside form: use form-scoped x-model, no HTMX
             form_name = form_context[:name]
             form_state = state[form_name] || {}
-            attrs = {
+            view.input(
               id: "input-#{form_name}-#{key}",
               type: "date",
               name: "#{form_name}[#{key}]",  # Rails-style nested params
               value: form_state[key] || "",
               class: "sw-date-input",
-              "x-model" => "_form.#{key}"  # Form-local Alpine scope
-            }
-            attrs[:min] = options[:min] if options[:min]
-            attrs[:max] = options[:max] if options[:max]
-            view.input(**attrs)
+              "x-model" => "_form.#{key}",  # Form-local Alpine scope
+              **bounds
+            )
           elsif scope_name
             # Inside a bare `scope` block (not `form`): nested name/x-model so a
             # "live" field's HTMX submit lands in state[scope_name][key], not a
             # same-named flat top-level key (FAC-P3.1 handoff, form-for.md).
             scope_state = state[scope_name] || {}
-            trigger_str, endpoint = build_input_triggers(key, options)
-            trigger_str = "#{trigger_str}, change"  # calendar picker fires change, not keyup
-            attrs = {
+            trigger_str, endpoint = date_field_triggers(key, options)
+            view.input(
               id: "input-#{scope_name}-#{key}",
               type: "date",
               name: "#{scope_name}[#{key}]",
               value: scope_state[key] || "",
               class: "sw-date-input",
               "x-model" => "#{scope_name}.#{key}",
+              **bounds,
               **(should_submit ? htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str) : {})
-            }
-            attrs[:min] = options[:min] if options[:min]
-            attrs[:max] = options[:max] if options[:max]
-            view.input(**attrs)
+            )
           elsif should_submit
-            trigger_str, endpoint = build_input_triggers(key, options)
-            trigger_str = "#{trigger_str}, change"  # calendar picker fires change, not keyup
-
-            attrs = {
+            trigger_str, endpoint = date_field_triggers(key, options)
+            view.input(
               id: "input-#{key}",
               type: "date",
               name: key.to_s,
               value: state[key] || "",
               class: "sw-date-input",
               "x-model" => key.to_s,
+              **bounds,
               **htmx_attrs(endpoint, view: view, loading: options.fetch(:loading, true), "hx-trigger" => trigger_str)
-            }
-            attrs[:min] = options[:min] if options[:min]
-            attrs[:max] = options[:max] if options[:max]
-            view.input(**attrs)
+            )
           else
             # No auto-submit: just Alpine.js binding, no HTMX
-            attrs = {
+            view.input(
               id: "input-#{key}",
               type: "date",
               name: key.to_s,
               value: state[key] || "",
               class: "sw-date-input",
-              "x-model" => key.to_s
-            }
-            attrs[:min] = options[:min] if options[:min]
-            attrs[:max] = options[:max] if options[:max]
-            view.input(**attrs)
+              "x-model" => key.to_s,
+              **bounds
+            )
           end
         end
+      end
+
+      # build_input_triggers plus a debounced "change" trigger: a calendar
+      # picker selection fires change, not keyup, and typing into the native
+      # date input's MM/DD/YYYY segments fires change repeatedly with a blank
+      # value until all segments are filled -- "changed delay" collapses that
+      # burst to one settled submit instead of spamming on_change with "".
+      #
+      # @param key [Symbol] The state key for this input
+      # @param options [Hash] Component options with optional :on_change, :on_blur, :debounce
+      # @return [Array<String, String>] [trigger_string, endpoint]
+      def date_field_triggers(key, options)
+        trigger_str, endpoint = build_input_triggers(key, options)
+        debounce_ms = options[:debounce] || 500
+        ["#{trigger_str}, change changed delay:#{debounce_ms}ms", endpoint]
       end
 
       # Render literal text (no markdown parsing), optionally with a visual
