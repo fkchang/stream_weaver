@@ -1017,7 +1017,7 @@ module StreamWeaver
       def initialize(data = nil, headers: nil, rows: nil, file: nil, path: nil,
                      striped: false, bordered: false, hoverable: true, compact: false,
                      sortable: false, sticky_header: false, markdown: false, caption: nil,
-                     alternating: false, scrollable: false, hover: false, row_key: nil, **options, &block)
+                     alternating: false, scrollable: false, hover: false, row_key: nil, id_column: nil, **options, &block)
         @data = data
         @headers = headers
         @rows = rows
@@ -1035,6 +1035,7 @@ module StreamWeaver
         @scrollable = scrollable
         @hover = hover
         @row_key_proc = row_key
+        @id_column = id_column
         @options = options
         @columns = []
         @transform_block = nil
@@ -1265,7 +1266,8 @@ module StreamWeaver
           component_columns: @component_columns || [],
           row_ids: @row_ids || [],
           cell_styles: @cell_styles || [],
-          dom_id: @dom_id
+          dom_id: @dom_id,
+          id_column: @id_column
         )
       end
       # #table_options is a pure derived-data reader (no side effects); the

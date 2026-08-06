@@ -1800,7 +1800,7 @@ module StreamWeaver
             show_id_style =
               if !col.nil? && !col.id_style.nil?
                 col.id_style
-              elsif options.key?(:id_column)
+              elsif !options[:id_column].nil?
                 options[:id_column] == col_idx
               else
                 col_idx.zero?
