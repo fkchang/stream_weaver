@@ -230,6 +230,9 @@ end
 button "Secondary", style: :secondary do |s|
   # ...
 end
+
+# Client-side clipboard copy -- no server round-trip
+copy_button "Copy summary", text: report_text
 ```
 
 ### Layout

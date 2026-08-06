@@ -830,6 +830,12 @@ module StreamWeaver
       components << Components::LayoutToggle.new(target: target, columns: columns, **options)
     end
 
+    # @example
+    #   copy_button "Copy summary", text: report_text
+    def copy_button(label = "Copy", text:, copied_label: "Copied!", **options)
+      components << Components::CopyButton.new(label, text: text, copied_label: copied_label, **options)
+    end
+
     # =========================================
     # Interactive components (render-only versions for FeedBuilder context)
     # App overrides these with full callback-wiring implementations.

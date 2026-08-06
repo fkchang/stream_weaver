@@ -2600,6 +2600,25 @@ module StreamWeaver
         view.adapter.render_layout_toggle(view, self, state)
       end
     end
+
+    # CopyButton -- clipboard-copy trigger for a fixed text payload
+    class CopyButton < Base
+      attr_reader :label, :text, :copied_label, :options
+
+      # @param label [String] Button label before copy
+      # @param text [String] Text to copy to the clipboard
+      # @param copied_label [String] Label shown briefly after a successful copy
+      def initialize(label = "Copy", text:, copied_label: "Copied!", **options)
+        @label = label
+        @text = text
+        @copied_label = copied_label
+        @options = options
+      end
+
+      def render(view, state)
+        view.adapter.render_copy_button(view, self, state)
+      end
+    end
   end
 end
 

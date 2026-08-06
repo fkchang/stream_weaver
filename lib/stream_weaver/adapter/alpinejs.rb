@@ -8426,7 +8426,38 @@ module StreamWeaver
         end
       end
 
+      # Render a clipboard-copy button. The copy text is carried ONLY in the
+      # data-sw-copy-text attribute (Phlex escapes attribute values) -- never
+      # interpolate component.text into the @click handler or any JS string.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [CopyButton] The copy button component
+      # @param state [Hash] Current state hash
+      def render_copy_button(view, component, state)
+        inject_copy_js(view)
+        classes = ["sw-button", "sw-copy-button", "btn", "btn-secondary", component.options[:class]].compact.join(" ")
+        view.button(
+          type: "button",
+          class: classes,
+          "data-sw-copy-text" => component.text,
+          "x-data" => "{ copied: false }",
+          "@click" => "swCopy($el).then(() => { copied = true; setTimeout(() => copied = false, 1500) })",
+          **(component.options[:style] ? { style: component.options[:style] } : {})
+        ) do
+          view.span("x-show" => "!copied") { component.label }
+          view.span("x-show" => "copied", "x-cloak" => true) { component.copied_label }
+        end
+      end
+
       private
+
+      # Inject sw-copy.js once per render
+      def inject_copy_js(view)
+        return if view.instance_variable_get(:@_copy_js_injected)
+        view.instance_variable_set(:@_copy_js_injected, true)
+        js_path = File.join(__dir__, '..', 'assets', 'js', 'sw-copy.js')
+        view.script { view.raw(view.safe(File.read(js_path))) } if File.exist?(js_path)
+      end
 
       # Inject CSS-only helpers stylesheet once
       def inject_helpers_css(view)

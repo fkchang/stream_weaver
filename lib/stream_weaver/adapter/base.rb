@@ -139,6 +139,21 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_button"
       end
 
+      # Render a clipboard-copy button (client-side only; Alpine.js only --
+      # not implemented for the Opal adapter by design)
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::CopyButton] The copy button component
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      #
+      # @example
+      #   adapter.render_copy_button(view, component, state)
+      def render_copy_button(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_copy_button"
+      end
+
       # Get HTML attributes for the app container (e.g., x-data for Alpine.js)
       #
       # @param state [Hash] Current state hash (symbol keys)

@@ -466,6 +466,22 @@ external_link_button "View on Amazon", url: "https://amazon.com/dp/B0XXX"
 external_link_button "Get it!", url: book[:amazon_url], submit: true
 ```
 
+## Copy Button
+
+Client-side clipboard-copy trigger for a fixed text payload -- no server round-trip.
+
+```ruby
+copy_button "Copy summary", text: report_text
+
+# Custom label shown briefly after a successful copy
+copy_button "Copy", text: api_key, copied_label: "Copied to clipboard!"
+```
+
+Uses `navigator.clipboard` on secure origins (HTTPS or localhost) and automatically
+falls back to a hidden-textarea + `execCommand('copy')` approach otherwise -- this
+matters when StreamWeaver is served over plain HTTP to a LAN IP, where
+`navigator.clipboard` is unavailable because the page isn't a secure context.
+
 ## Table
 
 Display tabular data with smart data inference, formatters, and interactive features.
