@@ -51,6 +51,16 @@ RSpec.describe "CodeBlock Component (T4)" do
       expect(cb.scroll).to eq(false)
     end
 
+    it "defaults copy to false" do
+      cb = described_class.new("x = 1")
+      expect(cb.copy).to eq(false)
+    end
+
+    it "accepts copy: true" do
+      cb = described_class.new("x = 1", copy: true)
+      expect(cb.copy).to eq(true)
+    end
+
     describe "#language_class" do
       it "returns language-ruby for lang: ruby" do
         cb = described_class.new("x = 1", lang: "ruby")
@@ -186,6 +196,83 @@ RSpec.describe "CodeBlock Component (T4)" do
   end
 
   # =========================================
+  # Copy affordance (opt-in via copy: true)
+  # =========================================
+
+  describe "copy affordance" do
+    let(:adapter) { StreamWeaver::Adapter::AlpineJS.new }
+    let(:state) { {} }
+
+    def render_html(component)
+      StreamWeaver::ComponentRenderer.render_html(adapter, [component], state)
+    end
+
+    it "renders no copy affordance by default" do
+      cb = StreamWeaver::Components::CodeBlock.new("puts 'hi'", lang: "ruby")
+      html = render_html(cb)
+      expect(html).not_to include("data-sw-copy-text")
+      # The class name appears in the inline CSS, but should not appear as a rendered HTML element
+      expect(html).not_to match(/class="[^"]*\bsw-code-block__copy\b[^"]*"/)
+    end
+
+    it "renders no header at all when file is nil and copy is false" do
+      cb = StreamWeaver::Components::CodeBlock.new("puts 'hi'", lang: "ruby")
+      html = render_html(cb)
+      expect(html).not_to include('class="sw-code-block__header"')
+    end
+
+    it "renders a header with a copy affordance when copy: true, even without file" do
+      cb = StreamWeaver::Components::CodeBlock.new("puts 'hi'", lang: "ruby", copy: true)
+      html = render_html(cb)
+      expect(html).to include('class="sw-code-block__header"')
+      expect(html).to include("sw-code-block__copy")
+    end
+
+    it "carries the exact code text in data-sw-copy-text" do
+      code = "def hello\n  puts 'hi'\nend"
+      cb = StreamWeaver::Components::CodeBlock.new(code, lang: "ruby", copy: true)
+      html = render_html(cb)
+      expect(html).to include(%(data-sw-copy-text="#{code}"))
+    end
+
+    it "reuses the shared swCopy($el) click handler, not a divergent implementation" do
+      cb = StreamWeaver::Components::CodeBlock.new("puts 'hi'", lang: "ruby", copy: true)
+      html = render_html(cb)
+      expect(html).to include("swCopy($el)")
+      expect(html).to include('@click="swCopy($el).then(() => { copied = true; setTimeout(() => copied = false, 1500) })"')
+    end
+
+    it "injects sw-copy.js exactly once even when copy_button and a copied code_block share a page" do
+      copy_button = StreamWeaver::Components::CopyButton.new(text: "hello")
+      cb = StreamWeaver::Components::CodeBlock.new("puts 'hi'", lang: "ruby", copy: true)
+      html = StreamWeaver::ComponentRenderer.render_html(adapter, [copy_button, cb], state)
+      expect(html.scan("window.swCopy").length).to eq(1)
+    end
+
+    it "escapes a hostile payload in the attribute and never leaks it raw into the click handler" do
+      payload = %(some "quoted" 'text' with\nnewline and \\backslash\\ and <script>alert(1)</script>)
+      cb = StreamWeaver::Components::CodeBlock.new(payload, copy: true)
+      html = render_html(cb)
+
+      expect(html).not_to include(%(data-sw-copy-text="#{payload}"))
+      expect(html).to include("&quot;quoted&quot;")
+
+      click_handler = html[/@click="([^"]*)"/, 1]
+      expect(click_handler).not_to be_nil
+      expect(click_handler).not_to include("quoted")
+      expect(click_handler).not_to include("backslash")
+      expect(click_handler).not_to include("script")
+    end
+
+    it "renders both file header and copy affordance together when both are set" do
+      cb = StreamWeaver::Components::CodeBlock.new("puts 'hi'", file: "src/app.rb", copy: true)
+      html = render_html(cb)
+      expect(html).to include("src/app.rb")
+      expect(html).to include("sw-code-block__copy")
+    end
+  end
+
+  # =========================================
   # Lazy CDN loading (Prism.js)
   # =========================================
 
@@ -289,6 +376,15 @@ RSpec.describe "CodeBlock Component (T4)" do
       app.rebuild_with_state({})
       component = app.components.find { |c| c.is_a?(StreamWeaver::Components::CodeBlock) }
       expect(component.scroll).to eq(false)
+    end
+
+    it "passes copy option" do
+      app = StreamWeaver::App.new("Test") do
+        code_block("x = 1", copy: true)
+      end
+      app.rebuild_with_state({})
+      component = app.components.find { |c| c.is_a?(StreamWeaver::Components::CodeBlock) }
+      expect(component.copy).to eq(true)
     end
   end
 

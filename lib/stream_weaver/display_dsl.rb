@@ -269,14 +269,18 @@ module StreamWeaver
     # @param file [String, nil] File path to show in a header bar above the code
     # @param truncate [Integer, nil] Max lines to show (with truncation indicator)
     # @param scroll [Boolean] Enable scrolling for long code (default: true)
+    # @param copy [Boolean] Show a copy-to-clipboard affordance in the header (default: false)
     #
     # @example Basic
     #   code_block("puts 'hi'", lang: "ruby")
     #
     # @example With file header and truncation
     #   code_block(code, file: "src/app.rb", lang: "ruby", truncate: 10)
-    def code_block(code, **options)
-      components << Components::CodeBlock.new(code, **options)
+    #
+    # @example With copy-to-clipboard affordance
+    #   code_block(code, lang: "ruby", copy: true)
+    def code_block(code, copy: false, **options)
+      components << Components::CodeBlock.new(code, copy: copy, **options)
     end
 
     # Render an image with optional caption.

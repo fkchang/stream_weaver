@@ -19,20 +19,22 @@ module StreamWeaver
     # @example Truncated for thumbnail
     #   code_block(code, truncate: 10, lang: "ruby")
     class CodeBlock < Base
-      attr_reader :code, :lang, :file, :truncate, :scroll
+      attr_reader :code, :lang, :file, :truncate, :scroll, :copy
 
       # @param code [String] The source code to display
       # @param lang [String, nil] Language for syntax highlighting (e.g. "ruby", "javascript")
       # @param file [String, nil] File path to show in header bar
       # @param truncate [Integer, nil] Maximum number of lines to show (nil = show all)
       # @param scroll [Boolean] Whether to enable scrolling for long code (default: true)
+      # @param copy [Boolean] Show a copy-to-clipboard affordance in the header (default: false)
       # @param options [Hash] Additional options
-      def initialize(code, lang: nil, file: nil, truncate: nil, scroll: true, **options)
+      def initialize(code, lang: nil, file: nil, truncate: nil, scroll: true, copy: false, **options)
         @code = code.to_s
         @lang = lang
         @file = file
         @truncate = truncate
         @scroll = scroll
+        @copy = copy
         @options = options
       end
 

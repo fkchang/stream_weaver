@@ -3057,10 +3057,13 @@ module StreamWeaver
         inject_prism_cdn(view)
 
         view.div(class: "sw-code-block") do
-          # File header bar (optional)
-          if component.file
+          # Header bar (optional) -- file path label and/or copy affordance
+          if component.file || component.copy
             view.div(class: "sw-code-block__header") do
-              view.span(class: "sw-code-block__file") { component.file }
+              if component.file
+                view.span(class: "sw-code-block__file") { component.file }
+              end
+              render_code_block_copy_button(view, component) if component.copy
             end
           end
 
@@ -3080,6 +3083,21 @@ module StreamWeaver
               view.plain("... #{component.total_lines - component.truncate} more lines")
             end
           end
+        end
+      end
+
+      # Small copy-to-clipboard control rendered inside the code block header
+      # when `copy: true`. Reuses window.swCopy (via copy_button_attrs) --
+      # the same safety mechanism as the standalone copy_button component.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [CodeBlock] The code block component
+      def render_code_block_copy_button(view, component)
+        inject_copy_js(view)
+        classes = ["sw-code-block__copy", "sw-copy-button"].join(" ")
+        view.button(**copy_button_attrs(component.code, classes), "aria-label" => "Copy code") do
+          view.span("x-show" => "!copied") { "Copy" }
+          view.span("x-show" => "copied", "x-cloak" => true) { "Copied!" }
         end
       end
 
@@ -8279,6 +8297,9 @@ module StreamWeaver
             background: var(--sw-surface, #ffffff);
           }
           .sw-code-block__header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
             background: var(--sw-surface-elevated, #f3f3f3);
             border-bottom: 1px solid var(--sw-border, #e0e0e0);
             padding: 0.375rem 0.75rem;
@@ -8288,6 +8309,21 @@ module StreamWeaver
           }
           .sw-code-block__file {
             user-select: all;
+          }
+          .sw-code-block__copy {
+            margin-left: auto;
+            flex-shrink: 0;
+            border: 1px solid var(--sw-border, #e0e0e0);
+            border-radius: var(--sw-radius-sm, 4px);
+            background: var(--sw-surface, #ffffff);
+            color: inherit;
+            font: inherit;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            cursor: pointer;
+          }
+          .sw-code-block__copy:hover {
+            background: var(--sw-border, #e0e0e0);
           }
           .sw-code-block__body {
             margin: 0;
@@ -8437,11 +8473,7 @@ module StreamWeaver
         inject_copy_js(view)
         classes = ["sw-button", "sw-copy-button", "btn", "btn-secondary", component.options[:class]].compact.join(" ")
         view.button(
-          type: "button",
-          class: classes,
-          "data-sw-copy-text" => component.text,
-          "x-data" => "{ copied: false }",
-          "@click" => "swCopy($el).then(() => { copied = true; setTimeout(() => copied = false, 1500) })",
+          **copy_button_attrs(component.text, classes),
           **(component.options[:style] ? { style: component.options[:style] } : {})
         ) do
           view.span("x-show" => "!copied") { component.label }
@@ -8450,6 +8482,25 @@ module StreamWeaver
       end
 
       private
+
+      # Shared attribute set for any clipboard-copy control. The copy text is
+      # carried ONLY in the data-sw-copy-text attribute (Phlex escapes
+      # attribute values) -- never interpolate text into the @click handler
+      # or any JS string. Both render_copy_button and render_code_block's
+      # copy affordance build on this so there is one safety mechanism.
+      #
+      # @param text [String] Text to copy to the clipboard
+      # @param classes [String] Fully-built CSS class string for the button
+      # @return [Hash] Attributes for a <button> tag wired to window.swCopy
+      def copy_button_attrs(text, classes)
+        {
+          type: "button",
+          class: classes,
+          "data-sw-copy-text" => text,
+          "x-data" => "{ copied: false }",
+          "@click" => "swCopy($el).then(() => { copied = true; setTimeout(() => copied = false, 1500) })"
+        }
+      end
 
       # Inject sw-copy.js once per render
       def inject_copy_js(view)
