@@ -736,20 +736,28 @@ module StreamWeaver
 
     # Collapsible component for expandable/collapsible content sections
     class Collapsible < Base
+      attr_reader :label, :expanded, :subtitle, :badge_text, :badge_variant, :options
       attr_accessor :children
 
       # @param label [String] The header label text
       # @param expanded [Boolean] Whether to start expanded (default: false)
+      # @param subtitle [String, nil] Optional subtitle shown next to the label
+      # @param badge_text [String, nil] Optional badge text (e.g., "5 activities")
+      # @param badge_variant [Symbol] Badge color variant
       # @param options [Hash] Additional options
-      def initialize(label, expanded: false, **options)
+      def initialize(label, expanded: false, subtitle: nil, badge_text: nil, badge_variant: :default, **options)
         @label = label
         @expanded = expanded
+        @subtitle = subtitle
+        @badge_text = badge_text
+        @badge_variant = badge_variant
         @options = options
         @children = []
       end
 
       def render(view, state)
-        view.adapter.render_collapsible(view, @label, @expanded, @children, @options, state)
+        render_options = @options.merge(subtitle: @subtitle, badge_text: @badge_text, badge_variant: @badge_variant)
+        view.adapter.render_collapsible(view, @label, @expanded, @children, render_options, state)
       end
     end
 

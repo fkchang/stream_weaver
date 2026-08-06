@@ -238,6 +238,31 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_scroll_box"
       end
 
+      # Render a collapsible/expandable section
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param label [String] The header label text
+      # @param expanded [Boolean] Whether to start expanded
+      # @param children [Array<Components::Base>] The section's child components
+      # @param options [Hash] Component options (class, style, subtitle, badge_text, badge_variant)
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_collapsible(view, label, expanded, children, options, state)
+        raise NotImplementedError, "#{self.class} must implement #render_collapsible"
+      end
+
+      # Render an expandable card with title, subtitle, badge, and status
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::ExpandableCard] The expandable card component
+      # @param state [Hash] Current state hash (symbol keys)
+      # @return [void] Renders to view
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_expandable_card(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_expandable_card"
+      end
+
       # =========================================
       # Navigation component rendering
       # =========================================

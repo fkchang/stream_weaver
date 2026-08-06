@@ -2340,6 +2340,15 @@ module StreamWeaver
                   background: var(--sw-color-bg-card);
                 }
 
+                .sw-collapsible-subtitle {
+                  font-size: 0.8rem;
+                  color: var(--sw-color-text-muted, #666);
+                }
+
+                .sw-collapsible-badge {
+                  margin-left: auto;
+                }
+
                 /* ===========================================
                    Scroll Box
                    =========================================== */

@@ -98,8 +98,8 @@ module StreamWeaver
       with_container(Components::Fullbleed.new(**options), &block)
     end
 
-    def collapsible(label, expanded: false, **options, &block)
-      with_container(Components::Collapsible.new(label, expanded: expanded, **options), &block)
+    def collapsible(label, expanded: false, subtitle: nil, badge_text: nil, badge_variant: :default, **options, &block)
+      with_container(Components::Collapsible.new(label, expanded: expanded, subtitle: subtitle, badge_text: badge_text, badge_variant: badge_variant, **options), &block)
     end
 
     # Progressive disclosure without nested expandable_card hacks (03 gap #7):

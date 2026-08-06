@@ -1435,12 +1435,30 @@ module StreamWeaver
       # @param state [Hash] Current state hash (symbol keys)
       # @return [void] Renders to view
       def render_collapsible(view, label, expanded, children, options, state)
-        view.div(class: "collapsible", "x-data" => "{ open: #{expanded} }") do
-          view.div(class: "collapsible-header", "@click" => "open = !open") do
-            view.span(class: "collapsible-icon", "x-text" => "open ? '▼' : '▶'")
-            view.span(class: "collapsible-label") { label }
+        subtitle = options[:subtitle]
+        badge_text = options[:badge_text]
+        badge_variant = options[:badge_variant] || :default
+
+        outer_classes = ["collapsible", "sw-collapsible"]
+        outer_classes << options[:class] if options[:class]
+        outer_attrs = { class: outer_classes.join(" "), "x-data" => "{ open: #{expanded} }" }
+        outer_attrs[:style] = options[:style] if options[:style]
+
+        view.div(**outer_attrs) do
+          view.div(class: "collapsible-header sw-collapsible-header", "@click" => "open = !open") do
+            view.span(class: "collapsible-icon sw-collapsible-icon", "x-text" => "open ? '▼' : '▶'")
+            view.span(class: "collapsible-label sw-collapsible-label") { label }
+            if subtitle
+              view.span(class: "sw-collapsible-subtitle") { subtitle }
+            end
+            if badge_text
+              view.span(class: "sw-collapsible-badge") do
+                badge = Components::Badge.new(badge_text, variant: badge_variant)
+                render_badge(view, badge, state)
+              end
+            end
           end
-          view.div(class: "collapsible-content", "x-show" => "open", "x-cloak" => true) do
+          view.div(class: "collapsible-content sw-collapsible-content", "x-show" => "open", "x-cloak" => true) do
             children.each { |child| child.render(view, state) }
           end
         end

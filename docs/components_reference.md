@@ -290,7 +290,14 @@ end
 collapsible "View Context", expanded: true do
   text "This content is visible initially"
 end
+
+# With a subtitle and badge in the header
+collapsible "Activity Log", subtitle: "Last 30 days", badge_text: "12 new", badge_variant: :success do
+  text "Recent activity details"
+end
 ```
+
+`collapsible` is client-side only — the server never learns the expanded state. If you need the server to know whether a section is expanded (e.g. to bind it to `state`), use `expandable_card` instead.
 
 ## Form Blocks (Deferred Submission)
 
