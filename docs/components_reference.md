@@ -489,6 +489,24 @@ falls back to a hidden-textarea + `execCommand('copy')` approach otherwise -- th
 matters when StreamWeaver is served over plain HTTP to a LAN IP, where
 `navigator.clipboard` is unavailable because the page isn't a secure context.
 
+## Code Block
+
+Syntax-highlighted code display.
+
+```ruby
+code_block "def hello\n  puts 'hi'\nend", lang: "ruby"
+
+# With a copy affordance in the header (off by default)
+code_block source_code, lang: "ruby", copy: true
+
+# With a filename shown in the header
+code_block source_code, lang: "ruby", file: "app.rb"
+```
+
+`copy:` reuses the same clipboard mechanism as `copy_button` -- the header gains
+a small Copy button that always copies the full code text, even if the block is
+truncated for display via `truncate:`.
+
 ## Table
 
 Display tabular data with smart data inference, formatters, and interactive features.

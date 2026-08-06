@@ -236,6 +236,9 @@ end
 
 # Client-side clipboard copy -- no server round-trip
 copy_button "Copy summary", text: report_text
+
+# Syntax-highlighted code, with an optional copy affordance (off by default)
+code_block source, lang: "ruby", copy: true
 ```
 
 ### Layout
