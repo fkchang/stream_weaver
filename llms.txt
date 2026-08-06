@@ -216,6 +216,9 @@ table [{ issue: "[JIRA-123](https://jira.example.com)" }], markdown: true
 # Data sources
 table data: :users           # From state
 table file: "data.yaml"      # From file
+
+# Cell style escape hatches: column style: (String|Proc), id_style: true/false, table-level id_column:
+table headers: [...], rows: [...], id_column: false   # disable the default first-column accent
 ```
 
 Formatters: `:date`, `:datetime`, `:currency`, `:number`, `:percent`

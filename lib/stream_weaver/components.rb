@@ -916,15 +916,16 @@ module StreamWeaver
 
     # Column definition for table DSL
     class TableColumn
-      attr_reader :key, :header, :format, :align, :style, :sort_value
+      attr_reader :key, :header, :format, :align, :style, :sort_value, :id_style
 
-      def initialize(key, header: nil, format: nil, align: nil, style: nil, sort_value: nil, &block)
+      def initialize(key, header: nil, format: nil, align: nil, style: nil, sort_value: nil, id_style: nil, &block)
         @key = key
         @header = header || key.to_s.split("_").map(&:capitalize).join(" ")
         @format = format
         @align = align
         @style = style
         @sort_value = sort_value
+        @id_style = id_style
         @value_block = block
       end
 
@@ -1050,8 +1051,8 @@ module StreamWeaver
       end
 
       # Column DSL method
-      def column(key, header: nil, format: nil, align: nil, style: nil, sort_value: nil, &block)
-        @columns << TableColumn.new(key, header: header, format: format, align: align, style: style, sort_value: sort_value, &block)
+      def column(key, header: nil, format: nil, align: nil, style: nil, sort_value: nil, id_style: nil, &block)
+        @columns << TableColumn.new(key, header: header, format: format, align: align, style: style, sort_value: sort_value, id_style: id_style, &block)
       end
 
       # Resolves headers/rows (and, for the column DSL, cell components/sort
@@ -1068,6 +1069,7 @@ module StreamWeaver
         @sort_values = resolved[:sort_values] || []
         @component_columns = resolved[:component_columns] || []
         @row_ids = resolved[:row_ids] || []
+        @cell_styles = resolved[:cell_styles] || []
         @children = @resolved_rows.flat_map { |row| row.flat_map { |cell| cell.is_a?(Array) ? cell : [] } }
         @resolved = true
         self
@@ -1177,6 +1179,7 @@ module StreamWeaver
         rows = []
         sort_values = []
         row_ids = []
+        cell_styles = []
 
         data.each_with_index do |item, idx|
           row_key_thunk = RowKeyThunk.new { resolve_row_key(item) }
@@ -1186,6 +1189,7 @@ module StreamWeaver
 
           rows << @columns.map { |col| col.extract_value(item, idx, app: app, fragment: fragment) }
           sort_values << @columns.map { |col| col.sort_value ? col.sort_value.call(item) : nil }
+          cell_styles << @columns.map { |col| resolve_col_style(col, item) }
           row_ids << row_dom_key(item)
 
           app.render_state.current_row_key_thunk = saved_thunk if had_render_state
@@ -1193,7 +1197,16 @@ module StreamWeaver
 
         component_columns = @columns.each_index.map { |ci| rows.any? { |row| row[ci].is_a?(Array) } }
 
-        { headers: headers, rows: rows, sort_values: sort_values, component_columns: component_columns, row_ids: row_ids }
+        { headers: headers, rows: rows, sort_values: sort_values, component_columns: component_columns, row_ids: row_ids,
+          cell_styles: cell_styles }
+      end
+
+      # Resolves a column's `style:` escape hatch for one row -- a static
+      # String applies to every row, a Proc is called per-row with the item
+      # (FAC table cell style escape hatches, stream_weaver-act).
+      def resolve_col_style(col, item)
+        return nil unless col&.style
+        col.style.is_a?(Proc) ? col.style.call(item) : col.style
       end
 
       # @raise [ArgumentError] when no row_key: proc was given and the item has
@@ -1251,6 +1264,7 @@ module StreamWeaver
           sort_values: @sort_values || [],
           component_columns: @component_columns || [],
           row_ids: @row_ids || [],
+          cell_styles: @cell_styles || [],
           dom_id: @dom_id
         )
       end

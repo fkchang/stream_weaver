@@ -159,7 +159,11 @@ module StreamWeaver
                 row_classes << "sw-row-hoverable" if options[:hoverable]
                 tr_attrs = row_classes.any? ? { class: row_classes.join(" ") } : {}
                 view.tr(**tr_attrs) do
-                  Array(row).each { |cell| view.td(style: td_style) { view.plain(cell.to_s) } }
+                  Array(row).each_with_index do |cell, col_idx|
+                    custom_style = options[:cell_styles]&.dig(idx, col_idx)
+                    style = custom_style && !custom_style.to_s.empty? ? "#{td_style} #{custom_style}" : td_style
+                    view.td(style: style) { view.plain(cell.to_s) }
+                  end
                 end
               end
             end

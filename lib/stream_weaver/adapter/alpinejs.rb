@@ -1797,15 +1797,21 @@ module StreamWeaver
             if options[:bordered]
               cell_style += " border: 1px solid var(--sw-color-border, #e0e0e0);"
             end
-            if col_idx.zero?
+            show_id_style =
+              if !col.nil? && !col.id_style.nil?
+                col.id_style
+              elsif options.key?(:id_column)
+                options[:id_column] == col_idx
+              else
+                col_idx.zero?
+              end
+
+            if show_id_style
               cell_style += " color: var(--sw-color-accent, #1E4ED8); font-family: var(--sw-font-mono, monospace); font-size: .8rem;"
             end
 
-            # Apply column style if defined
-            if col&.style.is_a?(Proc)
-              # Dynamic style based on cell value - would need to be pre-computed
-              # For now, skip dynamic styles in adapter
-            end
+            custom_style = options[:cell_styles]&.dig(idx, col_idx)
+            cell_style += " #{custom_style}" if custom_style && !custom_style.to_s.empty?
 
             td_attrs = { style: cell_style }
             sort_value = sort_values.dig(idx, col_idx)

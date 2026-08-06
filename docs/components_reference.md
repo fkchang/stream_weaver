@@ -592,6 +592,29 @@ table data,
       caption: "Title"      # Table caption above
 ```
 
+### Cell Style Escape Hatches
+
+By default, the first column renders in an accent monospace style (legacy behavior, unchanged). To control this per-cell:
+
+```ruby
+# Column DSL: style: accepts a static String or a per-row Proc
+table users do
+  column :name, style: "font-weight: 600;"
+  column :balance, style: ->(u) { u.balance.negative? ? "color: red;" : nil }
+
+  # id_style: overrides the default first-column accent styling, true/false, on any column
+  column :id, id_style: false     # never accent this column
+  column :sku, id_style: true     # always accent this column, regardless of position
+end
+
+# Raw headers:/rows: tables: id_column: picks which column (by index) gets the
+# accent styling instead of the column-0 default, or disables it entirely
+table headers: ["SKU", "Name"], rows: [...], id_column: 0   # explicit column 0
+table headers: ["SKU", "Name"], rows: [...], id_column: false # no accent anywhere
+```
+
+`style:` is appended after any built-in styling (including the accent styling above), so it always wins on conflicting CSS properties without needing `!important`.
+
 ## Score Table
 
 ```ruby

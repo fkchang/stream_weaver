@@ -268,6 +268,20 @@ RSpec.describe StreamWeaver::Adapter::Opal do
       )
       expect(view.to_html).to include("↓")
     end
+
+    it "appends cell_styles onto the td style attribute" do
+      render_table(cell_styles: [["background: yellow;", nil], [nil, nil], [nil, nil]])
+      html = view.to_html
+      alice_cell = html[/<td[^>]*>Alice<\/td>/]
+      expect(alice_cell).to include("background: yellow;")
+    end
+
+    it "does not emit accent/mono styling regardless of id_column/id_style options" do
+      render_table(id_column: 0)
+      html = view.to_html
+      expect(html).not_to include("--sw-color-accent")
+      expect(html).not_to include("--sw-font-mono")
+    end
   end
 
   describe "#render_theme_preset" do

@@ -193,6 +193,15 @@ added in stream_weaver-oeo).
 (forwarding added in stream_weaver-oeo; `style:` is appended after the
 framework's own required `width`/`border-collapse` base style).
 
+If the first column's inline accent styling beats your own CSS on cells (not
+the `<table>` element), that's a cell-level concern -- `class:`/`style:`
+above only forwards to the `<table>` tag. Use per-column `style:` (String or
+Proc) for arbitrary cell CSS, per-column `id_style:` to opt a column in or
+out of the accent styling regardless of position, or table-level
+`id_column:` to redirect (or disable) which column gets it on raw
+`headers:`/`rows:` tables. See Table in `docs/components_reference.md` for
+examples.
+
 ### Button
 
 | Element | Hook | Legacy (deprecated) |
