@@ -1428,26 +1428,23 @@ module StreamWeaver
       # Render a collapsible section with expand/collapse functionality
       #
       # @param view [Phlex::HTML] The Phlex view instance
-      # @param label [String] The header label text
-      # @param expanded [Boolean] Whether to start expanded
-      # @param children [Array] Child components to render inside
-      # @param options [Hash] Component options
+      # @param component [Components::Collapsible] The collapsible component
       # @param state [Hash] Current state hash (symbol keys)
       # @return [void] Renders to view
-      def render_collapsible(view, label, expanded, children, options, state)
-        subtitle = options[:subtitle]
-        badge_text = options[:badge_text]
-        badge_variant = options[:badge_variant] || :default
+      def render_collapsible(view, component, state)
+        subtitle = component.subtitle
+        badge_text = component.badge_text
+        badge_variant = component.badge_variant
 
         outer_classes = ["collapsible", "sw-collapsible"]
-        outer_classes << options[:class] if options[:class]
-        outer_attrs = { class: outer_classes.join(" "), "x-data" => "{ open: #{expanded} }" }
-        outer_attrs[:style] = options[:style] if options[:style]
+        outer_classes << component.options[:class] if component.options[:class]
+        outer_attrs = { class: outer_classes.join(" "), "x-data" => "{ open: #{component.expanded} }" }
+        outer_attrs[:style] = component.options[:style] if component.options[:style]
 
         view.div(**outer_attrs) do
           view.div(class: "collapsible-header sw-collapsible-header", "@click" => "open = !open") do
             view.span(class: "collapsible-icon sw-collapsible-icon", "x-text" => "open ? '▼' : '▶'")
-            view.span(class: "collapsible-label sw-collapsible-label") { label }
+            view.span(class: "collapsible-label sw-collapsible-label") { component.label }
             if subtitle
               view.span(class: "sw-collapsible-subtitle") { subtitle }
             end
@@ -1459,7 +1456,7 @@ module StreamWeaver
             end
           end
           view.div(class: "collapsible-content sw-collapsible-content", "x-show" => "open", "x-cloak" => true) do
-            children.each { |child| child.render(view, state) }
+            component.children.each { |child| child.render(view, state) }
           end
         end
       end

@@ -241,14 +241,11 @@ module StreamWeaver
       # Render a collapsible/expandable section
       #
       # @param view [Phlex::HTML] The Phlex view instance
-      # @param label [String] The header label text
-      # @param expanded [Boolean] Whether to start expanded
-      # @param children [Array<Components::Base>] The section's child components
-      # @param options [Hash] Component options (class, style, subtitle, badge_text, badge_variant)
+      # @param component [Components::Collapsible] The collapsible component
       # @param state [Hash] Current state hash (symbol keys)
       # @return [void] Renders to view
       # @raise [NotImplementedError] if not implemented by subclass
-      def render_collapsible(view, label, expanded, children, options, state)
+      def render_collapsible(view, component, state)
         raise NotImplementedError, "#{self.class} must implement #render_collapsible"
       end
 

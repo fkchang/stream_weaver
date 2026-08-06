@@ -756,8 +756,7 @@ module StreamWeaver
       end
 
       def render(view, state)
-        render_options = @options.merge(subtitle: @subtitle, badge_text: @badge_text, badge_variant: @badge_variant)
-        view.adapter.render_collapsible(view, @label, @expanded, @children, render_options, state)
+        view.adapter.render_collapsible(view, self, state)
       end
     end
 
