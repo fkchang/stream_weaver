@@ -8,6 +8,7 @@ module StreamWeaver
       PRISM_CDN     = "https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"
       PRISM_CSS_CDN = "https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css"
       MERMAID_CDN   = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"
+      DIFF_CDN      = "https://cdn.jsdelivr.net/npm/diff@5.2.0/dist/diff.min.js"
 
       # Typesets diagrams and highlights code once the runtime has painted.
       #
@@ -49,6 +50,10 @@ module StreamWeaver
       # title and app_js are build-time developer-supplied values — not user input. No escaping applied.
       # morphdom_js:       local file path to use instead of CDN.
       # marked_js:         local file path to use instead of CDN.
+      # prism_js/prism_css: local Prism bundle + theme, else CDN.
+      # mermaid_js:        local Mermaid bundle, else CDN.
+      # diff_js:           local jsdiff bundle, else CDN. Powers DiffBlock in
+      #                    the browser, where diff(1) does not exist.
       # theme_css:         path/URL to a CSS file injected as a stylesheet link.
       # google_fonts_url:  full Google Fonts CSS URL; emits preconnect + stylesheet tags.
       # dark_mode_script:  inline JS string placed first in <head> to prevent FOUC.
@@ -59,6 +64,7 @@ module StreamWeaver
         marked_js: nil,
         prism_js: nil,
         prism_css: nil,
+        diff_js: nil,
         mermaid_js: nil,
         theme_css: nil,
         google_fonts_url: nil,
@@ -70,6 +76,7 @@ module StreamWeaver
         prism_src    = prism_js    || PRISM_CDN
         prism_css_src = prism_css  || PRISM_CSS_CDN
         mermaid_src  = mermaid_js  || MERMAID_CDN
+        diff_src     = diff_js     || DIFF_CDN
 
         google_fonts_tags = google_fonts_url && [
           '    <link rel="preconnect" href="https://fonts.googleapis.com">',
@@ -97,6 +104,7 @@ module StreamWeaver
             <script src="#{morphdom_src}"></script>
             <script src="#{prism_src}"></script>
             <script src="#{mermaid_src}"></script>
+            <script src="#{diff_src}"></script>
           </head>
           <body class="#{body_theme}">
             <div id="sw-app"></div>

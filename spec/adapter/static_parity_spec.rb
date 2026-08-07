@@ -20,6 +20,7 @@ RSpec.describe StreamWeaver::Adapter::Static do
     render_doc_section_header
     render_sidebar_toc
     render_code_block
+    render_diff_block
   ].freeze
 
   # Seams the module deliberately leaves to the including adapter.
@@ -146,6 +147,22 @@ RSpec.describe StreamWeaver::Adapter::Static do
       build = -> { StreamWeaver::Components::CodeBlock.new("puts 'hi'", lang: "ruby") }
       expect(component_markup(render_via_opal(build.call), "sw-code-block"))
         .to eq(component_markup(render_via_alpine(build.call), "sw-code-block"))
+    end
+
+    # The diff itself is computed by diffy on the server and jsdiff in the
+    # browser, so this cannot run under MRI for both engines -- only the server
+    # path is exercised here. What it does pin down is that the *markup* comes
+    # from one shared implementation, so the browser cannot drift structurally.
+    it "renders a diff_block through the shared implementation" do
+      component = StreamWeaver::Components::DiffBlock.new(language: "ruby")
+      component.before_code = "a\nb\nc\n"
+      component.after_code  = "a\nB\nc\n"
+
+      html = render_via_alpine(component)
+      expect(html).to include("sw-diff-block__line--removed")
+      expect(html).to include("sw-diff-block__line--added")
+      expect(StreamWeaver::Adapter::AlpineJS.instance_method(:render_diff_block).owner)
+        .to eq(described_class)
     end
 
     it "omits the copy button in the browser adapter, where it has no behavior" do

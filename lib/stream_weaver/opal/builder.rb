@@ -43,6 +43,7 @@ module StreamWeaver
         {
           "prism.min.js"           => File.join(@stubs_root, "prism.min.js"),
           "prism-tomorrow.min.css" => File.join(@stubs_root, "prism-tomorrow.min.css"),
+          "diff.min.js"            => File.join(@stubs_root, "diff.min.js"),
           "mermaid.min.js"         => mermaid_source_path
         }.each do |name, src|
           next unless src && File.exist?(src)
@@ -102,6 +103,7 @@ module StreamWeaver
             marked_js: marked_js,
             prism_js: local_asset("prism.min.js"),
             prism_css: local_asset("prism-tomorrow.min.css"),
+            diff_js: local_asset("diff.min.js"),
             mermaid_js: local_asset("mermaid.min.js"),
             theme_css: File.exist?(output_path("sw-theme.css")) ? "sw-theme.css" : nil,
             google_fonts_url: google_fonts_url_for_build,
