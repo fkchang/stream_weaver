@@ -27,11 +27,42 @@ module StreamWeaver
         write_app_js
         copy_morphdom
         copy_marked
+        copy_browser_assets
         write_theme_css
         write_index_html
       end
 
       private
+
+      # Assets committed under opal/stubs, plus mermaid from the gitignored
+      # vendor dir (see bin/vendor_browser_assets -- it is too large to commit).
+      # Anything missing falls back to its CDN in OpalShell, which keeps builds
+      # working for web deployment; only offline and browser-extension hosts
+      # actually require the local copies.
+      def copy_browser_assets
+        {
+          "prism.min.js"           => File.join(@stubs_root, "prism.min.js"),
+          "prism-tomorrow.min.css" => File.join(@stubs_root, "prism-tomorrow.min.css"),
+          "mermaid.min.js"         => mermaid_source_path
+        }.each do |name, src|
+          next unless src && File.exist?(src)
+
+          FileUtils.cp(src, output_path(name))
+        end
+
+        return if mermaid_source_path && File.exist?(mermaid_source_path)
+
+        warn "[OpalBuilder] mermaid.min.js not vendored -- falling back to CDN. " \
+             "Run bin/vendor_browser_assets for an offline build."
+      end
+
+      def mermaid_source_path
+        @mermaid_source_path ||= File.join(@lib_root, "..", "vendor", "js", "mermaid.min.js")
+      end
+
+      def local_asset(name)
+        File.exist?(output_path(name)) ? name : nil
+      end
 
       def write_app_js
         File.write(output_path("app.js"), compile.to_s)
@@ -69,6 +100,9 @@ module StreamWeaver
             app_js: "app.js",
             morphdom_js: morphdom_js,
             marked_js: marked_js,
+            prism_js: local_asset("prism.min.js"),
+            prism_css: local_asset("prism-tomorrow.min.css"),
+            mermaid_js: local_asset("mermaid.min.js"),
             theme_css: File.exist?(output_path("sw-theme.css")) ? "sw-theme.css" : nil,
             google_fonts_url: google_fonts_url_for_build,
             body_theme: @theme ? "sw-theme-default sw-theme-#{@theme}" : "sw-theme-default",

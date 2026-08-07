@@ -133,6 +133,7 @@ module StreamWeaver
           }
         }
         # :nocov:
+        announce_render
       end
 
       def fire_start_hooks_once
@@ -178,6 +179,23 @@ module StreamWeaver
       def patch_dom(html)
         # :nocov:
         %x{ morphdom(document.getElementById('sw-app'), '<div id="sw-app">' + #{html} + '</div>') }
+        # :nocov:
+        announce_render
+      end
+
+      # Signals that freshly patched markup is in the DOM.
+      #
+      # Libraries that decorate rendered output rather than produce it --
+      # Prism, Mermaid -- have to run after a patch, and again after every
+      # subsequent one, because morphdom replaces nodes and takes their
+      # decoration with it. Start hooks and re-renders are scheduled through
+      # setTimeout, so there is no moment after start() when a caller can
+      # simply assume the DOM is settled; this event is that signal.
+      def announce_render
+        return unless RUBY_ENGINE == "opal"
+
+        # :nocov:
+        %x{ document.dispatchEvent(new CustomEvent("sw:render")) }
         # :nocov:
       end
     end
