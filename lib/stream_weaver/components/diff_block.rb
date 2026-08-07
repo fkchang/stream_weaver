@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
-require "diffy"
+# Diffy shells out to the system diff(1) binary, so it exists only on the
+# server. In the browser the equivalent work is done by jsdiff -- see
+# #unified_diff below.
+require "diffy" unless RUBY_ENGINE == "opal"
 
 module StreamWeaver
   module Components
@@ -33,8 +36,7 @@ module StreamWeaver
         before += "\n" unless before.end_with?("\n")
         after  += "\n" unless after.end_with?("\n")
 
-        raw = Diffy::Diff.new(before, after, context: 3).to_s(:text)
-        parse_unified_diff(raw)
+        parse_unified_diff(unified_diff(before, after))
       end
 
       def render(view, state)
@@ -42,6 +44,43 @@ module StreamWeaver
       end
 
       private
+
+      CONTEXT_LINES = 3
+
+      if RUBY_ENGINE == "opal"
+        # jsdiff, so the browser never needs a diff(1) binary it cannot have.
+        #
+        # structuredPatch rather than createPatch: the latter prepends an
+        # Index:/=== header that the server-side output has no equivalent for,
+        # and stripping a fixed number of lines back off is the kind of thing
+        # that breaks quietly. Building the unified text from the hunks keeps
+        # both engines feeding #parse_unified_diff the same shape.
+        #
+        # "\ No newline at end of file" markers are dropped -- they are
+        # annotations rather than content, and parse_unified_diff would read
+        # the leading backslash as a context line.
+        def unified_diff(before, after)
+          # :nocov:
+          %x{
+            var patch = Diff.structuredPatch("", "", #{before}, #{after}, "", "",
+                                             { context: #{CONTEXT_LINES} });
+            var out = [];
+            patch.hunks.forEach(function(h) {
+              out.push("@@ -" + h.oldStart + "," + h.oldLines +
+                       " +" + h.newStart + "," + h.newLines + " @@");
+              h.lines.forEach(function(l) {
+                if (l.charAt(0) !== "\\\\") out.push(l);
+              });
+            });
+            return out.length ? out.join("\n") + "\n" : "";
+          }
+          # :nocov:
+        end
+      else
+        def unified_diff(before, after)
+          Diffy::Diff.new(before, after, context: CONTEXT_LINES).to_s(:text)
+        end
+      end
 
       HUNK_HEADER_RE = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.freeze
 
