@@ -43,6 +43,20 @@ module StreamWeaver
         end
       end
 
+      # The framework stylesheet, or the best available substitute.
+      #
+      # full_stylesheet reads views.rb off disk. A compiled Opal bundle has no
+      # disk to read it from, so callers that run in both hosts -- notably the
+      # DOM-free render-to-string path -- ask for this instead and get the
+      # minimal token set rather than an exception when the file is out of
+      # reach.
+      # @return [String] CSS content
+      def base_stylesheet
+        full_stylesheet
+      rescue StandardError, NotImplementedError
+        minimal_css
+      end
+
       # Minimal CSS for fallback
       def minimal_css
         <<~CSS

@@ -3,6 +3,7 @@
 
 require "cgi"
 require_relative "static"
+require_relative "../opal/env"
 
 module StreamWeaver
   module Adapter
@@ -217,6 +218,22 @@ module StreamWeaver
       def render_theme_switcher(view, component, state)
       end
 
+      # Every component stylesheet this adapter has been asked to emit, keyed by
+      # component so re-renders and repeated instances contribute exactly once.
+      #
+      # The DOM path writes these into <head> and forgets them; the DOM-free
+      # path has no <head> to write to, so the adapter is where the CSS lives
+      # and OpalRuntime#collected_css reads it back out after a render. Values
+      # are already @layer-wrapped, i.e. ready to drop into a <style> tag.
+      def collected_css
+        @collected_css ||= {}
+      end
+
+      # The collected stylesheets as one blob, in first-seen order.
+      def collected_css_text
+        collected_css.values.join("\n")
+      end
+
       # Satisfies the Adapter::Static contract.
       #
       # Server-side this writes a <style> tag into the rendered fragment. In the
@@ -224,11 +241,18 @@ module StreamWeaver
       # builds fresh renderers and replaces the region's innerHTML. So instead
       # we append to <head> keyed by component, which is idempotent and survives
       # re-renders untouched.
+      #
+      # Collection happens unconditionally, before the DOM write: it is the only
+      # channel available when there is no <head> (Node, render-to-string), and
+      # it is what makes this hook observable under MRI.
       def inject_component_css(view, key, css)
         return if css.nil? || css.strip.empty?
-        return unless RUBY_ENGINE == "opal"
 
         wrapped = StreamWeaver::CSS.layer_wrap(css)
+        collected_css[key.to_sym] ||= wrapped
+
+        return unless StreamWeaver::Opal::Env.dom?
+
         # :nocov:
         %x{
           var id = "sw-css-" + #{key.to_s};

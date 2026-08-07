@@ -16,6 +16,7 @@ require "stream_weaver/adapter/opal"
 require "stream_weaver/opal/renderer"
 require "stream_weaver/opal/runtime"
 require "stream_weaver/opal/bridge"
+require "stream_weaver/opal/string_bridge"
 
 # Opal-specific patches: fix methods that break in the browser.
 
@@ -84,8 +85,16 @@ end
 StreamWeaver::App.prepend StreamWeaver::Opal::AppReactivePatch
 
 # Opal-mode global `app` helper — replaces the Sinatra-wired StreamWeaver.app.
-# Creates an OpalRuntime with the DSL block, installs delegated event listeners
-# via OpalBridge, and returns the runtime.
+# Creates an OpalRuntime with the DSL block, publishes it to JavaScript, and
+# returns the runtime.
+#
+# Two bridges, because the same compiled bundle runs in two hosts. OpalBridge
+# (window.SWRuntime: patching, event delegation) needs a DOM and installs only
+# when it finds one, so loading this bundle in Node no longer explodes on the
+# missing `window`. StringBridge (globalThis.SWRender) needs nothing and always
+# installs, which is what gives a Node process a way to render the doc to a
+# string. `app()` keeps its original signature so existing browser builds and
+# opal-build output are unaffected.
 module StreamWeaver
   module Opal
     module Kernel
@@ -94,6 +103,7 @@ module StreamWeaver
         runtime = OpalRuntime.new(adapter: adapter)
         runtime.set_block(&block)
         OpalBridge.new(runtime).install
+        StringBridge.new(runtime, title: title).install
         runtime
       end
     end

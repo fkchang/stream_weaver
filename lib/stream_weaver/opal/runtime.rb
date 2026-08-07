@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "reactive_state"
+require_relative "shell"
 
 module StreamWeaver
   module Opal
@@ -79,6 +80,52 @@ module StreamWeaver
         parts.join
       ensure
         OpalRuntime.current = nil
+      end
+
+      # --- DOM-free rendering -------------------------------------------------
+      #
+      # render_html already builds the whole document without touching the DOM;
+      # everything below is what a non-browser host (Node, a CLI) needs around
+      # it. Nothing here references `window` or `document`, directly or through
+      # a callee, so the same compiled bundle renders in a bare Node process.
+
+      # The document body, as a string. Same markup the browser paints.
+      def render_body_html
+        render_html
+      end
+
+      # Per-component CSS gathered during the last render.
+      #
+      # In a browser the adapter appends this to <head> and the caller never
+      # needs it. With no <head> to append to, the caller has to place it, so
+      # the collected text is handed back rather than dropped -- a document
+      # rendered to a file is styled because of this.
+      def collected_css
+        return "" unless @adapter.respond_to?(:collected_css_text)
+
+        @adapter.collected_css_text
+      end
+
+      # A complete, standalone HTML document: body markup baked in, component
+      # CSS inlined, no app.js and no runtime boot. This is the artifact a
+      # `streamweaver-render doc.rb > doc.html` CLI writes out.
+      #
+      # stylesheet: framework CSS to inline ahead of the component CSS. Defaults
+      # to whatever is reachable from the current host (see CSS.base_stylesheet)
+      # -- a host that ships the full theme file can pass its contents instead.
+      # Remaining options are forwarded to OpalShell.render.
+      def render_document(title: "StreamWeaver Document", stylesheet: nil, **shell_options)
+        body = render_html
+        css  = [stylesheet || StreamWeaver::CSS.base_stylesheet, collected_css]
+               .reject { |c| c.nil? || c.to_s.strip.empty? }.join("\n")
+
+        OpalShell.render(
+          title: title,
+          app_js: nil,
+          body_html: body,
+          inline_css: css,
+          **shell_options
+        )
       end
 
       def register_component_callbacks(components)
