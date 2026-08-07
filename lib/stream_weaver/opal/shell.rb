@@ -57,9 +57,20 @@ module StreamWeaver
       # theme_css:         path/URL to a CSS file injected as a stylesheet link.
       # google_fonts_url:  full Google Fonts CSS URL; emits preconnect + stylesheet tags.
       # dark_mode_script:  inline JS string placed first in <head> to prevent FOUC.
+      # body_html:         pre-rendered markup for #sw-app. Supplying it makes the
+      #                    page a finished document rather than an empty shell the
+      #                    runtime fills in.
+      # inline_css:        CSS text written into a <style> in <head>. A statically
+      #                    rendered document cannot let the adapter append per-
+      #                    component styles at runtime, so they come through here.
+      # app_js:            set to nil for a static render -- with no runtime to
+      #                    boot, the page only needs the enhancers (Prism/Mermaid)
+      #                    to run once over markup that is already present.
       def self.render(
         title: "StreamWeaver App",
         app_js: "app.js",
+        body_html: nil,
+        inline_css: nil,
         morphdom_js: nil,
         marked_js: nil,
         prism_js: nil,
@@ -84,14 +95,24 @@ module StreamWeaver
           "    <link rel=\"stylesheet\" href=\"#{google_fonts_url}\">"
         ]
 
+        has_inline_css = !(inline_css.nil? || inline_css.to_s.strip.empty?)
+
         optional_head = [
           (dark_mode_script && "    <script>#{dark_mode_script}</script>"),
           *google_fonts_tags,
           (theme_css && "    <link rel=\"stylesheet\" href=\"#{theme_css}\">"),
-          "    <link rel=\"stylesheet\" href=\"#{prism_css_src}\">"
+          "    <link rel=\"stylesheet\" href=\"#{prism_css_src}\">",
+          (has_inline_css ? "    <style>\n#{inline_css}\n    </style>" : nil)
         ].compact
 
         optional_section = optional_head.empty? ? "" : "#{optional_head.join("\n")}\n"
+
+        # With app_js the page boots the runtime, which fires sw:render and lets
+        # ENHANCE_JS decorate what it painted. Without it nothing will ever fire
+        # that event, so the enhancers are invoked directly against the markup
+        # that shipped in the HTML.
+        app_script = app_js ? "  <script src=\"#{app_js}\"></script>\n" : ""
+        boot_call  = app_js ? "SWRuntime.start();" : "if (typeof swEnhance === \"function\") swEnhance();"
 
         <<~HTML
           <!DOCTYPE html>
@@ -107,12 +128,11 @@ module StreamWeaver
             <script src="#{diff_src}"></script>
           </head>
           <body class="#{body_theme}">
-            <div id="sw-app"></div>
-            <script src="#{app_js}"></script>
-            <script>#{ENHANCE_JS}</script>
+            <div id="sw-app">#{body_html}</div>
+          #{app_script}  <script>#{ENHANCE_JS}</script>
             <script>
               document.addEventListener("DOMContentLoaded", function() {
-                SWRuntime.start();
+                #{boot_call}
               });
             </script>
           </body>

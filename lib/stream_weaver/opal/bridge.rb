@@ -1,9 +1,16 @@
 # frozen_string_literal: true
 
+require_relative "env"
+
 module StreamWeaver
   module Opal
     # Wires an OpalRuntime to window.SWRuntime in the browser.
     # Registers delegated event listeners so no inline JS is needed in HTML.
+    #
+    # Every line below needs a DOM -- `window`, `document`, and event
+    # delegation -- so installing is a no-op where there is none. That is what
+    # lets `app()` stay a single unconditional call site while the same bundle
+    # also loads in Node, where the string path (StringBridge) takes over.
     class OpalBridge
       def initialize(runtime)
         @runtime = runtime
@@ -11,7 +18,7 @@ module StreamWeaver
 
       def install
         # :nocov:
-        return unless defined?(::Opal)
+        return unless Env.dom?
         runtime = @runtime
         %x{
           window.SWRuntime = {

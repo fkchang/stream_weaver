@@ -112,4 +112,38 @@ RSpec.describe StreamWeaver::Opal::OpalShell do
       end
     end
   end
+
+  # A doc rendered to a file by the DOM-free path ships finished markup and its
+  # own styles: there is no runtime coming along later to supply either.
+  describe ".render as a static document" do
+    let(:html) do
+      described_class.render(
+        title: "Doc", app_js: nil,
+        body_html: '<div id="sw-region-0"><p>hello</p></div>',
+        inline_css: ".sw-callout { border-left: 4px solid red; }"
+      )
+    end
+
+    it "mounts the pre-rendered body inside #sw-app" do
+      expect(html).to include('<div id="sw-app"><div id="sw-region-0"><p>hello</p></div></div>')
+    end
+
+    it "inlines the supplied CSS in the head" do
+      expect(html).to include("<style>\n.sw-callout { border-left: 4px solid red; }\n    </style>")
+    end
+
+    it "omits the app.js script tag" do
+      expect(html).not_to include("<script src=\"\"")
+      expect(html).not_to include("app.js")
+    end
+
+    it "runs the enhancers directly instead of booting a runtime" do
+      expect(html).not_to include("SWRuntime.start()")
+      expect(html).to include('if (typeof swEnhance === "function") swEnhance();')
+    end
+
+    it "omits the style block when no inline CSS is supplied" do
+      expect(described_class.render(title: "Doc")).not_to include("<style>")
+    end
+  end
 end
