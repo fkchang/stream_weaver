@@ -2,10 +2,14 @@
 # backtick_javascript: true
 
 require "cgi"
+require_relative "static"
 
 module StreamWeaver
   module Adapter
     class Opal < Base
+      # Document renderers with no framework behavior, shared with the AlpineJS
+      # adapter. See adapter/static.rb.
+      include Static
       # Not in Base — defined fresh here
       def render_header(view, content, level, _state, options = {})
         level = [[level.to_i, 1].max, 6].min
@@ -211,6 +215,73 @@ module StreamWeaver
 
       # Not in Base — defined fresh here
       def render_theme_switcher(view, component, state)
+      end
+
+      # Satisfies the Adapter::Static contract.
+      #
+      # Server-side this writes a <style> tag into the rendered fragment. In the
+      # browser that would re-emit on every re-render, since each render pass
+      # builds fresh renderers and replaces the region's innerHTML. So instead
+      # we append to <head> keyed by component, which is idempotent and survives
+      # re-renders untouched.
+      def inject_component_css(view, key, css)
+        return if css.nil? || css.strip.empty?
+        return unless RUBY_ENGINE == "opal"
+
+        wrapped = StreamWeaver::CSS.layer_wrap(css)
+        # :nocov:
+        %x{
+          var id = "sw-css-" + #{key.to_s};
+          if (!document.getElementById(id)) {
+            var el = document.createElement("style");
+            el.id = id;
+            el.textContent = #{wrapped};
+            document.head.appendChild(el);
+          }
+        }
+        # :nocov:
+        nil
+      end
+
+      # Mermaid is the one document component that is NOT shared with the
+      # AlpineJS adapter: that version drives initialization through x-data /
+      # x-init and layers on zoom controls, both of which are behavior.
+      #
+      # Here we emit only what mermaid.js needs to find and typeset the diagram
+      # -- the source text inside a container with the conventional class. The
+      # host page owns the mermaid library and decides when to run it, which is
+      # what lets a browser-extension viewer bundle mermaid locally instead of
+      # pulling it from a CDN.
+      def render_mermaid(view, component, state)
+        attrs = { id: component.diagram_id, class: component.css_classes }
+        attrs["data-sw-mermaid-elk"] = "true" if component.elk?
+        attrs["data-sw-mermaid-vars"] = component.theme_vars_json if component.theme_vars
+
+        view.div(**attrs) do
+          view.plain(component.code)
+        end
+      end
+
+      # The remaining Adapter::Static seams. All three are asset/behavior
+      # concerns that a rendered document does not need:
+      #
+      # - scroll-spy is progressive enhancement; the TOC anchors work without it
+      # - Prism cannot be pulled from a CDN here (a browser-extension host
+      #   forbids remote script), so highlighting waits until it is bundled
+      # - copy-to-clipboard is Alpine-driven behavior, not document structure
+      #
+      # Each is a deliberate no-op rather than a missing method, so the document
+      # renders instead of raising NotImplementedError.
+      def inject_sidebar_toc_assets(view)
+        inject_component_css(view, :sidebar_toc, sidebar_toc_css)
+      end
+
+      def inject_code_highlighting(view)
+        nil
+      end
+
+      def render_code_block_copy_button(view, component)
+        nil
       end
 
       private

@@ -5,6 +5,7 @@
 
 require "stream_weaver/version"
 require "stream_weaver/utils"
+require "stream_weaver/css"   # layer_wrap, for per-component CSS injection
 require "stream_weaver/theme"
 require "stream_weaver/display_dsl"
 require "stream_weaver/app"
