@@ -100,7 +100,7 @@ module StreamWeaver
       end
 
       def build_stdlib(builder)
-        %w[set cgi json digest].each do |lib|
+        %w[set cgi json digest thread].each do |lib|
           builder.build(lib)
         rescue => e
           warn "[OpalBuilder] Could not build stdlib '#{lib}': #{e.message}"
