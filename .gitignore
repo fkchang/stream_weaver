@@ -1,5 +1,9 @@
 /.bundle/
 /vendor/bundle/
+# Browser assets too large to commit (mermaid is ~3.5MB, over the 500KB ceiling
+# bin/check_git_hygiene enforces). Regenerate with bin/vendor_browser_assets;
+# OpalBuilder falls back to CDN when they are absent.
+/vendor/js/
 /.yardoc
 /_yardoc/
 /coverage/
