@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>StreamWeaver doc</title>
+
+  <!--
+    This page exists to hold an eval.
+
+    Rendering a doc means compiling its Ruby in the browser, and Opal's
+    compiler output has to be evaluated. Manifest V3 pins extension pages to
+    script-src 'self' and will not accept 'unsafe-eval' there, so the work
+    cannot happen in viewer.html. A sandboxed page is the one place MV3 allows
+    it -- see the "sandbox" CSP in manifest.json.
+
+    The trade is that this page has a null origin and no extension APIs, so it
+    cannot read storage or fetch across origins. viewer.html does both and
+    hands the source over by postMessage.
+
+    Every script is local. MV3 forbids remote script outright, which is why
+    mermaid and Prism are bundled rather than pulled from a CDN.
+  -->
+  <link rel="stylesheet" href="vendor/sw-theme.css">
+  <link rel="stylesheet" href="vendor/prism-tomorrow.min.css">
+
+  <script src="vendor/marked.umd.js"></script>
+  <script src="vendor/morphdom.min.js"></script>
+  <script src="vendor/prism.min.js"></script>
+  <script src="vendor/mermaid.min.js"></script>
+  <script src="vendor/diff.min.js"></script>
+  <script src="vendor/sw-heredoc-rewrite.js"></script>
+  <script src="vendor/sw-runtime.js"></script>
+
+  <style>
+    html, body { margin: 0; padding: 0; }
+    body { padding: 2rem 2.5rem 4rem; }
+    #sw-error {
+      display: none;
+      margin: 2rem auto;
+      max-width: 48rem;
+      padding: 1rem 1.25rem;
+      border-left: 4px solid #d1242f;
+      background: #fff5f5;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 0.8125rem;
+      white-space: pre-wrap;
+      color: #82071e;
+    }
+  </style>
+</head>
+<body class="sw-theme-default sw-theme-doc">
+  <div id="sw-app"></div>
+  <pre id="sw-error"></pre>
+  <script src="sandbox.js"></script>
+</body>
+</html>

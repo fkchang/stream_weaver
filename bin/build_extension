@@ -1,0 +1,94 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Assembles the browser extension's vendor/ directory.
+#
+# The extension renders a StreamWeaver doc from Ruby source it reads off
+# GitHub, which means it has to compile Ruby in the browser. That needs two
+# things bundled together: Opal's self-hosted compiler (opal-parser) and the
+# StreamWeaver runtime. Everything is copied in as a local file -- Manifest V3
+# forbids remote script outright, so nothing may come from a CDN.
+#
+# Nothing produced here is committed (see extension/.gitignore); the bundle is
+# ~7MB and regenerating it is one command.
+#
+# Usage: bin/build_extension
+
+require "fileutils"
+
+ROOT   = File.expand_path("..", __dir__)
+VENDOR = File.join(ROOT, "extension", "vendor")
+STUBS  = File.join(ROOT, "lib", "stream_weaver", "opal", "stubs")
+ASSETS = File.join(ROOT, "lib", "stream_weaver", "assets", "js")
+
+$LOAD_PATH.unshift(File.join(ROOT, "lib"))
+require "opal"
+require "stream_weaver/css"
+require "stream_weaver/theme"
+
+FileUtils.mkdir_p(VENDOR)
+
+# --- 1. Ruby compiler + StreamWeaver runtime, in one bundle -----------------
+#
+# Order matters: `opal` first establishes the runtime the rest attaches to,
+# then the stdlib pieces StreamWeaver touches, then opal-parser (which is what
+# provides Opal.compile in the browser), then StreamWeaver itself.
+puts "Compiling StreamWeaver + Opal compiler..."
+builder = Opal::Builder.new(missing_require_severity: :ignore)
+builder.append_paths(STUBS)
+builder.append_paths(File.join(ROOT, "lib"))
+builder.build("opal")
+%w[set cgi json digest thread].each do |lib|
+  builder.build(lib)
+rescue StandardError => e
+  warn "  ! stdlib #{lib}: #{e.message}"
+end
+builder.build("opal-parser")
+builder.build("stream_weaver/opal_entry")
+File.write(File.join(VENDOR, "sw-runtime.js"), builder.to_s)
+
+# --- 2. Theme CSS -----------------------------------------------------------
+#
+# Framework-level styling only. Per-component CSS is emitted by the render
+# itself and injected by the viewer, so it is not duplicated here.
+puts "Writing theme CSS..."
+css = +""
+css << StreamWeaver::CSS.base_stylesheet
+css << "\n" << StreamWeaver::Theme.visual_skills_css
+css << "\n" << StreamWeaver::CSS.animation_css
+StreamWeaver::Theme::Presets.get(:doc) &&
+  css << "\n" << StreamWeaver::Theme::Presets.generate_preset_css(:doc)
+File.write(File.join(VENDOR, "sw-theme.css"), css)
+
+# --- 3. Static assets -------------------------------------------------------
+copies = {
+  File.join(ASSETS, "sw-heredoc-rewrite.js")  => "sw-heredoc-rewrite.js",
+  File.join(STUBS,  "marked.umd.js")          => "marked.umd.js",
+  File.join(STUBS,  "morphdom.min.js")        => "morphdom.min.js",
+  File.join(STUBS,  "prism.min.js")           => "prism.min.js",
+  File.join(STUBS,  "prism-tomorrow.min.css") => "prism-tomorrow.min.css",
+  File.join(STUBS,  "diff.min.js")            => "diff.min.js",
+  File.join(ROOT, "vendor", "js", "mermaid.min.js") => "mermaid.min.js"
+}
+
+missing = []
+copies.each do |src, name|
+  if File.exist?(src)
+    FileUtils.cp(src, File.join(VENDOR, name))
+  else
+    missing << name
+  end
+end
+
+puts "\nBundled into extension/vendor:"
+Dir.glob(File.join(VENDOR, "*")).sort.each do |f|
+  puts format("  %-28s %6d KB", File.basename(f), File.size(f) / 1024)
+end
+total = Dir.glob(File.join(VENDOR, "*")).sum { |f| File.size(f) }
+puts format("  %-28s %6d KB", "TOTAL", total / 1024)
+
+unless missing.empty?
+  warn "\n! Missing: #{missing.join(', ')}"
+  warn "  Run bin/vendor_browser_assets first (mermaid is not committed -- too large)."
+  exit 1
+end
