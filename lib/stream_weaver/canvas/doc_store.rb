@@ -34,6 +34,29 @@ module StreamWeaver
       DOCS_SUBPATH  = File.join('docs', 'streamweaver_canvas')
       VALID_NAME    = /\A[A-Za-z0-9][A-Za-z0-9._-]*\z/
 
+      # Marks a file as a StreamWeaver doc body.
+      #
+      # A saved doc is a bare DSL body -- no require, no app wrapper -- so
+      # nothing about the file announces what it is. Tooling that finds one out
+      # of context (a renderer looking at a GitHub blob, an editor plugin, a
+      # human) has no reliable way to tell it apart from ordinary Ruby.
+      # Guessing from content does not work either: substantial docs use a dozen
+      # distinct DSL calls, but a thin one may be almost entirely `md`.
+      #
+      # A comment costs nothing at eval time and travels with the file wherever
+      # it goes, independent of path or extension.
+      STAMP = '# streamweaver-doc: v1'
+
+      # Recognizes the stamp anywhere in a leading comment block, so it still
+      # matches if a magic comment (frozen_string_literal) or a title comment
+      # sits above it. The version is captured but not pinned -- a v2 doc should
+      # still be recognizable as a doc.
+      STAMP_RE = /^#\s*streamweaver-doc:\s*v(\d+)\s*$/
+
+      # How far into a file to look. Deep enough for a comment header, shallow
+      # enough that a stray match in prose does not count.
+      STAMP_SCAN_LINES = 10
+
       module_function
 
       # Resolves the docs directory. Read fresh on every call so an ENV
@@ -75,8 +98,35 @@ module StreamWeaver
         FileUtils.mkdir_p(dir)
 
         full = File.join(dir, filename)
-        File.write(full, dsl)
+        File.write(full, stamp(dsl))
         full
+      end
+
+      # True when `source` already declares itself a StreamWeaver doc.
+      #
+      # Only the first STAMP_SCAN_LINES are considered, so a doc that happens to
+      # quote the stamp inside prose or a code_block further down is not
+      # mistaken for a stamped file.
+      def stamped?(source)
+        return false unless source.is_a?(String)
+
+        source.each_line.first(STAMP_SCAN_LINES).any? { |line| line.match?(STAMP_RE) }
+      end
+
+      # Returns `dsl` with the stamp on its first line, or unchanged if it is
+      # already stamped.
+      #
+      # Idempotent on purpose: saving over an existing doc is the normal way to
+      # update one, and the stamp must not accumulate. Prepending is safe even
+      # when the body opens with `# frozen_string_literal: true` -- Ruby honors
+      # a magic comment anywhere in the leading comment block, not only on line
+      # one.
+      def stamp(dsl)
+        text = dsl.to_s
+        return text if stamped?(text)
+        return "#{STAMP}\n" if text.empty?
+
+        "#{STAMP}\n#{text}"
       end
 
       # Strips a single trailing .rb (case-sensitive), validates the resulting

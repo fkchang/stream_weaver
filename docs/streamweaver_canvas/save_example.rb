@@ -1,3 +1,4 @@
+# streamweaver-doc: v1
 header1 "🎯 Save as doc button — fresh bridge"
 md "Hard-refresh this page (cmd-shift-R or ctrl-shift-R) — old bridge had stale code."
 md ""

@@ -106,10 +106,80 @@ RSpec.describe StreamWeaver::Canvas::DocStore do
     end
   end
 
+  # A saved doc is a bare DSL body, indistinguishable from ordinary Ruby to
+  # anything that finds it out of context -- a renderer looking at a GitHub
+  # blob, an editor plugin. The stamp is what makes it identifiable, so these
+  # pin down that it is present, survives re-saving, and never runs twice.
+  describe 'doc stamping' do
+    describe '.stamped?' do
+      it 'recognizes a stamped body' do
+        expect(described_class.stamped?("#{described_class::STAMP}\nheader1 'Hi'")).to be(true)
+      end
+
+      it 'rejects an unstamped body' do
+        expect(described_class.stamped?("header1 'Hi'")).to be(false)
+      end
+
+      it 'recognizes a stamp below a magic comment' do
+        src = "# frozen_string_literal: true\n#{described_class::STAMP}\nheader1 'Hi'"
+        expect(described_class.stamped?(src)).to be(true)
+      end
+
+      it 'recognizes a future stamp version, so a v2 doc is still a doc' do
+        expect(described_class.stamped?("# streamweaver-doc: v2\nheader1 'Hi'")).to be(true)
+      end
+
+      it 'tolerates spacing variations' do
+        expect(described_class.stamped?("#streamweaver-doc:v1\nx")).to be(true)
+      end
+
+      it 'ignores a stamp buried deeper than the scan window' do
+        buried = (["md 'x'"] * 20).join("\n") + "\n#{described_class::STAMP}\n"
+        expect(described_class.stamped?(buried)).to be(false)
+      end
+
+      it 'is false for non-strings' do
+        expect(described_class.stamped?(nil)).to be(false)
+      end
+    end
+
+    describe '.stamp' do
+      it 'prepends the stamp' do
+        expect(described_class.stamp("header1 'Hi'"))
+          .to eq("#{described_class::STAMP}\nheader1 'Hi'")
+      end
+
+      it 'is idempotent, so re-saving does not accumulate stamps' do
+        once  = described_class.stamp("header1 'Hi'")
+        twice = described_class.stamp(once)
+        expect(twice).to eq(once)
+      end
+
+      it 'stamps an empty body without leaving a stray blank line' do
+        expect(described_class.stamp('')).to eq("#{described_class::STAMP}\n")
+      end
+
+      it 'leaves the body evaluable as Ruby' do
+        stamped = described_class.stamp("$stamp_probe = 41 + 1")
+        eval(stamped) # rubocop:disable Security/Eval
+        expect($stamp_probe).to eq(42)
+      end
+    end
+
+    it 'stamps on save, and re-saving the read-back content does not double it' do
+      path  = described_class.save('doc', "header1 'Hi'")
+      first = File.read(path)
+      expect(described_class.stamped?(first)).to be(true)
+
+      described_class.save('doc', first)
+      expect(File.read(path)).to eq(first)
+    end
+  end
+
   describe '.save' do
     it 'writes the DSL to <path>/<name>.rb and returns the absolute path' do
       path = described_class.save('hello', "header1 'Hi'")
-      expect(File.read(path)).to eq("header1 'Hi'")
+      expect(File.read(path)).to eq("#{described_class::STAMP}\nheader1 'Hi'")
       expect(path).to eq(File.join(@root, 'hello.rb'))
     end
 
@@ -130,7 +200,7 @@ RSpec.describe StreamWeaver::Canvas::DocStore do
       p1 = described_class.save('foo', 'a')
       p2 = described_class.save('foo.rb', 'b')
       expect(p1).to eq(p2)
-      expect(File.read(p1)).to eq('b') # second write overwrites first
+      expect(File.read(p1)).to eq("#{described_class::STAMP}\nb") # second write overwrites first
     end
 
     it 'allows descriptive names with extra dots (e.g. auth-flow.v2)' do

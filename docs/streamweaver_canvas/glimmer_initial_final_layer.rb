@@ -1,3 +1,4 @@
+# streamweaver-doc: v1
 header1 "Glimmer: Inspired By, Not Dependent On"
 
   div(style: "height:8px")

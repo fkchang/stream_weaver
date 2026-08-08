@@ -66,7 +66,8 @@ RSpec.describe StreamWeaver::Canvas::BridgeServer, type: :request do
       expect(body['ok']).to eq(true)
       expect(body['path']).to be_a(String)
       expect(File.exist?(body['path'])).to eq(true)
-      expect(File.read(body['path'])).to eq("header1 'Hi'")
+      expect(File.read(body['path']))
+        .to eq("#{StreamWeaver::Canvas::DocStore::STAMP}\nheader1 'Hi'")
       expect(body['path']).to start_with(@doc_root)
     end
 
