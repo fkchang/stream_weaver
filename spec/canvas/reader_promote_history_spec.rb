@@ -52,7 +52,8 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'promote-from-history' do
       expect(body['ok']).to be true
       expect(body['path']).to be_a(String)
       expect(File.exist?(body['path'])).to be true
-      expect(File.read(body['path'])).to eq("header1 'Snapshot'")
+      expect(File.read(body['path']))
+        .to eq("#{StreamWeaver::Canvas::DocStore::STAMP}\nheader1 'Snapshot'")
       expect(body['path']).to start_with(@doc_root)
     end
 

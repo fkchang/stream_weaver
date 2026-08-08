@@ -44,10 +44,13 @@ The core pattern: write your document content **once**, as a bare DSL body file 
 
 Because both modes read the exact same file, content never drifts between "the app I can `ruby run.rb`" and "the live canvas I've been iterating on with the user."
 
+**Start every DSL body with `# streamweaver-doc: v1`.** A body is bare component calls with no `require` and no `app` wrapper, so nothing about the file says what it is — tooling that meets one out of context (a renderer pointed at a GitHub blob, an editor plugin) can't tell it from ordinary Ruby, and guessing from content is unreliable for short docs. "Save as doc" adds the line automatically; hand-written bodies need it written in. It's a comment, so it costs nothing at eval time.
+
 Reference implementation in this repo: `examples/components/prd_dsl.rb` (body only) + `examples/components/prd_demo.rb` (standalone wrapper). Copy the shared-body/`instance_eval` structure — but note `prd_demo.rb` still says `theme: :document`, since it predates the `:doc` theme; use `theme: :doc` in new work.
 
 ```ruby
 # doc_body.rb — no `app` block, just component calls
+# streamweaver-doc: v1
 sidebar_toc sections: [
   { id: "problem", label: "Problem Statement" },
   { id: "architecture", label: "Architecture" }

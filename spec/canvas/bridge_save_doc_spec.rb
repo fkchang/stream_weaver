@@ -67,8 +67,11 @@ RSpec.describe StreamWeaver::Canvas::BridgeServer, type: :request do
       expect(body['path']).to be_a(String)
       expect(File.exist?(body['path'])).to eq(true)
       # The session's theme/layout are prepended so canvas-read can re-render
-      # the saved doc with the same look (stream_weaver-csf).
-      expect(File.read(body['path'])).to eq("use_theme :default\nuse_layout :fluid\nheader1 'Hi'")
+      # the saved doc with the same look (stream_weaver-csf), and the whole
+      # thing gets the stamp DocStore.save always adds on top (outermost,
+      # since dsl_with_metadata runs first and save's stamp() wraps its result).
+      expect(File.read(body['path']))
+        .to eq("#{StreamWeaver::Canvas::DocStore::STAMP}\nuse_theme :default\nuse_layout :fluid\nheader1 'Hi'")
       expect(body['path']).to start_with(@doc_root)
     end
 
