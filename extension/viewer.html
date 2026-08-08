@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StreamWeaver doc</title>
+  <style>
+    :root { color-scheme: light dark; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      display: flex;
+      flex-direction: column;
+      font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f6f8fa;
+      color: #1f2328;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      padding: .5rem 1rem;
+      background: #fff;
+      border-bottom: 1px solid #d1d9e0;
+      flex: 0 0 auto;
+    }
+    header .name { font-weight: 600; }
+    header .source { color: #59636e; text-decoration: none; margin-left: auto; }
+    header .source:hover { text-decoration: underline; }
+    #frame { flex: 1 1 auto; border: 0; width: 100%; background: #fff; }
+    #status { padding: 2rem; color: #59636e; }
+    #status.error { color: #82071e; white-space: pre-wrap; font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="name" id="doc-name">StreamWeaver doc</span>
+    <a class="source" id="source-link" target="_blank" rel="noopener">View source on GitHub</a>
+  </header>
+  <div id="status">Rendering…</div>
+  <!--
+    The doc renders inside this sandboxed frame, not here. Compiling Ruby in
+    the browser requires eval, which Manifest V3 forbids on a normal extension
+    page; a sandboxed page is the one place it is allowed. See sandbox.html.
+  -->
+  <iframe id="frame" src="sandbox.html" hidden></iframe>
+  <script src="viewer.js"></script>
+</body>
+</html>

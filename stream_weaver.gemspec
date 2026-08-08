@@ -24,7 +24,10 @@ Gem::Specification.new do |spec|
   spec.files = IO.popen(%w[git ls-files -z], chdir: __dir__, err: IO::NULL) do |ls|
     ls.readlines("\x0", chomp: true).reject do |f|
       (f == gemspec) ||
-        f.start_with?(*%w[test/ spec/ features/ .git appveyor Gemfile bin/])
+        # extension/ is a browser extension built from this source, not part of
+        # the gem -- its build output is gitignored, but the sources would
+        # otherwise ship to every `gem install`.
+        f.start_with?(*%w[test/ spec/ features/ .git appveyor Gemfile bin/ extension/])
     end
   end
   spec.bindir = "exe"
