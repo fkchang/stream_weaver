@@ -215,6 +215,28 @@ RSpec.describe "SidebarToc Component (T11)" do
       expect(css).to match(/#app-container:has\(>\s*\.sw-sidebar-toc\)\s*\{[^}]*overflow:\s*visible/m)
     end
 
+    it "out-specifies the base #app-container rule it has to beat" do
+      # #app-container:has(...) alone is (1,1,0) -- one type selector short
+      # of the base rule's (1,1,1) -- and silently loses the cascade on
+      # overflow-x, which then forces overflow-y back to auto too (spec:
+      # mixed visible/non-visible axes coerce to non-visible). Sticky
+      # breaks with no error, just a nav that scrolls away.
+      expect(css).to match(/body\[class\*="sw-layout-"\]\s*>\s*#app-container:has\(>\s*\.sw-sidebar-toc\)\s*\{\s*overflow:\s*visible/m)
+    end
+
+    it "keeps the overflow reset out of the desktop media query -- mobile's top nav is sticky too" do
+      desktop_block = css[/@media \(min-width:\s*1000px\).*/m]
+      expect(desktop_block).not_to include("overflow: visible")
+    end
+
+    it "stays pinned to the base selector it overrides (views.rb)" do
+      # This override hardcodes another file's selector shape to win a
+      # specificity race. If views.rb's base rule selector ever changes,
+      # this assertion is the tripwire -- without it, the override could
+      # silently stop applying and nothing else would fail.
+      expect(StreamWeaver::Views::AppView.master_theme_css).to include('body[class*="sw-layout-"] > #app-container')
+    end
+
     it "preserves the horizontal-bar responsive layout below 1000px" do
       expect(css).to match(/@media \(max-width:\s*999px\)\s*\{[^@]*\.sw-sidebar-toc\s*\{[^}]*top:\s*0/m)
       expect(css).to match(/\.sw-sidebar-toc__nav\s*\{[^}]*flex-direction:\s*row/m)

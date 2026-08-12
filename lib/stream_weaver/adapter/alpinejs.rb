@@ -3260,6 +3260,18 @@ module StreamWeaver
           height: auto;
         }
 
+        /* views.rb's global `p { color: var(--sw-color-text-muted) }` typography rule
+           is unscoped and beats Mermaid's own inline node-label color (mermaid renders
+           HTML labels as <p> inside a foreignObject) -- inheritance loses to any rule
+           that targets the element directly, even one set via a colored `style X
+           color:#fff` directive on an ancestor. Net effect: every mermaid node label
+           renders the same muted gray regardless of the diagram author's color choice,
+           unreadable on a dark-filled node. Force these <p> tags back to inheriting
+           from Mermaid's own label wrapper. */
+        .sw-mermaid__diagram svg foreignObject p {
+          color: inherit !important;
+        }
+
         .sw-mermaid--compact .sw-mermaid__diagram svg {
           max-height: 150px;
         }
@@ -4763,6 +4775,23 @@ module StreamWeaver
             z-index: 10;
           }
 
+          /* Undo the base overflow-x:auto on #app-container (views.rb's
+             `body[class*="sw-layout-"] > #app-container`) -- a non-visible
+             overflow-x computes overflow-y to auto, making the container a
+             scroll container and killing position:sticky for the TOC. Must
+             out-specify that selector (#app-container:has(...) alone is one
+             type selector short, see spec/components/sidebar_toc_spec.rb)
+             and must stay outside @media: the mobile top nav is sticky too.
+             Code/diff/board components scroll locally (e.g.
+             .sw-code-block__body), so this doesn't affect them; a wide
+             *table* with no scrollable:/sticky_header: option has no local
+             overflow wrapper and will now overflow to the page-level
+             `html { overflow-x: auto }` scroller instead -- accepted, since
+             a stuck TOC beats a nested table scrollbar. */
+          body[class*="sw-layout-"] > #app-container:has(> .sw-sidebar-toc) {
+            overflow: visible;
+          }
+
           .sw-sidebar-toc__nav {
             counter-reset: sw-toc-counter;
           }
@@ -4898,20 +4927,16 @@ module StreamWeaver
             }
 
             /* Sidebar + content as a CSS grid (replaces the old
-               float + negative-margin hack, which let the sidebar
-               scroll away instead of staying sticky). #app-container's
-               base rule sets overflow-x: auto for wide tables/code —
-               per spec that forces overflow-y to also compute to auto,
-               turning #app-container into its own scroll container and
-               silently breaking position:sticky for every descendant
-               (this was the actual root cause of the sticky-sidebar bug,
-               independent of the float hack). Restore both axes to
-               visible here so sticky positions relative to the page. */
+               float + negative-margin hack, which let the sidebar scroll
+               away instead of staying sticky). The overflow:visible fix
+               that makes position:sticky work lives on the
+               `body[class*="sw-layout-"] > #app-container:has(> .sw-sidebar-toc)`
+               rule above, not here -- it has to apply below 1000px too,
+               for the mobile top nav. */
             #app-container:has(> .sw-sidebar-toc) {
               --sw-toc-width: 220px;
               --sw-toc-gap: 2rem;
               display: grid;
-              overflow: visible;
               grid-template-columns: var(--sw-toc-width) minmax(0, 1fr);
               column-gap: var(--sw-toc-gap);
             }

@@ -81,5 +81,26 @@ RSpec.describe 'Canvas theme support' do
       expect(last_response.status).to eq(200)
       expect(last_response.body).to include('class="sw-theme-default sw-layout-fluid"')
     end
+
+    it 'pins cascade layer order and wraps SW_STYLES in the framework layer (stream_weaver-oeo)' do
+      # Regression guard: SW_STYLES was left unlayered while master_theme_css
+      # and visual_skills_css were layered around it. Per the cascade-layers
+      # spec, unlayered rules beat every layer regardless of specificity or
+      # order -- so SW_STYLES silently won every property it shares with
+      # master_theme_css (body margin/padding/font, #app-container padding/
+      # radius/shadow), undoing the theme wherever the two collide.
+      StreamWeaver::Canvas::BridgeServer.bridge.create_session('layer-session')
+      get '/canvas/layer-session'
+      body = last_response.body
+
+      # Layer order pinned before any framework CSS, matching views.rb's head.
+      pin_index = body.index('@layer stream-weaver;')
+      expect(pin_index).not_to be_nil
+
+      # SW_STYLES-only rule (--sw-radius-md is unique to it; master_theme_css
+      # uses --sw-radius-lg for #app-container) must be inside the layer.
+      expect(body).to match(/@layer stream-weaver \{\n[^@]*--sw-radius-md/m)
+      expect(pin_index).to be < body.index('--sw-radius-md')
+    end
   end
 end

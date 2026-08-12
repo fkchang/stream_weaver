@@ -220,11 +220,15 @@ module StreamWeaver
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>StreamWeaver Canvas: #{session_name}</title>
-            <style>
-              #{SW_STYLES}
-            </style>
-            <style>#{StreamWeaver::Views::AppView.master_theme_css}</style>
-            <style>#{StreamWeaver::Theme.visual_skills_css}</style>
+            <!-- Pins cascade layer order before any framework CSS is emitted,
+                 matching views.rb's AppView head -- SW_STYLES, master_theme_css
+                 and visual_skills_css all share this layer so any unlayered
+                 user stylesheet (inline_stylesheets_html below) always wins
+                 the cascade regardless of specificity or document order. -->
+            <style>@layer #{StreamWeaver::CSS::LAYER_NAME};</style>
+            <style>#{StreamWeaver::CSS.layer_wrap(SW_STYLES)}</style>
+            <style>#{StreamWeaver::CSS.layer_wrap(StreamWeaver::Views::AppView.master_theme_css)}</style>
+            <style>#{StreamWeaver::CSS.layer_wrap(StreamWeaver::Theme.visual_skills_css)}</style>
             #{inline_stylesheets_html(session)}
             <script>#{StreamWeaver::Theme::AutoMode.inline_script}</script>
             #{adapter.cdn_scripts.join("\n")}
