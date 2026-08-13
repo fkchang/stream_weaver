@@ -79,6 +79,30 @@ module StreamWeaver
         full
       end
 
+      # Prepends `use_theme`/`use_layout` declarations so a saved doc renders
+      # with the theme/layout of the canvas session it came from
+      # (stream_weaver-csf). Saved docs are re-rendered later by canvas-read,
+      # which has no session to inherit from -- only the DSL text -- so the
+      # metadata has to live in the text itself.
+      #
+      # Shared by BOTH save routes (BridgeServer's /canvas/:name/save-doc and
+      # Reader's /save-doc) deliberately: duplicating the prepend logic would
+      # let the two Save-as-doc buttons silently write different files.
+      #
+      # Idempotent: a DSL that already declares either directive keeps its own,
+      # so re-saving never stacks duplicates. nil theme/layout are skipped --
+      # that's the Reader's promote-from-history case, where the snapshot was
+      # written by `canvas-push` (which never sees the bridge session's theme),
+      # so those docs keep rendering with canvas-read's default.
+      def dsl_with_metadata(dsl, theme: nil, layout: nil)
+        lines = []
+        lines << "use_theme :#{theme}"   if theme  && !dsl.match?(/^[ \t]*use_theme\b/)
+        lines << "use_layout :#{layout}" if layout && !dsl.match?(/^[ \t]*use_layout\b/)
+        return dsl if lines.empty?
+
+        (lines + [dsl]).join("\n")
+      end
+
       # Strips a single trailing .rb (case-sensitive), validates the resulting
       # basename against VALID_NAME with explicit '..' and null-byte rejection,
       # then re-adds .rb. Bare ".rb" normalizes to an empty basename and is

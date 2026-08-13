@@ -106,6 +106,39 @@ RSpec.describe StreamWeaver::CLI do
       allow(Thread).to receive(:new).and_yield
     end
 
+    # --theme/--layout are a fallback for docs with no `use_theme`/`use_layout`
+    # of their own; they must not survive into FileList.build as paths
+    # (stream_weaver-csf).
+    describe '--theme / --layout flags' do
+      after { StreamWeaver::Canvas::Reader.configure_defaults!(theme: nil, layout: nil) }
+
+      it 'passes them to the reader as render defaults and strips them from args' do
+        Dir.mktmpdir do |explicit|
+          File.write(File.join(explicit, 'explicit.rb'), "header1 'Explicit'")
+
+          expect(StreamWeaver::Canvas::Reader).to receive(:configure_files!) do |list|
+            expect(list.files.map { |f| File.basename(f) }).to eq(['explicit.rb'])
+          end
+
+          expect do
+            described_class.canvas_read(['--theme=doc', explicit, '--layout=wide'])
+          end.to output.to_stdout
+
+          expect(StreamWeaver::Canvas::Reader.default_theme).to eq(:doc)
+          expect(StreamWeaver::Canvas::Reader.default_layout).to eq(:wide)
+        end
+      end
+
+      it 'leaves the defaults nil when the flags are absent' do
+        Dir.mktmpdir do |explicit|
+          File.write(File.join(explicit, 'explicit.rb'), "header1 'Explicit'")
+          expect { described_class.canvas_read([explicit]) }.to output.to_stdout
+          expect(StreamWeaver::Canvas::Reader.default_theme).to be_nil
+          expect(StreamWeaver::Canvas::Reader.default_layout).to be_nil
+        end
+      end
+    end
+
     it 'uses the explicit path even when default exists' do
       FileUtils.mkdir_p(@doc_root)
       File.write(File.join(@doc_root, 'default.rb'), "header1 'Default'")

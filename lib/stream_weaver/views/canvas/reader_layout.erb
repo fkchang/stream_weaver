@@ -1,3 +1,15 @@
+<%
+  doc            = @doc
+  body_class     = "sw-theme-#{doc.theme} sw-layout-#{doc.layout} sw-reader"
+  docs_groups    = @file_list.docs_groups
+  history_groups = @file_list.history_groups
+  is_history     = @current_file && @file_list.history_dir?(File.dirname(@current_file))
+  default_name   = if is_history
+                     session   = File.basename(File.dirname(@current_file))
+                     timestamp = File.basename(@current_file, '.rb')
+                     "#{session}-#{timestamp}"
+                   end
+%>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,64 +17,129 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>canvas-read</title>
 
-  <%# StreamWeaver component styles (CSS vars, typography, sw-* classes) %>
-  <style>
-    <%= @sw_styles %>
-  </style>
+  <%# Framework CSS, identical ordering to the canvas (PageShell is the single
+      source of truth): layer pin, then CANVAS_CSS / master_theme_css /
+      visual_skills_css all inside @layer stream-weaver. The reader's own
+      chrome gets a later layer so it can't be outranked by, nor bleed into,
+      framework rules. %>
+  <%= StreamWeaver::PageShell.framework_css_html(extra_layers: %w[sw-reader-chrome]) %>
 
-  <%# Override body to flex layout for the two-pane shell %>
-  <style>
-    html, body { height: 100%; overflow: hidden; margin: 0; padding: 0; display: flex; }
-    body { font-family: system-ui, sans-serif; background: #f3f4f6; }
+  <%# The doc's own use_stylesheet CSS -- unlayered, so it wins everything. %>
+  <%= StreamWeaver::PageShell.user_css_html(inline_stylesheets: doc.inline_stylesheets) %>
 
-    /* Sidebar */
-    #sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid #d1d5db; overflow-y: auto;
-               display: flex; flex-direction: column; background: #f9fafb; }
-    #sidebar h2 { padding: 0.75rem 1rem; font-size: 0.7rem; text-transform: uppercase;
-                  letter-spacing: .08em; color: #6b7280; border-bottom: 1px solid #e5e7eb; }
-    .dir-header { padding: 0.4rem 1rem; font-size: 0.75rem; color: #4b5563; cursor: pointer;
-                  user-select: none; display: flex; align-items: center; gap: 0.4rem; }
-    .dir-header:hover { background: #e5e7eb; }
-    .dir-arrow { font-size: 0.6rem; transition: transform 0.15s; }
-    .dir-files { list-style: none; }
-    .dir-files.collapsed { display: none; }
-    .dir-files li a { display: block; padding: 0.35rem 1rem 0.35rem 1.75rem; font-size: 0.8rem;
-                      color: #4b5563; text-decoration: none; white-space: nowrap;
-                      overflow: hidden; text-overflow: ellipsis; }
-    .dir-files li a:hover { background: #e5e7eb; color: #111827; }
-    .dir-files li a.active { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+  <%# Reader chrome. BOTH layered and #sw-reader-*-scoped, on purpose:
+      scoping alone would let CANVAS_CSS/master_theme_css's bare h1..h6/p/a
+      rules style the rail; layering alone would let an unscoped rule here
+      (e.g. `body { font-family }`) beat theme rules for the whole page.
+      The `html` padding rule below is the one deliberate exception -- it has
+      no framework equivalent to lose to. spec/canvas/reader_chrome_css_spec.rb
+      enforces this scoping; keep every new selector rooted at html or
+      #sw-reader-. %>
+  <style id="sw-reader-chrome-css">@layer sw-reader-chrome {
+    /* Offset for the fixed rail lives on `html`, NOT body: this shrinks html's
+       content box so body's own `margin: 0 auto` centering and the max-width
+       the sidebar_toc CSS sets on body both keep working untouched, with zero
+       cascade contact with views.rb's
+       `body[class*="sw-layout-"] { margin: 0 auto; padding: ... }` shorthand. */
+    html { padding-left: 220px; }
+    html.sw-rail-collapsed { padding-left: 0; }
+
+    /* Collapse is driven by `left`, never `transform`: a transformed ancestor
+       becomes the containing block for its position:fixed descendants, which
+       would trap the Save-as-doc modal (docked in #sw-reader-nav) inside the
+       220px rail instead of covering the viewport. */
+    #sw-reader-chrome {
+      position: fixed; top: 0; bottom: 0; left: 0; width: 220px; z-index: 40;
+      display: flex; flex-direction: column;
+      background: #f9fafb; border-right: 1px solid #d1d5db;
+      font-family: system-ui, sans-serif; font-size: 16px; line-height: 1.5;
+      color: #4b5563;
+      transition: left 160ms ease;
+    }
+    html.sw-rail-collapsed #sw-reader-chrome { left: -220px; }
+
+    #sw-reader-toggle {
+      position: absolute; top: 0.5rem; right: -2.25rem;
+      width: 2rem; height: 2rem; padding: 0; line-height: 1;
+      border: 1px solid #d1d5db; border-radius: 4px;
+      background: #f9fafb; color: #4b5563;
+      font-size: 0.95rem; cursor: pointer;
+    }
+    #sw-reader-toggle:hover { background: #e5e7eb; color: #111827; }
+
+    /* Only the file list scrolls; #sw-reader-nav stays docked at the bottom. */
+    #sw-reader-files { flex: 1; overflow-y: auto; min-height: 0; }
+    #sw-reader-files h2 {
+      margin: 0; padding: 0.75rem 1rem; font-size: 0.7rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .08em; color: #6b7280;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    #sw-reader-files .dir-header {
+      padding: 0.4rem 1rem; font-size: 0.75rem; color: #4b5563; cursor: pointer;
+      user-select: none; display: flex; align-items: center; gap: 0.4rem;
+    }
+    #sw-reader-files .dir-header:hover { background: #e5e7eb; }
+    /* Base glyph (▶) is the collapsed state; .expanded rotates it to point
+       down. Same convention as .history-section-header.expanded below, so
+       toggleSection() can drive both with one function. */
+    #sw-reader-files .dir-arrow { font-size: 0.6rem; transition: transform 0.15s; display: inline-block; }
+    #sw-reader-files .dir-header.expanded .dir-arrow { transform: rotate(90deg); }
+    #sw-reader-files .dir-files { list-style: none; margin: 0; padding: 0; }
+    #sw-reader-files .dir-files.collapsed { display: none; }
+    #sw-reader-files .dir-files li a {
+      display: block; padding: 0.35rem 1rem 0.35rem 1.75rem; font-size: 0.8rem;
+      color: #4b5563; text-decoration: none; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    #sw-reader-files .dir-files li a:hover { background: #e5e7eb; color: #111827; }
+    #sw-reader-files .dir-files li a.active { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
 
     /* History section (collapsed by default) */
-    .history-section-header { padding: 0.75rem 1rem; font-size: 0.7rem; text-transform: uppercase;
-                              letter-spacing: .08em; color: #6b7280; border-top: 1px solid #e5e7eb;
-                              cursor: pointer; user-select: none; display: flex; align-items: center;
-                              gap: 0.4rem; margin: 0; }
-    .history-section-header:hover { background: #e5e7eb; color: #374151; }
-    .history-arrow { font-size: 0.6rem; transition: transform 0.15s; display: inline-block; }
-    .history-section-header.expanded .history-arrow { transform: rotate(90deg); }
-    .history-content.collapsed { display: none; }
-    .history-session .dir-header { font-size: 0.7rem; color: #6b7280; padding-left: 1.25rem; }
-    .history-session .dir-files li a { padding-left: 2.25rem; font-family: ui-monospace, monospace;
-                                       font-size: 0.72rem; }
+    #sw-reader-files .history-section-header {
+      border-top: 1px solid #e5e7eb; border-bottom: none;
+      cursor: pointer; user-select: none; display: flex; align-items: center; gap: 0.4rem;
+    }
+    #sw-reader-files .history-section-header:hover { background: #e5e7eb; color: #374151; }
+    #sw-reader-files .history-arrow { font-size: 0.6rem; transition: transform 0.15s; display: inline-block; }
+    #sw-reader-files .history-section-header.expanded .history-arrow { transform: rotate(90deg); }
+    #sw-reader-files .history-content.collapsed { display: none; }
+    #sw-reader-files .history-session .dir-header { font-size: 0.7rem; color: #6b7280; padding-left: 1.25rem; }
+    #sw-reader-files .history-session .dir-files li a {
+      padding-left: 2.25rem; font-family: ui-monospace, monospace; font-size: 0.72rem;
+    }
 
-    /* Main pane */
-    #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    #content { flex: 1; overflow-y: auto; padding: 0; background: var(--sw-color-bg, #f8f8f8); }
-    #content > * { max-width: none; }
+    /* Prev/Next docked in the rail -- not a fixed bottom bar, which would
+       collide with the Save-as-doc button at bottom right. */
+    #sw-reader-nav {
+      flex-shrink: 0; border-top: 1px solid #e5e7eb; background: #f9fafb;
+      padding: 0.5rem 0.75rem; display: flex; align-items: center;
+      justify-content: space-between; gap: 0.4rem;
+    }
+    #sw-reader-nav .nav-link {
+      background: #e5e7eb; color: #374151; border: none; padding: 0.3rem 0.6rem;
+      border-radius: 4px; cursor: pointer; font-size: 0.75rem;
+      text-decoration: none; display: inline-block;
+    }
+    #sw-reader-nav .nav-link:hover { background: #d1d5db; color: #111827; }
+    #sw-reader-nav .nav-link--disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+    #sw-reader-nav .counter { font-size: 0.72rem; color: #6b7280; white-space: nowrap; }
 
-    /* Nav bar */
-    #nav { border-top: 1px solid #e5e7eb; padding: 0.5rem 1rem; display: flex;
-           align-items: center; justify-content: space-between; flex-shrink: 0;
-           background: #f9fafb; }
-    #nav .nav-link { background: #e5e7eb; color: #374151; border: none; padding: 0.3rem 0.8rem;
-                     border-radius: 4px; cursor: pointer; font-size: 0.8rem;
-                     text-decoration: none; display: inline-block; }
-    #nav .nav-link:hover { background: #d1d5db; color: #111827; }
-    #nav .nav-link--disabled { opacity: 0.35; cursor: default; pointer-events: none; }
-    #nav .counter { font-size: 0.8rem; color: #6b7280; }
-  </style>
+    /* Mandatory below ~1100px: the sidebar_toc's own desktop breakpoint
+       (min-width: 1000px) measures the VIEWPORT, not the doc's content
+       region, so a permanently-present 220px rail leaves the doc cramped at
+       common laptop widths. Default to collapsed and let the toggle slide it
+       back in over the content. */
+    @media (max-width: 1100px) {
+      html { padding-left: 0; }
+      #sw-reader-chrome { left: -220px; }
+      html.sw-rail-open #sw-reader-chrome { left: 0; box-shadow: 0 0 30px rgba(0,0,0,0.18); }
+    }
+  }</style>
 
-  <%# CDN dependencies for StreamWeaver components %>
+  <%# CDN dependencies. Written out here rather than via adapter.cdn_scripts:
+      the adapter is in :websocket mode (for component-markup parity with the
+      canvas) and would emit a connect script for /canvas/reader/ws, which the
+      reader doesn't serve -- 5 failed reconnects in the console. %>
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -74,80 +151,85 @@
   <%# Kick off mermaid CDN preload immediately (same pattern as bridge server) %>
   <script>if (window.swMermaidPreload) window.swMermaidPreload();</script>
 </head>
-<body class="sw-theme-default sw-layout-fluid"
-      hx-boost="true" hx-target="#content" hx-select="#content" hx-swap="innerHTML"
-      hx-select-oob="#nav">
+<body class="<%= body_class %>">
 
-<%
-  docs_groups    = @file_list.docs_groups
-  history_groups = @file_list.history_groups
-  is_history     = @current_file && @file_list.history_dir?(File.dirname(@current_file))
-  default_name   = if is_history
-                     session   = File.basename(File.dirname(@current_file))
-                     timestamp = File.basename(@current_file, '.rb')
-                     "#{session}-#{timestamp}"
-                   end
-%>
-<nav id="sidebar">
-  <% # docs_groups / history_groups computed above %>
+<%# #app-container is a DIRECT body child, exactly as the canvas renders it.
+    Every sidebar_toc/theme selector that matters uses the ">" combinator
+    against `body[class*="sw-layout-"] > #app-container` -- nesting it inside
+    a wrapper leaves all of them dead. data-sw-body-class is read back by the
+    htmx:afterSwap handler below, since <body>'s own class attribute is never
+    part of the swapped region. %>
+<div id="app-container" data-sw-body-class="<%= body_class %>">
+  <%= doc.html %>
+</div>
 
-  <h2><%= history_groups.any? ? 'Docs' : 'Files' %></h2>
-  <% docs_groups.each do |dir, entries| %>
-    <% dir_label = File.basename(dir) %>
-    <div class="dir-section">
-      <div class="dir-header" onclick="toggleDir(this)">
-        <span class="dir-arrow">▼</span>
-        <span title="<%= dir %>"><%= dir_label %></span>
-      </div>
-      <ul class="dir-files">
-        <% entries.each do |filepath, idx| %>
-          <li>
-            <a href="/?file=<%= idx %>"
-               class="<%= idx == @current_index ? 'active' : '' %>"
-               title="<%= filepath %>">
-              <%= File.basename(filepath, '.rb') %>
-            </a>
-          </li>
-        <% end %>
-      </ul>
-    </div>
-  <% end %>
+<%# hx-boost lives on the chrome, not <body>: that keeps in-document
+    .sw-sidebar-toc__link anchors (#section-id jumps) structurally outside the
+    boosted subtree. hx-swap="outerHTML" is required -- hx-select keeps the
+    matched element itself, so innerHTML would nest a new #app-container
+    inside the old one on every click, killing every ">" selector and
+    getElementById('app-container') lookup after the first navigation. %>
+<nav id="sw-reader-chrome"
+     hx-boost="true" hx-target="#app-container" hx-select="#app-container"
+     hx-swap="outerHTML" hx-select-oob="#sw-reader-nav">
 
-  <% if history_groups.any? %>
-    <h2 class="history-section-header" onclick="toggleHistory(this)">
-      <span class="history-arrow">▶</span>
-      History (<%= history_groups.size %>)
-    </h2>
-    <div class="history-content collapsed">
-      <% history_groups.each do |dir, entries| %>
-        <% session_label = File.basename(dir) %>
-        <div class="dir-section history-session">
-          <div class="dir-header" onclick="toggleDir(this)">
-            <span class="dir-arrow">▶</span>
-            <span title="<%= dir %>"><%= session_label %></span>
-          </div>
-          <ul class="dir-files collapsed">
-            <% entries.each do |filepath, idx| %>
-              <li>
-                <a href="/?file=<%= idx %>"
-                   class="<%= idx == @current_index ? 'active' : '' %>"
-                   title="<%= filepath %>">
-                  <%= File.basename(filepath, '.rb') %>
-                </a>
-              </li>
-            <% end %>
-          </ul>
+  <button id="sw-reader-toggle" type="button" onclick="swToggleRail()"
+          title="Toggle file rail" aria-label="Toggle file rail">☰</button>
+
+  <div id="sw-reader-files">
+    <h2><%= history_groups.any? ? 'Docs' : 'Files' %></h2>
+    <% docs_groups.each do |dir, entries| %>
+      <% dir_label = File.basename(dir) %>
+      <div class="dir-section">
+        <div class="dir-header expanded" onclick="toggleSection(this)">
+          <span class="dir-arrow">▶</span>
+          <span title="<%= dir %>"><%= dir_label %></span>
         </div>
-      <% end %>
-    </div>
-  <% end %>
-</nav>
+        <ul class="dir-files">
+          <% entries.each do |filepath, idx| %>
+            <li>
+              <a href="/?file=<%= idx %>"
+                 class="<%= idx == @current_index ? 'active' : '' %>"
+                 title="<%= filepath %>">
+                <%= File.basename(filepath, '.rb') %>
+              </a>
+            </li>
+          <% end %>
+        </ul>
+      </div>
+    <% end %>
 
-<div id="main">
-  <div id="content">
-    <%= @content_html %>
+    <% if history_groups.any? %>
+      <h2 class="history-section-header" onclick="toggleSection(this)">
+        <span class="history-arrow">▶</span>
+        History (<%= history_groups.size %>)
+      </h2>
+      <div class="history-content collapsed">
+        <% history_groups.each do |dir, entries| %>
+          <% session_label = File.basename(dir) %>
+          <div class="dir-section history-session">
+            <div class="dir-header" onclick="toggleSection(this)">
+              <span class="dir-arrow">▶</span>
+              <span title="<%= dir %>"><%= session_label %></span>
+            </div>
+            <ul class="dir-files collapsed">
+              <% entries.each do |filepath, idx| %>
+                <li>
+                  <a href="/?file=<%= idx %>"
+                     class="<%= idx == @current_index ? 'active' : '' %>"
+                     title="<%= filepath %>">
+                    <%= File.basename(filepath, '.rb') %>
+                  </a>
+                </li>
+              <% end %>
+            </ul>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
   </div>
-  <div id="nav">
+
+  <div id="sw-reader-nav">
     <% prev_idx = @current_index - 1 %>
     <% next_idx = @current_index + 1 %>
     <% if prev_idx >= 0 %>
@@ -161,39 +243,23 @@
     <% else %>
       <span class="nav-link nav-link--disabled">Next ▶</span>
     <% end %>
-  </div>
-</div>
-
-<script>
-  function toggleDir(header) {
-    const ul = header.nextElementSibling;
-    const arrow = header.querySelector('.dir-arrow');
-    ul.classList.toggle('collapsed');
-    arrow.style.transform = ul.classList.contains('collapsed') ? 'rotate(-90deg)' : '';
-  }
-
-  function toggleHistory(header) {
-    const content = header.nextElementSibling;
-    content.classList.toggle('collapsed');
-    header.classList.toggle('expanded');
-  }
-
-  // Keyboard arrows trigger Prev/Next anchors so they go through htmx
-  // (preserving sidebar state). The anchors handle their own enabled/disabled
-  // state via the [data-nav] selector — disabled state is rendered as <span>
-  // (no [data-nav]) so the click finds nothing.
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowLeft')  document.querySelector('[data-nav="prev"]')?.click();
-    if (e.key === 'ArrowRight') document.querySelector('[data-nav="next"]')?.click();
-  });
-</script>
 
 <% if is_history %>
   <%# Save-as-doc widget — promotes this history snapshot to docs/streamweaver_canvas/.
       Mirrors bridge_server.rb's save_doc_widget look-and-feel (sw-save-doc-* CSS,
-      Alpine modal). Only injected when the current file is a history entry. %>
-  <style>
+      Alpine modal). Lives inside #sw-reader-nav so the OOB swap refreshes its
+      file: index on every boosted navigation. Its <style> deliberately stays in
+      this same is_history conditional (spec/canvas/reader_promote_history_spec.rb
+      asserts the sw-save-doc-* strings are absent entirely for docs files), which
+      is also why these unscoped .sw-save-doc-* selectors are not part of the
+      #sw-reader-chrome-css block the scoping guard checks. %>
+  <style>@layer sw-reader-chrome {
     [x-cloak] { display: none !important; }
+    /* The widget now lives inside #sw-reader-nav (a flex row) so the OOB swap
+       refreshes its file: index. display:contents keeps it from becoming a
+       fourth flex item and pushing Next off the right edge -- both its real
+       children are position:fixed, so nothing lands in the flow. */
+    .sw-save-doc-host { display: contents; }
     .sw-save-doc-btn {
       position: fixed; bottom: 1rem; right: 1rem; z-index: 50;
       background: var(--sw-color-primary, #1f6feb); color: #fff;
@@ -212,6 +278,7 @@
       background: #fff; border-radius: 8px; padding: 1.5rem;
       width: min(440px, 90vw); box-shadow: 0 20px 50px rgba(0,0,0,0.25);
       font-family: 'Source Sans 3', system-ui, sans-serif;
+      color: #111827; text-align: left;
     }
     .sw-save-doc-dialog h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; }
     .sw-save-doc-dialog p.hint {
@@ -252,10 +319,17 @@
       background: var(--sw-color-primary, #1f6feb); color: #fff;
     }
     .sw-save-doc-save:hover:not(:disabled) { filter: brightness(1.05); }
-  </style>
+  }</style>
   <div x-data="{
     open: false,
-    name: '<%= ERB::Util.h(default_name) %>',
+    <%# to_json gives valid JS-string quoting (handles embedded quotes/apostrophes
+        from a filesystem-derived name correctly); ERB::Util.h then HTML-escapes
+        the result for the surrounding "..." attribute. Either alone is wrong: bare
+        to_json leaks a literal " that closes the attribute early (the exact q4y
+        regression above); the old ERB::Util.h(name) with hand-written '...' quotes
+        HTML-escapes ' to &#39;, which the HTML parser decodes back to a literal '
+        before Alpine ever sees it, so an apostrophe in the name still breaks out. %>
+    name: <%= ERB::Util.h(default_name.to_json) %>,
     file: <%= @current_index %>,
     saving: false,
     savedPath: null,
@@ -287,7 +361,7 @@
         this.saving = false;
       }
     }
-  }" @keydown.escape.window="open = false">
+  }" class="sw-save-doc-host" @keydown.escape.window="open = false">
     <button class="sw-save-doc-btn" @click="openDialog()" title="Save this history snapshot as a persistent doc">
       💾 Save as doc
     </button>
@@ -314,5 +388,68 @@
     </div>
   </div>
 <% end %>
+  </div>
+</nav>
+
+<script>
+  // Shared by docs/history-session dir-headers and the outer History (N)
+  // header -- both are a header immediately followed by the region it
+  // discloses, so one function drives all three. Arrow rotation is pure CSS
+  // (.expanded .dir-arrow / .history-arrow), not inline style, so it can't
+  // drift out of sync with the collapsed state the way per-glyph inline
+  // transforms did.
+  function toggleSection(header) {
+    header.classList.toggle('expanded');
+    header.nextElementSibling.classList.toggle('collapsed');
+  }
+
+  // Rail collapse. Below 1100px the rail is collapsed by default and the
+  // toggle slides it in (.sw-rail-open); above, it's open by default and the
+  // toggle slides it out (.sw-rail-collapsed). Classes go on <html> because
+  // the offset rule they drive is `html { padding-left }`.
+  function swToggleRail() {
+    const root = document.documentElement;
+    if (window.matchMedia('(max-width: 1100px)').matches) {
+      root.classList.remove('sw-rail-collapsed');
+      root.classList.toggle('sw-rail-open');
+    } else {
+      root.classList.remove('sw-rail-open');
+      root.classList.toggle('sw-rail-collapsed');
+    }
+  }
+
+  // Keyboard arrows trigger Prev/Next anchors so they go through htmx
+  // (preserving sidebar state). The anchors handle their own enabled/disabled
+  // state via the [data-nav] selector — disabled state is rendered as <span>
+  // (no [data-nav]) so the click finds nothing.
+  //
+  // Suppressed while focus is in a text input/textarea/contenteditable (the
+  // Save-as-doc name field lives on this same page) -- otherwise correcting
+  // a typo with Left/Right silently navigates the reader out from under the
+  // open dialog. Also suppressed with any modifier held, so it doesn't
+  // shadow browser/OS shortcuts that happen to use the arrow keys.
+  document.addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
+    if (e.key === 'ArrowLeft')  document.querySelector('[data-nav="prev"]')?.click();
+    if (e.key === 'ArrowRight') document.querySelector('[data-nav="next"]')?.click();
+  });
+
+  // Only #app-container and #sw-reader-nav are swapped, so two things the rest
+  // of the page depends on have to be re-derived by hand after each swap:
+  //   1. <body>'s theme/layout classes — file N may be :doc themed and N+1 not.
+  //   2. the active link in #sw-reader-files, which is never itself swapped.
+  document.addEventListener('htmx:afterSwap', () => {
+    const container = document.getElementById('app-container');
+    if (container && container.dataset.swBodyClass) {
+      document.body.className = container.dataset.swBodyClass;
+    }
+    const current = new URLSearchParams(window.location.search).get('file');
+    document.querySelectorAll('#sw-reader-files .dir-files a').forEach((a) => {
+      const href = new URL(a.getAttribute('href'), window.location.origin);
+      a.classList.toggle('active', href.searchParams.get('file') === current);
+    });
+  });
+</script>
 </body>
 </html>

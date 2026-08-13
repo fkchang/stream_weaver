@@ -1288,6 +1288,27 @@ module StreamWeaver
       @inline_stylesheets << css unless @inline_stylesheets.include?(css)
     end
 
+    # In-DSL equivalents of App.new's `theme:`/`layout:` kwargs, for the same
+    # reason use_stylesheet exists: a DSL file that gets instance_eval'd by
+    # canvas-push/canvas-read never runs its own App.new, so a `theme:` kwarg
+    # is simply not reachable in that path (stream_weaver-csf). Declaring
+    # `use_theme :doc` in the DSL body makes the doc carry its own theme
+    # everywhere it's rendered.
+    #
+    # These are new methods, NOT redefinitions of the `theme`/`layout`
+    # attr_readers -- views.rb reads `app.theme`/`app.layout` in many places.
+    def use_theme(name)
+      @theme = validate_theme(name)
+    end
+
+    # Caveat: canvas-read renders through Views::AppContentView, which does
+    # not evaluate exclusive-layout render blocks or layout slots (those are
+    # AppView-only). So in the reader `use_layout` only reaches body-class /
+    # CSS-selector level layout, not full exclusive-layout fidelity.
+    def use_layout(name)
+      @layout = name.to_sym
+    end
+
     # =========================================
     # Layout components (Cabinet Control style)
     # =========================================

@@ -67,6 +67,32 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'promote-from-history' do
       expect(body['error']).to match(/index/i)
     end
 
+    # Regression: `index.respond_to?(:to_i)` is true for nil (nil.to_i == 0),
+    # so a missing `file` key silently promoted file 0 instead of rejecting
+    # the request.
+    it 'returns 422 when the file key is missing entirely (does not silently promote file 0)' do
+      post '/save-doc',
+           { name: 'my-snapshot' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(422)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to be false
+    end
+
+    # Regression: Array#[] accepts negative indices (wraps to count from the
+    # end), so `file: -1` promoted the LAST file in the list instead of being
+    # rejected as an invalid index.
+    it 'returns 422 for a negative file index (does not wrap to the last file)' do
+      post '/save-doc',
+           { file: -1, name: 'my-snapshot' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(422)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to be false
+    end
+
     it 'returns 422 when name is invalid (ArgumentError from DocStore)' do
       post '/save-doc',
            { file: 1, name: '../evil' }.to_json,

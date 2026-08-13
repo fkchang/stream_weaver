@@ -146,8 +146,14 @@ module StreamWeaver
         body = JSON.parse(request.body.read, symbolize_names: true) rescue {}
         doc_name = body[:name]
 
+        # Carry the live session's theme/layout into the saved text -- canvas-read
+        # re-renders the file with no session to inherit from (stream_weaver-csf).
+        dsl = StreamWeaver::Canvas::DocStore.dsl_with_metadata(
+          session.dsl, theme: session.theme, layout: session.layout
+        )
+
         begin
-          path = StreamWeaver::Canvas::DocStore.save(doc_name, session.dsl)
+          path = StreamWeaver::Canvas::DocStore.save(doc_name, dsl)
           { ok: true, path: path }.to_json
         rescue ArgumentError => e
           halt 422, { ok: false, error: e.message }.to_json
@@ -526,13 +532,6 @@ module StreamWeaver
           })();
         JS
       end
-
-      # Alias -- the actual CSS now lives at StreamWeaver::PageShell::CANVAS_CSS
-      # (stream_weaver-mdc: extracted so canvas-read and the HTML exporter can
-      # reuse it once they're wired up, stream_weaver-csf / stream_weaver-65z).
-      # Kept as a constant here since Canvas::Reader references it as
-      # BridgeServer::SW_STYLES.
-      SW_STYLES = StreamWeaver::PageShell::CANVAS_CSS
 
       def container_attrs(state, adapter)
         attrs = adapter.container_attributes(state)

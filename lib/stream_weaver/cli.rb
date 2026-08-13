@@ -620,6 +620,7 @@ module StreamWeaver
           streamweaver canvas-list                List canvas sessions
           streamweaver canvas-stop                Stop the canvas bridge
           streamweaver canvas-read <file|dir> [...]  Browse canvas DSL docs in a local viewer
+                       [--theme=NAME] [--layout=NAME]  Fallback for docs with no use_theme/use_layout
 
         Canvas Examples:
           # Create session and open browser
@@ -1396,6 +1397,20 @@ module StreamWeaver
       require_relative 'canvas/reader'
       require_relative 'canvas/doc_store'
       require_relative 'canvas/history'
+
+      # Fallback theme/layout for files that don't declare their own via
+      # `use_theme`/`use_layout` (stream_weaver-csf). Precedence:
+      # DSL use_theme > --theme flag > :default/:fluid.
+      theme = nil
+      layout = nil
+      args = args.reject do |arg|
+        case arg
+        when /\A--theme=(.+)\z/  then theme  = Regexp.last_match(1); true
+        when /\A--layout=(.+)\z/ then layout = Regexp.last_match(1); true
+        else false
+        end
+      end
+      StreamWeaver::Canvas::Reader.configure_defaults!(theme: theme, layout: layout)
 
       history_roots = []
       if args.empty?

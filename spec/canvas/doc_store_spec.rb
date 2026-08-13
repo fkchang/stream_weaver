@@ -172,4 +172,34 @@ RSpec.describe StreamWeaver::Canvas::DocStore do
       expect { described_class.save('auth-flow.v2_1', 'x') }.not_to raise_error
     end
   end
+
+  # Shared by BOTH Save-as-doc routes (BridgeServer and Reader) so the two
+  # buttons can never write differently shaped files (stream_weaver-csf).
+  describe '.dsl_with_metadata' do
+    it 'prepends use_theme/use_layout so canvas-read re-renders the same look' do
+      expect(described_class.dsl_with_metadata("header1 'Hi'", theme: :doc, layout: :wide))
+        .to eq("use_theme :doc\nuse_layout :wide\nheader1 'Hi'")
+    end
+
+    it 'is idempotent -- a DSL that already declares them is untouched' do
+      dsl = "use_theme :dark\nuse_layout :full\nheader1 'Hi'"
+      expect(described_class.dsl_with_metadata(dsl, theme: :doc, layout: :wide)).to eq(dsl)
+    end
+
+    it 'injects only the directive that is missing' do
+      dsl = "use_theme :dark\nheader1 'Hi'"
+      expect(described_class.dsl_with_metadata(dsl, theme: :doc, layout: :wide))
+        .to eq("use_layout :wide\n#{dsl}")
+    end
+
+    it 'returns the DSL unchanged when neither theme nor layout is known' do
+      expect(described_class.dsl_with_metadata("header1 'Hi'")).to eq("header1 'Hi'")
+    end
+
+    it 'only counts a declaration at the start of a line, not a mention mid-string' do
+      dsl = "text 'call use_theme to set a theme'"
+      expect(described_class.dsl_with_metadata(dsl, theme: :doc))
+        .to eq("use_theme :doc\n#{dsl}")
+    end
+  end
 end
