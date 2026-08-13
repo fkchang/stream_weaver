@@ -38,9 +38,11 @@ module StreamWeaver
       CDN_PRISMJS_JS = "https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"
       CDN_PRISMJS_AUTOLOADER = "https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"
       CDN_ALPINE = "https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-      CDN_HTMX = "https://unpkg.com/htmx.org@2.0.4"
-      CDN_IDIOMORPH = "https://unpkg.com/idiomorph@0.3.0/dist/idiomorph-ext.min.js"
       CDN_GOOGLE_FONTS = "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap"
+
+      # Ground truth for "does this export need Alpine.js" -- see
+      # #collect_cdn_scripts.
+      ALPINE_DIRECTIVE = /\sx-data=/
 
       # A canvas-doc DSL fragment is a bare list of component calls -- it is
       # instance_eval'd against an App the caller already made. A full
@@ -139,7 +141,7 @@ module StreamWeaver
         build_document(
           title: @app.title,
           css_html: css_html,
-          cdn_scripts: collect_cdn_scripts,
+          cdn_scripts: collect_cdn_scripts(body_html),
           cdn_styles: collect_cdn_styles,
           body_html: body_html
         )
@@ -189,14 +191,27 @@ module StreamWeaver
         "sw-theme-#{@app.theme} sw-layout-#{@app.layout}"
       end
 
-      # Collect CDN script URLs based on what components are used
-      def collect_cdn_scripts
+      # Collect CDN script URLs based on what's actually in the rendered
+      # body.
+      #
+      # htmx/idiomorph are never included here: a static export has no
+      # server to talk to, so they're pure dead weight (and, on a
+      # CSP-locked-down viewer such as SharePoint's HTML preview, dead
+      # weight that also fails to load at all).
+      #
+      # Alpine.js is loaded only when the rendered markup actually contains
+      # an `x-data=` directive. This is checked against body_html itself
+      # rather than an allowlist of component classes: more than a dozen
+      # renderers in the adapter (tabs, charts, slide containers, dropdowns,
+      # copy buttons, sortable tables, ...) emit Alpine directives, and an
+      # allowlist here would silently drift every time one of them changes
+      # -- exactly the bug this method used to have, just for Alpine instead
+      # of mermaid (stream_weaver-4gs). Mermaid needs no entry in this
+      # check: sw-mermaid-zoom.js self-inits without any Alpine directive.
+      def collect_cdn_scripts(body_html)
         scripts = []
 
-        # Alpine.js and HTMX are always needed for the adapter
-        scripts << { src: CDN_ALPINE, defer: true }
-        scripts << { src: CDN_HTMX }
-        scripts << { src: CDN_IDIOMORPH }
+        scripts << { src: CDN_ALPINE, defer: true } if body_html.match?(ALPINE_DIRECTIVE)
 
         # Mermaid - check if any mermaid components exist
         if components_include?(Components::Mermaid)

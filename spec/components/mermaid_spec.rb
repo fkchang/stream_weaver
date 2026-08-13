@@ -127,10 +127,15 @@ RSpec.describe "Mermaid Component (T3)" do
       expect(html).to include("graph LR; A")
     end
 
-    it "includes x-init for lazy initialization" do
+    it "carries no Alpine directive -- sw-mermaid-zoom.js self-inits instead" do
+      # Rendering has no dependency on Alpine being loaded (stream_weaver-4gs):
+      # the engine calls swMermaidInit() itself on DOMContentLoaded/htmx:afterSwap.
+      # Checked as attribute forms, not bare substrings -- the inlined JS's own
+      # comments legitimately mention "x-init" as prose.
       m = StreamWeaver::Components::Mermaid.new("graph LR; A-->B")
       html = render_html(m)
-      expect(html).to include('x-init="swMermaidInit()"')
+      expect(html).not_to include('x-init="')
+      expect(html).not_to include('x-data="')
     end
 
     it "renders diagram area with sw-mermaid__diagram class" do

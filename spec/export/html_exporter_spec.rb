@@ -93,16 +93,6 @@ RSpec.describe StreamWeaver::Export::HtmlExporter do
       expect(html).to include('viewport')
     end
 
-    it "includes Alpine.js CDN" do
-      html = described_class.new(simple_app).to_html
-      expect(html).to include("alpinejs")
-    end
-
-    it "includes HTMX CDN" do
-      html = described_class.new(simple_app).to_html
-      expect(html).to include("htmx.org")
-    end
-
     it "includes Google Fonts link" do
       html = described_class.new(simple_app).to_html
       expect(html).to include("fonts.googleapis.com")
@@ -248,6 +238,69 @@ RSpec.describe StreamWeaver::Export::HtmlExporter do
     it "does not include Prism.js CDN when no code blocks" do
       html = described_class.new(simple_app).to_html
       expect(html).not_to match(%r{<script[^>]*prism}i)
+    end
+
+    # A static export never talks to a server -- htmx/idiomorph are dead
+    # weight, and dead weight that fails to load under a CSP that blocks
+    # external script-src (stream_weaver-4gs). Exercised against an
+    # interactive component (tabs) so the assertion isn't just "an empty
+    # doc has no scripts" -- htmx/idiomorph must be absent even when the
+    # doc is exactly the kind that used to justify loading them.
+    it "never includes htmx, regardless of components used" do
+      app = StreamWeaver::App.new("Has Tabs") { tabs(:demo) { tab("A") { text "hi" } } }
+      html = described_class.new(app).to_html
+      expect(html).not_to match(%r{<script[^>]*htmx}i)
+    end
+
+    it "never includes idiomorph, regardless of components used" do
+      app = StreamWeaver::App.new("Has Tabs") { tabs(:demo) { tab("A") { text "hi" } } }
+      html = described_class.new(app).to_html
+      expect(html).not_to match(%r{<script[^>]*idiomorph}i)
+    end
+
+    # Alpine is loaded only when the rendered body actually contains an
+    # x-data directive -- checked against the rendered HTML itself, not an
+    # allowlist of component classes (see ALPINE_DIRECTIVE). Loading it
+    # unconditionally meant every export depended on an external script
+    # that a CSP-locked-down viewer (SharePoint's HTML preview, etc.)
+    # blocks outright.
+    it "does not include Alpine.js when no component needs it" do
+      html = described_class.new(simple_app).to_html
+      expect(html).not_to match(%r{<script[^>]*alpinejs}i)
+    end
+
+    it "includes Alpine.js when the doc uses collapsible" do
+      app = StreamWeaver::App.new("Has Collapsible") do
+        collapsible("Details") { text "hidden" }
+      end
+      html = described_class.new(app).to_html
+      expect(html).to match(%r{<script[^>]*alpinejs}i)
+    end
+
+    it "includes Alpine.js when the doc uses theme_toggle" do
+      app = StreamWeaver::App.new("Has Theme Toggle") { theme_toggle }
+      html = described_class.new(app).to_html
+      expect(html).to match(%r{<script[^>]*alpinejs}i)
+    end
+
+    # Proves the detection is body-content-based, not a hardcoded list:
+    # tabs was never in any Alpine allowlist here and still needs Alpine
+    # (adapter/alpinejs.rb emits x-data="{ activeTab: ... }" for it).
+    it "includes Alpine.js when the doc uses tabs, with no allowlist entry for it" do
+      app = StreamWeaver::App.new("Has Tabs") do
+        tabs(:demo) { tab("A") { text "hi" } }
+      end
+      html = described_class.new(app).to_html
+      expect(html).to match(%r{<script[^>]*alpinejs}i)
+    end
+
+    # Mermaid needs no Alpine at all: sw-mermaid-zoom.js self-inits on
+    # DOMContentLoaded/htmx:afterSwap (stream_weaver-4gs) rather than
+    # relying on an x-init directive on the diagram element.
+    it "does not include Alpine.js for a mermaid-only doc" do
+      app = StreamWeaver::App.new("Has Mermaid") { mermaid "graph TD; A-->B;" }
+      html = described_class.new(app).to_html
+      expect(html).not_to match(%r{<script[^>]*alpinejs}i)
     end
   end
 

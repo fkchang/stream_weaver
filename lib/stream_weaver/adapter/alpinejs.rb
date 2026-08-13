@@ -3156,11 +3156,14 @@ module StreamWeaver
           render_mermaid_cdn_scripts(view)
         end
 
+        # No Alpine directive here: sw-mermaid-zoom.js self-inits on
+        # DOMContentLoaded and re-inits on every htmx:afterSwap, so
+        # rendering has no dependency on Alpine being loaded at all --
+        # important for the exporter, which only loads Alpine when a
+        # collapsible/theme_toggle needs its reactivity (stream_weaver-4gs).
         attrs = {
           id: component.diagram_id,
-          class: component.css_classes,
-          "x-data" => "{}",
-          "x-init" => "swMermaidInit()"
+          class: component.css_classes
         }
 
         # ELK layout flag for the JS loader

@@ -149,7 +149,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
   <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
 
-  <%# Mermaid zoom/pan engine — inlined so swMermaidInit() is available before Alpine fires %>
+  <%# Mermaid zoom/pan engine — inlined here so it self-inits on DOMContentLoaded %>
   <script><%= @mermaid_zoom_js %></script>
   <%# Kick off mermaid CDN preload immediately (same pattern as bridge server) %>
   <script>if (window.swMermaidPreload) window.swMermaidPreload();</script>
