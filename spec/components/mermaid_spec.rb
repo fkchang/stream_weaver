@@ -187,6 +187,22 @@ RSpec.describe "Mermaid Component (T3)" do
       expect(container_html).to include('data-sw-zoom="expand"')
     end
 
+    # Regression guard: the expand icon is a flex item (its parent button
+    # is display: flex), and a flex item's used width comes from its
+    # flex-basis before width/height HTML attributes are ever consulted --
+    # verified live, `width="14" height="14"` rendered as a literally
+    # invisible 0-width icon (only width collapsed; height was fine).
+    # Inline `style` wins the cascade outright regardless of flex-basis
+    # resolution, which bare attributes cannot.
+    it "sizes the expand icon via inline style, not width/height attributes" do
+      m = StreamWeaver::Components::Mermaid.new("graph LR; A-->B")
+      html = render_html(m)
+      container_html = html[html.index('class="sw-mermaid"')..]
+      svg_tag = container_html[/<svg[^>]*>/]
+      expect(svg_tag).to include('style="width:14px;height:14px')
+      expect(svg_tag).not_to include('width="14"')
+    end
+
     it "adds compact class" do
       m = StreamWeaver::Components::Mermaid.new("graph LR; A-->B", compact: true)
       html = render_html(m)
@@ -475,6 +491,21 @@ RSpec.describe "Mermaid Component (T3)" do
       # moment the original re-renders or is swapped out from under an
       # open overlay.
       expect(js).to include("fullscreenSeq")
+    end
+
+    # Regression guard: mermaid's root <svg> carries width="100%" plus an
+    # inline max-width -- fine in the original in-place container (a
+    # normal block div with a concrete width), not in the overlay, where
+    # .content is a flex item with no explicit width for "100%" to
+    # resolve against. Verified live: the diagram rendered a few px wide
+    # instead of natural size -- clearing max-width alone (a first draft)
+    # never touched the actual cause. Fixed by reading the SVG's own
+    # viewBox and setting concrete pixel width/height from it, which
+    # depends on no ancestor's computed width at all.
+    it "sizes the cloned SVG from its own viewBox instead of a percentage width" do
+      expect(js).to include("getAttribute('viewBox')")
+      expect(js).to include("svgEl.style.width")
+      expect(js).to include("svgEl.style.height")
     end
   end
 end

@@ -3212,6 +3212,17 @@ module StreamWeaver
             # SharePoint case this feature exists for), and the fullscreen
             # dingbat (U+26F6) has patchy font coverage on Windows/Linux --
             # an SVG path renders identically everywhere.
+            #
+            # Sized via inline `style`, not the `width`/`height` attributes
+            # alone: this button is `display: flex`, which makes the SVG a
+            # flex item, and a flex item's used width comes from its
+            # flex-basis (here, `auto`) before the width/height HTML
+            # presentation attributes ever get consulted -- verified live,
+            # this rendered as a literally invisible 0-width icon (height
+            # still resolved correctly; only width collapsed) while the
+            # neighboring text-glyph buttons were unaffected. `style`
+            # wins the cascade outright, and flex-shrink: 0 stops the flex
+            # algorithm from shrinking it back down under pressure.
             view.button(
               type: "button",
               class: "sw-mermaid__btn",
@@ -3220,10 +3231,11 @@ module StreamWeaver
               title: "Expand to full screen"
             ) do
               view.raw(view.safe(
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" ' \
-                'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" ' \
-                'stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 ' \
-                '0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>'
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' \
+                'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ' \
+                'style="width:14px;height:14px;flex-shrink:0;display:block">' \
+                '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 ' \
+                '0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>'
               ))
             end
           end
@@ -3398,12 +3410,14 @@ module StreamWeaver
         }
 
         .sw-mermaid-fullscreen-overlay__svg-wrapper svg {
-          height: auto;
           display: block;
-          /* max-width: none is also set inline via JS (cloneSvgWrapper) --
-             mermaid emits its own inline max-width on the root <svg>,
-             which no stylesheet rule can outrank. Kept here too as the
-             belt to that suspenders. */
+          height: auto; /* fallback only -- see cloneSvgWrapper for the real fix */
+          /* The real sizing (concrete px width/height from the SVG's own
+             viewBox) is set inline via JS (cloneSvgWrapper) -- mermaid's
+             width="100%" has nothing solid to resolve against inside
+             .content's flex layout otherwise, and no stylesheet rule can
+             outrank an inline style regardless. max-width: none here is
+             belt-and-suspenders for the same reason. */
           max-width: none;
         }
 
