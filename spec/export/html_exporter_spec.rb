@@ -48,7 +48,33 @@ RSpec.describe StreamWeaver::Export::HtmlExporter do
       expect(html).to include("<html")
       expect(html).to include("</html>")
       expect(html).to include("<head>")
-      expect(html).to include("<body>")
+      expect(html).to include('<body class="sw-theme-default sw-layout-default">')
+    end
+
+    it "wraps the body content in #app-container, as the canvas and reader do" do
+      html = described_class.new(simple_app).to_html
+      expect(html).to include('<div id="app-container">')
+    end
+
+    it "carries the app's theme and layout on the body class" do
+      app = StreamWeaver::App.new("Themed") do
+        use_theme :doc
+        use_layout :wide
+        text "hi"
+      end
+      html = described_class.new(app).to_html
+      expect(html).to include('<body class="sw-theme-doc sw-layout-wide">')
+    end
+
+    it "emits the doc's use_stylesheet CSS unlayered, after the framework CSS" do
+      app = StreamWeaver::App.new("Styled") do
+        use_stylesheet "h1 { color: rebeccapurple; }"
+        header1 "Hi"
+      end
+      html = described_class.new(app).to_html
+
+      expect(html).to include("<style>h1 { color: rebeccapurple; }</style>")
+      expect(html.index("h1 { color: rebeccapurple; }")).to be > html.index("@layer #{StreamWeaver::CSS::LAYER_NAME}")
     end
 
     it "includes the app title" do
@@ -202,20 +228,134 @@ RSpec.describe StreamWeaver::Export::HtmlExporter do
   # CDN script collection
   # =========================================
 
+  # These assert against a <script> tag shape, not a bare substring
+  # ("mermaid", "chart.js", ...): the framework CSS PageShell emits mentions
+  # sw-mermaid-zoom.js in a comment, so a bare-substring form would fail on a
+  # document that loads no mermaid script at all. Shape (not the literal
+  # CDN_* constant) so the spec still catches a wrong-URL regression instead
+  # of only "not exactly today's URL".
   describe "CDN script collection" do
     it "does not include Mermaid CDN when no mermaid components" do
       html = described_class.new(simple_app).to_html
-      expect(html).not_to include("mermaid")
+      expect(html).not_to match(%r{<script[^>]*mermaid}i)
     end
 
     it "does not include Chart.js CDN when no chart components" do
       html = described_class.new(simple_app).to_html
-      expect(html).not_to include("chart.js")
+      expect(html).not_to match(%r{<script[^>]*chart\.js}i)
     end
 
     it "does not include Prism.js CDN when no code blocks" do
       html = described_class.new(simple_app).to_html
-      expect(html).not_to include("prismjs")
+      expect(html).not_to match(%r{<script[^>]*prism}i)
+    end
+  end
+
+  # =========================================
+  # DSL-string apps (canvas docs / history snapshots)
+  # =========================================
+
+  describe "apps built by instance_eval'ing a DSL string" do
+    # A canvas doc has no block to rebuild from -- @block is nil -- so an
+    # unguarded rebuild_with_state wiped every component and exported an
+    # empty page (stream_weaver-65z).
+    let(:dsl_app) do
+      app = StreamWeaver::App.new("Doc")
+      app.instance_eval(<<~DSL)
+        header1 "Canvas Doc Title"
+        text "Body paragraph from the DSL."
+      DSL
+      app
+    end
+
+    it "keeps its components instead of wiping them" do
+      expect { described_class.new(dsl_app).to_html }
+        .not_to change { dsl_app.components.size }
+      expect(dsl_app.components.size).to eq(2)
+    end
+
+    it "renders the DSL's markup into the export" do
+      html = described_class.new(dsl_app).to_html
+      expect(html).to include("<h1")
+      expect(html).to include("Canvas Doc Title")
+      expect(html).to include("Body paragraph from the DSL.")
+    end
+  end
+
+  # =========================================
+  # Input contract: canvas-doc DSL fragments only
+  # =========================================
+
+  describe ".from_dsl" do
+    it "builds an exporter from a bare DSL fragment" do
+      html = described_class.from_dsl(%(header1 "From Fragment")).to_html
+      expect(html).to include("From Fragment")
+    end
+
+    it "titles the document from the source filename" do
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, "arch-notes.rb")
+        File.write(path, %(text "hi"))
+        expect(described_class.from_dsl_file(path).to_html).to include("<title>arch-notes</title>")
+      end
+    end
+
+    it "rejects a full standalone app file with a message naming the expected input" do
+      full_app = <<~RUBY
+        require "stream_weaver"
+        app = StreamWeaver::App.new("Standalone") do
+          text "hi"
+        end
+        app.run!
+      RUBY
+
+      expect { described_class.from_dsl(full_app) }
+        .to raise_error(StreamWeaver::Export::InvalidDslError, /canvas-doc DSL fragment/)
+    end
+
+    it "rejects a run! call even without App.new" do
+      expect { described_class.from_dsl("my_app.run!") }
+        .to raise_error(StreamWeaver::Export::InvalidDslError)
+    end
+
+    it "resolves relative image paths against the source file's directory" do
+      Dir.mktmpdir do |dir|
+        png = Base64.decode64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+        File.binwrite(File.join(dir, "pic.png"), png)
+        path = File.join(dir, "doc.rb")
+        File.write(path, %(image_block "pic.png", alt: "rel"))
+
+        html = described_class.from_dsl_file(path).to_html(inline_images: true)
+        expect(html).to include("data:image/png;base64,")
+      end
+    end
+  end
+
+  # =========================================
+  # Download filename sanitization
+  # =========================================
+
+  describe ".export_filename" do
+    it "keeps a well-formed doc name" do
+      expect(described_class.export_filename("/docs/auth-flow.v2.rb")).to eq("auth-flow.v2.html")
+    end
+
+    it "replaces characters outside the DocStore allowlist, collapsing runs into one hyphen" do
+      expect(described_class.export_filename("/docs/my doc (draft).rb")).to eq("my-doc-draft-.html")
+    end
+
+    it "collapses dot runs so no traversal survives" do
+      expect(described_class.export_filename("/docs/..%2f..%2fetc.rb")).not_to include("..")
+    end
+
+    it "strips a leading non-alphanumeric so the result matches VALID_NAME" do
+      name = described_class.export_filename("/docs/-leading.rb")
+      expect(name).to eq("leading.html")
+      expect(File.basename(name, ".html")).to match(StreamWeaver::Canvas::DocStore::VALID_NAME)
+    end
+
+    it "falls back to export.html when nothing usable is left" do
+      expect(described_class.export_filename("/docs/___.rb")).to eq("export.html")
     end
   end
 

@@ -2,11 +2,15 @@
 
 require 'phlex'
 require 'base64'
-require 'net/http'
-require 'uri'
+require 'fileutils'
+require_relative '../page_shell'
 
 module StreamWeaver
   module Export
+    # Raised when the DSL handed to the exporter isn't a canvas-doc fragment
+    # (see HtmlExporter.from_dsl).
+    class InvalidDslError < StandardError; end
+
     # Generates self-contained HTML files from StreamWeaver apps.
     #
     # Collects all CDN links (Mermaid, Chart.js, Prism.js, Google Fonts),
@@ -19,6 +23,13 @@ module StreamWeaver
     #
     # @example Get HTML string
     #   html = StreamWeaver::Export::HtmlExporter.new(app).to_html
+    #
+    # @example Export a canvas doc / history snapshot (a DSL fragment on disk)
+    #   StreamWeaver::Export::HtmlExporter.from_dsl_file(path).export(path: out)
+    #
+    # The <head>/<body> shell comes from PageShell, so an export lands in the
+    # same cascade order as the canvas and the reader rather than re-deriving
+    # its own (stream_weaver-mdc).
     class HtmlExporter
       # Known CDN URLs for components that lazy-load scripts
       CDN_MERMAID = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"
@@ -31,12 +42,71 @@ module StreamWeaver
       CDN_IDIOMORPH = "https://unpkg.com/idiomorph@0.3.0/dist/idiomorph-ext.min.js"
       CDN_GOOGLE_FONTS = "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap"
 
+      # A canvas-doc DSL fragment is a bare list of component calls -- it is
+      # instance_eval'd against an App the caller already made. A full
+      # standalone app file builds its own App and starts a server, so
+      # eval'ing one here either dies deep inside the DSL or boots a web
+      # server mid-export; a plain textual check catches it up front with a
+      # message that says what the input should have been.
+      #
+      # Deliberately literal, and it does not know about strings or comments:
+      # a doc whose code_block quotes `App.new` is a false positive. That
+      # trade is the right way round -- the export refuses with an
+      # explanation, versus silently hanging on a booted server.
+      FULL_APP_MARKERS = /App\.new|\.run!/
+
       # @param app [StreamWeaver::App] The app to export
       # @param state [Hash] State to render with (default: empty)
-      def initialize(app, state: {})
+      # @param base_dir [String, nil] Directory that relative asset paths in
+      #   the doc resolve against (the source DSL file's dir). Defaults to
+      #   the process working directory.
+      def initialize(app, state: {}, base_dir: nil)
         @app = app
         @state = state
+        @base_dir = base_dir
         @adapter = StreamWeaver::Adapter::AlpineJS.new
+      end
+
+      # Build an exporter from a canvas-doc DSL fragment -- the shape a
+      # docs/streamweaver_canvas/*.rb file or a history snapshot has: bare
+      # component calls, no requires, no App.new/run! wrapper of its own.
+      #
+      # @param dsl [String] the fragment
+      # @param path [String, nil] source file, used for the <title>, for
+      #   relative asset resolution, and so a DSL error names the real file
+      # @param theme [Symbol, nil] fallback for a doc with no use_theme
+      # @param layout [Symbol, nil] fallback for a doc with no use_layout
+      # @raise [InvalidDslError] when the fragment looks like a full app file
+      def self.from_dsl(dsl, path: nil, theme: nil, layout: nil)
+        if dsl.match?(FULL_APP_MARKERS)
+          raise InvalidDslError,
+                "expected a canvas-doc DSL fragment (bare component calls) but found " \
+                "App.new/run! -- export takes the same input as `streamweaver canvas-push`, " \
+                "not a standalone app file"
+        end
+
+        title = path ? File.basename(path.to_s, '.rb') : 'StreamWeaver Export'
+        app = StreamWeaver::App.new(title, theme: theme || :default, layout: layout || :default)
+        app.instance_eval(dsl, path.to_s, 1)
+        new(app, base_dir: path && File.dirname(File.expand_path(path)))
+      end
+
+      # Reads `path` and builds an exporter from it. See .from_dsl.
+      def self.from_dsl_file(path, theme: nil, layout: nil)
+        from_dsl(File.read(path), path: path, theme: theme, layout: layout)
+      end
+
+      # A download-safe "<name>.html" derived from a source DSL path, allowing
+      # the same character set DocStore's doc-name allowlist does. DocStore
+      # raises on a bad name because a human typed it; here the name comes
+      # from a filesystem path the user didn't choose for this purpose, so we
+      # sanitize and fall back rather than fail the export.
+      def self.export_filename(source_path)
+        name = File.basename(source_path.to_s, '.rb')
+                   .gsub(/[^A-Za-z0-9._-]+/, '-')
+                   .gsub(/\.{2,}/, '.')
+                   .sub(/\A[^A-Za-z0-9]+/, '')
+        "#{name.empty? ? 'export' : name}.html"
       end
 
       # Export to a file
@@ -57,20 +127,20 @@ module StreamWeaver
       # @param inline_images [Boolean] Convert local image src to base64 data URIs
       # @return [String] Complete HTML document
       def to_html(inline_images: false)
-        # Rebuild components with state
-        @app.rebuild_with_state(@state)
+        # Only block-built apps can be rebuilt. A canvas doc is instance_eval'd
+        # from a DSL *string* into a bare App, so @block is nil there and
+        # rebuilding would re-evaluate nothing, wiping every component
+        # (stream_weaver-65z).
+        @app.rebuild_with_state(@state) if @app.block
 
         body_html = render_body
         body_html = inline_images_in_html(body_html) if inline_images
-        css = inline_css
-        cdn_scripts = collect_cdn_scripts
-        cdn_styles = collect_cdn_styles
 
         build_document(
           title: @app.title,
-          css: css,
-          cdn_scripts: cdn_scripts,
-          cdn_styles: cdn_styles,
+          css_html: css_html,
+          cdn_scripts: collect_cdn_scripts,
+          cdn_styles: collect_cdn_styles,
           body_html: body_html
         )
       end
@@ -92,23 +162,31 @@ module StreamWeaver
         StreamWeaver::ComponentRenderer.render_html(@adapter, @app.components, @state)
       end
 
-      # Collect all CSS that should be inlined
-      def inline_css
-        css_parts = []
+      # The <head> style block, in the same cascade order the canvas and the
+      # reader use (PageShell is the single source of truth): framework layer,
+      # then the app's registered theme, then unlayered user CSS last so it
+      # outranks everything.
+      def css_html
+        parts = [StreamWeaver::PageShell.framework_css_html]
 
-        # Visual skills foundation CSS (custom properties)
-        css_parts << StreamWeaver::Theme.visual_skills_css
-
-        # Theme-specific CSS if a custom theme is registered
-        if @app.theme && @app.theme != :default
-          theme = StreamWeaver.get_theme(@app.theme)
-          css_parts << theme.to_css if theme
+        # Registered custom themes are NOT part of master_theme_css -- AppView
+        # emits them separately via render_custom_theme_css, and so must we.
+        if (theme = custom_theme)
+          parts << "<style>#{StreamWeaver::CSS.layer_wrap(theme.to_css)}</style>"
         end
 
-        # App-level stylesheets are kept as links (they might be CDN)
-        # The component-level CSS is injected inline by the adapter during render_body
+        parts << StreamWeaver::PageShell.user_css_html(inline_stylesheets: @app.inline_stylesheets)
+        parts.join("\n")
+      end
 
-        css_parts.compact.join("\n\n")
+      def custom_theme
+        return nil if @app.theme.nil? || StreamWeaver::App::BUILT_IN_THEMES.include?(@app.theme)
+
+        StreamWeaver.get_theme(@app.theme)
+      end
+
+      def body_class
+        "sw-theme-#{@app.theme} sw-layout-#{@app.layout}"
       end
 
       # Collect CDN script URLs based on what components are used
@@ -176,10 +254,13 @@ module StreamWeaver
         end
       end
 
-      # Replace local image paths with base64 data URIs in HTML
+      # Replace local image paths with base64 data URIs in HTML.
+      # Relative paths resolve against the source DSL file's directory, not
+      # Dir.pwd -- a doc referencing ./diagram.png means the one next to it,
+      # wherever the export happens to be run from.
       def inline_images_in_html(html)
         html.gsub(/src="((?!data:|https?:\/\/)[^"]+)"/) do |match|
-          path = $1
+          path = File.expand_path($1, @base_dir || Dir.pwd)
           if File.exist?(path)
             mime = case File.extname(path).downcase
                    when '.png' then 'image/png'
@@ -198,7 +279,7 @@ module StreamWeaver
       end
 
       # Build the complete HTML document
-      def build_document(title:, css:, cdn_scripts:, cdn_styles:, body_html:)
+      def build_document(title:, css_html:, cdn_scripts:, cdn_styles:, body_html:)
         script_tags = cdn_scripts.map do |s|
           attrs = ["src=\"#{s[:src]}\""]
           attrs << "defer" if s[:defer]
@@ -221,12 +302,15 @@ module StreamWeaver
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             #{style_tags}
             #{script_tags}
-            <style>
-          #{css}
-            </style>
+          #{css_html}
           </head>
-          <body>
+          <body class="#{body_class}">
+          <!-- #app-container is a DIRECT body child, as the canvas and reader
+               render it: theme/sidebar_toc selectors use the ">" combinator
+               against body[class*="sw-layout-"] > #app-container. -->
+          <div id="app-container">
             #{body_html}
+          </div>
           </body>
           </html>
         HTML

@@ -75,6 +75,8 @@ module StreamWeaver
         canvas_stop
       when 'canvas-read'
         canvas_read(args)
+      when 'export'
+        export_html(args)
       # High-level canvas helpers
       when 'pick'
         canvas_pick(args)
@@ -621,6 +623,9 @@ module StreamWeaver
           streamweaver canvas-stop                Stop the canvas bridge
           streamweaver canvas-read <file|dir> [...]  Browse canvas DSL docs in a local viewer
                        [--theme=NAME] [--layout=NAME]  Fallback for docs with no use_theme/use_layout
+          streamweaver export <file.rb>           Write a canvas DSL doc out as standalone HTML
+                       [-o out.html]                Output path (default: <doc-name>.html)
+                       [--inline-images]            Embed local images as base64 data URIs
 
         Canvas Examples:
           # Create session and open browser
@@ -1436,6 +1441,51 @@ module StreamWeaver
       Thread.new { sleep 0.8; open_browser(url) }
 
       StreamWeaver::Canvas::Reader.run!
+    end
+
+    # Writes a canvas-doc DSL file out as a standalone HTML document -- the
+    # same thing the reader's Export HTML button downloads.
+    def self.export_html(args)
+      require_relative 'export/html_exporter'
+
+      source = nil
+      output = nil
+      inline_images = false
+      until args.empty?
+        arg = args.shift
+        case arg
+        when '-o', '--output'
+          output = args.shift
+          if output.nil?
+            $stderr.puts "Error: #{arg} requires a value"
+            exit 1
+          end
+        when /\A--output=(.+)\z/     then output = Regexp.last_match(1)
+        when '--inline-images'       then inline_images = true
+        else source = arg
+        end
+      end
+
+      unless source && File.file?(source)
+        $stderr.puts "Usage: streamweaver export <file.rb> [-o out.html] [--inline-images]"
+        $stderr.puts "Error: no such file: #{source}" if source
+        exit 1
+      end
+
+      output ||= StreamWeaver::Export::HtmlExporter.export_filename(source)
+
+      begin
+        path = StreamWeaver::Export::HtmlExporter.from_dsl_file(source)
+                                                 .export(path: output, inline_images: inline_images)
+      rescue StreamWeaver::Export::InvalidDslError => e
+        $stderr.puts "Error: #{e.message}"
+        exit 1
+      rescue ScriptError, StandardError => e
+        $stderr.puts "Error: export failed: #{e.message}"
+        exit 1
+      end
+
+      puts "Exported #{source} → #{path}"
     end
 
     # Resolves the no-arg default for `streamweaver canvas-read`. Returns

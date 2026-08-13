@@ -109,10 +109,12 @@
     }
 
     /* Prev/Next docked in the rail -- not a fixed bottom bar, which would
-       collide with the Save-as-doc button at bottom right. */
+       collide with the Save-as-doc button at bottom right. flex-wrap because
+       Export sits on its own row below Prev/counter/Next, which already fill
+       the 220px width -- a fourth same-row item would squeeze the counter. */
     #sw-reader-nav {
       flex-shrink: 0; border-top: 1px solid #e5e7eb; background: #f9fafb;
-      padding: 0.5rem 0.75rem; display: flex; align-items: center;
+      padding: 0.5rem 0.75rem; display: flex; flex-wrap: wrap; align-items: center;
       justify-content: space-between; gap: 0.4rem;
     }
     #sw-reader-nav .nav-link {
@@ -123,6 +125,7 @@
     #sw-reader-nav .nav-link:hover { background: #d1d5db; color: #111827; }
     #sw-reader-nav .nav-link--disabled { opacity: 0.35; cursor: default; pointer-events: none; }
     #sw-reader-nav .counter { font-size: 0.72rem; color: #6b7280; white-space: nowrap; }
+    #sw-reader-nav .nav-export { flex-basis: 100%; text-align: center; }
 
     /* Mandatory below ~1100px: the sidebar_toc's own desktop breakpoint
        (min-width: 1000px) measures the VIEWPORT, not the doc's content
@@ -243,6 +246,20 @@
     <% else %>
       <span class="nav-link nav-link--disabled">Next ▶</span>
     <% end %>
+
+    <%# Available for every file, not just history snapshots. hx-boost="false"
+        is mandatory: this link is inside the boosted <nav>, and a boosted
+        click would swap the downloaded document into #app-container instead
+        of handing it to the browser as a file.
+        No `download` attribute: Content-Disposition: attachment already
+        triggers the save-as on success and leaves this page in place --
+        `download` would additionally force a 422/500 error body into
+        ~/Downloads as an extensionless file instead of showing the error.
+        target="_blank" keeps a failed export's error text out of the way
+        of the page you were reading. %>
+    <a href="/export?file=<%= @current_index %>" class="nav-link nav-export"
+       hx-boost="false" target="_blank"
+       title="Download this doc as a standalone HTML file">⬇ Export HTML</a>
 
 <% if is_history %>
   <%# Save-as-doc widget — promotes this history snapshot to docs/streamweaver_canvas/.

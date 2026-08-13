@@ -9,6 +9,7 @@ require 'stream_weaver/views'
 require 'stream_weaver/adapter/alpinejs'
 require 'stream_weaver/canvas/doc_store'
 require 'stream_weaver/page_shell'
+require 'stream_weaver/export/html_exporter'
 
 module StreamWeaver
   module Canvas
@@ -62,8 +63,11 @@ module StreamWeaver
           indexed_groups.select { |dir, _| history_dir?(dir) }
         end
 
+        # Array#[] wraps on negative indices and nil.to_i is 0 -- neither is a
+        # valid file reference, so this refuses both centrally rather than
+        # every caller re-deriving the same guard (and GET / not bothering to).
         def at(index)
-          @files[index]
+          @files[index] if index.is_a?(Integer) && index >= 0
         end
 
         def size
@@ -101,6 +105,18 @@ module StreamWeaver
           @default_layout = layout&.to_sym
         end
 
+        # render_doc and GET /export both need these; a single source of
+        # truth is what makes "the download matches what's on screen" true
+        # rather than aspirational -- two independent `|| :fluid`s could
+        # silently drift.
+        def fallback_theme
+          default_theme || :default
+        end
+
+        def fallback_layout
+          default_layout || :fluid
+        end
+
         def find_available_port(start = 4800)
           port = start
           loop do
@@ -134,6 +150,43 @@ module StreamWeaver
         erb :reader_layout, layout: false
       end
 
+      # Download the currently-viewed file as a standalone HTML document.
+      # Same ?file=N index convention as GET /, and the same theme/layout
+      # fallbacks render_doc uses (fallback_theme/fallback_layout), so the
+      # download matches what's on screen.
+      #
+      # Failures answer text/plain with a status, never a partial document:
+      # a half-written .html landing in ~/Downloads looks like a success.
+      # content_type is set to :text up front for exactly that reason --
+      # halt'ing after a `content_type :html` would still serve the error
+      # body as HTML. The export link itself must never carry a `download`
+      # attribute, or the browser saves an error body as a mystery file
+      # instead of showing it (see reader_layout.erb).
+      get '/export' do
+        content_type :text
+        path = self.class.file_list&.at(params[:file].to_i)
+        halt 404, 'File not found' unless path
+
+        html = begin
+          StreamWeaver::Export::HtmlExporter.from_dsl_file(
+            path,
+            theme:  self.class.fallback_theme,
+            layout: self.class.fallback_layout
+          ).to_html
+        rescue StreamWeaver::Export::InvalidDslError => e
+          halt 422, "Export failed: #{e.message}"
+        rescue ScriptError, StandardError => e
+          # A DSL that fails to eval is bad input, not an exporter failure --
+          # same 422 GET / gives the equivalent case (its red error box).
+          halt 422, "Export failed: #{e.message}"
+        end
+
+        content_type :html
+        headers['Content-Disposition'] =
+          %(attachment; filename="#{StreamWeaver::Export::HtmlExporter.export_filename(path)}")
+        html
+      end
+
       # Promote a history snapshot to a persistent canvas doc (Tier 2).
       # Body: {"file": <integer-index>, "name": "<doc-name>"}.
       # Mirrors BridgeServer's /canvas/:name/save-doc contract: 200 on success,
@@ -147,11 +200,10 @@ module StreamWeaver
         index = body[:file]
         name  = body[:name]
 
-        # Reject anything that isn't a real, in-range index. `nil.respond_to?(:to_i)`
-        # is true (== 0) and Array#[] accepts negative indices (wraps to the last
-        # entry) -- neither is a valid promote target, so both must be excluded
-        # explicitly rather than relying on `at`/`File.exist?` to catch them.
-        file_path = list.at(index) if index.is_a?(Integer) && index >= 0 && index < list.size
+        # FileList#at already refuses non-Integer/negative indices; File.exist?
+        # covers the case an in-range index still points at a file that's
+        # since been deleted out from under us.
+        file_path = list.at(index)
         unless file_path && File.exist?(file_path)
           halt 422, { ok: false, error: "File index out of range: #{index.inspect}" }.to_json
         end
@@ -191,8 +243,8 @@ module StreamWeaver
       # @param path [String, nil] source file, passed through to instance_eval
       #   so a DSL error names the actual file/line instead of "(eval)".
       def self.render_doc(dsl, path: nil)
-        theme  = default_theme  || :default
-        layout = default_layout || :fluid
+        theme  = fallback_theme
+        layout = fallback_layout
         mini_app = StreamWeaver::App.new('reader', theme: theme, layout: layout)
         mini_app.instance_eval(dsl, path.to_s, 1)
         adapter = StreamWeaver::Adapter::AlpineJS.new(
