@@ -1481,7 +1481,12 @@ module StreamWeaver
       output ||= StreamWeaver::Export::HtmlExporter.export_filename(source)
 
       begin
-        path = StreamWeaver::Export::HtmlExporter.from_dsl_file(source)
+        # layout: 'fluid' matches the reader's own fallback (Reader.fallback_layout,
+        # canvas/reader.rb), not HtmlExporter.from_dsl's bare default of :default --
+        # without this, `streamweaver export doc.rb` and the reader's "Export HTML"
+        # button silently produce different-width documents from the same source
+        # file whenever it doesn't declare its own use_layout.
+        path = StreamWeaver::Export::HtmlExporter.from_dsl_file(source, theme: :default, layout: :fluid)
                                                  .export(path: output, inline_images: inline_images, offline: offline)
       rescue StreamWeaver::Export::InvalidDslError, StreamWeaver::Export::OfflineAssetError => e
         $stderr.puts "Error: #{e.message}"

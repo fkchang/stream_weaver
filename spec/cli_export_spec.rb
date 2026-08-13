@@ -31,6 +31,21 @@ RSpec.describe StreamWeaver::CLI, '.export_html' do
     expect(File.read(out)).to include('Paragraph.')
   end
 
+  # Regression guard: HtmlExporter.from_dsl's own bare default is
+  # layout: :default (900px, matching App.new's framework-wide default),
+  # but the reader's "Export HTML" button falls back to :fluid
+  # (Reader.fallback_layout) for a doc with no use_layout. Left
+  # unreconciled, `streamweaver export doc.rb` and the reader button
+  # silently produced different-width documents from the same source
+  # file -- this pins the CLI to the reader's fallback instead.
+  it 'defaults to the same fallback layout the reader uses (:fluid), not the exporter bare default' do
+    out = File.join(@dir, 'out.html')
+    expect { described_class.export_html([doc, '-o', out]) }
+      .to output(/Exported/).to_stdout
+
+    expect(File.read(out)).to include('<body class="sw-theme-default sw-layout-fluid">')
+  end
+
   it 'accepts --output=PATH as well as -o PATH' do
     out = File.join(@dir, 'other.html')
     expect { described_class.export_html([doc, "--output=#{out}"]) }.to output(/Exported/).to_stdout

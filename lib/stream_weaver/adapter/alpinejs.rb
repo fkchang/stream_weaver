@@ -3153,7 +3153,7 @@ module StreamWeaver
         unless view.instance_variable_get(:@_mermaid_assets_injected)
           view.instance_variable_set(:@_mermaid_assets_injected, true)
           view.style { view.raw(view.safe(StreamWeaver::CSS.layer_wrap(MERMAID_CSS))) }
-          render_mermaid_cdn_scripts(view)
+          inject_mermaid_engine(view)
         end
 
         # No Alpine directive here: sw-mermaid-zoom.js self-inits on
@@ -3242,9 +3242,13 @@ module StreamWeaver
         end
       end
 
-      # Mermaid CDN scripts -- injected lazily by render_mermaid_cdn_scripts
-      def render_mermaid_cdn_scripts(view)
-        # Inline the zoom/pan engine JS
+      # Inlines sw-mermaid-zoom.js verbatim as a <script> -- not a CDN
+      # reference. This is what makes mermaid rendering have zero external
+      # script dependency of its own (stream_weaver-4gs): the engine that
+      # loads mermaid's actual library is always local, whether or not
+      # that library itself comes from the CDN or is inlined too
+      # (--offline, stream_weaver-dnq).
+      def inject_mermaid_engine(view)
         js_path = File.join(__dir__, '..', 'assets', 'js', 'sw-mermaid-zoom.js')
         if File.exist?(js_path)
           view.script { view.raw(view.safe(File.read(js_path))) }

@@ -109,9 +109,11 @@
     }
 
     /* Prev/Next docked in the rail -- not a fixed bottom bar, which would
-       collide with the Save-as-doc button at bottom right. flex-wrap because
-       Export sits on its own row below Prev/counter/Next, which already fill
-       the 220px width -- a fourth same-row item would squeeze the counter. */
+       collide with the Save-as-doc button at bottom right. flex-wrap
+       because Export (and, on a doc with mermaid, a second Export
+       (offline) row -- stream_weaver-dnq) sits below Prev/counter/Next,
+       which already fill the 220px width -- a fourth same-row item would
+       squeeze the counter. */
     #sw-reader-nav {
       flex-shrink: 0; border-top: 1px solid #e5e7eb; background: #f9fafb;
       padding: 0.5rem 0.75rem; display: flex; flex-wrap: wrap; align-items: center;
@@ -462,6 +464,12 @@
   document.addEventListener('keydown', (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
+    // A mermaid fullscreen expand (stream_weaver-yjv) is a <dialog> opened
+    // via showModal(), which makes the rest of the page inert to *user*
+    // interaction -- but inert doesn't stop a programmatic .click() like
+    // this handler's, so without this guard, arrow-key nav still silently
+    // navigates the reader out from under an open diagram.
+    if (document.querySelector('dialog[open]')) return;
     if (e.key === 'ArrowLeft')  document.querySelector('[data-nav="prev"]')?.click();
     if (e.key === 'ArrowRight') document.querySelector('[data-nav="next"]')?.click();
   });

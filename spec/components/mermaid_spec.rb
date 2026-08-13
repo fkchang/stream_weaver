@@ -501,19 +501,18 @@ RSpec.describe "Mermaid Component (T3)" do
       expect(js).to include("fullscreenSeq")
     end
 
-    # Regression guard, revised twice:
-    # 1. Mermaid's root <svg> carries width="100%" plus an inline
-    #    max-width -- fine in the original in-place container (a normal
-    #    block div with a concrete width), not in the overlay, where
-    #    .content is a flex item with no explicit width for "100%" to
-    #    resolve against. Verified live: the diagram rendered a few px
-    #    wide instead of natural size.
-    # 2. Fixing that via svgEl.style.width/height worked locally but broke
-    #    again on SharePoint, whose CSP restricts style-src-attr (inline
-    #    style="", including writes through the .style DOM API)
-    #    independently of style-src.
-    # setAttribute('width'/'height', ...) are plain SVG geometry
-    # attributes, not CSS -- no style-src directive governs them at all.
+    # Regression guard: mermaid's root <svg> carries width="100%" plus an
+    # inline max-width -- fine in the original in-place container (a
+    # normal block div with a concrete width), not in the overlay, where
+    # .content is a flex item with no explicit width for "100%" to resolve
+    # against. Verified live: the diagram rendered a few px wide instead
+    # of natural size. Fixed via setAttribute('width'/'height', ...)
+    # rather than svgEl.style.width/height -- plain SVG geometry
+    # attributes, no CSS involved at all, which also sidesteps whatever
+    # SharePoint's actual restriction turns out to be (see the expand
+    # icon's own comment in adapter/alpinejs.rb: the first suspected
+    # cause, an inline-style CSP restriction, didn't hold up, but
+    # setAttribute is no worse than .style either way).
     it "sizes the cloned SVG via width/height attributes, not .style" do
       expect(js).to include("getAttribute('viewBox')")
       expect(js).to include("svgEl.setAttribute('width'")

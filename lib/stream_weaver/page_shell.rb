@@ -5,16 +5,15 @@ require_relative "views"
 require_relative "theme"
 
 module StreamWeaver
-  # Framework-CSS <head> block, currently used by the canvas
-  # (Canvas::BridgeServer). Extracted from BridgeServer#render_canvas_page,
-  # which is the correct reference implementation (stream_weaver-oeo fixed
+  # Framework-CSS <head> block, shared by all three renderers that need the
+  # same cascade order: the canvas (Canvas::BridgeServer), the reader
+  # (Canvas::Reader / reader_layout.erb), and static exports
+  # (Export::HtmlExporter). Extracted from BridgeServer#render_canvas_page,
+  # which was the correct reference implementation (stream_weaver-oeo fixed
   # its cascade-layer bug: CANVAS_CSS must be layer-wrapped alongside
-  # master_theme_css/visual_skills_css, or it silently outranks them).
-  #
-  # Canvas::Reader and Export::HtmlExporter do NOT use this yet -- that's
-  # stream_weaver-csf and stream_weaver-65z, not this commit. The point of
-  # extracting it now is so those two can call the same ordering instead of
-  # re-deriving it, once they're wired up -- see stream_weaver-mdc.
+  # master_theme_css/visual_skills_css, or it silently outranks them) --
+  # extracting it here is what lets the other two call the same ordering
+  # instead of re-deriving it (stream_weaver-mdc).
   #
   # Deliberately narrow scope: only the framework <style> blocks plus
   # optional user CSS. Body-class computation (session theme overrides,
@@ -22,9 +21,8 @@ module StreamWeaver
   # scripts, and chrome/widgets all stay with each caller -- this is NOT a
   # canonical replacement for AppView's full standalone shell.
   module PageShell
-    # Canvas-specific CSS (moved verbatim from Canvas::BridgeServer::SW_STYLES,
-    # kept there as an alias since Canvas::Reader's only remaining direct
-    # reference to it is by that name).
+    # Canvas-specific CSS -- moved verbatim from Canvas::BridgeServer's old
+    # SW_STYLES constant when this module was extracted (stream_weaver-39j).
     CANVAS_CSS = <<~CSS
       /* Note: --sw-color and --sw-spacing family tokens are intentionally
          NOT declared at :root here -- they come from AppView.master_theme_css's
