@@ -187,29 +187,28 @@ RSpec.describe "Mermaid Component (T3)" do
       expect(container_html).to include('data-sw-zoom="expand"')
     end
 
-    # Regression guard, revised twice:
+    # Regression guard, revised three times:
     # 1. Bare width="14"/height="14" attributes rendered as a literally
     #    invisible 0-width icon -- the button is display: flex, which
-    #    makes the SVG a flex item, and a flex item's used width comes
-    #    from its flex-basis before width/height attributes are ever
-    #    consulted.
-    # 2. Switching to an inline style="" attribute fixed that locally but
-    #    broke again specifically on SharePoint, whose CSP restricts
-    #    style-src-attr (inline style="") independently of style-src (the
-    #    <style> block this rule now lives in, already proven working
-    #    since the rest of the page's CSS renders there).
-    # A real stylesheet class rule dodges both: normal author-stylesheet
-    # specificity settles the flex-basis question, and it's governed by
-    # style-src, not style-src-attr.
-    it "sizes the expand icon via a stylesheet class, not attributes or inline style" do
+    #    makes an <svg> child a flex item, and a flex item's used width
+    #    comes from its flex-basis before width/height attributes are
+    #    ever consulted.
+    # 2. Switching to an inline style="" attribute fixed that locally,
+    #    then a stylesheet class after ruling out an inline-style CSP
+    #    restriction -- both still went blank specifically on SharePoint.
+    # 3. The common factor across both SVG attempts, not either one's
+    #    styling: SharePoint's HTML preview most likely sanitizes
+    #    uploaded HTML before rendering it, and <svg> is a standard
+    #    target for that (it can carry event handlers,
+    #    <script>/<foreignObject>). +/-/reset, plain text the whole time,
+    #    never had a problem. A unicode glyph is a text node, immune to
+    #    that class of sanitization the same way those three already are.
+    it "renders the expand control as a plain text glyph, not markup" do
       m = StreamWeaver::Components::Mermaid.new("graph LR; A-->B")
       html = render_html(m)
       container_html = html[html.index('class="sw-mermaid"')..]
-      svg_tag = container_html[/<svg[^>]*>/]
-      expect(svg_tag).to include('class="sw-mermaid__expand-icon"')
-      expect(svg_tag).not_to include("style=")
-      expect(svg_tag).not_to include('width="14"')
-      expect(html).to include(".sw-mermaid__expand-icon {")
+      expect(container_html).not_to match(%r{data-sw-zoom="expand"[^>]*>\s*<svg})
+      expect(container_html[/data-sw-zoom="expand"[^>]*>([^<]*)</, 1]).not_to be_empty
     end
 
     it "adds compact class" do
