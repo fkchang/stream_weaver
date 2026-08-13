@@ -305,6 +305,166 @@ RSpec.describe StreamWeaver::Export::HtmlExporter do
   end
 
   # =========================================
+  # offline: (stream_weaver-dnq) -- inline mermaid's library so it
+  # renders in a viewer whose CSP blocks external scripts entirely.
+  # Stubs the network fetch: these specs are about the flag being wired
+  # through the exporter correctly, not about actually reaching jsdelivr.
+  # =========================================
+
+  describe "offline:" do
+    let(:mermaid_app) do
+      StreamWeaver::App.new("Has Mermaid") { mermaid "graph TD; A-->B;" }
+    end
+
+    it "does not fetch anything for a doc with no mermaid component" do
+      exporter = described_class.new(simple_app)
+      expect(exporter).not_to receive(:fetch_url)
+      exporter.to_html(offline: true)
+    end
+
+    it "inlines the fetched script instead of referencing mermaid's CDN" do
+      exporter = described_class.new(mermaid_app)
+      allow(exporter).to receive(:fetch_url)
+        .with(described_class::CDN_MERMAID_OFFLINE).and_return("/* stubbed mermaid global */")
+
+      html = exporter.to_html(offline: true)
+
+      expect(html).to include("<script>/* stubbed mermaid global */</script>")
+      expect(html).not_to match(%r{<script[^>]*mermaid\.esm})
+    end
+
+    it "still references the CDN when offline: is false (the default)" do
+      html = described_class.new(mermaid_app).to_html
+      expect(html).to match(%r{<script[^>]*mermaid\.esm})
+    end
+
+    it "raises OfflineAssetError with an actionable message when the fetch fails" do
+      exporter = described_class.new(mermaid_app)
+      allow(exporter).to receive(:fetch_url).and_raise(Timeout::Error, "execution expired")
+
+      expect { exporter.to_html(offline: true) }
+        .to raise_error(StreamWeaver::Export::OfflineAssetError, /needs network access/)
+    end
+
+    # A floating-version CDN response is untrusted-ish content interpolated
+    # directly into a <script> element's raw text. The HTML tokenizer closes
+    # a script at the first "</script" it sees, even inside a JS string --
+    # today's mermaid build happens to already escape this in its own
+    # output, but this can't depend on that holding for every future fetch.
+    it "neutralizes a </script> in the fetched payload so it can't break out of the script tag" do
+      exporter = described_class.new(mermaid_app)
+      allow(exporter).to receive(:fetch_url)
+        .and_return(%(var s = "</script><img src=x onerror=alert(1)>";))
+
+      html = exporter.to_html(offline: true)
+
+      expect(html).not_to include("</script><img")
+      expect(html).to include('<\/script>')
+    end
+
+    it "neutralizes <!-- in the fetched payload (starts script-data-escaped state otherwise)" do
+      exporter = described_class.new(mermaid_app)
+      allow(exporter).to receive(:fetch_url).and_return(%(var s = "<!--<script>";))
+
+      html = exporter.to_html(offline: true)
+
+      expect(html).to include('<\!--')
+    end
+
+    # Regression guard: a first draft escaped every bare "</", not just
+    # "</script" -- which corrupted real code. Mermaid's own minified
+    # source contains the regex literal /</g (matches a literal "<"); a
+    # blind "</" -> "<\/" replacement turned it into /<\/g, an invalid
+    # regex literal -- a JS syntax error that silently broke the whole
+    # inlined script (globalThis.mermaid never got set, so the offline
+    # export fell straight through to the CDN it exists to avoid). Caught
+    # by a live browser check under a CSP mirroring SharePoint's, not by
+    # any spec -- this one pins that a "</" not followed by "script" is
+    # left completely untouched.
+    it "leaves a bare </ that isn't part of </script untouched" do
+      exporter = described_class.new(mermaid_app)
+      allow(exporter).to receive(:fetch_url).and_return(%(var pattern = /</g;))
+
+      html = exporter.to_html(offline: true)
+
+      expect(html).to include("<script>var pattern = /</g;</script>")
+    end
+  end
+
+  describe "#fetch_url (used by offline:)" do
+    # Direct coverage of the network-handling method itself, rather than
+    # stubbing it away -- the house pattern for stubbing Net::HTTP by hand
+    # (see spec/feed_spec.rb) applied to a real Net::HTTPResponse instance,
+    # since #fetch_url's case/when dispatches on the response's actual
+    # class (Net::HTTPSuccess/Net::HTTPRedirection), which a plain double
+    # can't satisfy.
+    subject(:exporter) { described_class.new(StreamWeaver::App.new("X") { text "hi" }) }
+
+    def fake_response(klass, code:, body: nil, location: nil)
+      res = klass.new("1.1", code, "status")
+      res.instance_variable_set(:@read, true)
+      res.body = body if body
+      res['location'] = location if location
+      res
+    end
+
+    it "returns the body on success" do
+      allow(Net::HTTP).to receive(:start).and_return(fake_response(Net::HTTPOK, code: "200", body: "ok"))
+      expect(exporter.send(:fetch_url, "https://example.com/x")).to eq("ok")
+    end
+
+    it "forces the body to UTF-8 even when the response is tagged ASCII-8BIT" do
+      body = "hello".dup.force_encoding(Encoding::ASCII_8BIT)
+      allow(Net::HTTP).to receive(:start).and_return(fake_response(Net::HTTPOK, code: "200", body: body))
+
+      result = exporter.send(:fetch_url, "https://example.com/x")
+      expect(result.encoding).to eq(Encoding::UTF_8)
+    end
+
+    it "follows a redirect and returns the second response's body" do
+      first  = fake_response(Net::HTTPFound, code: "302", location: "https://example.com/y")
+      second = fake_response(Net::HTTPOK, code: "200", body: "final")
+      allow(Net::HTTP).to receive(:start).and_return(first, second)
+
+      expect(exporter.send(:fetch_url, "https://example.com/x")).to eq("final")
+    end
+
+    it "resolves a relative Location against the redirecting URL" do
+      # If this weren't resolved against the original URL, URI("/y") would
+      # have a nil host and Net::HTTP.start would raise instead of
+      # returning the second response's body.
+      first  = fake_response(Net::HTTPFound, code: "302", location: "/y")
+      second = fake_response(Net::HTTPOK, code: "200", body: "final")
+      allow(Net::HTTP).to receive(:start).and_return(first, second)
+
+      expect(exporter.send(:fetch_url, "https://example.com/x")).to eq("final")
+    end
+
+    it "refuses a redirect to a non-https URL" do
+      allow(Net::HTTP).to receive(:start)
+        .and_return(fake_response(Net::HTTPFound, code: "302", location: "http://example.com/y"))
+
+      expect { exporter.send(:fetch_url, "https://example.com/x") }
+        .to raise_error(/non-https/)
+    end
+
+    it "gives up after too many redirects" do
+      allow(Net::HTTP).to receive(:start)
+        .and_return(fake_response(Net::HTTPFound, code: "302", location: "https://example.com/x"))
+
+      expect { exporter.send(:fetch_url, "https://example.com/x") }
+        .to raise_error(/too many redirects/)
+    end
+
+    it "raises with the status code on a non-2xx/3xx response" do
+      allow(Net::HTTP).to receive(:start).and_return(fake_response(Net::HTTPNotFound, code: "404"))
+
+      expect { exporter.send(:fetch_url, "https://example.com/x") }
+        .to raise_error(/HTTP 404/)
+    end
+  end
+
+  # =========================================
   # DSL-string apps (canvas docs / history snapshots)
   # =========================================
 

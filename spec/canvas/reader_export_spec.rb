@@ -19,6 +19,7 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'HTML export' do
       File.write(File.join(dir, 'arch notes.rb'), "header1 'Arch Notes'\ntext 'From the DSL.'")
       File.write(File.join(dir, 'broken.rb'),     "no_such_component 'boom'")
       File.write(File.join(dir, 'full_app.rb'),   "app = StreamWeaver::App.new('X')\napp.run!")
+      File.write(File.join(dir, 'diagram.rb'),    %(mermaid "graph TD; A-->B;"))
       described_class.configure_files!(described_class::FileList.build([dir]))
       described_class.configure_defaults!(theme: nil, layout: nil)
       begin
@@ -33,10 +34,11 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'HTML export' do
     end
   end
 
-  # FileList sorts by path: arch notes, broken, full_app
+  # FileList sorts by path: arch notes, broken, diagram, full_app
   let(:doc_index)      { 0 }
   let(:broken_index)   { 1 }
-  let(:full_app_index) { 2 }
+  let(:mermaid_index)  { 2 }
+  let(:full_app_index) { 3 }
 
   describe 'GET /export' do
     it 'returns the rendered doc as an HTML attachment' do
@@ -98,6 +100,39 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'HTML export' do
       expect(last_response.body).to include('Export failed')
       expect(last_response.body).not_to include('<!DOCTYPE html>')
     end
+
+    # ?offline=1 (stream_weaver-dnq). Stubs the network fetch -- these
+    # specs are about the query param reaching HtmlExporter#to_html, not
+    # about actually reaching jsdelivr.
+    describe '?offline=1' do
+      it 'inlines mermaid instead of referencing its CDN' do
+        allow_any_instance_of(StreamWeaver::Export::HtmlExporter)
+          .to receive(:fetch_url).and_return("/* stubbed mermaid global */")
+
+        get "/export?file=#{mermaid_index}&offline=1"
+
+        expect(last_response.status).to eq(200)
+        expect(last_response.body).to include("/* stubbed mermaid global */")
+        expect(last_response.body).not_to match(%r{<script[^>]*mermaid\.esm})
+      end
+
+      it 'still references the CDN when offline is omitted' do
+        get "/export?file=#{mermaid_index}"
+
+        expect(last_response.body).to match(%r{<script[^>]*mermaid\.esm})
+      end
+
+      it '502s with an actionable message when the fetch fails' do
+        allow_any_instance_of(StreamWeaver::Export::HtmlExporter)
+          .to receive(:fetch_url).and_raise(Timeout::Error, "execution expired")
+
+        get "/export?file=#{mermaid_index}&offline=1"
+
+        expect(last_response.status).to eq(502)
+        expect(last_response.headers['Content-Type']).to include('text/plain')
+        expect(last_response.body).to include('needs network access')
+      end
+    end
   end
 
   describe 'the Export HTML button' do
@@ -107,6 +142,19 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'HTML export' do
       nav = last_response.body[/<div id="sw-reader-nav">([\s\S]*?)<\/nav>/, 1]
       expect(nav).to include("href=\"/export?file=#{doc_index}\"")
       expect(nav).to include('Export HTML')
+    end
+
+    # The offline variant only does something on a doc with a mermaid
+    # diagram to inline -- shown only there, so it isn't a confusing extra
+    # click that does nothing on every other doc.
+    it 'shows the offline export link only on a doc that has mermaid' do
+      get "/?file=#{doc_index}"
+      expect(last_response.body).not_to include('Export HTML (offline)')
+
+      get "/?file=#{mermaid_index}"
+      nav = last_response.body[/<div id="sw-reader-nav">([\s\S]*?)<\/nav>/, 1]
+      expect(nav).to include("href=\"/export?file=#{mermaid_index}&amp;offline=1\"")
+      expect(nav).to include('Export HTML (offline)')
     end
 
     it 'opts the link out of hx-boost so the download is not swapped into the page' do

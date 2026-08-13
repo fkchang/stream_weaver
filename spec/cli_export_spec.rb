@@ -74,4 +74,39 @@ RSpec.describe StreamWeaver::CLI, '.export_html' do
       .to raise_error(SystemExit)
       .and output(/canvas-doc DSL fragment/).to_stderr
   end
+
+  # --offline (stream_weaver-dnq): inlines mermaid's library instead of
+  # referencing its CDN, for viewers whose CSP blocks external scripts
+  # entirely. Stubs the network fetch -- these specs are about the flag
+  # being wired through, not about actually reaching jsdelivr.
+  describe '--offline' do
+    let(:mermaid_doc) do
+      File.join(@dir, 'diagram.rb').tap do |path|
+        File.write(path, %(mermaid "graph TD; A-->B;"))
+      end
+    end
+
+    it 'inlines mermaid instead of referencing its CDN' do
+      allow_any_instance_of(StreamWeaver::Export::HtmlExporter)
+        .to receive(:fetch_url).and_return("/* stubbed mermaid global */")
+      out = File.join(@dir, 'diagram.html')
+
+      expect { described_class.export_html([mermaid_doc, '-o', out, '--offline']) }
+        .to output(/Exported/).to_stdout
+
+      html = File.read(out)
+      expect(html).to include("/* stubbed mermaid global */")
+      expect(html).not_to match(%r{<script[^>]*mermaid\.esm})
+    end
+
+    it 'exits 1 with a clear message when the fetch fails' do
+      allow_any_instance_of(StreamWeaver::Export::HtmlExporter)
+        .to receive(:fetch_url).and_raise(Timeout::Error, "execution expired")
+      out = File.join(@dir, 'diagram.html')
+
+      expect { described_class.export_html([mermaid_doc, '-o', out, '--offline']) }
+        .to raise_error(SystemExit)
+        .and output(/offline export couldn.t fetch mermaid/).to_stderr
+    end
+  end
 end

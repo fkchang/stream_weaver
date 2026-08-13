@@ -261,6 +261,20 @@
        hx-boost="false" target="_blank"
        title="Download this doc as a standalone HTML file">⬇ Export HTML</a>
 
+    <%# Fetches and inlines mermaid's own library instead of referencing its CDN
+        (stream_weaver-dnq), so mermaid diagrams render in a viewer whose CSP
+        blocks external scripts entirely -- SharePoint's HTML preview is the
+        motivating case. Only shown on a doc that actually has a mermaid
+        diagram (@doc.html always contains "sw-mermaid" for one, in either
+        the diagram's own CSS class or its lazily-injected CSS block) --
+        the flag does nothing on a doc without one, so a second identical
+        button there would just be a confusing extra click with no effect. %>
+    <% if @doc.html.include?("sw-mermaid") %>
+      <a href="/export?file=<%= @current_index %>&amp;offline=1" class="nav-link nav-export"
+         hx-boost="false" target="_blank"
+         title="Download as standalone HTML with mermaid's library inlined, for viewers that block external scripts (e.g. SharePoint)">⬇ Export HTML (offline)</a>
+    <% end %>
+
 <% if is_history %>
   <%# Save-as-doc widget — promotes this history snapshot to docs/streamweaver_canvas/.
       Mirrors bridge_server.rb's save_doc_widget look-and-feel (sw-save-doc-* CSS,

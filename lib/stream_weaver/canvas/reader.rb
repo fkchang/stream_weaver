@@ -162,6 +162,12 @@ module StreamWeaver
       # body as HTML. The export link itself must never carry a `download`
       # attribute, or the browser saves an error body as a mystery file
       # instead of showing it (see reader_layout.erb).
+      # ?offline=1 inlines mermaid's own library instead of referencing its
+      # CDN (stream_weaver-dnq), so a diagram renders in a viewer whose CSP
+      # blocks external scripts entirely (SharePoint's HTML preview, etc.).
+      # Needs network access at export time; a fetch failure there is a 502
+      # (this server tried an upstream and it failed), distinct from the
+      # 422s below for bad input.
       get '/export' do
         content_type :text
         path = self.class.file_list&.at(params[:file].to_i)
@@ -172,9 +178,11 @@ module StreamWeaver
             path,
             theme:  self.class.fallback_theme,
             layout: self.class.fallback_layout
-          ).to_html
+          ).to_html(offline: params[:offline] == '1')
         rescue StreamWeaver::Export::InvalidDslError => e
           halt 422, "Export failed: #{e.message}"
+        rescue StreamWeaver::Export::OfflineAssetError => e
+          halt 502, "Export failed: #{e.message}"
         rescue ScriptError, StandardError => e
           # A DSL that fails to eval is bad input, not an exporter failure --
           # same 422 GET / gives the equivalent case (its red error box).

@@ -626,6 +626,10 @@ module StreamWeaver
           streamweaver export <file.rb>           Write a canvas DSL doc out as standalone HTML
                        [-o out.html]                Output path (default: <doc-name>.html)
                        [--inline-images]            Embed local images as base64 data URIs
+                       [--offline]                  Inline mermaid's library (needs network at
+                                                     export time) so diagrams render in a viewer
+                                                     whose CSP blocks external scripts entirely
+                                                     (e.g. SharePoint's HTML preview)
 
         Canvas Examples:
           # Create session and open browser
@@ -1451,6 +1455,7 @@ module StreamWeaver
       source = nil
       output = nil
       inline_images = false
+      offline = false
       until args.empty?
         arg = args.shift
         case arg
@@ -1462,12 +1467,13 @@ module StreamWeaver
           end
         when /\A--output=(.+)\z/     then output = Regexp.last_match(1)
         when '--inline-images'       then inline_images = true
+        when '--offline'             then offline = true
         else source = arg
         end
       end
 
       unless source && File.file?(source)
-        $stderr.puts "Usage: streamweaver export <file.rb> [-o out.html] [--inline-images]"
+        $stderr.puts "Usage: streamweaver export <file.rb> [-o out.html] [--inline-images] [--offline]"
         $stderr.puts "Error: no such file: #{source}" if source
         exit 1
       end
@@ -1476,8 +1482,8 @@ module StreamWeaver
 
       begin
         path = StreamWeaver::Export::HtmlExporter.from_dsl_file(source)
-                                                 .export(path: output, inline_images: inline_images)
-      rescue StreamWeaver::Export::InvalidDslError => e
+                                                 .export(path: output, inline_images: inline_images, offline: offline)
+      rescue StreamWeaver::Export::InvalidDslError, StreamWeaver::Export::OfflineAssetError => e
         $stderr.puts "Error: #{e.message}"
         exit 1
       rescue ScriptError, StandardError => e
