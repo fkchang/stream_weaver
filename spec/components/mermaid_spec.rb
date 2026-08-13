@@ -187,20 +187,29 @@ RSpec.describe "Mermaid Component (T3)" do
       expect(container_html).to include('data-sw-zoom="expand"')
     end
 
-    # Regression guard: the expand icon is a flex item (its parent button
-    # is display: flex), and a flex item's used width comes from its
-    # flex-basis before width/height HTML attributes are ever consulted --
-    # verified live, `width="14" height="14"` rendered as a literally
-    # invisible 0-width icon (only width collapsed; height was fine).
-    # Inline `style` wins the cascade outright regardless of flex-basis
-    # resolution, which bare attributes cannot.
-    it "sizes the expand icon via inline style, not width/height attributes" do
+    # Regression guard, revised twice:
+    # 1. Bare width="14"/height="14" attributes rendered as a literally
+    #    invisible 0-width icon -- the button is display: flex, which
+    #    makes the SVG a flex item, and a flex item's used width comes
+    #    from its flex-basis before width/height attributes are ever
+    #    consulted.
+    # 2. Switching to an inline style="" attribute fixed that locally but
+    #    broke again specifically on SharePoint, whose CSP restricts
+    #    style-src-attr (inline style="") independently of style-src (the
+    #    <style> block this rule now lives in, already proven working
+    #    since the rest of the page's CSS renders there).
+    # A real stylesheet class rule dodges both: normal author-stylesheet
+    # specificity settles the flex-basis question, and it's governed by
+    # style-src, not style-src-attr.
+    it "sizes the expand icon via a stylesheet class, not attributes or inline style" do
       m = StreamWeaver::Components::Mermaid.new("graph LR; A-->B")
       html = render_html(m)
       container_html = html[html.index('class="sw-mermaid"')..]
       svg_tag = container_html[/<svg[^>]*>/]
-      expect(svg_tag).to include('style="width:14px;height:14px')
+      expect(svg_tag).to include('class="sw-mermaid__expand-icon"')
+      expect(svg_tag).not_to include("style=")
       expect(svg_tag).not_to include('width="14"')
+      expect(html).to include(".sw-mermaid__expand-icon {")
     end
 
     it "adds compact class" do
@@ -493,19 +502,25 @@ RSpec.describe "Mermaid Component (T3)" do
       expect(js).to include("fullscreenSeq")
     end
 
-    # Regression guard: mermaid's root <svg> carries width="100%" plus an
-    # inline max-width -- fine in the original in-place container (a
-    # normal block div with a concrete width), not in the overlay, where
-    # .content is a flex item with no explicit width for "100%" to
-    # resolve against. Verified live: the diagram rendered a few px wide
-    # instead of natural size -- clearing max-width alone (a first draft)
-    # never touched the actual cause. Fixed by reading the SVG's own
-    # viewBox and setting concrete pixel width/height from it, which
-    # depends on no ancestor's computed width at all.
-    it "sizes the cloned SVG from its own viewBox instead of a percentage width" do
+    # Regression guard, revised twice:
+    # 1. Mermaid's root <svg> carries width="100%" plus an inline
+    #    max-width -- fine in the original in-place container (a normal
+    #    block div with a concrete width), not in the overlay, where
+    #    .content is a flex item with no explicit width for "100%" to
+    #    resolve against. Verified live: the diagram rendered a few px
+    #    wide instead of natural size.
+    # 2. Fixing that via svgEl.style.width/height worked locally but broke
+    #    again on SharePoint, whose CSP restricts style-src-attr (inline
+    #    style="", including writes through the .style DOM API)
+    #    independently of style-src.
+    # setAttribute('width'/'height', ...) are plain SVG geometry
+    # attributes, not CSS -- no style-src directive governs them at all.
+    it "sizes the cloned SVG via width/height attributes, not .style" do
       expect(js).to include("getAttribute('viewBox')")
-      expect(js).to include("svgEl.style.width")
-      expect(js).to include("svgEl.style.height")
+      expect(js).to include("svgEl.setAttribute('width'")
+      expect(js).to include("svgEl.setAttribute('height'")
+      expect(js).not_to include("svgEl.style.width")
+      expect(js).not_to include("svgEl.style.height")
     end
   end
 end

@@ -3213,16 +3213,22 @@ module StreamWeaver
             # dingbat (U+26F6) has patchy font coverage on Windows/Linux --
             # an SVG path renders identically everywhere.
             #
-            # Sized via inline `style`, not the `width`/`height` attributes
-            # alone: this button is `display: flex`, which makes the SVG a
-            # flex item, and a flex item's used width comes from its
-            # flex-basis (here, `auto`) before the width/height HTML
-            # presentation attributes ever get consulted -- verified live,
-            # this rendered as a literally invisible 0-width icon (height
-            # still resolved correctly; only width collapsed) while the
-            # neighboring text-glyph buttons were unaffected. `style`
-            # wins the cascade outright, and flex-shrink: 0 stops the flex
-            # algorithm from shrinking it back down under pressure.
+            # Sized via the .sw-mermaid__btn svg rule in MERMAID_CSS below,
+            # not an inline `style=` attribute or bare width/height
+            # attributes. Two things went wrong before landing on this:
+            # bare width="14"/height="14" attributes rendered as a
+            # literally invisible 0-width icon -- this button is `display:
+            # flex`, which makes the SVG a flex item, and a flex item's
+            # used width comes from its flex-basis (here, `auto`) before
+            # width/height presentation attributes are ever consulted.
+            # Switching to an inline `style=` attribute fixed that locally,
+            # but broke again specifically on SharePoint: some corporate
+            # CSPs restrict style-src-attr independently of style-src (the
+            # directive that governs the <style> block below, already
+            # proven working since the rest of this page's CSS renders
+            # fine there) -- inline `style=""` attributes are a distinct,
+            # separately-gatable CSP surface. A real stylesheet rule
+            # avoids both problems at once.
             view.button(
               type: "button",
               class: "sw-mermaid__btn",
@@ -3231,9 +3237,9 @@ module StreamWeaver
               title: "Expand to full screen"
             ) do
               view.raw(view.safe(
-                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' \
-                'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ' \
-                'style="width:14px;height:14px;flex-shrink:0;display:block">' \
+                '<svg class="sw-mermaid__expand-icon" viewBox="0 0 24 24" fill="none" ' \
+                'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" ' \
+                'stroke-linejoin="round">' \
                 '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 ' \
                 '0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>'
               ))
@@ -3346,6 +3352,16 @@ module StreamWeaver
           background: var(--sw-accent, #0d9488);
           color: #fff;
           border-color: var(--sw-accent, #0d9488);
+        }
+
+        /* A stylesheet rule, not the SVG's own width/height attributes or
+           an inline style= -- see the long comment at the expand button's
+           render call for why both of those failed. */
+        .sw-mermaid__expand-icon {
+          width: 14px;
+          height: 14px;
+          flex-shrink: 0;
+          display: block;
         }
 
         .sw-mermaid__error {
