@@ -153,14 +153,38 @@ RSpec.describe "Mermaid Component (T3)" do
       expect(html).to include('data-sw-zoom="reset"')
     end
 
-    it "does not render zoom controls when zoom: false" do
+    it "does not render in/out/reset zoom controls when zoom: false" do
       m = StreamWeaver::Components::Mermaid.new("graph LR; A-->B")
       html = render_html(m)
-      # The container div itself should not have zoom controls
-      # (CSS/JS may mention them, but the rendered container should not)
       container_html = html[html.index('class="sw-mermaid"')..]
-      expect(container_html).not_to include('sw-mermaid__controls')
-      expect(container_html).not_to include('data-sw-zoom')
+      expect(container_html).not_to include('data-sw-zoom="in"')
+      expect(container_html).not_to include('data-sw-zoom="out"')
+      expect(container_html).not_to include('data-sw-zoom="reset"')
+    end
+
+    # Expand always renders, regardless of zoom: -- the in-place zoom
+    # mechanism doesn't fix the real problem (the container itself is
+    # still small), so it needs no opt-in the way in/out/reset do
+    # (stream_weaver-yjv).
+    #
+    # Asserted against the container slice, not the full document: the
+    # inlined sw-mermaid-zoom.js contains its own
+    # querySelector('[data-sw-zoom="expand"]'), which satisfies a bare
+    # substring check on the full HTML even with the button deleted --
+    # the same trap the negative spec above already dodges.
+    it "renders the expand control even when zoom: false" do
+      m = StreamWeaver::Components::Mermaid.new("graph LR; A-->B")
+      html = render_html(m)
+      container_html = html[html.index('class="sw-mermaid"')..]
+      expect(container_html).to include('class="sw-mermaid__controls"')
+      expect(container_html).to include('data-sw-zoom="expand"')
+    end
+
+    it "renders the expand control alongside in/out/reset when zoom: true" do
+      m = StreamWeaver::Components::Mermaid.new("graph LR; A-->B", zoom: true)
+      html = render_html(m)
+      container_html = html[html.index('class="sw-mermaid"')..]
+      expect(container_html).to include('data-sw-zoom="expand"')
     end
 
     it "adds compact class" do
@@ -417,6 +441,40 @@ RSpec.describe "Mermaid Component (T3)" do
 
     it "handles render errors gracefully" do
       expect(js).to include("sw-mermaid__error")
+    end
+
+    it "implements a fullscreen expand overlay (stream_weaver-yjv)" do
+      expect(js).to include("sw-mermaid-fullscreen-overlay")
+      expect(js).to include("data-sw-zoom=\"expand\"")
+      # Native <dialog>.showModal() rather than a hand-rolled overlay --
+      # gets Escape-to-close, focus management, and an inert background
+      # from the platform instead of reimplementing them.
+      expect(js).to include("showModal")
+    end
+
+    it "guards against re-wiring the expand button on every theme switch" do
+      # reRenderAll() (a theme toggle) re-runs initExpand against the same
+      # button without recreating it -- without an idempotency guard, every
+      # toggle stacks another click handler on it.
+      expect(js).to include("data-sw-expand-wired")
+    end
+
+    it "ties every fullscreen listener to one AbortController per open" do
+      # A first draft added document-level mousemove/mouseup listeners with
+      # no way to remove them, leaking two per expand/close cycle plus the
+      # entire cloned SVG each one's closure retained.
+      expect(js).to include("AbortController")
+    end
+
+    it "re-namespaces cloned SVG ids instead of duplicating them" do
+      # cloneNode(true) alone would duplicate every internal id (arrowhead
+      # markers, gradients) into the document while the original is still
+      # there; url(#...) resolves to the first match in document order --
+      # the original's -- so the clone's markers silently point at
+      # whatever the original happens to still have, which breaks the
+      # moment the original re-renders or is swapped out from under an
+      # open overlay.
+      expect(js).to include("fullscreenSeq")
     end
   end
 end

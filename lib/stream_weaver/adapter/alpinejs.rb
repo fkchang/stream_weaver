@@ -3175,9 +3175,16 @@ module StreamWeaver
         end
 
         view.div(**attrs) do
-          # Zoom controls (only when zoom: true)
-          if component.zoom
-            view.div(class: "sw-mermaid__controls") do
+          # Controls: expand is always available (stream_weaver-yjv) --
+          # the in-place zoom mechanism (zoom: true) helps but doesn't fix
+          # the actual problem, which is the container itself: a wide
+          # diagram's fixed-px labels shrink proportionally to fit an
+          # 800-1400px doc column regardless of pan/zoom. Expand opens the
+          # diagram in a full-viewport overlay instead, with no container
+          # width to shrink against. +/-/reset stay opt-in via zoom: true;
+          # expand needs no opt-in since it has no in-place layout cost.
+          view.div(class: "sw-mermaid__controls") do
+            if component.zoom
               view.button(
                 type: "button",
                 class: "sw-mermaid__btn",
@@ -3199,6 +3206,25 @@ module StreamWeaver
                 "aria-label" => "Reset zoom",
                 title: "Reset"
               ) { "\u21BA" }
+            end
+            # An inline SVG rather than the unicode glyphs the other three
+            # buttons use: this codebase's docs get read outside macOS (the
+            # SharePoint case this feature exists for), and the fullscreen
+            # dingbat (U+26F6) has patchy font coverage on Windows/Linux --
+            # an SVG path renders identically everywhere.
+            view.button(
+              type: "button",
+              class: "sw-mermaid__btn",
+              "data-sw-zoom" => "expand",
+              "aria-label" => "Expand to full screen",
+              title: "Expand to full screen"
+            ) do
+              view.raw(view.safe(
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" ' \
+                'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" ' \
+                'stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 ' \
+                '0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>'
+              ))
             end
           end
 
@@ -3315,6 +3341,125 @@ module StreamWeaver
           font-family: var(--sw-font-mono, monospace);
           font-size: 0.85rem;
           padding: 1rem;
+        }
+
+        /* Fullscreen expand overlay (stream_weaver-yjv) -- the doc column's
+           max-width shrinks a wide diagram's fixed-px labels proportionally
+           no matter how the layout is tuned; the overlay removes that
+           constraint entirely instead of trying to out-negotiate it.
+           A <dialog> via showModal(), not a hand-rolled div: the browser's
+           top layer means no z-index arms race with this file's own
+           toasts/nav (see page_shell.rb, alpinejs.rb elsewhere), plus
+           Escape-to-close, focus management, and an inert background for
+           free -- overriding only the UA default box (border/padding/
+           background/position) that a plain <dialog> ships with. */
+        dialog.sw-mermaid-fullscreen-overlay {
+          max-width: none;
+          max-height: none;
+          width: 100%;
+          height: 100%;
+          margin: 0;
+          border: 0;
+          padding: 4rem 2rem 2rem;
+          background: transparent;
+          /* The dialog itself does NOT scroll -- .content does (below).
+             A first version had overflow: auto here, which made the
+             dialog the scroll container; close/hint are positioned
+             against the dialog, so they scrolled away with the diagram
+             instead of staying pinned to the viewport. Caught live: opened
+             a tall diagram and scrolled down past the hint text. */
+          overflow: hidden;
+        }
+
+        dialog.sw-mermaid-fullscreen-overlay[open] {
+          display: flex;
+          align-items: flex-start;
+          justify-content: center;
+        }
+
+        dialog.sw-mermaid-fullscreen-overlay::backdrop {
+          background: rgba(0, 0, 0, 0.75);
+        }
+
+        .sw-mermaid-fullscreen-overlay__content {
+          position: relative;
+          background: var(--sw-surface, #fff);
+          border-radius: var(--sw-radius-md, 6px);
+          padding: 1.5rem;
+          cursor: grab;
+          /* No max-width: the whole point is to render the diagram at
+             natural (or zoomed) size rather than shrink the SVG to fit.
+             max-height IS bounded, to the space the dialog's own padding
+             leaves -- that's what makes this the scroll container instead
+             of the dialog (see the dialog rule above). */
+          max-height: 100%;
+          overflow: auto;
+          overscroll-behavior: contain;
+        }
+
+        .sw-mermaid-fullscreen-overlay__svg-wrapper svg {
+          height: auto;
+          display: block;
+          /* max-width: none is also set inline via JS (cloneSvgWrapper) --
+             mermaid emits its own inline max-width on the root <svg>,
+             which no stylesheet rule can outrank. Kept here too as the
+             belt to that suspenders. */
+          max-width: none;
+        }
+
+        /* Positioned against the dialog itself (its nearest positioned
+           ancestor once it's the top-layer element), not the viewport --
+           no z-index needed inside a top-layer dialog. */
+        .sw-mermaid-fullscreen-overlay__close {
+          position: absolute;
+          top: 1rem;
+          right: 1.5rem;
+          width: 40px;
+          height: 40px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--sw-surface-elevated, #f3f3f3);
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-sm, 4px);
+          cursor: pointer;
+          font-size: 1.25rem;
+          line-height: 1;
+          color: var(--sw-text, #111);
+        }
+
+        .sw-mermaid-fullscreen-overlay__close:hover {
+          background: var(--sw-accent, #0d9488);
+          color: #fff;
+          border-color: var(--sw-accent, #0d9488);
+        }
+
+        .sw-mermaid-fullscreen-overlay__hint {
+          position: absolute;
+          bottom: 1rem;
+          left: 50%;
+          transform: translateX(-50%);
+          background: var(--sw-surface-elevated, #f3f3f3);
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-sm, 4px);
+          padding: 0.35rem 0.75rem;
+          font-size: 0.8rem;
+          color: var(--sw-text-dim, #6b6860);
+          white-space: nowrap;
+        }
+
+        /* views.rb sets `html { overflow-x: auto }` on every StreamWeaver
+           page, which makes <html> its own scroll container and stops
+           <body>'s overflow from propagating to the viewport -- so the
+           scroll lock has to sit on <html>, or it locks an element that
+           was never the one scrolling in the first place. */
+        html.sw-mermaid-fullscreen-open,
+        html.sw-mermaid-fullscreen-open body {
+          overflow: hidden;
+        }
+
+        @media print {
+          .sw-mermaid__controls { display: none; }
         }
       CSS
 

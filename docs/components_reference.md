@@ -726,12 +726,14 @@ mermaid diagram_code, theme_vars: {
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `zoom:` | Boolean | `false` | Adds zoom/pan controls (+/−/reset) and Ctrl+scroll |
+| `zoom:` | Boolean | `false` | Adds in-place zoom/pan controls (+/−/reset) and Ctrl+scroll |
 | `compact:` | Boolean | `false` | Reduces padding — use when embedding inside a card |
 | `layout:` | Symbol | `:default` | Layout engine: `:default` (Dagre) or `:elk` (ELK) |
 | `theme_vars:` | Hash | `nil` | Per-diagram Mermaid `themeVariables` overrides |
 
 **Supported diagram types:** flowchart, sequence, pie, gantt, gitgraph, classDiagram, stateDiagram, erDiagram, and any other type supported by Mermaid.js 11.
+
+**Expand to full screen.** Every diagram, regardless of `zoom:`, gets an ⛶-style expand button that opens it full-viewport with no width constraint — a doc column's max-width shrinks a wide diagram's fixed-px labels proportionally no matter how the layout is tuned, so this is the actual fix for an illegible complex diagram, not just a bigger version of `zoom: true`. Scroll (or drag) to pan, Ctrl+scroll to zoom further, Escape/click the backdrop/the close button to exit. No opt-in needed and no extra dependency — it's client-side only, so it works the same in the live canvas, `canvas-read`, and any exported doc (including an `--offline` one).
 
 **Theme awareness:** Mermaid diagrams automatically re-render when the page theme changes (dark/light). Use `theme_vars:` for brand-specific color overrides.
 
