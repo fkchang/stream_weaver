@@ -173,6 +173,8 @@ mermaid diagram_code, layout: :elk                 # ELK layout engine for dense
 mermaid diagram_code, theme_vars: { primaryColor: "#6366f1" }  # custom colors
 ```
 
+Every diagram, regardless of `zoom:`, also gets an "expand to full screen" button (no opt-in) — a wide diagram's fixed-px labels shrink to fit whatever doc column width it renders in no matter how the layout is tuned, so this is the actual fix for an illegible complex diagram, not just a bigger version of `zoom: true`.
+
 ### CRITICAL: `text` Does NOT Render Markdown
 
 **`text` is literal — markdown syntax appears as raw characters.**
@@ -511,8 +513,11 @@ streamweaver canvas-close "$SESSION"
 | `streamweaver canvas-wait SESSION` | Wait for button click, return JSON |
 | `streamweaver canvas-close SESSION` | Close the canvas session |
 | `streamweaver canvas-read FILE [FILE\|DIR ...]` | Browse saved canvas DSL files in a local viewer (sidebar + prev/next nav) |
+| `streamweaver export FILE.rb [-o OUT.html] [--inline-images] [--offline]` | Write a canvas DSL doc out as standalone HTML |
 
 `panel` flags: `--layout=` is one of `default`/`wide`/`full`/`fluid` (default `fluid`). `--theme=` selects any registered theme for the session (default `:default`); e.g. `--theme=doc` renders the canvas in the `:doc` theme, including its dark-mode variant. `--fresh` closes any existing session with the same name before creating a new one.
+
+`export` flags: `--inline-images` embeds local images as base64 data URIs so the file is fully portable. `--offline` fetches and inlines mermaid's own library (instead of referencing its CDN) so diagrams render in a viewer whose CSP blocks external scripts entirely — SharePoint's built-in HTML preview is the motivating case; needs network access once, at export time, not at view time. Same capability from `canvas-read`'s nav rail: "⬇ Export HTML" on every file, plus a second "⬇ Export HTML (offline)" link shown only on docs with a mermaid diagram.
 
 ### Important Behavior
 
