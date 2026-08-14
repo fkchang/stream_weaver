@@ -93,6 +93,13 @@ end
 | `POST /action/btn_<name>_<id>` | Button actions (names normalized: lowercase, underscores) |
 | `POST /update` | Form field updates |
 
+## Testing `route_with`
+
+Covered in [`docs/routing.md`](routing.md) § Testing route_with, not here: extract the parser
+and builder into plain functions and test them with a `build(parse(path)) == path` round-trip
+check over every route — no Rack::Test or session harness required. See that doc's Common
+Pitfalls section for the two bug classes this catches.
+
 ## Testing Agentic Mode (`run_once!`)
 
 The `/submit` endpoint can be tested directly:

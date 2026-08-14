@@ -488,7 +488,9 @@ module Sections
       `route_by :page, home: "/", settings: "/settings"` gives one state key a
       bidirectional URL mapping; `route_with(parser:, builder:)` handles
       parameterized routes (`/post/:id`) with two lambdas. See
-      `docs/routing.md` for the full parser/builder contract.
+      `docs/routing.md` for the full parser/builder contract - including a
+      Common Pitfalls section worth reading once your app grows past a
+      handful of routes.
 
       If you need a genuine HTTP route that bypasses rendering entirely (a
       webhook, a JSON API, a file download), that's `endpoint` - next lesson.

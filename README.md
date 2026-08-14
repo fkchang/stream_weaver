@@ -375,6 +375,23 @@ modal :confirm, title: "Are you sure?" do
 end
 ```
 
+### URL Routing
+
+Deep links, bookmarkable URLs, and browser back/forward — no router library, just a
+bidirectional map between a URL path and a slice of state:
+
+```ruby
+route_with(
+  parser:  ->(path) { path == '/goals' ? { main_nav: 2 } : nil },
+  builder: ->(state) { state[:main_nav] == 2 ? '/goals' : nil }
+)
+```
+
+`route_by` covers the simple single-key case. See [`docs/routing.md`](docs/routing.md) for the
+full contract — including a **Common Pitfalls** section worth reading before an app grows past a
+handful of routes (state merges rather than replaces on every GET, so an incomplete route table
+fails silently rather than loudly).
+
 ### Feedback
 
 ```ruby
@@ -424,6 +441,7 @@ end
 - [Templates Reference](docs/templates.md)
 - [Components Reference](docs/components_reference.md)
 - [Service Mode](docs/SERVICE_MODE.md)
+- [URL Routing](docs/routing.md) — `route_by`/`route_with`, plus Common Pitfalls for larger apps
 
 ---
 

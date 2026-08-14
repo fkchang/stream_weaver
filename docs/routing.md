@@ -109,7 +109,10 @@ end
 
 ### Parser Rules
 
-- Return a **hash** to merge into state (only the keys you want to set, not the full state)
+- Return a **hash** to merge into state (only the keys you want to set, not the full state) —
+  **merge, not replace**: any key you don't mention keeps whatever value a *previous* request
+  left in session state. See "Common Pitfalls" below before relying on this for anything beyond
+  a single-view app.
 - Return `nil` to indicate "this path isn't handled by me" — Sinatra will 404
 - Always `CGI.unescape` captured path segments before storing in state
 - Match most-specific patterns first (`:id/surface/:sid` before `:id`)
@@ -164,6 +167,94 @@ elsif current_state[:initiative_id].to_s.strip != '' && current_state[:editing_i
   "/initiative/#{CGI.escape(current_state[:initiative_id])}/edit"
 elsif current_state[:initiative_id].to_s.strip != ''
   "/initiative/#{CGI.escape(current_state[:initiative_id])}"
+```
+
+---
+
+## Common Pitfalls
+
+Two bug classes that show up in any sufficiently large `route_with` app (found in practice in an
+app with ~20 branches and 15 tabs). Both come from the same source: a `case`/`when` route table
+that isn't exhaustive in one direction or the other.
+
+### Pitfall 1 — a narrow branch leaks a previous view's state
+
+Because parser results are **merged** into session state, not replaced, a branch that only sets
+its own key(s) leaves every other stateful key exactly as an earlier request left it:
+
+```ruby
+# BAD — only sets main_nav; any special-view flag set by a PRIOR request survives untouched
+when "/messages"
+  { main_nav: MESSAGES_TAB_INDEX }
+```
+
+If some other branch earlier set `view_task_id` (a "show this one task, bypass the tab board"
+flag) and your render logic checks `view_task_id` before `main_nav`, navigating to `/messages`
+after having visited `/task/:id` renders the stale task view, not Messages — the URL you're on
+is not what's on screen. This is easy to miss because it's **intermittent**: it only reproduces
+when a session has visited the leaking view before, so it looks like flakiness rather than a
+routing bug.
+
+**Fix**: define one frozen hash listing every "special view" key with its off value, and have
+every branch merge its own keys on top of it, not just `nil`/base-hash-free literals:
+
+```ruby
+SPECIAL_VIEW_RESET = { view_task_id: nil, messages_view_stream: nil, checkin_slug: nil, ... }.freeze
+
+when "/messages"
+  SPECIAL_VIEW_RESET.merge(main_nav: MESSAGES_TAB_INDEX)
+```
+
+Adding a new special view later means adding one key to the list, not remembering to touch every
+existing branch.
+
+### Pitfall 2 — an uncovered `case`/`when` value fails silently, in both directions
+
+A `case current_state[:main_nav].to_i` (or any keyed dispatch) with `when` clauses that don't
+cover every value your app actually uses returns `nil` on the uncovered values — and `nil` from
+a builder means **"leave the URL unchanged"** (see Builder Rules above), not an error. The
+symptom is not a crash, it's silence: clicking a tab that maps to an uncovered index changes what
+renders but never touches the URL bar, so it looks like the click "didn't do anything" to the
+address bar specifically. The same gap on the parser side means the corresponding path never
+seeds that index into state, so a direct GET to a URL nobody wrote a `when` for either falls
+through to `nil` (404) or, if it matches a *different* branch that doesn't set `main_nav` at all
+(e.g. bare `/` only clearing special-view flags), inherits whatever `main_nav` a previous request
+left behind.
+
+**Fix**: audit the full index/key range your app actually dispatches on and confirm every value
+has a `when` clause on **both** the parser and the builder — not just the branch that was
+reported broken. In practice this bug hunts in pairs: if one branch of a route table is
+incomplete, check the others before considering it fixed.
+
+## Testing route_with
+
+`route_with`'s parser and builder are plain `path -> hash` / `hash -> path` functions — the
+highest-leverage way to test them is to **extract them out of the inline DSL lambdas** into
+ordinary module methods (e.g. `MyApp::Routing.parse(path)` / `MyApp::Routing.build(state)`), so
+they're unit-testable with no Rack::Test or session harness at all:
+
+```ruby
+parser: ->(path) { MyApp::Routing.parse(path) },
+builder: ->(state) { MyApp::Routing.build(state) }
+```
+
+Then the single most valuable regression test is a **round-trip check over every known path** —
+`build(parse(path)) == path` for each route your app defines. It catches both pitfalls above at
+once: Pitfall 1 shows up as `parse` returning a state hash with leftover keys from nothing (a
+round trip alone won't catch this one directly — pair it with an explicit assertion that
+`parse(path)` matches `SPECIAL_VIEW_RESET.merge(...)` exactly, not just a subset); Pitfall 2
+shows up as `build(parse(path))` returning `nil` or the wrong path for any route whose index
+wasn't wired into the builder's `case`, which is exactly the bug it exists to catch — a route
+that parses fine but never round-trips back to a real URL.
+
+```ruby
+KNOWN_ROUTES = ["/", "/messages", "/task/abc", ...]
+
+KNOWN_ROUTES.each do |path|
+  it "round-trips #{path}" do
+    expect(MyApp::Routing.build(MyApp::Routing.parse(path))).to eq(path)
+  end
+end
 ```
 
 Then in the app body:
