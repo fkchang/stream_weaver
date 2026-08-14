@@ -89,6 +89,11 @@ module StreamWeaver
           render_card(component)
         when Components::Comparison
           render_comparison(component)
+        when Components::Mermaid
+          header = component.zoom ? "mermaid :zoom t" : "mermaid"
+          "\n#+begin_src #{header}\n#{component.code.to_s.rstrip}\n#+end_src\n"
+        when Components::CodeBlock
+          "\n#+begin_src #{component.lang}\n#{component.code.to_s.rstrip}\n#+end_src\n"
         else
           ""
         end

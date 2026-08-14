@@ -185,4 +185,32 @@ RSpec.describe StreamWeaver::Org::Writer do
     RUBY
     expect(org).to include("*⚖️ Pick one*")
   end
+
+  it "emits a mermaid component as a #+begin_src mermaid block, content untouched" do
+    org = write(<<~'RUBY')
+      mermaid <<~MERMAID, zoom: true
+        graph LR
+          A["a/b/c"] --> B
+      MERMAID
+    RUBY
+    expect(org).to include(<<~ORG)
+      #+begin_src mermaid :zoom t
+      graph LR
+        A["a/b/c"] --> B
+      #+end_src
+    ORG
+  end
+
+  it "emits a code_block component as a #+begin_src block with its language" do
+    org = write(<<~'RUBY')
+      code_block(<<~TXT, lang: "text")
+        lib/foo.rb:1-10
+      TXT
+    RUBY
+    expect(org).to include(<<~ORG)
+      #+begin_src text
+      lib/foo.rb:1-10
+      #+end_src
+    ORG
+  end
 end
