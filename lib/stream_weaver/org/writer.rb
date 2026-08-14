@@ -83,8 +83,14 @@ module StreamWeaver
           "\n#{Inline.md_to_org(component.content)}\n"
         when Components::Table
           render_table(component)
+        when Components::Callout
+          render_quote("*#{component.icon} #{component.title}*", component.children)
+        when Components::Card
+          render_card(component)
+        when Components::Comparison
+          render_comparison(component)
         else
-          "" # remaining types handled in later tasks
+          ""
         end
       end
 
@@ -103,6 +109,38 @@ module StreamWeaver
 
       def row_line(cells, widths)
         "| " + cells.each_with_index.map { |c, i| c.ljust(widths[i]) }.join(" | ") + " |\n"
+      end
+
+      def render_card(card)
+        header = card.children.find { |c| c.is_a?(Components::CardHeader) }
+        # A card with no CardHeader (loose children directly under card
+        # do...end -- a real pattern elsewhere in this codebase, e.g. admin
+        # dashboard stat tiles) has no natural title for the marker-line
+        # convention and isn't part of the doc-builder vocabulary this
+        # format targets. Fall back to the same raw-passthrough convention
+        # Task 8 uses for any unrecognized component, rather than crash or
+        # silently drop the content.
+        return raw_passthrough(card) unless header
+
+        body = card.children.find { |c| c.is_a?(Components::CardBody) }
+        marker = header.badge ? "*[#{header.badge}] #{header.content}*" : "*#{header.content}*"
+        marker << " /(#{header.meta})/" if header.meta
+        render_quote(marker, body ? body.children : [])
+      end
+
+      def raw_passthrough(component)
+        "\n#+begin_src ruby :streamweaver-raw t\n# unrecognized component: #{component.class}\n#+end_src\n"
+      end
+
+      def render_comparison(comparison)
+        before = render_quote("*◀ Before — #{comparison.before_label}*", comparison.before_children)
+        after  = render_quote("*▶ After — #{comparison.after_label}*", comparison.after_children)
+        "\n" + before.strip + "\n" + after.strip + "\n"
+      end
+
+      def render_quote(marker, children)
+        body = children.map { |c| render_component(c) }.join.strip
+        "\n#+begin_quote\n#{marker}\n#{body}\n#+end_quote\n"
       end
     end
   end

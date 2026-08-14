@@ -106,4 +106,83 @@ RSpec.describe StreamWeaver::Org::Writer do
     org = write(%(table(headers: ["A"], rows: [["x"]], markdown: true)\n))
     expect(org).not_to include("#+ATTR_STREAMWEAVER")
   end
+
+  it "emits a callout as a quote block with an emoji marker line" do
+    org = write(<<~RUBY)
+      callout(variant: :warning, title: "What happened") do
+        md "Something happened."
+      end
+    RUBY
+    expect(org).to include(<<~ORG)
+      #+begin_quote
+      *⚠️ What happened*
+      Something happened.
+      #+end_quote
+    ORG
+  end
+
+  it "emits a card as a quote block with a bracket-badge marker line and meta" do
+    org = write(<<~RUBY)
+      card do
+        card_header "Title", badge: "1", meta: "note"
+        card_body do
+          md "Body."
+        end
+      end
+    RUBY
+    expect(org).to include(<<~ORG)
+      #+begin_quote
+      *[1] Title* /(note)/
+      Body.
+      #+end_quote
+    ORG
+  end
+
+  it "emits a card with no badge/meta as a plain bold marker line" do
+    org = write(<<~RUBY)
+      card do
+        card_header "Title"
+        card_body { md "Body." }
+      end
+    RUBY
+    expect(org).to include("*Title*\nBody.")
+  end
+
+  it "emits a comparison as two consecutive before/after quote blocks" do
+    org = write(<<~RUBY)
+      comparison(before_label: "Old", after_label: "New") do
+        before { md "old" }
+        after { md "new" }
+      end
+    RUBY
+    expect(org).to include(<<~ORG)
+      #+begin_quote
+      *◀ Before — Old*
+      old
+      #+end_quote
+      #+begin_quote
+      *▶ After — New*
+      new
+      #+end_quote
+    ORG
+  end
+
+  it "falls back to raw-passthrough for a card with no CardHeader, instead of crashing (a real pattern elsewhere in this codebase, e.g. admin dashboard stat tiles)" do
+    org = write(<<~RUBY)
+      card do
+        md "loose content, no header"
+      end
+    RUBY
+    expect(org).to include("#+begin_src ruby :streamweaver-raw t")
+    expect(org).to include("#+end_src")
+  end
+
+  it "delegates callout emoji to Components::Callout#icon rather than a separate mapping, so it can never drift from the real icon" do
+    org = write(<<~RUBY)
+      callout(variant: :decision, title: "Pick one") do
+        md "body"
+      end
+    RUBY
+    expect(org).to include("*⚖️ Pick one*")
+  end
 end
