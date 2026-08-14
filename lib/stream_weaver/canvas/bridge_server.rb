@@ -342,6 +342,11 @@ module StreamWeaver
               background: #dcfce7; color: #166534; border-radius: 4px;
               font-size: 0.85rem; word-break: break-all;
             }
+            .sw-save-doc-notice {
+              margin-top: 0.5rem; padding: 0.5rem 0.75rem;
+              background: #fef9c3; color: #854d0e; border-radius: 4px;
+              font-size: 0.85rem;
+            }
             .sw-save-doc-actions {
               display: flex; justify-content: flex-end; gap: 0.5rem;
               margin-top: 1rem;
@@ -357,13 +362,20 @@ module StreamWeaver
               background: var(--sw-color-primary, #1f6feb); color: #fff;
             }
             .sw-save-doc-save:hover:not(:disabled) { filter: brightness(1.05); }
+            .sw-save-doc-save-org {
+              background: #fff; color: var(--sw-color-primary, #1f6feb);
+              border-color: var(--sw-color-primary, #1f6feb);
+            }
+            .sw-save-doc-save-org:hover:not(:disabled) { background: #eff6ff; }
           </style>
           <div x-data="{
             open: false,
             name: '',
+            format: 'rb',
             saving: false,
             savedPath: null,
             error: null,
+            coverage: null,
             defaultName() {
               const d = new Date();
               const pad = n => String(n).padStart(2, '0');
@@ -371,25 +383,56 @@ module StreamWeaver
               const hm = pad(d.getHours()) + pad(d.getMinutes());
               return '#{session_name}-' + ymd + '-' + hm;
             },
+            notice: null,
             openDialog() {
-              this.error = null; this.savedPath = null;
+              this.error = null; this.savedPath = null; this.coverage = null; this.notice = null;
               this.name = this.defaultName();
+              this.format = 'rb';
               this.open = true;
               this.$nextTick(() => this.$refs.input && this.$refs.input.select());
             },
+            // Tiered copy for the org-coverage notice (Phase 2 design spec's
+            // Save-as-Org UX section, including its 2026-08-14 copy-accuracy
+            // correction: N/M must name passthrough_verbatim/passthrough_lossy
+            // specifically, not a conflated total-recognized count, or a doc
+            // with mostly-verbatim elements gets told MORE of it is lossy
+            // than actually is). Only ever non-null after a format=org save
+            // whose response included coverage; a plain .rb save leaves
+            // coverage null so this stays hidden.
+            orgNotice() {
+              if (!this.coverage) return null;
+              const { total, recognized, passthrough_verbatim, passthrough_lossy } = this.coverage;
+              if (recognized === total) return null;
+              let body;
+              if (passthrough_verbatim > 0 && passthrough_lossy > 0) {
+                body = `${passthrough_verbatim} element(s) will show as raw code in a plain org viewer (nothing lost); ${passthrough_lossy} more can't be verbatim-recovered and will be replaced with a placeholder comment instead — those specific parts won't survive the round trip.`;
+              } else if (passthrough_lossy > 0) {
+                body = `${passthrough_lossy} element(s) can't be verbatim-recovered and will be replaced with a placeholder comment — those specific parts won't survive the round trip.`;
+              } else {
+                body = `${passthrough_verbatim} element(s) will show as raw code in a plain org viewer — nothing is lost, just not styled.`;
+              }
+              return recognized / total < 0.5
+                ? `This looks like an app, not a document — Org format won't add much here. ${body}`
+                : body;
+            },
             async save() {
               if (this.saving) return;
-              this.saving = true; this.error = null;
+              this.saving = true; this.error = null; this.coverage = null; this.notice = null;
               try {
                 const res = await fetch('/canvas/#{session_name}/save-doc', {
                   method: 'POST',
                   headers: {'Content-Type': 'application/json'},
-                  body: JSON.stringify({name: this.name})
+                  body: JSON.stringify({name: this.name, format: this.format})
                 });
                 const data = await res.json();
                 if (res.ok && data.ok) {
                   this.savedPath = data.path;
-                  setTimeout(() => { this.open = false; }, 1800);
+                  this.coverage = data.coverage || null;
+                  this.notice = this.orgNotice();
+                  // A tiered notice can be a full sentence or two -- the
+                  // default 1.8s auto-close (tuned for a one-line success
+                  // confirmation) isn't enough time to read it.
+                  setTimeout(() => { this.open = false; }, this.notice ? 6000 : 1800);
                 } else {
                   this.error = data.error || ('HTTP ' + res.status);
                 }
@@ -406,7 +449,10 @@ module StreamWeaver
             <div x-show="open" x-cloak class="sw-save-doc-modal" @click.self="open = false">
               <div class="sw-save-doc-dialog" @click.stop>
                 <h3>Save canvas as doc</h3>
-                <p class="hint">Writes to <code>docs/streamweaver_canvas/&lt;name&gt;.rb</code> (or <code>~/.streamweaver/canvas/</code> outside a git repo).</p>
+                <p class="hint">
+                  <span x-show="format !== 'org'">Writes to <code>docs/streamweaver_canvas/&lt;name&gt;.rb</code> (or <code>~/.streamweaver/canvas/</code> outside a git repo).</span>
+                  <span x-show="format === 'org'">Writes a human-readable <code>&lt;name&gt;.org</code> sibling file alongside the canonical <code>.rb</code>.</span>
+                </p>
                 <input type="text" x-model="name" x-ref="input"
                        @keydown.enter.prevent="save()"
                        :disabled="saving"
@@ -415,11 +461,16 @@ module StreamWeaver
                 <div x-show="savedPath" class="sw-save-doc-success">
                   ✓ Saved to <code x-text="savedPath"></code>
                 </div>
+                <div x-show="notice" x-text="notice" class="sw-save-doc-notice"></div>
                 <div class="sw-save-doc-actions">
                   <button class="sw-save-doc-cancel" @click="open = false" :disabled="saving">Cancel</button>
-                  <button class="sw-save-doc-save" @click="save()" :disabled="saving">
-                    <span x-show="!saving">Save</span>
-                    <span x-show="saving">Saving...</span>
+                  <button class="sw-save-doc-save-org" @click="format = 'org'; save()" :disabled="saving" title="Save as a plain-text .org sibling file">
+                    <span x-show="!(saving && format === 'org')">Save as Org</span>
+                    <span x-show="saving && format === 'org'">Saving...</span>
+                  </button>
+                  <button class="sw-save-doc-save" @click="format = 'rb'; save()" :disabled="saving">
+                    <span x-show="!(saving && format === 'rb')">Save</span>
+                    <span x-show="saving && format === 'rb'">Saving...</span>
                   </button>
                 </div>
               </div>
