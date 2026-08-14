@@ -148,4 +148,46 @@ RSpec.describe StreamWeaver::Org::Reader do
     expect(dsl).to include("markdown: true")
     expect(dsl).to include('"**should convert normally, unaffected**"')
   end
+
+  it "parses a reserved-emoji quote block as a callout, even with no headline anywhere in the document" do
+    org = "#+begin_quote\n*⚠️ Heads up*\nbody text\n#+end_quote\n"
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include('callout(variant: :warning, title: "Heads up")')
+    expect(dsl).not_to include("doc_header(") # the regression this test guards against
+  end
+
+  it "parses a bracket-badge quote block as a card, even with no headline anywhere in the document" do
+    org = "#+begin_quote\n*[1] Title* /(note)/\nBody.\n#+end_quote\n"
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include("card do")
+    expect(dsl).to include('badge: "1"')
+    expect(dsl).not_to include("doc_header(")
+  end
+
+  it "parses two consecutive before/after quote blocks as a comparison, even with no headline anywhere in the document" do
+    org = "#+begin_quote\n*◀ Before — Old*\nold\n#+end_quote\n#+begin_quote\n*▶ After — New*\nnew\n#+end_quote\n"
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include('comparison(')
+    expect(dsl).to include('before_label: "Old"')
+    expect(dsl).to include('after_label: "New"')
+  end
+
+  it "recognizes a src block nested inside a card's quote body, instead of flattening it into one md call" do
+    org = <<~ORG
+      #+begin_quote
+      *Pipeline* /(team · service)/
+      Some intro text.
+      #+begin_src mermaid :zoom t
+      graph LR
+        A --> B
+      #+end_src
+      Some trailing text.
+      #+end_quote
+    ORG
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include("mermaid <<~MERMAID")
+    expect(dsl).to include("A --> B")
+    expect(dsl).to include("Some intro text")
+    expect(dsl).to include("Some trailing text")
+  end
 end
