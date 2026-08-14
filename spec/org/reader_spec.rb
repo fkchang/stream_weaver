@@ -190,4 +190,92 @@ RSpec.describe StreamWeaver::Org::Reader do
     expect(dsl).to include("Some intro text")
     expect(dsl).to include("Some trailing text")
   end
+
+  it "converts headlines to doc_section_header calls and derives sidebar_toc from depth-1 ones" do
+    org = <<~ORG
+      * 00 Summary
+      :PROPERTIES:
+      :CUSTOM_ID: summary
+      :END:
+
+      ** 00.1 Detail
+      :PROPERTIES:
+      :CUSTOM_ID: detail
+      :END:
+    ORG
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include('sidebar_toc sections: [{ id: "summary", label: "Summary" }]')
+    expect(dsl).to include('doc_section_header "00", "Summary", id: "summary"')
+    expect(dsl).to include('doc_section_header "00.1", "Detail", id: "detail"')
+  end
+
+  it "honors TOC_LABEL when deriving the sidebar_toc" do
+    org = <<~ORG
+      * 01 How It Works — Reference
+      :PROPERTIES:
+      :CUSTOM_ID: how
+      :TOC_LABEL: How It Works
+      :END:
+    ORG
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include('{ id: "how", label: "How It Works" }')
+    expect(dsl).to include('doc_section_header "01", "How It Works — Reference", id: "how"')
+  end
+
+  it "converts a mermaid src block to valid, parseable Ruby with zoom on the opening heredoc line" do
+    org = "#+begin_src mermaid :zoom t\ngraph LR\n  A --> B\n#+end_src\n"
+    dsl = described_class.to_dsl(org)
+    expect { RubyVM::InstructionSequence.compile(dsl) }.not_to raise_error
+    expect(dsl).to match(/mermaid <<~MERMAID, zoom: true\n/)
+  end
+
+  it "converts a plain src block to a valid code_block call" do
+    org = "#+begin_src text\nlib/foo.rb:1-10\n#+end_src\n"
+    dsl = described_class.to_dsl(org)
+    expect { RubyVM::InstructionSequence.compile(dsl) }.not_to raise_error
+    expect(dsl).to include('code_block(<<~TXT, lang: "text")')
+  end
+
+  it "parses a full realistic document end to end with no stray or duplicated output, producing valid Ruby" do
+    org = <<~ORG
+      #+STREAMWEAVER_DSL: 1
+      #+TITLE: Sample Report
+
+      #+begin_quote
+      /Team · Project/
+      *[warn] Draft* · 2026-08-13
+      #+end_quote
+
+      * 00 Overview
+      :PROPERTIES:
+      :CUSTOM_ID: overview
+      :END:
+
+      #+begin_quote
+      *[1] Pipeline* /(team · service)/
+      #+begin_src mermaid :zoom t
+      graph LR
+        A --> B
+      #+end_src
+      #+end_quote
+
+      #+begin_quote
+      *⚠️ Heads up*
+      Something **important** happened.
+      #+end_quote
+    ORG
+    dsl = described_class.to_dsl(org)
+
+    require "tempfile"
+    Tempfile.create(["gen", ".rb"]) do |f|
+      f.write(dsl)
+      f.flush
+      expect(system("ruby", "-c", f.path, out: File::NULL, err: File::NULL)).to be true
+    end
+
+    expect(dsl.scan(/doc_header\(/).length).to eq(1)
+    expect(dsl.scan(/mermaid <<~MERMAID/).length).to eq(1)
+    expect(dsl.scan(/callout\(/).length).to eq(1)
+    expect(dsl.scan(/md <<~MD/).length).to eq(1) # only the callout body -- no stray preamble md
+  end
 end
