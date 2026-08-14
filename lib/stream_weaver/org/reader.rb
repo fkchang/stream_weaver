@@ -84,10 +84,10 @@ module StreamWeaver
             output << emit_headline(chunk)
 
           when :quote
-            # Rule 1 (positional + content-shape, NOT position alone -- see
-            # doc_header_chunk? below): only the doc_header preamble block
-            # qualifies, never an arbitrary headline-less callout/card.
-            if !seen_headline && !emitted_doc_header && doc_header_chunk?(chunk)
+            # Rule 1 (position, NOT content shape -- see doc_header_chunk?
+            # below for why): only the doc_header preamble block qualifies,
+            # never an arbitrary headline-less callout/card.
+            if !seen_headline && !emitted_doc_header && doc_header_chunk?(chunk, i)
               output << emit_doc_header(chunk)
               emitted_doc_header = true
             else
@@ -446,24 +446,35 @@ module StreamWeaver
         end.join("\n\n")
       end
 
-      # THE fix for the doc_header misclassification bug: position alone
-      # ("no headline seen yet") is NOT sufficient, because that's also true
-      # of a standalone callout/card/comparison with no headline anywhere in
-      # the document. Require the StreamWeaver preamble tag, a title, AND a
-      # first content line that ISN'T shaped like a callout/card/comparison
-      # marker (all of which wrap their entire marker line in a leading
-      # "*"). This accepts both an eyebrow line (`/.../`) and a plain
-      # (non-variant-tagged) pills line -- a doc_header with no eyebrow
-      # whose only pill happens to be variant-tagged (e.g. "*[warn] Draft*")
-      # is visually identical to a single-badge card and can't be
-      # disambiguated from shape alone; known limitation.
-      def doc_header_chunk?(chunk)
-        return false unless @streamweaver_document && @title
+      # THE fix for the doc_header misclassification bug. An earlier version
+      # of this check used content shape alone (eyebrow-line vs. a leading
+      # "*"), which is unreliable: a doc_header with no eyebrow whose pills
+      # are all variant-tagged renders as "*[warn] Draft* · *[success] v2*"
+      # -- syntactically a valid card marker, not just visually similar to
+      # one. That ambiguity is irreducible from shape alone (real-content
+      # check found it crashing/corrupting via emit_card on exactly this
+      # shape). Position is the reliable signal instead: Writer never emits
+      # ANY body content before doc_header's own preamble block, so
+      # whenever one exists it is unconditionally the very first chunk in
+      # the whole document (index 0) -- no other quote block can ever
+      # occupy that position while a title is set. Callout/comparison
+      # markers still win even at position 0, since they use reserved
+      # syntax (a fixed emoji set, "◀ Before —"/"▶ After —") that
+      # eyebrow/pills text can never produce.
+      #
+      # Known limitation this doesn't resolve: a title-only doc_header (no
+      # eyebrow/pills, so no preamble block at all -- see the post-loop
+      # synthesis in #call) whose very first BODY element, before any
+      # section headline, is itself a genuine standalone card. That's an
+      # unusual, non-idiomatic document shape (cards normally live inside a
+      # section, after a headline), so left unresolved.
+      def doc_header_chunk?(chunk, index)
+        return false unless @streamweaver_document && @title && index.zero?
 
         first_content_line = chunk[:lines].find { |line| !line.empty? }
         return false unless first_content_line
 
-        first_content_line.match?(%r{\A/.*/\z}) || !first_content_line.start_with?("*")
+        !callout_marker_match(first_content_line) && !first_content_line.match?(/\A\*(?:◀|▶)\s/)
       end
 
       def callout_marker_match(marker)

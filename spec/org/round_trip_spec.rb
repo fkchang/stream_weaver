@@ -95,4 +95,60 @@ RSpec.describe "org round trip" do
     expect(regenerated_html).not_to include("DSL error")
     expect(regenerated_html).to eq(original_html)
   end
+
+  # Round 2 of the final full-branch review found the fix above was too
+  # narrow: it only tested a single, non-variant-tagged pill. A doc_header
+  # with no eyebrow whose pills mix in variant tags renders as syntactically
+  # valid card-marker text (e.g. "*[warn] Draft* · *[success] v2*"), which
+  # crashed or silently corrupted data via the card-marker parser -- the
+  # exact same failure class the fix above was meant to close. Fixed by
+  # switching doc_header detection from content shape to chunk position
+  # (Writer never emits body content before doc_header's own block).
+  it "round-trips a doc_header with no eyebrow whose FIRST pill is variant-tagged, without crashing" do
+    original_dsl = <<~RUBY
+      doc_header(title: "T", pills: [{ text: "Draft", variant: :warn }, "Q3 2026"])
+      doc_section_header "00", "Overview", id: "overview"
+    RUBY
+
+    org = StreamWeaver::Org::Writer.from_dsl(original_dsl)
+    regenerated_dsl = StreamWeaver::Org::Reader.to_dsl(org)
+    expect { RubyVM::InstructionSequence.compile(regenerated_dsl) }.not_to raise_error
+
+    original_html    = StreamWeaver::Canvas::Reader.render_dsl(original_dsl)
+    regenerated_html = StreamWeaver::Canvas::Reader.render_dsl(regenerated_dsl)
+    expect(regenerated_html).not_to include("DSL error")
+    expect(regenerated_html).to eq(original_html)
+  end
+
+  it "round-trips a doc_header with no eyebrow whose LAST pill is variant-tagged (the shape that fully matches a card marker regex), without corrupting the title text" do
+    original_dsl = <<~RUBY
+      doc_header(title: "T", pills: [{ text: "Draft", variant: :warn }, { text: "v2", variant: :success }])
+      doc_section_header "00", "Overview", id: "overview"
+    RUBY
+
+    org = StreamWeaver::Org::Writer.from_dsl(original_dsl)
+    regenerated_dsl = StreamWeaver::Org::Reader.to_dsl(org)
+    expect { RubyVM::InstructionSequence.compile(regenerated_dsl) }.not_to raise_error
+    expect(regenerated_dsl).not_to include("card do") # must not be misclassified as a card
+
+    original_html    = StreamWeaver::Canvas::Reader.render_dsl(original_dsl)
+    regenerated_html = StreamWeaver::Canvas::Reader.render_dsl(regenerated_dsl)
+    expect(regenerated_html).not_to include("DSL error")
+    expect(regenerated_html).to eq(original_html)
+  end
+
+  it "documents the residual known limitation gracefully: a title-only doc_header immediately followed by a real standalone card (no eyebrow/pills block to anchor position on) gets misclassified as doc_header pills, but does not crash, hang, or produce invalid Ruby" do
+    original_dsl = <<~RUBY
+      doc_header(title: "T")
+      card do
+        card_header "Real Card"
+        card_body { md "hi" }
+      end
+    RUBY
+
+    org = StreamWeaver::Org::Writer.from_dsl(original_dsl)
+    regenerated_dsl = StreamWeaver::Org::Reader.to_dsl(org)
+    expect { RubyVM::InstructionSequence.compile(regenerated_dsl) }.not_to raise_error
+    expect { StreamWeaver::Canvas::Reader.render_dsl(regenerated_dsl) }.not_to raise_error
+  end
 end
