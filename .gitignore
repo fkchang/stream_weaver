@@ -54,6 +54,9 @@ examples_playground/
 # tyrion worktree state
 .tyrion/
 
+# Claude Code git worktrees (superpowers:using-git-worktrees)
+.worktrees/
+
 # Built Opal/JS artifacts (regenerated via streamweaver opal-build / bin/build_scenarios)
 /dist/
 
@@ -71,3 +74,4 @@ docs/blog/ruby-docs-beat-react-artifacts.md
 # GSD orchestration scratch + analysis reports (cite personal paths/apps)
 /gsd/
 .context/
+.gstack/
