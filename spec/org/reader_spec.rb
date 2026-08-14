@@ -50,4 +50,102 @@ RSpec.describe StreamWeaver::Org::Reader do
       end.to raise_error(ArgumentError)
     end
   end
+
+  it "converts a paragraph chunk to an md call with markdown inline syntax restored" do
+    dsl = described_class.to_dsl("hello *world*\n")
+    expect(dsl).to include('md <<~MD')
+    expect(dsl).to include("hello **world**")
+  end
+
+  it "converts a table chunk to a table call with markdown: true, inline conversion applied to cells" do
+    org = <<~ORG
+      | A | B |
+      |---|---|
+      | *x* | 2 |
+    ORG
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include('markdown: true')
+    expect(dsl).to include('headers: ["A", "B"]')
+    expect(dsl).to include('["**x**", "2"]')
+  end
+
+  it "parses the doc_header preamble quote block (title, eyebrow, and variant-tagged pills)" do
+    org = <<~ORG
+      #+STREAMWEAVER_DSL: 1
+      #+TITLE: My Report
+
+      #+begin_quote
+      /Team · Project/
+      *[warn] Draft* · 2026-08-13
+      #+end_quote
+
+      * 00 Summary
+      :PROPERTIES:
+      :CUSTOM_ID: summary
+      :END:
+    ORG
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include('title: "My Report"')
+    expect(dsl).to include('eyebrow: "Team · Project"')
+    expect(dsl).to include('{ text: "Draft", variant: :warn }')
+    expect(dsl).to include('"2026-08-13"')
+    expect(dsl.scan(/doc_header\(/).length).to eq(1)
+    # Confirms the preamble-leak fix: no stray literal md call for the
+    # #+STREAMWEAVER_DSL:/#+TITLE: lines themselves.
+    expect(dsl.scan(/md <<~MD/).length).to eq(0)
+  end
+
+  it "keeps a multi-paragraph prose block as ONE md call, not split on its internal blank line" do
+    org = <<~ORG
+      This is paragraph one.
+
+      This is paragraph two.
+    ORG
+    dsl = described_class.to_dsl(org)
+    expect(dsl.scan(/md <<~MD/).length).to eq(1)
+    expect(dsl).to include("This is paragraph one.")
+    expect(dsl).to include("This is paragraph two.")
+  end
+
+  it "still splits two components separated by a real structural boundary (not just a blank line)" do
+    org = <<~ORG
+      First paragraph.
+
+      * 00 Section
+      :PROPERTIES:
+      :CUSTOM_ID: sec
+      :END:
+
+      Second paragraph after a real section boundary.
+    ORG
+    dsl = described_class.to_dsl(org)
+    expect(dsl.scan(/md <<~MD/).length).to eq(2)
+  end
+
+  it "preserves markdown: false on a table marked with #+ATTR_STREAMWEAVER: :markdown nil, without reinterpreting literal characters as emphasis" do
+    org = <<~ORG
+      #+ATTR_STREAMWEAVER: :markdown nil
+      | Hypothesis |
+      |---|
+      | 5 min *after* the 10:28 failure |
+    ORG
+    dsl = described_class.to_dsl(org)
+    expect(dsl).not_to include("markdown: true")
+    expect(dsl).to include('"5 min *after* the 10:28 failure"')
+  end
+
+  it "does not leak an ATTR_STREAMWEAVER marker onto a later, unrelated table separated by a paragraph" do
+    org = <<~ORG
+      #+ATTR_STREAMWEAVER: :markdown nil
+
+      Just a plain paragraph, not a table at all.
+
+      | A |
+      |---|
+      | *should convert normally, unaffected* |
+    ORG
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include("markdown: true")
+    expect(dsl).to include('"**should convert normally, unaffected**"')
+  end
 end
