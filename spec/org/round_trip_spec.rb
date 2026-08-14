@@ -72,4 +72,27 @@ RSpec.describe "org round trip" do
 
     expect(org_twice).to eq(org_once)
   end
+
+  it "round-trips a doc_header with no eyebrow, only plain pills, without crashing or losing data" do
+    # Regression: the final full-branch review found this crashed with
+    # "ArgumentError: malformed card header" -- a doc_header without an
+    # eyebrow used to be undetectable from the eyebrow-only shape check,
+    # so its pills line fell through to the card-marker parser instead.
+    original_dsl = <<~RUBY
+      doc_header(title: "Sample Report", pills: ["Draft", "2026-08-13"])
+      doc_section_header "00", "Overview", id: "overview"
+    RUBY
+
+    org = StreamWeaver::Org::Writer.from_dsl(original_dsl)
+    regenerated_dsl = StreamWeaver::Org::Reader.to_dsl(org)
+
+    expect { RubyVM::InstructionSequence.compile(regenerated_dsl) }.not_to raise_error
+
+    original_html    = StreamWeaver::Canvas::Reader.render_dsl(original_dsl)
+    regenerated_html = StreamWeaver::Canvas::Reader.render_dsl(regenerated_dsl)
+
+    expect(original_html).not_to include("DSL error")
+    expect(regenerated_html).not_to include("DSL error")
+    expect(regenerated_html).to eq(original_html)
+  end
 end

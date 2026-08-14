@@ -121,6 +121,38 @@ RSpec.describe StreamWeaver::Org::Writer do
     ORG
   end
 
+  it "emits a titleless callout with no trailing space after the emoji marker" do
+    org = write(<<~RUBY)
+      callout(variant: :warning) do
+        md "body"
+      end
+    RUBY
+    expect(org).to include("*⚠️*\nbody")
+  end
+
+  it "emits doc_header with only a title (no eyebrow, no pills) as bare preamble, with no quote block at all" do
+    org = write(%(doc_header(title: "T")\n))
+    expect(org).to eq(<<~ORG)
+      #+STREAMWEAVER_DSL: 1
+      #+TITLE: T
+    ORG
+  end
+
+  it "emits a plain (non-variant-tagged) pills line even with no eyebrow" do
+    org = write(%(doc_header(title: "T", pills: ["Draft", "2026-08-13"])\n))
+    expect(org).to include(<<~ORG)
+      #+begin_quote
+      Draft · 2026-08-13
+      #+end_quote
+    ORG
+  end
+
+  it "falls back to raw-passthrough for a table built with data: (not headers:/rows:), instead of silently emitting a garbage empty table" do
+    org = write(%(table(data: [{ name: "Alice" }])\n))
+    expect(org).to include("#+begin_src ruby :streamweaver-raw t")
+    expect(org).not_to include("|  |")
+  end
+
   it "emits a card as a quote block with a bracket-badge marker line and meta" do
     org = write(<<~RUBY)
       card do

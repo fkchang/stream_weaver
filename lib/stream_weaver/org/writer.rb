@@ -84,7 +84,8 @@ module StreamWeaver
         when Components::Table
           render_table(component)
         when Components::Callout
-          render_quote("*#{component.icon} #{component.title}*", component.children)
+          marker = component.title ? "*#{component.icon} #{component.title}*" : "*#{component.icon}*"
+          render_quote(marker, component.children)
         when Components::Card
           render_card(component)
         when Components::Comparison
@@ -100,7 +101,17 @@ module StreamWeaver
       end
 
       def render_table(table)
-        headers = table.headers || []
+        # table.headers/#rows are the raw constructor args, nil for any form
+        # other than table(headers:, rows:) -- e.g. table(data:) or the
+        # column DSL, which resolve their actual content lazily elsewhere
+        # and are out of scope for this format (see the design spec's
+        # Tables section). Falling through to the normal empty-array
+        # default here would silently emit a garbage 1-empty-column table
+        # with all row data gone; raw-passthrough matches the same
+        # unrecognized-shape convention used elsewhere in this file.
+        return raw_passthrough(table) if table.headers.nil?
+
+        headers = table.headers
         rows = table.rows || []
         convert = ->(s) { table.markdown ? Inline.md_to_org(s.to_s) : s.to_s }
         widths = headers.each_index.map { |i| ([headers[i]] + rows.map { |r| r[i] }).map { |s| convert.call(s).length }.max }

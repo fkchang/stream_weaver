@@ -95,6 +95,48 @@ RSpec.describe StreamWeaver::Org::Reader do
     expect(dsl.scan(/md <<~MD/).length).to eq(0)
   end
 
+  it "synthesizes a title-only doc_header when the preamble has no quote block at all (no eyebrow, no pills)" do
+    org = <<~ORG
+      #+STREAMWEAVER_DSL: 1
+      #+TITLE: My Report
+
+      * 00 Summary
+      :PROPERTIES:
+      :CUSTOM_ID: summary
+      :END:
+    ORG
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include('doc_header(')
+    expect(dsl).to include('title: "My Report"')
+    expect(dsl).to include('eyebrow: nil')
+    expect(dsl).to include('pills: []')
+    expect(dsl.scan(/doc_header\(/).length).to eq(1)
+    expect { RubyVM::InstructionSequence.compile(dsl) }.not_to raise_error
+  end
+
+  it "parses a doc_header preamble quote block with plain pills and no eyebrow line" do
+    org = <<~ORG
+      #+STREAMWEAVER_DSL: 1
+      #+TITLE: My Report
+
+      #+begin_quote
+      Draft · 2026-08-13
+      #+end_quote
+    ORG
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include('title: "My Report"')
+    expect(dsl).to include('eyebrow: nil')
+    expect(dsl).to include('pills: ["Draft", "2026-08-13"]')
+    expect(dsl.scan(/doc_header\(/).length).to eq(1)
+    expect { RubyVM::InstructionSequence.compile(dsl) }.not_to raise_error
+  end
+
+  it "parses a titleless callout marker (no trailing space after the emoji)" do
+    org = "#+begin_quote\n*⚠️*\nbody text\n#+end_quote\n"
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include('callout(variant: :warning, title: nil)')
+  end
+
   it "keeps a multi-paragraph prose block as ONE md call, not split on its internal blank line" do
     org = <<~ORG
       This is paragraph one.

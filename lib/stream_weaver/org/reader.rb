@@ -64,9 +64,11 @@ module StreamWeaver
         end
 
         output = []
+        header_insert_at = 0
         unless toc_entries.empty?
           entries = toc_entries.map { |e| "{ id: #{e[:id].inspect}, label: #{e[:label].inspect} }" }
           output << "sidebar_toc sections: [#{entries.join(', ')}]"
+          header_insert_at = 1
         end
 
         seen_headline = false
@@ -83,8 +85,7 @@ module StreamWeaver
 
           when :quote
             # Rule 1 (positional + content-shape, NOT position alone -- see
-            # doc_header_chunk? below, this is the fix for the
-            # misclassification bug): only the doc_header preamble block
+            # doc_header_chunk? below): only the doc_header preamble block
             # qualifies, never an arbitrary headline-less callout/card.
             if !seen_headline && !emitted_doc_header && doc_header_chunk?(chunk)
               output << emit_doc_header(chunk)
@@ -118,6 +119,15 @@ module StreamWeaver
           end
 
           i += 1
+        end
+
+        # A doc_header with neither eyebrow nor pills has no quote block at
+        # all (Writer only emits one when it has content to put in it), so
+        # the loop above never gets a chance to match it -- synthesize a
+        # title-only call here instead, in the position it would have
+        # occupied (right after sidebar_toc, before everything else).
+        if @streamweaver_document && @title && !emitted_doc_header
+          output.insert(header_insert_at, emit_doc_header(nil))
         end
 
         output.reject!(&:empty?)
@@ -336,17 +346,22 @@ module StreamWeaver
         end
       end
 
+      # chunk is nil for a doc_header with neither eyebrow nor pills (see the
+      # synthesis call in #call) -- title-only in that case. Otherwise,
+      # each non-empty line is classified by its OWN shape rather than a
+      # fixed line position, so eyebrow-only, pills-only, and eyebrow+pills
+      # all parse correctly regardless of which one is actually present.
       def emit_doc_header(chunk)
-        lines = chunk[:lines].reject(&:empty?)
-        eyebrow_match = lines.first&.match(%r{\A/(.*)/\z})
-        raise ArgumentError, "malformed doc_header: missing eyebrow line" unless eyebrow_match
+        eyebrow = nil
+        pills = []
 
-        eyebrow = eyebrow_match[1]
-        pills = lines[1].to_s.split(" · ").map do |pill|
-          if (match = pill.match(/\A\*\[([A-Za-z_]\w*)\]\s*(.+)\*\z/))
-            "{ text: #{match[2].inspect}, variant: #{match[1].to_sym.inspect} }"
-          else
-            pill.inspect
+        if chunk
+          chunk[:lines].reject(&:empty?).each do |line|
+            if (match = line.match(%r{\A/(.*)/\z}))
+              eyebrow = match[1]
+            else
+              pills.concat(line.split(" · ").map { |pill| format_pill(pill) })
+            end
           end
         end
 
@@ -357,6 +372,14 @@ module StreamWeaver
             pills: [#{pills.join(', ')}]
           )
         RUBY
+      end
+
+      def format_pill(pill)
+        if (match = pill.match(/\A\*\[([A-Za-z_]\w*)\]\s*(.+)\*\z/))
+          "{ text: #{match[2].inspect}, variant: #{match[1].to_sym.inspect} }"
+        else
+          pill.inspect
+        end
       end
 
       def emit_callout(variant, title, body_lines)
@@ -426,19 +449,29 @@ module StreamWeaver
       # THE fix for the doc_header misclassification bug: position alone
       # ("no headline seen yet") is NOT sufficient, because that's also true
       # of a standalone callout/card/comparison with no headline anywhere in
-      # the document. Require the StreamWeaver preamble tag, a title, AND an
-      # eyebrow-shaped first content line (`/.../`) -- a callout/card marker
-      # never has that shape, so this can't false-positive on one.
+      # the document. Require the StreamWeaver preamble tag, a title, AND a
+      # first content line that ISN'T shaped like a callout/card/comparison
+      # marker (all of which wrap their entire marker line in a leading
+      # "*"). This accepts both an eyebrow line (`/.../`) and a plain
+      # (non-variant-tagged) pills line -- a doc_header with no eyebrow
+      # whose only pill happens to be variant-tagged (e.g. "*[warn] Draft*")
+      # is visually identical to a single-badge card and can't be
+      # disambiguated from shape alone; known limitation.
       def doc_header_chunk?(chunk)
         return false unless @streamweaver_document && @title
 
         first_content_line = chunk[:lines].find { |line| !line.empty? }
-        first_content_line&.match?(%r{\A/.*/\z})
+        return false unless first_content_line
+
+        first_content_line.match?(%r{\A/.*/\z}) || !first_content_line.start_with?("*")
       end
 
       def callout_marker_match(marker)
         emoji_pattern = Regexp.union(VARIANT_EMOJI.keys)
-        marker.match(/\A\*(#{emoji_pattern})\s+(.+)\*\z/)
+        # Title is optional (match[2] is nil without one) -- a titleless
+        # callout's marker is just "*<emoji>*", no trailing space (see
+        # Writer#render_component).
+        marker.match(/\A\*(#{emoji_pattern})(?:\s+(.+))?\*\z/)
       end
 
       def table_separator?(row)
