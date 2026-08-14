@@ -1,0 +1,132 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# bin/org_uat — UAT for the org<=>DSL round trip (stream_weaver-65z family)
+#
+# Runs real saved/checkpointed canvas docs through rb -> org -> rb and
+# compares rendered HTML before/after -- the same bar the implementation
+# plan's final task used against one real doc, generalized to run against
+# everything you've actually saved. Also writes the produced .org sibling
+# next to each source file (open it in markymark to eyeball readability) and
+# sanity-checks it through the real org-ruby gem -- the same one GitHub and
+# markymark use -- so a silently-dropped block shows up here first.
+#
+#   bin/org_uat                      # scans StreamWeaver::Canvas::DocStore.path
+#   bin/org_uat path/to/doc.rb ...   # or specific files
+#
+# Prints one check/x check line per file plus a final "N/M passed" summary.
+# Exits 0 only if every file round-trips cleanly.
+
+require "bundler/setup"
+require "org-ruby"
+require "tempfile"
+require "stream_weaver"
+require_relative "../lib/stream_weaver/canvas/reader"
+require_relative "../lib/stream_weaver/canvas/doc_store"
+require_relative "../lib/stream_weaver/org/writer"
+require_relative "../lib/stream_weaver/org/reader"
+
+CHECK = "✓"
+CROSS = "✗"
+
+$results = []
+
+def check(description)
+  ok, detail = yield
+  $results << ok
+  if ok
+    puts "  #{CHECK} #{description}"
+  else
+    puts "  #{CROSS} #{description}#{detail ? " -- #{detail}" : ''}"
+  end
+  ok
+rescue StandardError, ScriptError => e
+  $results << false
+  puts "  #{CROSS} #{description} -- raised #{e.class}: #{e.message}"
+  false
+end
+
+# Known non-determinism/deliberate asymmetry that isn't a round-trip bug --
+# see spec/org/round_trip_spec.rb's normalize_ids for the full rationale.
+# Components::Mermaid#diagram_id embeds Ruby's object_id, never stable
+# across two separate renders; the ~ -> ≈ tilde normalization is one-way
+# by design (see StreamWeaver::Org::Inline).
+def normalize(html)
+  html.gsub(/sw-mermaid-\d+/, "sw-mermaid-ID").gsub("≈", "~")
+end
+
+def unified_diff(label_a, text_a, label_b, text_b)
+  a = Tempfile.new("org-uat-a")
+  b = Tempfile.new("org-uat-b")
+  a.write(text_a)
+  b.write(text_b)
+  a.close
+  b.close
+  `diff -u --label #{label_a} --label #{label_b} #{a.path} #{b.path}`
+ensure
+  a&.unlink
+  b&.unlink
+end
+
+def target_files
+  return ARGV if ARGV.any?
+
+  Dir.glob(File.join(StreamWeaver::Canvas::DocStore.path, "*.rb")).sort
+end
+
+files = target_files
+if files.empty?
+  puts "No .rb docs found. Pass file paths explicitly, or check StreamWeaver::Canvas::DocStore.path (#{StreamWeaver::Canvas::DocStore.path})."
+  exit 1
+end
+
+puts "Scanning #{files.length} doc(s) from #{files == ARGV ? 'the command line' : StreamWeaver::Canvas::DocStore.path}..."
+puts
+
+files.each do |path|
+  puts "-- #{path} --"
+  original_dsl = File.read(path)
+  org = nil
+  regenerated_dsl = nil
+
+  next unless check("rb -> org (Writer)") { org = StreamWeaver::Org::Writer.from_dsl(original_dsl); [true, nil] }
+
+  org_path = path.sub(/\.rb\z/, ".org")
+  File.write(org_path, org)
+  puts "    wrote #{org_path}"
+
+  next unless check("org -> rb (Reader)") { regenerated_dsl = StreamWeaver::Org::Reader.to_dsl(org); [true, nil] }
+
+  check("regenerated DSL is syntactically valid Ruby") do
+    RubyVM::InstructionSequence.compile(regenerated_dsl)
+    [true, nil]
+  end
+
+  check("rendered HTML matches the original (rb -> org -> rb round trip)") do
+    original_html    = normalize(StreamWeaver::Canvas::Reader.render_dsl(original_dsl))
+    regenerated_html = normalize(StreamWeaver::Canvas::Reader.render_dsl(regenerated_dsl))
+    ok = !original_html.include?("DSL error") && !regenerated_html.include?("DSL error") && original_html == regenerated_html
+    unless ok
+      diff = unified_diff("original", original_html, "regenerated", regenerated_html)
+      diff_path = path.sub(/\.rb\z/, ".uat-diff.txt")
+      File.write(diff_path, diff)
+      puts "      wrote #{diff_path}"
+    end
+    [ok, ok ? nil : "HTML differs after round trip"]
+  end
+
+  check("org text renders through the real org-ruby gem without dropping any #+begin_quote block") do
+    quote_block_count = org.scan(/^#\+begin_quote$/).length
+    html = Orgmode::Parser.new(org).to_html
+    rendered_blockquote_count = html.scan(/<blockquote>/).length
+    ok = rendered_blockquote_count == quote_block_count
+    [ok, ok ? nil : "expected #{quote_block_count} <blockquote>, got #{rendered_blockquote_count} -- org-ruby may be silently dropping content"]
+  end
+
+  puts
+end
+
+passed = $results.count(true)
+total = $results.size
+puts "#{passed}/#{total} passed"
+exit(passed == total ? 0 : 1)

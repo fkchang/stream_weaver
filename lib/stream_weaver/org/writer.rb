@@ -2,6 +2,7 @@
 
 require_relative "recording_context"
 require_relative "inline"
+require_relative "source_splitter"
 
 module StreamWeaver
   module Org
@@ -18,10 +19,18 @@ module StreamWeaver
         @dsl_text = dsl_text
       end
 
+      # Top-level DSL statements RecordingContext deliberately no-ops (see
+      # its class comment) -- these produce zero components, so they'd
+      # otherwise break the 1:1 statement<->component correspondence
+      # #build_raw_sources relies on. Every real saved doc has at least one
+      # of these prepended by DocStore.dsl_with_metadata.
+      NO_OP_STATEMENT_RE = /\Ause_(?:theme|layout)\b/
+
       def call
         ctx = RecordingContext.new
         ctx.instance_eval(@dsl_text)
         components = ctx.components
+        @raw_sources = build_raw_sources(components)
 
         toc_sections = components.find { |c| c.is_a?(Components::SidebarToc) }&.sections || []
         toc_by_id = toc_sections.each_with_object({}) { |s, h| h[s[:id]] = s[:label] }
@@ -144,8 +153,33 @@ module StreamWeaver
         render_quote(marker, body ? body.children : [])
       end
 
+      # Best-effort verbatim-source recovery for the raw-passthrough escape
+      # hatch: maps each top-level component to the literal DSL source text
+      # of the top-level statement that produced it, ONLY when that
+      # correspondence is unambiguous (exactly one top-level statement per
+      # top-level component, after filtering out known no-ops -- the common
+      # case for the flat DSL body this format targets). Falls back to an
+      # empty map (raw_passthrough's comment-only placeholder) rather than
+      # guessing when a doc uses top-level control flow (loops,
+      # conditionals producing zero-or-many components per statement) that
+      # breaks the 1:1 assumption -- silent-but-safe beats attributing the
+      # wrong source to a component.
+      def build_raw_sources(components)
+        statements = SourceSplitter.top_level_statements(@dsl_text)
+        return {} unless statements
+
+        statements = statements.reject { |s| s.strip.match?(NO_OP_STATEMENT_RE) }
+        return {} unless statements.length == components.length
+
+        components.each_with_index.to_h { |c, i| [c.object_id, statements[i]] }
+      rescue StandardError
+        {}
+      end
+
       def raw_passthrough(component)
-        "\n#+begin_src ruby :streamweaver-raw t\n# unrecognized component: #{component.class}\n#+end_src\n"
+        source = @raw_sources[component.object_id]
+        content = source || "# unrecognized component: #{component.class}"
+        "\n#+begin_src ruby :streamweaver-raw t\n#{content.rstrip}\n#+end_src\n"
       end
 
       def render_comparison(comparison)

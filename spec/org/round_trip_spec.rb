@@ -137,6 +137,30 @@ RSpec.describe "org round trip" do
     expect(regenerated_html).to eq(original_html)
   end
 
+  it "round-trips a top-level component outside the doc-builder vocabulary via genuine verbatim source recovery, not a lossy placeholder" do
+    # Regression: bin/org_uat run against real saved docs found this --
+    # header1 (a generic canvas component, not part of the :doc-theme
+    # vocabulary) used to come back as a fake code_block(...) call
+    # (Prism.js CSS/JS injected, original title text replaced by a
+    # "# unrecognized component" comment) instead of the original title
+    # rendering at all.
+    original_dsl = <<~RUBY
+      header1 "Save as doc button"
+      md "Some prose."
+    RUBY
+
+    org = StreamWeaver::Org::Writer.from_dsl(original_dsl)
+    regenerated_dsl = StreamWeaver::Org::Reader.to_dsl(org)
+    expect { RubyVM::InstructionSequence.compile(regenerated_dsl) }.not_to raise_error
+    expect(regenerated_dsl).to include('header1 "Save as doc button"')
+    expect(regenerated_dsl).not_to include("code_block(")
+
+    original_html    = StreamWeaver::Canvas::Reader.render_dsl(original_dsl)
+    regenerated_html = StreamWeaver::Canvas::Reader.render_dsl(regenerated_dsl)
+    expect(regenerated_html).not_to include("DSL error")
+    expect(regenerated_html).to eq(original_html)
+  end
+
   it "documents the residual known limitation gracefully: a title-only doc_header immediately followed by a real standalone card (no eyebrow/pills block to anchor position on) gets misclassified as doc_header pills, but does not crash, hang, or produce invalid Ruby" do
     original_dsl = <<~RUBY
       doc_header(title: "T")

@@ -278,6 +278,13 @@ RSpec.describe StreamWeaver::Org::Reader do
     expect(dsl).to include('code_block(<<~TXT, lang: "text")')
   end
 
+  it "splices a :streamweaver-raw t block's content back in verbatim, NOT wrapped in a code_block(...) call (Writer's raw-passthrough escape hatch)" do
+    org = "#+begin_src ruby :streamweaver-raw t\nheader1 \"Title\"\n#+end_src\n"
+    dsl = described_class.to_dsl(org)
+    expect(dsl.strip).to eq('header1 "Title"')
+    expect(dsl).not_to include("code_block(")
+  end
+
   it "parses a full realistic document end to end with no stray or duplicated output, producing valid Ruby" do
     org = <<~ORG
       #+STREAMWEAVER_DSL: 1

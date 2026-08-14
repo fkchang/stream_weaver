@@ -335,8 +335,17 @@ module StreamWeaver
         tokens = chunk[:header].split(/\s+/)
         lang = tokens.shift
         lang = "text" if lang.nil? || lang.empty?
-        zoom = tokens.each_cons(2).any? { |key, value| key == ":zoom" && value == "t" }
         code = chunk[:lines].join("\n")
+
+        # Writer#raw_passthrough's escape hatch (see also its NO_OP_STATEMENT_RE
+        # comment): content here is either the verbatim original DSL
+        # statement(s) or a "# unrecognized component" comment -- either way,
+        # real Ruby text meant to be spliced back in AS-IS, not wrapped in a
+        # code_block(...) call (which would misrender it: a fake code block
+        # with Prism.js chrome around what used to be, say, a `header1` call).
+        return code if tokens.each_cons(2).any? { |key, value| key == ":streamweaver-raw" && value == "t" }
+
+        zoom = tokens.each_cons(2).any? { |key, value| key == ":zoom" && value == "t" }
 
         if lang == "mermaid"
           options = zoom ? ", zoom: true" : ""

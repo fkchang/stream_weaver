@@ -251,4 +251,62 @@ RSpec.describe StreamWeaver::Org::Writer do
     expect(org).to include("#+begin_src ruby :streamweaver-raw t")
     expect(org).to include("#+end_src")
   end
+
+  it "recovers the VERBATIM original source for an unrecognized top-level statement, when it's the only content in the doc" do
+    org = write(%(header1 "Title Text"\n))
+    expect(org).to include(<<~ORG)
+      #+begin_src ruby :streamweaver-raw t
+      header1 "Title Text"
+      #+end_src
+    ORG
+  end
+
+  it "recovers verbatim source for a multi-line unrecognized statement (a do..end block), the whole block intact" do
+    org = write(<<~RUBY)
+      columns widths: ["50%", "50%"] do
+        column do
+          header3 "x"
+        end
+      end
+    RUBY
+    expect(org).to include(<<~ORG.strip)
+      #+begin_src ruby :streamweaver-raw t
+      columns widths: ["50%", "50%"] do
+        column do
+          header3 "x"
+        end
+      end
+      #+end_src
+    ORG
+  end
+
+  it "recovers verbatim source for each of several distinct unrecognized top-level statements independently" do
+    org = write(<<~RUBY)
+      header1 "First"
+      div(style: "height:8px")
+    RUBY
+    expect(org).to include('header1 "First"')
+    expect(org).to include('div(style: "height:8px")')
+  end
+
+  it "ignores use_theme/use_layout no-op statements when matching source to components (real saved docs are prepended with these)" do
+    org = write(<<~RUBY)
+      use_layout :full
+      header1 "Title"
+    RUBY
+    expect(org).to include(<<~ORG)
+      #+begin_src ruby :streamweaver-raw t
+      header1 "Title"
+      #+end_src
+    ORG
+  end
+
+  it "falls back to the class-name comment (not a wrong verbatim guess) when a top-level loop makes the statement<->component correspondence ambiguous" do
+    org = write(<<~RUBY)
+      ["a", "b"].each { |t| header1 t }
+    RUBY
+    expect(org).to include("#+begin_src ruby :streamweaver-raw t")
+    expect(org).to include("# unrecognized component: StreamWeaver::Components::Header")
+    expect(org).not_to include(".each")
+  end
 end
