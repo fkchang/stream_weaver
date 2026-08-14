@@ -62,7 +62,7 @@ module StreamWeaver
           out << if c.is_a?(Components::DocSectionHeader)
             section_headline(c, toc_by_id)
           else
-            render_component(c) # implemented in later tasks
+            render_component(c)
           end
         end
         out
@@ -95,7 +95,7 @@ module StreamWeaver
         when Components::CodeBlock
           "\n#+begin_src #{component.lang}\n#{component.code.to_s.rstrip}\n#+end_src\n"
         else
-          ""
+          raw_passthrough(component)
         end
       end
 
@@ -123,8 +123,8 @@ module StreamWeaver
         # dashboard stat tiles) has no natural title for the marker-line
         # convention and isn't part of the doc-builder vocabulary this
         # format targets. Fall back to the same raw-passthrough convention
-        # Task 8 uses for any unrecognized component, rather than crash or
-        # silently drop the content.
+        # render_component's unrecognized-component branch uses, rather
+        # than crash or silently drop the content.
         return raw_passthrough(card) unless header
 
         body = card.children.find { |c| c.is_a?(Components::CardBody) }

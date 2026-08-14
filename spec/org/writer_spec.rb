@@ -213,4 +213,10 @@ RSpec.describe StreamWeaver::Org::Writer do
       #+end_src
     ORG
   end
+
+  it "wraps an unrecognized component's rendered class name in a raw passthrough block rather than dropping it" do
+    org = write(%(implementation_map(files: [{ path: "x", note: "y" }])\n))
+    expect(org).to include("#+begin_src ruby :streamweaver-raw t")
+    expect(org).to include("#+end_src")
+  end
 end
