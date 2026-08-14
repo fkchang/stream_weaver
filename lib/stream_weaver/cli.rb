@@ -77,6 +77,10 @@ module StreamWeaver
         canvas_read(args)
       when 'export'
         export_html(args)
+      when 'org-export'
+        org_export(args)
+      when 'org-render'
+        org_render(args)
       # High-level canvas helpers
       when 'pick'
         canvas_pick(args)
@@ -630,6 +634,10 @@ module StreamWeaver
                                                      export time) so diagrams render in a viewer
                                                      whose CSP blocks external scripts entirely
                                                      (e.g. SharePoint's HTML preview)
+          streamweaver org-export <file.rb>       Convert a saved DSL doc to a human-readable
+                                                     org-mode sibling file (<name>.org)
+          streamweaver org-render <file.org>      Convert an org-mode doc back to DSL body text
+                                                     (prints to stdout)
 
         Canvas Examples:
           # Create session and open browser
@@ -1445,6 +1453,42 @@ module StreamWeaver
       Thread.new { sleep 0.8; open_browser(url) }
 
       StreamWeaver::Canvas::Reader.run!
+    end
+
+    # Converts a saved DSL doc to a human-readable org-mode sibling file,
+    # written next to the source .rb file.
+    def self.org_export(args)
+      require_relative 'org/writer'
+      rb_path = args.first
+      abort "Usage: streamweaver org-export <file.rb>" unless rb_path && File.file?(rb_path)
+
+      begin
+        org = StreamWeaver::Org::Writer.from_dsl(File.read(rb_path))
+      rescue ScriptError, StandardError => e
+        $stderr.puts "Error: org-export failed: #{e.message}"
+        exit 1
+      end
+
+      org_path = rb_path.sub(/\.rb\z/, ".org")
+      $stderr.puts "Warning: overwriting existing #{org_path}" if File.exist?(org_path)
+      File.write(org_path, org)
+      puts "Wrote #{org_path}"
+    end
+
+    # Converts an org-mode doc back to DSL body text, printed to stdout.
+    def self.org_render(args)
+      require_relative 'org/reader'
+      org_path = args.first
+      abort "Usage: streamweaver org-render <file.org>" unless org_path && File.file?(org_path)
+
+      begin
+        dsl = StreamWeaver::Org::Reader.to_dsl(File.read(org_path))
+      rescue ScriptError, StandardError => e
+        $stderr.puts "Error: org-render failed: #{e.message}"
+        exit 1
+      end
+
+      puts dsl
     end
 
     # Writes a canvas-doc DSL file out as a standalone HTML document -- the
