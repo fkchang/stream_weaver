@@ -69,4 +69,41 @@ RSpec.describe StreamWeaver::Org::Writer do
       :END:
     ORG
   end
+
+  it "emits a markdown component as a plain paragraph, converted to org inline syntax" do
+    org = write(%(md "hello **world**"\n))
+    expect(org).to include("hello *world*")
+  end
+
+  it "emits a table as native org table syntax" do
+    org = write(<<~RUBY)
+      table(headers: ["A", "B"], rows: [["1", "2"], ["3", "4"]])
+    RUBY
+    expect(org).to include(<<~ORG.strip)
+      | A | B |
+      |---|---|
+      | 1 | 2 |
+      | 3 | 4 |
+    ORG
+  end
+
+  it "converts inline emphasis inside table cells when markdown: true" do
+    org = write(%(table(headers: ["A"], rows: [["**bold**"]], markdown: true)\n))
+    expect(org).to include("| *bold* |")
+  end
+
+  it "leaves table cells byte-identical when markdown: false (the default) -- same principle as code content never running through inline conversion" do
+    org = write(%(table(headers: ["A"], rows: [["**bold**"]])\n))
+    expect(org).to include("| **bold** |")
+  end
+
+  it "marks a markdown: false table with #+ATTR_STREAMWEAVER: :markdown nil, so the Reader can tell it apart from the (unmarked) markdown: true default" do
+    org = write(%(table(headers: ["A"], rows: [["literal"]])\n))
+    expect(org).to include("#+ATTR_STREAMWEAVER: :markdown nil")
+  end
+
+  it "does NOT mark a markdown: true table with the ATTR line" do
+    org = write(%(table(headers: ["A"], rows: [["x"]], markdown: true)\n))
+    expect(org).not_to include("#+ATTR_STREAMWEAVER")
+  end
 end

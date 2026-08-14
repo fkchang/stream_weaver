@@ -77,9 +77,32 @@ module StreamWeaver
         headline << ":END:\n"
       end
 
-      # Filled in by later tasks: md/table/callout/card/comparison/code_block/mermaid.
-      def render_component(_component)
-        ""
+      def render_component(component)
+        case component
+        when Components::Markdown
+          "\n#{Inline.md_to_org(component.content)}\n"
+        when Components::Table
+          render_table(component)
+        else
+          "" # remaining types handled in later tasks
+        end
+      end
+
+      def render_table(table)
+        headers = table.headers || []
+        rows = table.rows || []
+        convert = ->(s) { table.markdown ? Inline.md_to_org(s.to_s) : s.to_s }
+        widths = headers.each_index.map { |i| ([headers[i]] + rows.map { |r| r[i] }).map { |s| convert.call(s).length }.max }
+        out = +"\n"
+        out << "#+ATTR_STREAMWEAVER: :markdown nil\n" unless table.markdown
+        out << row_line(headers.map { |h| convert.call(h) }, widths)
+        out << "|" + widths.map { |w| "-" * (w + 2) }.join("|") + "|\n"
+        rows.each { |r| out << row_line(r.map { |c| convert.call(c) }, widths) }
+        out
+      end
+
+      def row_line(cells, widths)
+        "| " + cells.each_with_index.map { |c, i| c.ljust(widths[i]) }.join(" | ") + " |\n"
       end
     end
   end
