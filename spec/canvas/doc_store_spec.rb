@@ -171,6 +171,25 @@ RSpec.describe StreamWeaver::Canvas::DocStore do
       expect { described_class.save('brainstorm', 'x') }.not_to raise_error
       expect { described_class.save('auth-flow.v2_1', 'x') }.not_to raise_error
     end
+
+    it 'accepts a .org extension, forcing it the same way .rb is forced' do
+      path = described_class.save('mydoc.org', "#+STREAMWEAVER_DSL: 1\n")
+      expect(path).to end_with('mydoc.org')
+      expect(File.read(path)).to eq("#+STREAMWEAVER_DSL: 1\n")
+    end
+
+    it 'defaults to .rb when no recognized extension is given (unchanged existing behavior)' do
+      path = described_class.save('mydoc', 'md "x"')
+      expect(path).to end_with('mydoc.rb')
+    end
+
+    it 'still rejects invalid names when saving as .org' do
+      expect { described_class.save('../evil.org', 'x') }.to raise_error(ArgumentError)
+    end
+
+    it 'rejects bare ".org" (which would normalize to empty basename), same as bare ".rb"' do
+      expect { described_class.save('.org', 'x') }.to raise_error(ArgumentError)
+    end
   end
 
   # Shared by BOTH Save-as-doc routes (BridgeServer and Reader) so the two

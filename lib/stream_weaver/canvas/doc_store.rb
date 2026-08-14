@@ -103,14 +103,21 @@ module StreamWeaver
         (lines + [dsl]).join("\n")
       end
 
-      # Strips a single trailing .rb (case-sensitive), validates the resulting
-      # basename against VALID_NAME with explicit '..' and null-byte rejection,
-      # then re-adds .rb. Bare ".rb" normalizes to an empty basename and is
-      # rejected.
+      # Strips a single trailing .rb or .org (case-sensitive), validates the
+      # resulting basename against VALID_NAME with explicit '..' and
+      # null-byte rejection, then re-adds whichever extension was detected
+      # (defaulting to .rb when neither is present). Bare ".rb"/".org"
+      # normalize to an empty basename and are rejected.
       def normalize_name(name)
         raise ArgumentError, "invalid doc name: #{name.inspect}" unless name.is_a?(String)
 
-        stripped = name.end_with?('.rb') ? name[0...-3] : name
+        ext, stripped = if name.end_with?('.rb')
+                          ['.rb', name[0...-3]]
+                        elsif name.end_with?('.org')
+                          ['.org', name[0...-4]]
+                        else
+                          ['.rb', name]
+                        end
 
         unless !stripped.empty? &&
                !stripped.include?('..') &&
@@ -119,7 +126,7 @@ module StreamWeaver
           raise ArgumentError, "invalid doc name: #{name.inspect}"
         end
 
-        "#{stripped}.rb"
+        "#{stripped}#{ext}"
       end
       private_class_method :normalize_name
     end
