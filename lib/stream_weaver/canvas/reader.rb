@@ -10,6 +10,7 @@ require 'stream_weaver/adapter/alpinejs'
 require 'stream_weaver/canvas/doc_store'
 require 'stream_weaver/page_shell'
 require 'stream_weaver/export/html_exporter'
+require 'stream_weaver/org/writer'
 
 module StreamWeaver
   module Canvas
@@ -196,17 +197,20 @@ module StreamWeaver
       end
 
       # Promote a history snapshot to a persistent canvas doc (Tier 2).
-      # Body: {"file": <integer-index>, "name": "<doc-name>"}.
-      # Mirrors BridgeServer's /canvas/:name/save-doc contract: 200 on success,
-      # 422 on bad index / bad name, 404 when no list configured, 500 otherwise.
+      # Body: {"file": <integer-index>, "name": "<doc-name>", "format": "rb"|"org"}.
+      # format defaults to "rb". Mirrors BridgeServer's /canvas/:name/save-doc
+      # contract: 200 on success, 422 on bad index / bad name / bad format,
+      # 404 when no list configured, 500 otherwise.
       post '/save-doc' do
         content_type :json
         list = self.class.file_list
         halt 404, { ok: false, error: 'No file list configured' }.to_json unless list
 
-        body  = JSON.parse(request.body.read, symbolize_names: true) rescue {}
-        index = body[:file]
-        name  = body[:name]
+        body   = JSON.parse(request.body.read, symbolize_names: true) rescue {}
+        index  = body[:file]
+        name   = body[:name]
+        format = body[:format] || 'rb'
+        halt 422, { ok: false, error: "unrecognized format: #{format.inspect}" }.to_json unless %w[rb org].include?(format)
 
         # FileList#at already refuses non-Integer/negative indices; File.exist?
         # covers the case an in-range index still points at a file that's
@@ -224,8 +228,24 @@ module StreamWeaver
         # with canvas-read's default -- accepted limitation (stream_weaver-csf).
         dsl = File.read(file_path)
         begin
-          saved_path = StreamWeaver::Canvas::DocStore.save(name, dsl)
-          { ok: true, path: saved_path }.to_json
+          if format == 'org'
+            writer   = StreamWeaver::Org::Writer.new(dsl)
+            org_text = writer.call
+            # Strip any .rb/.org the user already typed before appending .org --
+            # otherwise a name like "mydoc.org" round-trips to "mydoc.org.org"
+            # (DocStore.normalize_name only strips ONE trailing extension, so
+            # blindly appending here is not idempotent against an already-typed one).
+            # Only strip when name is actually a String -- a non-String is
+            # passed through as-is so DocStore.save's own type check rejects
+            # it with the same ArgumentError the .rb path below already gets
+            # for free, instead of silently coercing it via #to_s.
+            org_name = name.is_a?(String) ? "#{name.sub(/\.(rb|org)\z/, '')}.org" : name
+            saved_path = StreamWeaver::Canvas::DocStore.save(org_name, org_text)
+            { ok: true, path: saved_path, coverage: writer.coverage }.to_json
+          else
+            saved_path = StreamWeaver::Canvas::DocStore.save(name, dsl)
+            { ok: true, path: saved_path }.to_json
+          end
         rescue ArgumentError => e
           halt 422, { ok: false, error: e.message }.to_json
         rescue StandardError => e

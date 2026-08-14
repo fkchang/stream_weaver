@@ -118,6 +118,65 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'promote-from-history' do
       expect(body['error']).to include('disk full')
     end
 
+    it 'saves as .org and returns coverage in the JSON response when format=org' do
+      post '/save-doc',
+           { file: 1, name: 'my-snapshot', format: 'org' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(200)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to be true
+      expect(body['coverage']).to eq(
+        { 'total' => 1, 'recognized' => 0, 'passthrough_verbatim' => 1, 'passthrough_lossy' => 0 }
+      )
+      saved_path = File.join(StreamWeaver::Canvas::DocStore.path, 'my-snapshot.org')
+      expect(body['path']).to eq(saved_path)
+      expect(File.exist?(saved_path)).to be true
+    end
+
+    it 'still saves as .rb with no coverage field when format is omitted (unchanged default)' do
+      post '/save-doc',
+           { file: 1, name: 'my-snapshot' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(200)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to be true
+      expect(body).not_to have_key('coverage')
+    end
+
+    it 'does not double the extension when the user already typed .org into the name field' do
+      post '/save-doc',
+           { file: 1, name: 'my-snapshot.org', format: 'org' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(200)
+      body = JSON.parse(last_response.body)
+      expect(body['path']).to end_with('my-snapshot.org')
+      expect(body['path']).not_to end_with('.org.org')
+    end
+
+    it 'rejects an unrecognized format value instead of silently falling back to .rb' do
+      post '/save-doc',
+           { file: 1, name: 'my-snapshot', format: 'pdf' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(422)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to be false
+      expect(body['error']).to include('pdf')
+    end
+
+    it 'rejects a non-String name on the org path the same way the .rb path already does (no silent #to_s coercion)' do
+      post '/save-doc',
+           { file: 1, name: 123, format: 'org' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(422)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to be false
+    end
+
     it 'returns 404 when no file list is configured' do
       prev = described_class.file_list
       described_class.configure_files!(nil)
