@@ -8,6 +8,7 @@ require_relative 'protocol'
 require_relative 'session'
 require_relative 'bridge'
 require_relative 'doc_store'
+require_relative '../org/writer'
 
 # Load StreamWeaver core for adapter and views
 require_relative '../adapter/base'
@@ -134,7 +135,8 @@ module StreamWeaver
       end
 
       # Save the session's last-good DSL as a persistent canvas doc (Tier 2).
-      # Body: {"name": "<doc-name>"}; ".rb" is added/normalized by DocStore.
+      # Body: {"name": "<doc-name>", "format": "rb"|"org"}; ".rb"/".org" is
+      # added/normalized by DocStore. format defaults to "rb".
       post '/canvas/:name/save-doc' do
         content_type :json
         session_name = params[:name]
@@ -145,6 +147,32 @@ module StreamWeaver
 
         body = JSON.parse(request.body.read, symbolize_names: true) rescue {}
         doc_name = body[:name]
+        format = body[:format] || 'rb'
+        halt 422, { ok: false, error: "unrecognized format: #{format.inspect}" }.to_json unless %w[rb org].include?(format)
+
+        if format == 'org'
+          begin
+            writer = StreamWeaver::Org::Writer.new(session.dsl)
+            org_text = writer.call
+            coverage = writer.coverage
+            # Strip any .rb/.org the user already typed before appending .org --
+            # otherwise a name like "mydoc.org" round-trips to "mydoc.org.org"
+            # (DocStore.normalize_name only strips ONE trailing extension, so
+            # blindly appending here is not idempotent against an already-typed one).
+            # Only strip when doc_name is actually a String -- a non-String
+            # (e.g. accidentally posted as a number) is passed through as-is
+            # so DocStore.save's own type check rejects it with the same
+            # ArgumentError the .rb path below already gets for free, instead
+            # of silently coercing it via #to_s into a technically-valid name.
+            org_name = doc_name.is_a?(String) ? "#{doc_name.sub(/\.(rb|org)\z/, '')}.org" : doc_name
+            path = StreamWeaver::Canvas::DocStore.save(org_name, org_text)
+            return { ok: true, path: path, coverage: coverage }.to_json
+          rescue ArgumentError => e
+            halt 422, { ok: false, error: e.message }.to_json
+          rescue StandardError => e
+            halt 500, { ok: false, error: e.message }.to_json
+          end
+        end
 
         # Carry the live session's theme/layout into the saved text -- canvas-read
         # re-renders the file with no session to inherit from (stream_weaver-csf).

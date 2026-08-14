@@ -155,6 +155,81 @@ RSpec.describe StreamWeaver::Canvas::BridgeServer, type: :request do
       expect(body['ok']).to eq(false)
       expect(body['error']).to include('disk full')
     end
+
+    it 'saves as .org and returns coverage in the JSON response when format=org' do
+      session = described_class.bridge.create_session('s1')
+      session.set_dsl(%(md "hello"\ntable(headers: ["A"], rows: [["1"]])\n))
+
+      post '/canvas/s1/save-doc',
+           { name: 'mydoc', format: 'org' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(200)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to eq(true)
+      expect(body['coverage']).to eq(
+        { 'total' => 2, 'recognized' => 2, 'passthrough_verbatim' => 0, 'passthrough_lossy' => 0 }
+      )
+      saved_path = File.join(StreamWeaver::Canvas::DocStore.path, 'mydoc.org')
+      expect(body['path']).to eq(saved_path)
+      expect(File.exist?(saved_path)).to eq(true)
+    end
+
+    it 'still saves as .rb with no coverage field when format is omitted (unchanged default)' do
+      session = described_class.bridge.create_session('s1')
+      session.set_dsl("header1 'Hi'")
+
+      post '/canvas/s1/save-doc',
+           { name: 'mydoc' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(200)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to eq(true)
+      expect(body).not_to have_key('coverage')
+      expect(body['path']).to end_with('mydoc.rb')
+    end
+
+    it 'does not double the extension when the user already typed .org into the name field' do
+      session = described_class.bridge.create_session('s1')
+      session.set_dsl(%(md "hello"\n))
+
+      post '/canvas/s1/save-doc',
+           { name: 'mydoc.org', format: 'org' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(200)
+      body = JSON.parse(last_response.body)
+      expect(body['path']).to end_with('mydoc.org')
+      expect(body['path']).not_to end_with('.org.org')
+    end
+
+    it 'rejects an unrecognized format value instead of silently falling back to .rb' do
+      session = described_class.bridge.create_session('s1')
+      session.set_dsl(%(md "hello"\n))
+
+      post '/canvas/s1/save-doc',
+           { name: 'mydoc', format: 'pdf' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(422)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to eq(false)
+      expect(body['error']).to include('pdf')
+    end
+
+    it 'rejects a non-String name on the org path the same way the .rb path already does (no silent #to_s coercion)' do
+      session = described_class.bridge.create_session('s1')
+      session.set_dsl(%(md "hello"\n))
+
+      post '/canvas/s1/save-doc',
+           { name: 123, format: 'org' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(422)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to eq(false)
+    end
   end
 end
 
