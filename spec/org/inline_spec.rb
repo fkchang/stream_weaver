@@ -54,6 +54,16 @@ RSpec.describe StreamWeaver::Org::Inline do
     it "does not normalize a tilde in a path (only converts when followed by a digit)" do
       expect(described_class.md_to_org("edit ~/.bashrc then restart")).to eq("edit ~/.bashrc then restart")
     end
+
+    it "converts a code span whose content contains the org verbatim delimiter itself" do
+      # Round-trip counterpart to the .org_to_md regression test below --
+      # this direction (backtick delimiter, "=" only in the content) never
+      # actually broke, since CODE_MD only needs to worry about its own
+      # delimiter ("`") appearing in content, not "=". Kept for symmetry.
+      text = "Result: `queued=true, sent=false`, hides the position."
+      expect(described_class.md_to_org(text))
+        .to eq("Result: =queued=true, sent=false=, hides the position.")
+    end
   end
 
   describe ".org_to_md" do
@@ -76,6 +86,16 @@ RSpec.describe StreamWeaver::Org::Inline do
     it "does not treat slashes inside a file path as italic markers" do
       text = "see =app/admin/cms/stock_positions.rb:216= for details"
       expect(described_class.org_to_md(text)).to eq("see `app/admin/cms/stock_positions.rb:216` for details")
+    end
+
+    it "converts a verbatim span whose content contains the org delimiter itself back to a code span" do
+      text = "Result: =queued=true, sent=false=, hides the position."
+      expect(described_class.org_to_md(text))
+        .to eq("Result: `queued=true, sent=false`, hides the position.")
+    end
+
+    it "still separates two adjacent verbatim spans on one line rather than bridging them" do
+      expect(described_class.org_to_md("=a= =b=")).to eq("`a` `b`")
     end
   end
 end

@@ -16,22 +16,38 @@ module StreamWeaver
       # them ("*a* *b*") corrupt into one mismatched span, since the shared
       # space gets eaten as POST of the first match and is then unavailable
       # as PRE for the second. Content also excludes the delimiter itself
-      # (not just the first/last char) -- otherwise a lazy .*? can bridge
-      # across two separate same-delimiter spans into one corrupted match
-      # spanning from the first opener to the last closer.
+      # (not just the first/last char) -- this is what stops ITALIC_MD's
+      # single-"*" pattern from misreading BOLD_MD's doubled "**" markers as
+      # its own boundary (the second "*" of "**bold**" can never be content).
       def self.span(delim)
         d = Regexp.escape(delim)
         /(?<=#{PRE})#{d}([^\s#{d}](?:[^#{d}]*?[^\s#{d}])?)#{d}(?=#{POST})/m
       end
 
+      # Code/verbatim spans have no doubled-marker sibling to disambiguate
+      # against (unlike "*"/"**"), so unlike span() this allows the delimiter
+      # itself inside the content -- real code routinely contains "="
+      # (e.g. "queued=true"). The trailing group must be a LAZY optional
+      # (`??`, not `?`) -- a greedy optional always tries "include extra
+      # content" first, and backtracking from there finds the *last* valid
+      # closing delimiter on the line, bridging separate spans ("`a` `b`"
+      # -> content "a` `b"). Lazy-optional tries "no extra content" first,
+      # so it finds the *nearest* closing delimiter whose following
+      # character satisfies POST -- correct for both a single span whose
+      # content happens to contain the delimiter, and two adjacent spans.
+      def self.code_span(delim)
+        d = Regexp.escape(delim)
+        /(?<=#{PRE})#{d}([^\s](?:.*?[^\s])??)#{d}(?=#{POST})/m
+      end
+
       BOLD_MD   = span("**")
       ITALIC_MD = span("*")
-      CODE_MD   = span("`")
+      CODE_MD   = code_span("`")
       LINK_MD   = /\[([^\]]+)\]\(#([^\)]+)\)/
 
       BOLD_ORG   = span("*")
       ITALIC_ORG = span("/")
-      CODE_ORG   = span("=")
+      CODE_ORG   = code_span("=")
       LINK_ORG   = /\[\[#([^\]]+)\]\[([^\]]+)\]\]/
 
       PLACEHOLDER = "\x00CODE%d\x00"
