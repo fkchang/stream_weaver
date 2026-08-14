@@ -451,6 +451,7 @@ module StreamWeaver
     # CardHeader component for card header section
     class CardHeader < Base
       attr_accessor :children
+      attr_reader :content, :badge, :meta
 
       # @param content [String, nil] Optional string content (renders as h4)
       # @param options [Hash] Additional options
@@ -984,7 +985,7 @@ module StreamWeaver
     #     column :balance, format: :currency, align: :right
     #   end
     class Table < Base
-      attr_reader :columns, :resolved_rows
+      attr_reader :columns, :resolved_rows, :headers, :rows, :markdown
       # Deterministic DOM id assigned by the `table` DSL method (display_dsl.rb)
       # for column-DSL tables, used to build stable `<tr id="#{dom_id}-row-#{key}">`
       # ids that survive across rebuilds (see that method for why -- FAC row-granular
@@ -1277,7 +1278,7 @@ module StreamWeaver
 
     # Markdown component for rendering markdown-formatted content
     class Markdown < Base
-      attr_reader :options
+      attr_reader :content, :options
 
       # @param content [String, Proc] The markdown content (can be a proc for dynamic content)
       # @param options [Hash] :class/:style passthrough (stream_weaver-1lo)
