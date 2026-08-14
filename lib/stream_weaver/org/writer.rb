@@ -17,6 +17,9 @@ module StreamWeaver
 
       def initialize(dsl_text)
         @dsl_text = dsl_text
+        @coverage_counts = { total: 0, passthrough_verbatim: 0, passthrough_lossy: 0 }
+        @called = false
+        @nesting_depth = 0
       end
 
       # Top-level DSL statements RecordingContext deliberately no-ops (see
@@ -27,6 +30,7 @@ module StreamWeaver
       NO_OP_STATEMENT_RE = /\Ause_(?:theme|layout)\b/
 
       def call
+        @called = true
         ctx = RecordingContext.new
         ctx.instance_eval(@dsl_text)
         components = ctx.components
@@ -39,6 +43,27 @@ module StreamWeaver
         body_components = components.reject { |c| c.is_a?(Components::SidebarToc) || c.is_a?(Components::DocHeader) }
 
         [preamble(header), sections_and_body(body_components, toc_by_id)].join("\n").rstrip + "\n"
+      end
+
+      # Recognized vs. raw-passthrough accounting for the single conversion
+      # pass #call just ran. Must be called after #call. `recognized` is
+      # derived (total - passthrough_verbatim - passthrough_lossy) rather
+      # than tracked directly, so the three numbers can never disagree with
+      # each other by construction -- see raw_passthrough for where the
+      # passthrough counts are actually incremented. `total` only reflects
+      # body_components (everything sections_and_body walks) -- DocHeader
+      # and SidebarToc are metadata, filtered out before that walk starts
+      # (see #call), and never contribute to any of these four numbers.
+      def coverage
+        raise "call #call before #coverage" unless @called
+
+        total = @coverage_counts[:total]
+        passthrough_verbatim = @coverage_counts[:passthrough_verbatim]
+        passthrough_lossy = @coverage_counts[:passthrough_lossy]
+        recognized = total - passthrough_verbatim - passthrough_lossy
+
+        { total: total, recognized: recognized,
+          passthrough_verbatim: passthrough_verbatim, passthrough_lossy: passthrough_lossy }
       end
 
       private
@@ -68,6 +93,7 @@ module StreamWeaver
       def sections_and_body(components, toc_by_id)
         out = +""
         components.each do |c|
+          @coverage_counts[:total] += 1
           out << if c.is_a?(Components::DocSectionHeader)
             section_headline(c, toc_by_id)
           else
@@ -86,6 +112,14 @@ module StreamWeaver
         headline << ":END:\n"
       end
 
+      # WARNING for future editors: raw_passthrough's coverage counting is
+      # guarded by @nesting_depth, which only render_quote's recursive call
+      # (below) currently increments. If you add ANOTHER path that calls
+      # render_component recursively (not via render_quote), wrap it in the
+      # same @nesting_depth += 1 / ensure @nesting_depth -= 1 pattern --
+      # otherwise a nested raw_passthrough there will silently be miscounted
+      # as top-level, reintroducing the negative-`recognized` bug this guard
+      # exists to prevent (see raw_passthrough's own comment for the story).
       def render_component(component)
         case component
         when Components::Markdown
@@ -176,8 +210,20 @@ module StreamWeaver
         {}
       end
 
+      # Coverage only counts TOP-LEVEL statements (see #coverage) -- but
+      # raw_passthrough is also reachable for a component nested inside an
+      # already-recognized container (e.g. an unrecognized type inside a
+      # callout/card/comparison body, via render_quote's recursive
+      # render_component calls below). Without this guard, such a nested
+      # passthrough would increment passthrough_verbatim/lossy with no
+      # matching #total increment (only sections_and_body's top-level loop
+      # increments #total), making recognized go negative. @nesting_depth
+      # (incremented/decremented around render_quote's recursive walk)
+      # tracks whether we're inside such a nested render; only a top-level
+      # (depth-0) raw_passthrough counts toward coverage.
       def raw_passthrough(component)
         source = @raw_sources[component.object_id]
+        @coverage_counts[source ? :passthrough_verbatim : :passthrough_lossy] += 1 if @nesting_depth.zero?
         content = source || "# unrecognized component: #{component.class}"
         "\n#+begin_src ruby :streamweaver-raw t\n#{content.rstrip}\n#+end_src\n"
       end
@@ -189,8 +235,11 @@ module StreamWeaver
       end
 
       def render_quote(marker, children)
+        @nesting_depth += 1
         body = children.map { |c| render_component(c) }.join.strip
         "\n#+begin_quote\n#{marker}\n#{body}\n#+end_quote\n"
+      ensure
+        @nesting_depth -= 1
       end
     end
   end

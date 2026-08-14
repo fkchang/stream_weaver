@@ -309,4 +309,75 @@ RSpec.describe StreamWeaver::Org::Writer do
     expect(org).to include("# unrecognized component: StreamWeaver::Components::Header")
     expect(org).not_to include(".each")
   end
+
+  describe "#coverage" do
+    def coverage_for(dsl)
+      w = described_class.new(dsl)
+      w.call
+      w.coverage
+    end
+
+    it "reports 100% recognized for a doc built entirely from doc-builder vocabulary" do
+      cov = coverage_for(%(md "hello"\ntable(headers: ["A"], rows: [["1"]])\n))
+      expect(cov).to eq(total: 2, recognized: 2, passthrough_verbatim: 0, passthrough_lossy: 0)
+    end
+
+    it "counts a verbatim-recovered raw-passthrough statement separately from a recognized one" do
+      cov = coverage_for(%(md "hello"\nheader1 "Title"\n))
+      expect(cov).to eq(total: 2, recognized: 1, passthrough_verbatim: 1, passthrough_lossy: 0)
+    end
+
+    it "counts a comment-fallback (lossy) raw-passthrough statement separately from verbatim-recovered" do
+      cov = coverage_for(%(["a", "b"].each { |t| header1 t }\n))
+      expect(cov).to eq(total: 2, recognized: 0, passthrough_verbatim: 0, passthrough_lossy: 2)
+    end
+
+    it "does not count use_theme/use_layout no-op statements toward the total" do
+      cov = coverage_for(<<~RUBY)
+        use_layout :full
+        md "hello"
+      RUBY
+      expect(cov).to eq(total: 1, recognized: 1, passthrough_verbatim: 0, passthrough_lossy: 0)
+    end
+
+    it "raises if #coverage is called before #call" do
+      expect { described_class.new(%(md "x")).coverage }.to raise_error(RuntimeError, /call.*before.*coverage/i)
+    end
+
+    # Plan-review regression: render_table and render_card each have an
+    # INTERNAL fallback to raw_passthrough (table built with data: instead of
+    # headers:/rows:; a card with no CardHeader -- both already covered by
+    # existing writer_spec.rb examples for the org-text output itself). A
+    # naive "count at the top of each named case branch" implementation would
+    # wrongly count these as recognized instead of passthrough. Assert they
+    # count as passthrough_verbatim (source recovery still applies -- these
+    # ARE real top-level statements with an unambiguous 1:1 match, same as
+    # any other raw_passthrough case).
+    it "counts a table(data: ...) fallback (unsupported table shape) as passthrough, not recognized" do
+      cov = coverage_for(%(table(data: [{ name: "Alice" }])\n))
+      expect(cov).to eq(total: 1, recognized: 0, passthrough_verbatim: 1, passthrough_lossy: 0)
+    end
+
+    it "counts a header-less card fallback as passthrough, not recognized" do
+      cov = coverage_for(%(card do\n  md "loose content, no header"\nend\n))
+      expect(cov).to eq(total: 1, recognized: 0, passthrough_verbatim: 1, passthrough_lossy: 0)
+    end
+
+    it "does not double-count (or go negative) when raw_passthrough fires for a component NESTED inside a recognized callout" do
+      # Regression: raw_passthrough is reachable from render_quote's
+      # recursive render_component calls (a callout/card/comparison body),
+      # not just the top-level dispatch loop in sections_and_body. Only
+      # top-level statements increment #total, so a nested raw-passthrough
+      # (here: an unsupported table shape inside a callout body) must NOT
+      # increment the passthrough counters either, or recognized would go
+      # negative (1 total, but 1 top-level "recognized" callout PLUS 1
+      # nested passthrough it doesn't know about).
+      cov = coverage_for(<<~RUBY)
+        callout(variant: :warning, title: "Heads up") do
+          table(data: [{ name: "Alice" }])
+        end
+      RUBY
+      expect(cov).to eq(total: 1, recognized: 1, passthrough_verbatim: 0, passthrough_lossy: 0)
+    end
+  end
 end
