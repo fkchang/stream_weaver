@@ -7,7 +7,7 @@
 (function () {
   "use strict";
 
-  const app = document.getElementById("sw-app");
+  const app = document.getElementById("app-container");
   const errorBox = document.getElementById("sw-error");
 
   function fail(stage, err) {
@@ -60,9 +60,30 @@
       document.head.appendChild(style);
     }
     app.innerHTML = html;
+    unwrapRegions();
 
     enhance();
     parent.postMessage({ type: "sw:rendered", bytes: html.length }, "*");
+  }
+
+  // render_html (OpalRuntime, shared with the live/interactive runtime) wraps
+  // every top-level component in a <div id="sw-region-N"> so morphdom can
+  // patch one region at a time. The sandbox never re-renders -- it's a
+  // one-shot static view, SWRuntime.start() is deliberately never called --
+  // so these wrappers serve no purpose here, and their side effect is
+  // actively harmful: a lot of :doc-theme CSS (sidebar_toc's sticky grid
+  // layout, doc_header's chrome removal) targets `#app-container > .foo`
+  // with a direct-child combinator, which a "> .sw-region-0 > .foo" wrapper
+  // breaks. Unwrapping each single-child region div (rather than changing
+  // the combinator, which is there on purpose -- see adapter/static.rb's
+  // "Document layout fix" comment) keeps this fix local to the one host that
+  // doesn't need the wrapper, instead of weakening a selector every other
+  // host still relies on.
+  function unwrapRegions() {
+    app.querySelectorAll(':scope > div[id^="sw-region-"]').forEach(function (region) {
+      while (region.firstChild) region.parentNode.insertBefore(region.firstChild, region);
+      region.remove();
+    });
   }
 
   // Prism and Mermaid decorate markup rather than produce it, so they run

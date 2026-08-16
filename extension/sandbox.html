@@ -48,8 +48,16 @@
     }
   </style>
 </head>
-<body class="sw-theme-default sw-theme-doc">
-  <div id="sw-app"></div>
+<body class="sw-theme-default sw-theme-doc sw-layout-fluid">
+  <!-- id="app-container", not "sw-app": a large amount of :doc-theme CSS
+       (sidebar_toc's sticky grid layout, doc_header chrome removal, card
+       styling) is scoped to `body[class*="sw-layout-"] > #app-container`,
+       matching the server-rendered shape exactly -- see
+       adapter/static.rb's sidebar_toc_css. Using a different id/no layout
+       class here would silently drop all of that, found via a direct
+       sandbox-mechanism test (2026-08-16): sidebar_toc rendered but never
+       got its left-column grid position. -->
+  <div id="app-container"></div>
   <pre id="sw-error"></pre>
   <script src="sandbox.js"></script>
 </body>
