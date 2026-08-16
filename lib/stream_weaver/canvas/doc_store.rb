@@ -92,13 +92,21 @@ module StreamWeaver
       # path. Creates the docs directory if missing. Overwrites any existing
       # file with the same name (Tier 2 docs are user-managed; collisions
       # mean the user is intentionally updating).
+      #
+      # Only .rb output gets the `# streamweaver-doc: v1` stamp -- .org output
+      # already self-identifies via its own `#+STREAMWEAVER_DSL: 1` header
+      # keyword (org-doc-format-design.md), which must be the file's first
+      # line unconditionally. Prepending the .rb-style stamp in front of it
+      # would violate that and, being a bare `#` line rather than a `#+`
+      # keyword, wouldn't even be recognized by org-ruby.
       def save(name, dsl)
         filename = normalize_name(name)
         dir = path
         FileUtils.mkdir_p(dir)
 
         full = File.join(dir, filename)
-        File.write(full, stamp(dsl))
+        content = filename.end_with?('.org') ? dsl : stamp(dsl)
+        File.write(full, content)
         full
       end
 

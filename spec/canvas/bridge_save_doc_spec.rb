@@ -85,7 +85,7 @@ RSpec.describe StreamWeaver::Canvas::BridgeServer, type: :request do
 
       expect(last_response.status).to eq(200)
       written = File.read(JSON.parse(last_response.body)['path'])
-      expect(written).to eq("use_theme :doc\nuse_layout :wide\nheader1 'Hi'")
+      expect(written).to eq("#{StreamWeaver::Canvas::DocStore::STAMP}\nuse_theme :doc\nuse_layout :wide\nheader1 'Hi'")
     end
 
     it 'does not double up metadata when the DSL already declares it' do
@@ -98,7 +98,7 @@ RSpec.describe StreamWeaver::Canvas::BridgeServer, type: :request do
 
       expect(last_response.status).to eq(200)
       written = File.read(JSON.parse(last_response.body)['path'])
-      expect(written).to eq("use_theme :dark\nuse_layout :full\nheader1 'Hi'")
+      expect(written).to eq("#{StreamWeaver::Canvas::DocStore::STAMP}\nuse_theme :dark\nuse_layout :full\nheader1 'Hi'")
       expect(written.scan(/use_theme/).size).to eq(1)
     end
 
