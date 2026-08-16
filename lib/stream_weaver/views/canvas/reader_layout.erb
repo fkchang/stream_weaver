@@ -1,14 +1,32 @@
 <%
   doc            = @doc
-  body_class     = "sw-theme-#{doc.theme} sw-layout-#{doc.layout} sw-reader"
-  docs_groups    = @file_list.docs_groups
-  history_groups = @file_list.history_groups
-  is_history     = @current_file && @file_list.history_dir?(File.dirname(@current_file))
+  # Browse (stream_weaver-rdh) can land here with no file open yet
+  # (GET /browse before any file is clicked) -- doc.theme/layout have
+  # nothing to fall back to in that case, so the body class falls back to
+  # the reader's own defaults instead of reading through a nil doc.
+  body_class     = if doc
+                     "sw-theme-#{doc.theme} sw-layout-#{doc.layout} sw-reader"
+                   else
+                     "sw-theme-#{StreamWeaver::Canvas::Reader.fallback_theme} " \
+                     "sw-layout-#{StreamWeaver::Canvas::Reader.fallback_layout} sw-reader"
+                   end
+  browse_mode    = !!@browse_mode
+  # docs_groups/history_groups are meaningless in Browse mode (its sidebar
+  # replaces them entirely) -- skipping them isn't just wasted work, it
+  # avoids a NoMethodError the day canvas-read ships a "no configured
+  # files, Browse only" boot mode, where @file_list would be nil.
+  docs_groups    = browse_mode ? {} : @file_list.docs_groups
+  history_groups = browse_mode ? {} : @file_list.history_groups
+  is_history     = @current_file && !browse_mode && @file_list.history_dir?(File.dirname(@current_file))
   default_name   = if is_history
                      session   = File.basename(File.dirname(@current_file))
                      timestamp = File.basename(@current_file, '.rb')
                      "#{session}-#{timestamp}"
                    end
+  # @breadcrumbs/@browse_parent/@repo_docs_root come from the route (Reader
+  # #set_browse_ivars) -- the breadcrumb walk and repo_docs_root's
+  # filesystem/.git lookup are controller work, not view formatting.
+  browse_oob = StreamWeaver::Canvas::Reader::BROWSE_OOB
 %>
 <!DOCTYPE html>
 <html lang="en">
@@ -24,8 +42,9 @@
       framework rules. %>
   <%= StreamWeaver::PageShell.framework_css_html(extra_layers: %w[sw-reader-chrome]) %>
 
-  <%# The doc's own use_stylesheet CSS -- unlayered, so it wins everything. %>
-  <%= StreamWeaver::PageShell.user_css_html(inline_stylesheets: doc.inline_stylesheets) %>
+  <%# The doc's own use_stylesheet CSS -- unlayered, so it wins everything.
+      Nothing to inline with no doc open yet (a bare Browse listing). %>
+  <%= StreamWeaver::PageShell.user_css_html(inline_stylesheets: doc ? doc.inline_stylesheets : []) %>
 
   <%# Reader chrome. BOTH layered and #sw-reader-*-scoped, on purpose:
       scoping alone would let CANVAS_CSS/master_theme_css's bare h1..h6/p/a
@@ -93,6 +112,40 @@
     }
     #sw-reader-files .dir-files li a:hover { background: #e5e7eb; color: #111827; }
     #sw-reader-files .dir-files li a.active { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+
+    /* Browse (stream_weaver-rdh). .browse-listing reuses .dir-files li a's
+       styling above (same selector chain) for consistent link appearance;
+       only the browse-specific chrome (shortcuts, breadcrumbs, up/back
+       links) needs its own rules. */
+    #sw-reader-files .browse-shortcuts {
+      padding: 0.5rem 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    #sw-reader-files .browse-shortcuts a {
+      font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 3px;
+      background: #e5e7eb; color: #374151; text-decoration: none;
+    }
+    #sw-reader-files .browse-shortcuts a:hover { background: #d1d5db; }
+    #sw-reader-files .browse-crumbs {
+      padding: 0.4rem 1rem; font-size: 0.72rem; color: #6b7280;
+      word-break: break-all; border-bottom: 1px solid #e5e7eb;
+    }
+    #sw-reader-files .browse-crumbs a { color: #4b5563; text-decoration: none; }
+    #sw-reader-files .browse-crumbs a:hover { text-decoration: underline; }
+    #sw-reader-files .browse-crumbs .crumb-sep { color: #9ca3af; }
+    #sw-reader-files .browse-listing .browse-up,
+    #sw-reader-files .browse-listing .browse-dir { font-weight: 500; }
+    #sw-reader-files .browse-empty {
+      padding: 0.5rem 1rem 0.5rem 1.75rem; font-size: 0.75rem; color: #9ca3af;
+      font-style: italic;
+    }
+    #sw-reader-files .browse-back, #sw-reader-files .browse-link {
+      display: block; padding: 0.5rem 1rem; font-size: 0.75rem;
+      color: #4b5563; text-decoration: none; border-top: 1px solid #e5e7eb;
+    }
+    #sw-reader-files .browse-back:hover, #sw-reader-files .browse-link:hover {
+      background: #e5e7eb; color: #111827;
+    }
 
     /* History section (collapsed by default) */
     #sw-reader-files .history-section-header {
@@ -165,7 +218,13 @@
     htmx:afterSwap handler below, since <body>'s own class attribute is never
     part of the swapped region. %>
 <div id="app-container" data-sw-body-class="<%= body_class %>">
-  <%= doc.html %>
+  <% if doc %>
+    <%= doc.html %>
+  <% else %>
+    <div style="padding: 3rem; text-align: center; color: #6b7280; font-family: system-ui, sans-serif;">
+      Pick a <code>.rb</code> file from the browser on the left.
+    </div>
+  <% end %>
 </div>
 
 <%# hx-boost lives on the chrome, not <body>: that keeps in-document
@@ -173,7 +232,15 @@
     boosted subtree. hx-swap="outerHTML" is required -- hx-select keeps the
     matched element itself, so innerHTML would nest a new #app-container
     inside the old one on every click, killing every ">" selector and
-    getElementById('app-container') lookup after the first navigation. %>
+    getElementById('app-container') lookup after the first navigation.
+    #sw-reader-files is deliberately NOT in this default hx-select-oob --
+    stream_weaver-8v1 keeps accordion expand/collapse state alive across
+    Prev/Next and sidebar clicks precisely BY never swapping it. Browse
+    (stream_weaver-rdh) needs the opposite (the sidebar's own content has to
+    change between directories), so its links carry their own, wider
+    hx-select-oob (BROWSE_OOB below) that overrides this default -- boosted
+    per-element attributes win over the ancestor's, so normal docs/history
+    navigation is untouched. %>
 <nav id="sw-reader-chrome"
      hx-boost="true" hx-target="#app-container" hx-select="#app-container"
      hx-swap="outerHTML" hx-select-oob="#sw-reader-nav">
@@ -182,99 +249,153 @@
           title="Toggle file rail" aria-label="Toggle file rail">☰</button>
 
   <div id="sw-reader-files">
-    <h2><%= history_groups.any? ? 'Docs' : 'Files' %></h2>
-    <% docs_groups.each do |dir, entries| %>
-      <% dir_label = File.basename(dir) %>
-      <div class="dir-section">
-        <div class="dir-header expanded" onclick="toggleSection(this)">
-          <span class="dir-arrow">▶</span>
-          <span title="<%= dir %>"><%= dir_label %></span>
-        </div>
-        <ul class="dir-files">
-          <% entries.each do |filepath, idx| %>
-            <li>
-              <a href="/?file=<%= idx %>"
-                 class="<%= idx == @current_index ? 'active' : '' %>"
-                 title="<%= filepath %>">
-                <%= File.basename(filepath, '.rb') %>
-              </a>
-            </li>
-          <% end %>
-        </ul>
+    <% if browse_mode %>
+      <%# Every link in this block carries its own hx-select-oob, wider than
+          the chrome's default (#sw-reader-nav alone, see the <nav> comment
+          above) -- Browse needs the sidebar's own CONTENT to change between
+          directories, unlike normal docs/history navigation, which needs it
+          to stay untouched so accordion state survives (stream_weaver-8v1).
+          A boosted element's own hx-* attributes override its ancestor's. %>
+      <h2>Browse</h2>
+      <div class="browse-shortcuts">
+        <% if @repo_docs_root %>
+          <a href="/browse?dir=<%= ERB::Util.url_encode(@repo_docs_root) %>" <%= browse_oob %>>This repo</a>
+        <% end %>
+        <a href="/browse?dir=<%= ERB::Util.url_encode(StreamWeaver::Canvas::DocStore::DEFAULT_ROOT) %>" <%= browse_oob %>>StreamWeaver (global)</a>
       </div>
-    <% end %>
-
-    <% if history_groups.any? %>
-      <h2 class="history-section-header" onclick="toggleSection(this)">
-        <span class="history-arrow">▶</span>
-        History (<%= history_groups.size %>)
-      </h2>
-      <div class="history-content collapsed">
-        <% history_groups.each do |dir, entries| %>
-          <% session_label = File.basename(dir) %>
-          <div class="dir-section history-session">
-            <div class="dir-header" onclick="toggleSection(this)">
-              <span class="dir-arrow">▶</span>
-              <span title="<%= dir %>"><%= session_label %></span>
-            </div>
-            <ul class="dir-files collapsed">
-              <% entries.each do |filepath, idx| %>
-                <li>
-                  <a href="/?file=<%= idx %>"
-                     class="<%= idx == @current_index ? 'active' : '' %>"
-                     title="<%= filepath %>">
-                    <%= File.basename(filepath, '.rb') %>
-                  </a>
-                </li>
-              <% end %>
-            </ul>
-          </div>
+      <div class="browse-crumbs">
+        <a href="/browse?dir=%2F" <%= browse_oob %>>/</a>
+        <% @breadcrumbs.each do |label, crumb_path| %>
+          <span class="crumb-sep">/</span><a href="/browse?dir=<%= ERB::Util.url_encode(crumb_path) %>" <%= browse_oob %>><%= ERB::Util.h(label) %></a>
         <% end %>
       </div>
+      <%# Filenames/dirnames come straight off the filesystem -- '"', '<', '&'
+          are all legal there, and unlike the fixed docs sections above,
+          Browse can be pointed at literally any directory (~/Downloads
+          included, where an attacker controls a dropped file's name). Every
+          filesystem-derived string in this block is ERB::Util.h'd; the
+          hrefs are already safe via url_encode. %>
+      <ul class="dir-files browse-listing">
+        <% if @browse_parent %>
+          <li><a href="/browse?dir=<%= ERB::Util.url_encode(@browse_parent) %>" class="browse-up" <%= browse_oob %>>.. (up)</a></li>
+        <% end %>
+        <% @browse_entries[:dirs].each do |name| %>
+          <li><a href="/browse?dir=<%= ERB::Util.url_encode(File.join(@browse_dir, name)) %>" class="browse-dir" <%= browse_oob %>>📁 <%= ERB::Util.h(name) %></a></li>
+        <% end %>
+        <% @browse_entries[:files].each do |name| %>
+          <% full = File.join(@browse_dir, name) %>
+          <li><a href="/open?path=<%= ERB::Util.url_encode(full) %>" class="<%= full == @current_file ? 'active' : '' %>" title="<%= ERB::Util.h(full) %>" <%= browse_oob %>><%= ERB::Util.h(name) %></a></li>
+        <% end %>
+        <% if @browse_entries[:dirs].empty? && @browse_entries[:files].empty? %>
+          <li class="browse-empty">(empty)</li>
+        <% end %>
+      </ul>
+      <a href="/?file=0" class="browse-back" <%= browse_oob %>>← Back to docs</a>
+    <% else %>
+      <h2><%= history_groups.any? ? 'Docs' : 'Files' %></h2>
+      <% docs_groups.each do |dir, entries| %>
+        <% dir_label = File.basename(dir) %>
+        <div class="dir-section">
+          <div class="dir-header expanded" onclick="toggleSection(this)">
+            <span class="dir-arrow">▶</span>
+            <span title="<%= dir %>"><%= dir_label %></span>
+          </div>
+          <ul class="dir-files">
+            <% entries.each do |filepath, idx| %>
+              <li>
+                <a href="/?file=<%= idx %>"
+                   class="<%= idx == @current_index ? 'active' : '' %>"
+                   title="<%= filepath %>">
+                  <%= File.basename(filepath, '.rb') %>
+                </a>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+
+      <% if history_groups.any? %>
+        <h2 class="history-section-header" onclick="toggleSection(this)">
+          <span class="history-arrow">▶</span>
+          History (<%= history_groups.size %>)
+        </h2>
+        <div class="history-content collapsed">
+          <% history_groups.each do |dir, entries| %>
+            <% session_label = File.basename(dir) %>
+            <div class="dir-section history-session">
+              <div class="dir-header" onclick="toggleSection(this)">
+                <span class="dir-arrow">▶</span>
+                <span title="<%= dir %>"><%= session_label %></span>
+              </div>
+              <ul class="dir-files collapsed">
+                <% entries.each do |filepath, idx| %>
+                  <li>
+                    <a href="/?file=<%= idx %>"
+                       class="<%= idx == @current_index ? 'active' : '' %>"
+                       title="<%= filepath %>">
+                      <%= File.basename(filepath, '.rb') %>
+                    </a>
+                  </li>
+                <% end %>
+              </ul>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+
+      <a href="/browse" class="browse-link" <%= browse_oob %>>📁 Browse files…</a>
     <% end %>
   </div>
 
   <div id="sw-reader-nav">
-    <% prev_idx = @current_index - 1 %>
-    <% next_idx = @current_index + 1 %>
-    <% if prev_idx >= 0 %>
-      <a href="/?file=<%= prev_idx %>" class="nav-link" data-nav="prev">◀ Prev</a>
-    <% else %>
-      <span class="nav-link nav-link--disabled">◀ Prev</span>
-    <% end %>
-    <span class="counter"><%= @current_index + 1 %> of <%= @file_list.size %></span>
-    <% if next_idx < @file_list.size %>
-      <a href="/?file=<%= next_idx %>" class="nav-link" data-nav="next">Next ▶</a>
-    <% else %>
-      <span class="nav-link nav-link--disabled">Next ▶</span>
-    <% end %>
+    <%# @current_index is unset for a file opened via Browse (stream_weaver-rdh)
+        -- it isn't part of any FileList, so there's no index to page
+        Prev/Next through and no ?file=N to hand /export. Browsed files skip
+        this whole block rather than guessing at a meaningless index. %>
+    <% if @current_index %>
+      <% prev_idx = @current_index - 1 %>
+      <% next_idx = @current_index + 1 %>
+      <% if prev_idx >= 0 %>
+        <a href="/?file=<%= prev_idx %>" class="nav-link" data-nav="prev">◀ Prev</a>
+      <% else %>
+        <span class="nav-link nav-link--disabled">◀ Prev</span>
+      <% end %>
+      <span class="counter"><%= @current_index + 1 %> of <%= @file_list.size %></span>
+      <% if next_idx < @file_list.size %>
+        <a href="/?file=<%= next_idx %>" class="nav-link" data-nav="next">Next ▶</a>
+      <% else %>
+        <span class="nav-link nav-link--disabled">Next ▶</span>
+      <% end %>
 
-    <%# Available for every file, not just history snapshots. hx-boost="false"
-        is mandatory: this link is inside the boosted <nav>, and a boosted
-        click would swap the downloaded document into #app-container instead
-        of handing it to the browser as a file.
-        No `download` attribute: Content-Disposition: attachment already
-        triggers the save-as on success and leaves this page in place --
-        `download` would additionally force a 422/500 error body into
-        ~/Downloads as an extensionless file instead of showing the error.
-        target="_blank" keeps a failed export's error text out of the way
-        of the page you were reading. %>
-    <a href="/export?file=<%= @current_index %>" class="nav-link nav-export"
-       hx-boost="false" target="_blank"
-       title="Download this doc as a standalone HTML file">⬇ Export HTML</a>
-
-    <%# Fetches and inlines mermaid's own library instead of referencing its CDN
-        (stream_weaver-dnq), so mermaid diagrams render in a viewer whose CSP
-        blocks external scripts entirely -- SharePoint's HTML preview is the
-        motivating case. Only shown on a doc that actually has a mermaid
-        diagram (@doc.html always contains "sw-mermaid" for one, in either
-        the diagram's own CSS class or its lazily-injected CSS block) --
-        the flag does nothing on a doc without one, so a second identical
-        button there would just be a confusing extra click with no effect. %>
-    <% if @doc.html.include?("sw-mermaid") %>
-      <a href="/export?file=<%= @current_index %>&amp;offline=1" class="nav-link nav-export"
+      <%# Available for every file, not just history snapshots. hx-boost="false"
+          is mandatory: this link is inside the boosted <nav>, and a boosted
+          click would swap the downloaded document into #app-container instead
+          of handing it to the browser as a file.
+          No `download` attribute: Content-Disposition: attachment already
+          triggers the save-as on success and leaves this page in place --
+          `download` would additionally force a 422/500 error body into
+          ~/Downloads as an extensionless file instead of showing the error.
+          target="_blank" keeps a failed export's error text out of the way
+          of the page you were reading. %>
+      <a href="/export?file=<%= @current_index %>" class="nav-link nav-export"
          hx-boost="false" target="_blank"
-         title="Download as standalone HTML with mermaid's library inlined, for viewers that block external scripts (e.g. SharePoint)">⬇ Export HTML (offline)</a>
+         title="Download this doc as a standalone HTML file">⬇ Export HTML</a>
+
+      <%# Fetches and inlines mermaid's own library instead of referencing its CDN
+          (stream_weaver-dnq), so mermaid diagrams render in a viewer whose CSP
+          blocks external scripts entirely -- SharePoint's HTML preview is the
+          motivating case. Only shown on a doc that actually has a mermaid
+          diagram (@doc.html always contains "sw-mermaid" for one, in either
+          the diagram's own CSS class or its lazily-injected CSS block) --
+          the flag does nothing on a doc without one, so a second identical
+          button there would just be a confusing extra click with no effect. %>
+      <% if @doc.html.include?("sw-mermaid") %>
+        <a href="/export?file=<%= @current_index %>&amp;offline=1" class="nav-link nav-export"
+           hx-boost="false" target="_blank"
+           title="Download as standalone HTML with mermaid's library inlined, for viewers that block external scripts (e.g. SharePoint)">⬇ Export HTML (offline)</a>
+      <% end %>
+    <% elsif @current_file %>
+      <span class="counter" title="<%= ERB::Util.h(@current_file) %>">Browsed: <%= ERB::Util.h(File.basename(@current_file)) %></span>
     <% end %>
 
 <% if is_history %>
@@ -525,16 +646,30 @@
     if (e.key === 'ArrowRight') document.querySelector('[data-nav="next"]')?.click();
   });
 
-  // Only #app-container and #sw-reader-nav are swapped, so two things the rest
-  // of the page depends on have to be re-derived by hand after each swap:
+  // Only #app-container and #sw-reader-nav are swapped by default (Browse
+  // links, stream_weaver-rdh, additionally swap #sw-reader-files via their
+  // own wider BROWSE_OOB), so two things the rest of the page depends on
+  // have to be re-derived by hand after each swap:
   //   1. <body>'s theme/layout classes — file N may be :doc themed and N+1 not.
-  //   2. the active link in #sw-reader-files, which is never itself swapped.
+  //   2. the active link in #sw-reader-files, when it wasn't itself swapped
+  //      this time (stream_weaver-8v1 -- the whole reason it usually isn't:
+  //      an actual re-render would reset any accordion section a user had
+  //      opened).
   document.addEventListener('htmx:afterSwap', () => {
     const container = document.getElementById('app-container');
     if (container && container.dataset.swBodyClass) {
       document.body.className = container.dataset.swBodyClass;
     }
     const current = new URLSearchParams(window.location.search).get('file');
+    // Browse/Open URLs (and "/", mid-redirect to "/?file=0") carry no
+    // ?file= at all -- current is null there. Without this guard,
+    // `href.searchParams.get('file') === current` reads as `null === null`
+    // for every single Browse link (none of them have a file= param
+    // either), so the whole listing lit up .active, and the one
+    // non-Browse link on that response ("Back to docs", also file-less)
+    // stripped the .active class the OOB swap had just correctly set. Only
+    // do this comparison when there's an actual file index to compare.
+    if (current === null) return;
     document.querySelectorAll('#sw-reader-files .dir-files a').forEach((a) => {
       const href = new URL(a.getAttribute('href'), window.location.origin);
       a.classList.toggle('active', href.searchParams.get('file') === current);

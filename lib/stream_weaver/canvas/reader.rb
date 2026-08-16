@@ -128,6 +128,81 @@ module StreamWeaver
             raise "No available port found starting from #{start}" if port > start + 100
           end
         end
+
+        # Absolute path of the current repo's docs root, or nil outside a
+        # git repo. Same resolution DocStore.path itself would use for the
+        # "in a repo" branch -- kept as a named shortcut (not stored state)
+        # for the Browse view's quick-jump link (stream_weaver-rdh).
+        def repo_docs_root
+          root = StreamWeaver::Canvas::DocStore.git_root(Dir.pwd)
+          root && File.join(root, StreamWeaver::Canvas::DocStore::DOCS_SUBPATH)
+        end
+
+        # {dirs:, files:} immediately under `dir` -- one level, not recursive
+        # (Browse navigates by clicking in, not by a pre-walked tree). Dotfiles
+        # excluded (matches normal file-browser expectations; a .git directory
+        # in the listing is noise, never something you'd navigate into here).
+        # Swallows ENOENT/EACCES rather than raising: a stale bookmark or a
+        # permission-denied directory should render an empty listing, not a 500.
+        def browse_entries(dir)
+          entries = Dir.children(dir).reject { |e| e.start_with?('.') }.sort
+          # partition, not two independent #select calls: a directory named
+          # "bundle.rb" (rare, but real -- generator fixtures do this) would
+          # otherwise satisfy both the dirs and files predicates and get
+          # listed twice, the second listing a dead link (/open 404s on it).
+          dirs, rest = entries.partition { |e| File.directory?(File.join(dir, e)) }
+          { dirs: dirs, files: rest.select { |e| e.end_with?('.rb') } }
+        rescue SystemCallError
+          # Broader than Errno::ENOENT/EACCES alone: a TCC-protected macOS
+          # directory (~/Library/Mail, ~/Documents without Full Disk Access)
+          # raises Errno::EPERM, not EACCES, and $HOME -- Browse's own
+          # default landing directory -- routinely contains one. A symlink
+          # loop raises Errno::ELOOP. All of them mean the same thing here:
+          # show an empty listing, not a 500.
+          { dirs: [], files: [] }
+        end
+
+        # Expands and validates a Browse `dir` param, falling back to $HOME
+        # for anything blank, relative-and-missing, or not actually a
+        # directory -- Browse always has *somewhere* valid to show rather
+        # than erroring on a stale/hand-edited query string. The rescue
+        # covers what File.expand_path itself can raise on bad input
+        # (?dir=~nosuchuser, a null byte, a non-String param from
+        # ?dir[]=x) -- all real, reachable ways to reach this from a
+        # browser address bar or a stale link, not just theoretical.
+        def resolve_browse_dir(raw)
+          expanded = raw && !raw.to_s.empty? && (File.expand_path(raw.to_s) rescue nil)
+          expanded && File.directory?(expanded) ? expanded : Dir.home
+        end
+      end
+
+      # 127.0.0.1-binding stops a remote client, but not a browser already
+      # on this machine: any page open in any tab can issue a cross-origin
+      # GET here with no CSRF token required (an <img src="http://127.0.0.1:
+      # 4800/open?path=...">, a bare <a>, a form) -- same-origin policy
+      # blocks that page from READING the response, not from sending the
+      # request. That distinction didn't matter much when the worst case
+      # was an unwanted render; it matters a great deal now that /open
+      # (stream_weaver-rdh) *evaluates* the .rb file it opens.
+      #
+      # Two independent checks, because either alone has a gap:
+      # - Host: blocks the common drive-by case outright. Beaten by DNS
+      #   rebinding, where an attacker's domain re-resolves to 127.0.0.1
+      #   mid-session, making the request genuinely same-origin by the time
+      #   it arrives.
+      # - Sec-Fetch-Site: set by the browser itself from the *page's own*
+      #   origin, not spoofable by page JS, so it still reads "cross-site"
+      #   after a rebind. Older browsers omit the header entirely; failing
+      #   open on absence (rather than blocking) is deliberate -- this is a
+      #   single-user local dev tool where the primary path is a modern
+      #   browser navigating here directly, and false positives there would
+      #   be worse than the residual risk from a browser old enough to omit
+      #   Fetch Metadata.
+      before do
+        halt 403, 'Forbidden' unless %w[127.0.0.1 localhost].include?(request.host)
+
+        site = request.env['HTTP_SEC_FETCH_SITE']
+        halt 403, 'Forbidden' if site && !%w[same-origin none].include?(site)
       end
 
       get '/health' do
@@ -147,6 +222,51 @@ module StreamWeaver
         @file_list       = list
         @current_index   = index
         @current_file    = path
+        @mermaid_zoom_js = MERMAID_ZOOM_JS
+        erb :reader_layout, layout: false
+      end
+
+      # Live filesystem browse (stream_weaver-rdh) -- the thing actually
+      # missing before this: canvas-read already renders any file/dir handed
+      # to it as a CLI arg, but once running, you're stuck with what you
+      # started it with. No index, no registered locations: browsing IS the
+      # discovery, computed fresh on every request. NOT the same trust
+      # boundary as the CLI args this already accepts, despite first
+      # appearances -- a CLI arg is the user naming a file once, with
+      # intent; an HTTP GET is reachable from any tab in the user's
+      # browser, and /open below evaluates what it opens. See the `before`
+      # filter above for why that gap is actually closed.
+      #
+      # No `?file=N` here -- Browse's sidebar replaces the file-list view
+      # entirely rather than adding to it, so there's no index into anything
+      # to render disabled/enabled Prev/Next against. @current_index stays
+      # unset, which the layout's nav block treats as "no file open."
+      get '/browse' do
+        set_browse_ivars(self.class.resolve_browse_dir(params[:dir]))
+        @file_list       = self.class.file_list
+        @mermaid_zoom_js = MERMAID_ZOOM_JS
+        erb :reader_layout, layout: false
+      end
+
+      # Renders one file found via Browse, independent of the configured
+      # FileList/docs_groups/history_groups -- this is what makes Browse not
+      # need an index: viewing a browsed file was never routed through a
+      # precomputed list to begin with. Sidebar stays in Browse mode (the
+      # opened file's own directory), so browsing feels continuous rather
+      # than dropping back to the original file list.
+      get '/open' do
+        path = File.expand_path(params[:path].to_s)
+        halt 404, 'File not found' unless File.file?(path) && path.end_with?('.rb')
+
+        dsl = begin
+          File.read(path)
+        rescue SystemCallError
+          halt 404, 'File not found'
+        end
+        @doc             = Reader.render_doc(dsl, path: path)
+        @current_file    = path
+        set_browse_ivars(File.dirname(path))
+        @file_list       = self.class.file_list
         @mermaid_zoom_js = MERMAID_ZOOM_JS
         erb :reader_layout, layout: false
       end
@@ -297,6 +417,38 @@ module StreamWeaver
 
       def self.render_dsl(dsl)
         render_doc(dsl).html
+      end
+
+      private
+
+      # Every Browse-related link carries this instead of the chrome's
+      # narrower default (hx-select-oob="#sw-reader-nav" alone) -- Browse
+      # needs the sidebar's own CONTENT to change between directories,
+      # unlike normal docs/history navigation, which needs it to stay
+      # untouched so accordion state survives (stream_weaver-8v1). A
+      # boosted element's own hx-* attributes override its ancestor's, so
+      # this widening stays scoped to exactly the links that opt into it.
+      # One constant instead of nine hand-typed copies in the template:
+      # dropping #sw-reader-nav from any one of them would silently stop
+      # that link's swap from refreshing the nav bar.
+      BROWSE_OOB = 'hx-select-oob="#sw-reader-nav, #sw-reader-files"'
+
+      # Populates every ivar reader_layout.erb's Browse sidebar needs,
+      # shared by GET /browse and GET /open so both compute breadcrumbs and
+      # the repo-root shortcut identically. Kept out of the ERB entirely --
+      # the breadcrumb walk and repo_docs_root's filesystem/.git lookup are
+      # controller work, not view formatting, and doing it here means it
+      # runs once per request instead of once per render.
+      def set_browse_ivars(dir)
+        @browse_mode    = true
+        @browse_dir     = dir
+        @browse_entries = self.class.browse_entries(dir)
+        @browse_parent  = dir == '/' ? nil : File.dirname(dir)
+
+        parts = dir.split('/').reject(&:empty?)
+        @breadcrumbs = parts.each_index.map { |i| [parts[i], "/#{parts[0..i].join('/')}"] }
+
+        @repo_docs_root = self.class.repo_docs_root
       end
     end
   end
