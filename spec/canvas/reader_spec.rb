@@ -89,6 +89,55 @@ RSpec.describe StreamWeaver::Canvas::Reader::FileList do
       expect(list.at(99)).to be_nil
     end
   end
+
+  # Live refresh (stream_weaver-gnj8): FileList used to be built once and
+  # never revisited, so a doc saved mid-session never appeared without a
+  # restart. File.utime forces a deterministic mtime rather than sleeping
+  # past whatever mtime resolution the test filesystem happens to have.
+  describe '#stale?/#rebuild_if_stale' do
+    it 'is not stale immediately after building' do
+      touch('a.rb')
+      list = described_class.build([@dir])
+      expect(list.stale?).to be false
+    end
+
+    it 'returns the same object from rebuild_if_stale when nothing changed' do
+      touch('a.rb')
+      list = described_class.build([@dir])
+      expect(list.rebuild_if_stale).to equal(list)
+    end
+
+    it 'is stale once a source directory\'s mtime moves' do
+      touch('a.rb')
+      list = described_class.build([@dir])
+      File.utime(Time.now, Time.now + 5, @dir)
+      expect(list.stale?).to be true
+    end
+
+    it 'rebuild_if_stale re-globs and picks up a file added after the original build' do
+      touch('a.rb')
+      list = described_class.build([@dir])
+      touch('b.rb')
+      File.utime(Time.now, Time.now + 5, @dir)
+
+      refreshed = list.rebuild_if_stale
+      expect(refreshed.files.size).to eq(2)
+      expect(refreshed).not_to equal(list)
+    end
+
+    it 'falls back to the last-known list instead of raising if every source directory vanishes' do
+      # No block form: Dir.mktmpdir's own post-block cleanup would try to
+      # rm a directory this example already removed itself, raising
+      # ENOENT -- rm_rf below is the only cleanup needed here.
+      vanishing = Dir.mktmpdir
+      File.write(File.join(vanishing, 'a.rb'), "header1 'x'")
+      list = described_class.build([vanishing])
+      FileUtils.rm_rf(vanishing)
+
+      expect { list.rebuild_if_stale }.not_to raise_error
+      expect(list.rebuild_if_stale).to equal(list)
+    end
+  end
 end
 
 RSpec.describe StreamWeaver::Canvas::Reader do
@@ -118,6 +167,35 @@ RSpec.describe StreamWeaver::Canvas::Reader do
     it 'does not misdetect plain .rb DSL text as .org' do
       html = described_class.render_dsl("header1 'Not Org'")
       expect(html).to include('Not Org')
+    end
+  end
+
+  # Friendly non-doc message (stream_weaver-gnj8): a random, non-
+  # StreamWeaver .org file (personal notes, journals -- ordinary
+  # filesystem clutter Browse can turn up) has no #+STREAMWEAVER_DSL:
+  # marker, so render_doc previously fell through to instance_eval'ing raw
+  # org markup as Ruby -- guaranteed to fail, producing a confusing syntax
+  # error naming some fragment of prose. Needs path: to trigger the .org
+  # branch at all (render_dsl, used above, never passes one).
+  describe '.render_doc with an unmarked .org file' do
+    it "shows a friendly message instead of attempting to eval it as Ruby" do
+      plain_org = "* Just a headline\nsome prose, not Ruby\n"
+      doc = described_class.render_doc(plain_org, path: '/tmp/whatever/notes.org')
+      expect(doc.html).to include("doesn't look like a StreamWeaver doc")
+      expect(doc.html).not_to include('DSL error')
+      expect(doc.html).not_to include('syntax error')
+    end
+
+    it 'still renders a marked .org doc normally (regression guard)' do
+      org = "#+STREAMWEAVER_DSL: 1\n#+TITLE: Real Doc\n"
+      doc = described_class.render_doc(org, path: '/tmp/whatever/real.org')
+      expect(doc.html).to include('Real Doc')
+      expect(doc.html).not_to include("doesn't look like a StreamWeaver doc")
+    end
+
+    it 'does not special-case .rb the same way -- eval-and-show-DSL-error stays the fallback there' do
+      doc = described_class.render_doc("this is not valid !@#", path: '/tmp/whatever/plain.rb')
+      expect(doc.html).to include('DSL error')
     end
   end
 end
@@ -195,6 +273,83 @@ RSpec.describe StreamWeaver::Canvas::Reader, type: :request do
         expect(link).not_to be_nil
         expect(link).to include('notes')
         expect(link).not_to include('>notes.org<')
+      ensure
+        described_class.configure_files!(prev)
+        FileUtils.rm_rf(dir)
+      end
+    end
+
+    # Format badge (stream_weaver-gnj8): a same-stem .rb/.org pair (e.g.
+    # demo.rb + demo.org) is otherwise indistinguishable once the sidebar
+    # label above strips the extension -- both show as "demo".
+    it 'shows a small org badge on .org entries only, never on .rb' do
+      dir = Dir.mktmpdir
+      File.write(File.join(dir, 'demo.rb'), "header1 'Demo RB'")
+      File.write(File.join(dir, 'demo.org'), "#+STREAMWEAVER_DSL: 1\n#+TITLE: Demo Org\n")
+      prev = described_class.file_list
+      described_class.configure_files!(described_class::FileList.build([dir]))
+      begin
+        list = described_class.file_list
+        rb_index  = list.files.index { |f| f.end_with?('demo.rb') }
+        org_index = list.files.index { |f| f.end_with?('demo.org') }
+
+        get "/?file=#{rb_index}"
+        body = last_response.body
+        rb_link  = body[/<a href="\/\?file=#{rb_index}"[^>]*title="[^"]*demo\.rb"[^>]*>.*?<\/a>/m]
+        org_link = body[/<a href="\/\?file=#{org_index}"[^>]*title="[^"]*demo\.org"[^>]*>.*?<\/a>/m]
+
+        expect(rb_link).not_to be_nil
+        expect(rb_link).not_to include('sw-reader-file-badge')
+        expect(org_link).not_to be_nil
+        expect(org_link).to include('sw-reader-file-badge')
+        expect(org_link).to include('>org<')
+      ensure
+        described_class.configure_files!(prev)
+        FileUtils.rm_rf(dir)
+      end
+    end
+  end
+
+  # Live refresh (stream_weaver-gnj8): FileList used to be built once at
+  # boot, so a doc saved mid-session never showed up in the sidebar
+  # without a restart. File.utime forces a deterministic mtime rather than
+  # sleeping past whatever mtime resolution the test filesystem has.
+  describe 'GET / picks up a doc added to a watched directory without a restart' do
+    it 'shows a newly-added file in the sidebar on the next request' do
+      dir = Dir.mktmpdir
+      File.write(File.join(dir, 'first.rb'), "header1 'First'")
+      prev = described_class.file_list
+      described_class.configure_files!(described_class::FileList.build([dir]))
+      begin
+        get '/?file=0'
+        # 'second.rb', the full filename -- not the bare word "second",
+        # which false-positives on "secondaryColor" in the always-embedded
+        # mermaid-zoom JS.
+        expect(last_response.body).not_to include('second.rb')
+
+        File.write(File.join(dir, 'second.rb'), "header1 'Second'")
+        File.utime(Time.now, Time.now + 5, dir)
+
+        get '/?file=0'
+        expect(last_response.body).to include('second.rb')
+      ensure
+        described_class.configure_files!(prev)
+        FileUtils.rm_rf(dir)
+      end
+    end
+
+    it 'keeps ?file=N resolving to a real file across a rebuild, not 404ing or serving stale content' do
+      dir = Dir.mktmpdir
+      File.write(File.join(dir, 'a.rb'), "header1 'A'")
+      prev = described_class.file_list
+      described_class.configure_files!(described_class::FileList.build([dir]))
+      begin
+        File.write(File.join(dir, 'b.rb'), "header1 'B'")
+        File.utime(Time.now, Time.now + 5, dir)
+
+        get '/?file=0'
+        expect(last_response.status).to eq(200)
+        expect(last_response.body).to include('A')
       ensure
         described_class.configure_files!(prev)
         FileUtils.rm_rf(dir)

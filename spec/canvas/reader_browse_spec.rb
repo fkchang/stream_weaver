@@ -155,6 +155,24 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'file browser' do
       expect(last_response.body).to include('StreamWeaver (global)')
     end
 
+    # stream_weaver-gnj8: the only way out of Browse mode used to sit after
+    # the whole file/dir listing, so escaping a long directory meant
+    # scrolling past it first.
+    it 'puts the exit-to-docs link at the top of the listing, not the bottom' do
+      get "/browse?dir=#{ERB::Util.url_encode(@elsewhere)}"
+
+      body = last_response.body
+      back_index = body.index('browse-back')
+      # The exact element, not the bare word -- ".browse-listing" also
+      # appears in a CSS comment inside <head>, well before the real <ul>,
+      # which would make a bare-word search find that instead and report a
+      # false "already at the top."
+      listing_index = body.index('<ul class="dir-files browse-listing"')
+      expect(back_index).not_to be_nil
+      expect(listing_index).not_to be_nil
+      expect(back_index).to be < listing_index
+    end
+
     it 'renders breadcrumbs for the current directory' do
       get "/browse?dir=#{ERB::Util.url_encode(File.join(@elsewhere, 'subdir'))}"
 
@@ -222,6 +240,20 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'file browser' do
       expect(last_response.status).to eq(200)
       expect(last_response.body).to include('Org Via Open')
       expect(last_response.body).to include('Opened via /open')
+    end
+
+    # stream_weaver-gnj8: Browse now lists any .org file, including ones
+    # never meant as StreamWeaver docs -- personal notes turned up while
+    # browsing $HOME, the exact real-world case that motivated this guard.
+    it 'shows a friendly message, not a raw Ruby syntax error, for a non-StreamWeaver .org file' do
+      path = File.join(@elsewhere, 'bills.org')
+      File.write(path, "* Finances\nDiscover $6,642.47 on 3/23\n")
+      get "/open?path=#{ERB::Util.url_encode(path)}"
+
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to include("doesn't look like a StreamWeaver doc")
+      expect(last_response.body).not_to include('DSL error')
+      expect(last_response.body).not_to include('syntax error')
     end
 
     it 'shows a "Browsed: <name>" note in place of Prev/Next, with no file index' do

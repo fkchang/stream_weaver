@@ -34,12 +34,45 @@ module StreamWeaver
 
           raise NoFilesError, "No .rb or .org files found in: #{args.join(', ')}" if files.empty?
 
-          new(files, history_roots: history_roots)
+          new(files, args: args, history_roots: history_roots)
         end
 
-        def initialize(files, history_roots: [])
+        def initialize(files, args:, history_roots: [])
           @files = files
+          @args = args
           @history_roots = history_roots.map { |p| File.expand_path(p) }
+          @dir_mtimes = snapshot_dir_mtimes
+        end
+
+        # True when a source directory's mtime has moved since this list was
+        # built (stream_weaver-gnj8) -- a directory's own mtime bumps when
+        # an entry is added or removed inside it (a Save-as-doc write, a git
+        # pull, a direct edit from any process), which is the only kind of
+        # change that affects what FILES are in this list. An existing
+        # file's own content changing does NOT bump its directory's mtime
+        # and doesn't need to: GET / already re-reads file content fresh on
+        # every request regardless of this cache, so only the *set* of
+        # files can ever go stale here.
+        def stale?
+          @dir_mtimes.any? { |dir, snapshot| current_mtime(dir) != snapshot }
+        end
+
+        # Rebuilds from the same source args if stale, otherwise returns
+        # self unchanged -- the common (nothing changed) case costs one
+        # stat() per source directory and nothing else.
+        def rebuild_if_stale
+          return self unless stale?
+
+          self.class.build(@args, history_roots: @history_roots)
+        rescue NoFilesError
+          # Every source directory vanished entirely (deleted, unmounted,
+          # or -- in specs -- a Dir.mktmpdir block that already exited)
+          # since this list was built. Keep serving the last-known list
+          # rather than raising: a stale list is still useful navigation, a
+          # crashed request is not. Matches browse_entries/
+          # resolve_browse_dir's existing philosophy elsewhere in this
+          # class -- filesystem drift degrades gracefully, never 500s.
+          self
         end
 
         def groups
@@ -75,6 +108,25 @@ module StreamWeaver
         def size
           @files.size
         end
+
+        private
+
+        def snapshot_dir_mtimes
+          @args.each_with_object({}) do |arg, snapshot|
+            snapshot[arg] = current_mtime(arg) if File.directory?(arg)
+          end
+        end
+
+        # A directory that vanished since boot reads as nil, which never
+        # equals a real mtime -- stale? then forces a rebuild attempt
+        # rather than silently trusting a cache that points at nothing.
+        # If genuinely nothing is left, .build's own NoFilesError still
+        # fires the way it always has.
+        def current_mtime(dir)
+          File.mtime(dir)
+        rescue SystemCallError
+          nil
+        end
       end
 
       MERMAID_ZOOM_JS = File.read(File.expand_path('../assets/js/sw-mermaid-zoom.js', __dir__))
@@ -93,7 +145,21 @@ module StreamWeaver
       Doc = Struct.new(:html, :theme, :layout, :inline_stylesheets, keyword_init: true)
 
       class << self
-        attr_reader :file_list, :default_theme, :default_layout
+        attr_reader :default_theme, :default_layout
+
+        # Returns the configured FileList, rebuilding it first if it's gone
+        # stale (stream_weaver-gnj8 -- see FileList#stale?). nil-safe: a
+        # future Browse-only boot mode with no configured files at all
+        # would leave @file_list nil, which has nothing to rebuild.
+        # Concurrent requests both detecting staleness and both rebuilding
+        # is possible under Puma's threaded server -- harmless (each
+        # rebuild produces an equivalent, immutable FileList; worst case is
+        # redundant work, never corruption), so not worth a mutex for a
+        # single-user local dev tool.
+        def file_list
+          @file_list = @file_list.rebuild_if_stale if @file_list
+          @file_list
+        end
 
         def configure_files!(list)
           @file_list = list
@@ -400,9 +466,23 @@ module StreamWeaver
       # a converted doc names the wrong line -- an accepted, precedented gap
       # (the extension's sandbox.js has the same limitation; org->DSL is a
       # real rewrite, not a 1:1 mapping).
+      #
+      # An `.org` file WITHOUT the marker (stream_weaver-gnj8 -- e.g. Browse
+      # pointed at $HOME turns up ordinary org-mode notes, not StreamWeaver
+      # docs) is caught before eval, not after: raw org markup is never
+      # valid Ruby, so letting it fall through to instance_eval only ever
+      # produces a confusing syntax error naming some fragment of prose. A
+      # `.rb` file with no StreamWeaver DSL calls doesn't get the same
+      # short-circuit -- it could legitimately be valid, unrelated Ruby
+      # (or invalid for an unrelated reason), so eval-and-show-DSL-error
+      # remains the right fallback there.
       def self.render_doc(dsl, path: nil)
         theme  = fallback_theme
         layout = fallback_layout
+        if path.to_s.end_with?('.org') && !StreamWeaver::Org::Reader.streamweaver_org?(dsl)
+          return Doc.new(html: not_a_streamweaver_doc_html, theme: theme, layout: layout, inline_stylesheets: [])
+        end
+
         dsl = StreamWeaver::Org::Reader.to_dsl(dsl) if StreamWeaver::Org::Reader.streamweaver_org?(dsl)
         mini_app = StreamWeaver::App.new('reader', theme: theme, layout: layout)
         mini_app.instance_eval(dsl, path.to_s, 1)
@@ -429,6 +509,18 @@ module StreamWeaver
       def self.render_dsl(dsl)
         render_doc(dsl).html
       end
+
+      # Neutral, not red -- this isn't a bug in the doc or in canvas-read,
+      # it's just the wrong kind of file (stream_weaver-gnj8). Red/"error"
+      # styling here would read as "something's broken," which is the
+      # opposite of what a stray personal org file browsed into deserves.
+      def self.not_a_streamweaver_doc_html
+        "<div style='color:#4b5563;padding:1rem;font-family:monospace'>" \
+          "This doesn't look like a StreamWeaver doc -- no " \
+          "<code>#+STREAMWEAVER_DSL:</code> header found. It's probably a " \
+          "plain org-mode file.</div>"
+      end
+      private_class_method :not_a_streamweaver_doc_html
 
       private
 

@@ -112,6 +112,14 @@
     }
     #sw-reader-files .dir-files li a:hover { background: #e5e7eb; color: #111827; }
     #sw-reader-files .dir-files li a.active { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+    /* .org format badge (stream_weaver-gnj8) -- unconditional on every org
+       entry, not just on a name collision with its .rb sibling; see the
+       ERB comment above this class's only use site for why. */
+    #sw-reader-files .sw-reader-file-badge {
+      display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.35rem;
+      font-size: 0.65rem; font-weight: 600; letter-spacing: 0.02em;
+      color: #6b7280; background: #e5e7eb; border-radius: 3px;
+    }
 
     /* Browse (stream_weaver-rdh). .browse-listing reuses .dir-files li a's
        styling above (same selector chain) for consistent link appearance;
@@ -257,6 +265,11 @@
           to stay untouched so accordion state survives (stream_weaver-8v1).
           A boosted element's own hx-* attributes override its ancestor's. %>
       <h2>Browse</h2>
+      <%# First thing in the listing, not last -- previously sat after the
+          whole file/dir listing (browse-back below), which meant scrolling
+          past a potentially long directory to find the only way out of
+          Browse mode. stream_weaver-gnj8. %>
+      <a href="/?file=0" class="browse-back" <%= browse_oob %>>← Back to docs</a>
       <div class="browse-shortcuts">
         <% if @repo_docs_root %>
           <a href="/browse?dir=<%= ERB::Util.url_encode(@repo_docs_root) %>" <%= browse_oob %>>This repo</a>
@@ -290,7 +303,6 @@
           <li class="browse-empty">(empty)</li>
         <% end %>
       </ul>
-      <a href="/?file=0" class="browse-back" <%= browse_oob %>>← Back to docs</a>
     <% else %>
       <h2><%= history_groups.any? ? 'Docs' : 'Files' %></h2>
       <% docs_groups.each do |dir, entries| %>
@@ -313,6 +325,15 @@
                       populates with .org, so it needs both extensions
                       stripped, not just one. %>
                   <%= File.basename(filepath).sub(/\.(rb|org)\z/, '') %>
+                  <%# Shown unconditionally on every .org entry, not just on
+                      a name collision (stream_weaver-gnj8) -- a same-stem
+                      .rb/.org pair (demo.rb + demo.org) is otherwise
+                      indistinguishable once the extension is stripped
+                      above, and a badge that only sometimes appears would
+                      be worse than one that's always there: you couldn't
+                      trust its absence to mean "no other version exists."
+                      .rb gets no badge -- it's the implied default. %>
+                  <% if filepath.end_with?('.org') %><span class="sw-reader-file-badge">org</span><% end %>
                 </a>
               </li>
             <% end %>
