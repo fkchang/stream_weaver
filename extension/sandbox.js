@@ -115,16 +115,38 @@
       console.error("[StreamWeaver] highlighting failed:", e);
     }
 
-    try {
-      if (typeof mermaid === "undefined") return;
-      mermaid.initialize({ startOnLoad: false, theme: "default" });
-      const nodes = document.querySelectorAll(".sw-mermaid:not([data-processed])");
-      if (nodes.length) {
-        mermaid.run({ nodes }).catch((e) => console.error("[StreamWeaver] mermaid failed:", e));
-      }
-    } catch (e) {
-      console.error("[StreamWeaver] mermaid failed:", e);
-    }
+    runMermaidWhenPainted();
+  }
+
+  // viewer.js unhides this iframe before sending "sw:render" specifically so
+  // mermaid has real layout to measure (a hidden ancestor makes getBBox etc.
+  // return NaN -- see viewer.js's comment on why frame.hidden flips there,
+  // not here). That fixes the steady-state case, but postMessage delivery
+  // between the extension's separate frames has enough IPC latency variance
+  // that the unhide and this handler running aren't strictly ordered by wall
+  // clock alone -- reproduced in production (not locally: a same-process
+  // localhost postMessage round-trip is fast and consistent enough to never
+  // hit this) as the exact same NaN transform error even with the frame
+  // already unhidden by the time it was inspected after the fact. Waiting
+  // for two animation frames is a wall-clock-independent guarantee instead
+  // of a race: it always means "the browser has completed at least one real
+  // layout+paint pass since now," regardless of how postMessage IPC timing
+  // varies between a local test and a real extension.
+  function runMermaidWhenPainted() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        try {
+          if (typeof mermaid === "undefined") return;
+          mermaid.initialize({ startOnLoad: false, theme: "default" });
+          const nodes = document.querySelectorAll(".sw-mermaid:not([data-processed])");
+          if (nodes.length) {
+            mermaid.run({ nodes }).catch((e) => console.error("[StreamWeaver] mermaid failed:", e));
+          }
+        } catch (e) {
+          console.error("[StreamWeaver] mermaid failed:", e);
+        }
+      });
+    });
   }
 
   window.addEventListener("message", (event) => {
