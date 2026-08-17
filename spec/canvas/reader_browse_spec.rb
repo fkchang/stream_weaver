@@ -53,6 +53,14 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'file browser' do
       expect(last_response.body).not_to include('.hidden')
     end
 
+    # .org support (stream_weaver-yf3a): browse_entries was .rb-only.
+    it 'also lists .org files' do
+      File.write(File.join(@elsewhere, 'doc.org'), "#+STREAMWEAVER_DSL: 1\n#+TITLE: T\n")
+      get "/browse?dir=#{ERB::Util.url_encode(@elsewhere)}"
+
+      expect(last_response.body).to include('doc.org')
+    end
+
     it 'navigating into a subdirectory shows that directory\'s own contents' do
       get "/browse?dir=#{ERB::Util.url_encode(File.join(@elsewhere, 'subdir'))}"
 
@@ -200,9 +208,20 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'file browser' do
       expect(last_response.status).to eq(404)
     end
 
-    it '404s on a path that is not a .rb file' do
+    it '404s on a path that is not a .rb or .org file' do
       get "/open?path=#{ERB::Util.url_encode(File.join(@elsewhere, 'not-ruby.txt'))}"
       expect(last_response.status).to eq(404)
+    end
+
+    # .org support (stream_weaver-yf3a).
+    it 'renders an .org file found via Browse' do
+      path = File.join(@elsewhere, 'notes.org')
+      File.write(path, "#+STREAMWEAVER_DSL: 1\n#+TITLE: Org Via Open\n\nOpened via /open\n")
+      get "/open?path=#{ERB::Util.url_encode(path)}"
+
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to include('Org Via Open')
+      expect(last_response.body).to include('Opened via /open')
     end
 
     it 'shows a "Browsed: <name>" note in place of Prev/Next, with no file index' do

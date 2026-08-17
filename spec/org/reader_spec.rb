@@ -4,6 +4,33 @@ require "timeout"
 require_relative "../../lib/stream_weaver/org/reader"
 
 RSpec.describe StreamWeaver::Org::Reader do
+  # Reusable server-side detector (stream_weaver-yf3a): canvas-read's Reader
+  # needs to tell a StreamWeaver .org doc apart from plain org/prose before
+  # parsing it, the same content-based way content.js/sandbox.js already do
+  # client-side.
+  describe ".streamweaver_org?" do
+    it "is true when the marker is present" do
+      expect(described_class.streamweaver_org?("#+STREAMWEAVER_DSL: 1\n#+TITLE: X\n")).to be true
+    end
+
+    it "is true for a future version number, not just 1" do
+      expect(described_class.streamweaver_org?("#+STREAMWEAVER_DSL: 2\n")).to be true
+    end
+
+    it "is false for plain org/prose with no marker" do
+      expect(described_class.streamweaver_org?("* Just a headline\nsome text\n")).to be false
+    end
+
+    it "is false for non-String input" do
+      expect(described_class.streamweaver_org?(nil)).to be false
+    end
+
+    it "only looks at the first 10 lines" do
+      late = ("\n" * 10) + "#+STREAMWEAVER_DSL: 1\n"
+      expect(described_class.streamweaver_org?(late)).to be false
+    end
+  end
+
   describe ".chunks (private, tested via send — internal structure worth locking down)" do
     it "splits headline, quote, table, src, and paragraph chunks" do
       org = <<~ORG

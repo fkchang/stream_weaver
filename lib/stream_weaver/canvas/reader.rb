@@ -11,6 +11,7 @@ require 'stream_weaver/canvas/doc_store'
 require 'stream_weaver/page_shell'
 require 'stream_weaver/export/html_exporter'
 require 'stream_weaver/org/writer'
+require 'stream_weaver/org/reader'
 
 module StreamWeaver
   module Canvas
@@ -23,15 +24,15 @@ module StreamWeaver
         def self.build(args, history_roots: [])
           files = args.flat_map do |arg|
             if File.directory?(arg)
-              Dir.glob(File.join(arg, '*.rb')).sort
-            elsif File.exist?(arg) && arg.end_with?('.rb')
+              Dir.glob(File.join(arg, '*.{rb,org}')).sort
+            elsif File.exist?(arg) && arg.end_with?('.rb', '.org')
               [File.expand_path(arg)]
             else
               []
             end
           end.uniq
 
-          raise NoFilesError, "No .rb files found in: #{args.join(', ')}" if files.empty?
+          raise NoFilesError, "No .rb or .org files found in: #{args.join(', ')}" if files.empty?
 
           new(files, history_roots: history_roots)
         end
@@ -151,7 +152,7 @@ module StreamWeaver
           # otherwise satisfy both the dirs and files predicates and get
           # listed twice, the second listing a dead link (/open 404s on it).
           dirs, rest = entries.partition { |e| File.directory?(File.join(dir, e)) }
-          { dirs: dirs, files: rest.select { |e| e.end_with?('.rb') } }
+          { dirs: dirs, files: rest.select { |e| e.end_with?('.rb', '.org') } }
         rescue SystemCallError
           # Broader than Errno::ENOENT/EACCES alone: a TCC-protected macOS
           # directory (~/Library/Mail, ~/Documents without Full Disk Access)
@@ -256,7 +257,7 @@ module StreamWeaver
       # than dropping back to the original file list.
       get '/open' do
         path = File.expand_path(params[:path].to_s)
-        halt 404, 'File not found' unless File.file?(path) && path.end_with?('.rb')
+        halt 404, 'File not found' unless File.file?(path) && path.end_with?('.rb', '.org')
 
         dsl = begin
           File.read(path)
@@ -390,9 +391,19 @@ module StreamWeaver
       #
       # @param path [String, nil] source file, passed through to instance_eval
       #   so a DSL error names the actual file/line instead of "(eval)".
+      #
+      # `dsl` may actually be `.org` text -- detected the same content-based
+      # way content.js/sandbox.js do client-side (StreamWeaver::Org::Reader.
+      # streamweaver_org?) and converted via Org::Reader.to_dsl before eval,
+      # same path the extension already uses. The converted text's line
+      # numbers no longer match the original .org file's, so a DSL error in
+      # a converted doc names the wrong line -- an accepted, precedented gap
+      # (the extension's sandbox.js has the same limitation; org->DSL is a
+      # real rewrite, not a 1:1 mapping).
       def self.render_doc(dsl, path: nil)
         theme  = fallback_theme
         layout = fallback_layout
+        dsl = StreamWeaver::Org::Reader.to_dsl(dsl) if StreamWeaver::Org::Reader.streamweaver_org?(dsl)
         mini_app = StreamWeaver::App.new('reader', theme: theme, layout: layout)
         mini_app.instance_eval(dsl, path.to_s, 1)
         adapter = StreamWeaver::Adapter::AlpineJS.new(

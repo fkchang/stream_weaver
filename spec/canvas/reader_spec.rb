@@ -48,6 +48,20 @@ RSpec.describe StreamWeaver::Canvas::Reader::FileList do
       list = described_class.build([@dir, f1])
       expect(list.files).to include(f1)
     end
+
+    # .org support (stream_weaver-yf3a): canvas-read was .rb-only until now.
+    it 'accepts an explicit .org file path' do
+      f = touch('a.org')
+      list = described_class.build([f])
+      expect(list.files).to eq([f])
+    end
+
+    it 'scans a directory for *.org files alongside *.rb' do
+      touch('x.rb')
+      touch('y.org')
+      list = described_class.build([@dir])
+      expect(list.files.size).to eq(2)
+    end
   end
 
   describe '#groups' do
@@ -88,6 +102,22 @@ RSpec.describe StreamWeaver::Canvas::Reader do
     it 'returns error HTML for invalid DSL without raising' do
       html = described_class.render_dsl("this is not valid !@#")
       expect(html).to include('error')
+    end
+
+    # .org support (stream_weaver-yf3a): render_doc detects the
+    # #+STREAMWEAVER_DSL: marker the same way content.js/sandbox.js do and
+    # converts via Org::Reader.to_dsl before eval -- the same path the
+    # extension already uses, now available server-side too.
+    it 'detects and renders .org text via Org::Reader.to_dsl' do
+      org = "#+STREAMWEAVER_DSL: 1\n#+TITLE: Org Doc\n\nHello from org\n"
+      html = described_class.render_dsl(org)
+      expect(html).to include('Org Doc')
+      expect(html).to include('Hello from org')
+    end
+
+    it 'does not misdetect plain .rb DSL text as .org' do
+      html = described_class.render_dsl("header1 'Not Org'")
+      expect(html).to include('Not Org')
     end
   end
 end
@@ -134,6 +164,41 @@ RSpec.describe StreamWeaver::Canvas::Reader, type: :request do
     it 'returns doc2 content' do
       get '/?file=1'
       expect(last_response.body).to include('Doc Two')
+    end
+  end
+
+  # .org support (stream_weaver-yf3a): end-to-end through the actual HTTP
+  # route, not just render_doc directly -- confirms FileList.build, the
+  # docs_groups sidebar label, and render_doc's org detection all agree.
+  describe 'GET /?file=N with a mixed .rb/.org docs directory' do
+    it 'renders an .org doc correctly and strips the extension in the sidebar label' do
+      dir = Dir.mktmpdir
+      File.write(File.join(dir, 'plain.rb'), "header1 'Plain Doc'")
+      File.write(File.join(dir, 'notes.org'), "#+STREAMWEAVER_DSL: 1\n#+TITLE: Org Notes\n\nBody text\n")
+      prev = described_class.file_list
+      described_class.configure_files!(described_class::FileList.build([dir]))
+      begin
+        list = described_class.file_list
+        org_index = list.files.index { |f| f.end_with?('notes.org') }
+
+        get "/?file=#{org_index}"
+        expect(last_response.status).to eq(200)
+        expect(last_response.body).to include('Org Notes')
+        expect(last_response.body).to include('Body text')
+        # Sidebar label: "notes", not "notes.org" (File.basename(path,
+        # '.rb') alone would leave the extension on for .org). Scoped to
+        # the sidebar entry specifically (identified by its title=""
+        # tooltip, which carries the full path -- Prev/Next nav links
+        # share the same href="/?file=N" shape but have no title
+        # attribute, so this can't accidentally match one of those instead).
+        link = last_response.body[/<a href="\/\?file=#{org_index}"[^>]*title="[^"]*notes\.org"[^>]*>.*?<\/a>/m]
+        expect(link).not_to be_nil
+        expect(link).to include('notes')
+        expect(link).not_to include('>notes.org<')
+      ensure
+        described_class.configure_files!(prev)
+        FileUtils.rm_rf(dir)
+      end
     end
   end
 

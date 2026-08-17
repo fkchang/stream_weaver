@@ -41,6 +41,21 @@ module StreamWeaver
         new(org_text).call
       end
 
+      # True when `text` carries the `#+STREAMWEAVER_DSL:` marker within its
+      # first 10 lines -- the same content-based check content.js/sandbox.js
+      # already do client-side (there's no way to share the regex literally
+      # across Ruby and JS, so each surface keeps its own copy; this is the
+      # canonical Ruby-side one, for anything server-side that needs to tell
+      # a StreamWeaver org doc apart from plain org/prose before parsing it).
+      # Looser than the `\s*1\s*\z`-anchored check `initialize` uses for its
+      # own @streamweaver_document flag (any digit, no end anchor) so a
+      # future version bump stays recognized here without an update.
+      def self.streamweaver_org?(text)
+        return false unless text.is_a?(String)
+
+        text.each_line.first(10).any? { |line| line.match?(/\A#\+STREAMWEAVER_DSL:\s*\d+/i) }
+      end
+
       def initialize(org_text)
         @lines = org_text.lines.map(&:chomp)
 

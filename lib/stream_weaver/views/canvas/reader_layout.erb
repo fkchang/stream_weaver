@@ -222,7 +222,7 @@
     <%= doc.html %>
   <% else %>
     <div style="padding: 3rem; text-align: center; color: #6b7280; font-family: system-ui, sans-serif;">
-      Pick a <code>.rb</code> file from the browser on the left.
+      Pick a <code>.rb</code> or <code>.org</code> file from the browser on the left.
     </div>
   <% end %>
 </div>
@@ -306,7 +306,13 @@
                 <a href="/?file=<%= idx %>"
                    class="<%= idx == @current_index ? 'active' : '' %>"
                    title="<%= filepath %>">
-                  <%= File.basename(filepath, '.rb') %>
+                  <%# History entries are always .rb (written by canvas-push,
+                      see doc_store.rb) so plain File.basename(path, '.rb')
+                      is still correct below in the history block -- this
+                      docs_groups block is the one FileList.build now also
+                      populates with .org, so it needs both extensions
+                      stripped, not just one. %>
+                  <%= File.basename(filepath).sub(/\.(rb|org)\z/, '') %>
                 </a>
               </li>
             <% end %>
