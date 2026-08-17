@@ -33,6 +33,15 @@
   # #set_browse_ivars) -- the breadcrumb walk and repo_docs_root's
   # filesystem/.git lookup are controller work, not view formatting.
   browse_oob = StreamWeaver::Canvas::Reader::BROWSE_OOB
+  # Which groups get a delete control (stream_weaver-uvaj): only the two
+  # roots THIS process owns -- the repo it was launched in and the global
+  # store. A peer repo surfaced by discovery is readable here and never
+  # deletable, so its rows get no trash icon; that's the same boundary
+  # POST /delete-doc enforces server-side, mirrored into the UI so you're
+  # never offered a button that can only answer 403. Resolved once per
+  # render rather than per row -- each answer costs a realpath plus the
+  # .git walk behind repo_docs_root.
+  deletable_dirs = browse_mode ? [] : docs_groups.keys.select { |d| StreamWeaver::Canvas::Reader.deletable_dir?(d) }
 %>
 <!DOCTYPE html>
 <html lang="en">
@@ -118,6 +127,57 @@
     }
     #sw-reader-files .dir-files li a:hover { background: #e5e7eb; color: #111827; }
     #sw-reader-files .dir-files li a.active { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+    /* Delete control (stream_weaver-uvaj). The row becomes a flex line so
+       the trash sits at its right edge; the link keeps flex:1 + min-width:0
+       so a long name still ellipsizes instead of shoving the button out of
+       the 220px rail. Visible at rest, not hover-only: a control you have to
+       discover by hovering is friction, and it's the confirm dialog -- not
+       concealment -- that protects against a mis-click. */
+    #sw-reader-files .dir-files li { display: flex; align-items: center; }
+    #sw-reader-files .dir-files li a { flex: 1 1 auto; min-width: 0; }
+    #sw-reader-files .sw-doc-delete {
+      flex: 0 0 auto; border: none; background: none; cursor: pointer;
+      padding: 0.35rem 0.65rem 0.35rem 0.15rem; font-size: 0.72rem;
+      line-height: 1; opacity: 0.4;
+    }
+    #sw-reader-files .sw-doc-delete:hover { opacity: 1; }
+
+    /* Confirm dialog. Same modal treatment as the Save-as-doc widget's
+       (.sw-save-doc-*, further down), but rooted at #sw-reader-chrome so it
+       stays inside this block's scoping guard (reader_chrome_css_spec)
+       instead of needing a second unscoped <style> the way that widget did. */
+    #sw-reader-chrome [x-cloak] { display: none !important; }
+    #sw-reader-chrome .sw-doc-delete-modal {
+      position: fixed; inset: 0; z-index: 60;
+      background: rgba(15, 17, 23, 0.45);
+      display: flex; align-items: center; justify-content: center;
+    }
+    #sw-reader-chrome .sw-doc-delete-dialog {
+      background: #fff; border-radius: 8px; padding: 1.5rem;
+      width: min(420px, 90vw); box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+      font-family: system-ui, sans-serif; color: #111827; text-align: left;
+    }
+    #sw-reader-chrome .sw-doc-delete-dialog h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; }
+    #sw-reader-chrome .sw-doc-delete-dialog p.hint {
+      margin: 0; color: #6b7280; font-size: 0.85rem; word-break: break-word;
+    }
+    #sw-reader-chrome .sw-doc-delete-error {
+      margin-top: 0.75rem; padding: 0.5rem 0.75rem;
+      background: #fee2e2; color: #991b1b; border-radius: 4px; font-size: 0.85rem;
+    }
+    #sw-reader-chrome .sw-doc-delete-actions {
+      display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;
+    }
+    #sw-reader-chrome .sw-doc-delete-actions button {
+      padding: 0.45rem 1rem; border-radius: 5px; font-size: 0.9rem;
+      cursor: pointer; border: 1px solid transparent;
+    }
+    #sw-reader-chrome .sw-doc-delete-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #sw-reader-chrome .sw-doc-delete-cancel { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
+    #sw-reader-chrome .sw-doc-delete-cancel:hover:not(:disabled) { background: #e5e7eb; }
+    #sw-reader-chrome .sw-doc-delete-confirm { background: #b91c1c; color: #fff; }
+    #sw-reader-chrome .sw-doc-delete-confirm:hover:not(:disabled) { filter: brightness(1.08); }
+
     /* .org format badge (stream_weaver-gnj8) -- unconditional on every org
        entry, not just on a name collision with its .rb sibling; see the
        ERB comment above this class's only use site for why. */
@@ -275,7 +335,14 @@
     hx-select-oob (BROWSE_OOB below) that overrides this default -- boosted
     per-element attributes win over the ancestor's, so normal docs/history
     navigation is untouched. %>
+<%# x-data for the delete confirm (stream_weaver-uvaj) sits HERE, on the one
+    piece of chrome that is never itself swapped -- the delete buttons live
+    in #sw-reader-files and the request they fire replaces that whole region,
+    so component state kept inside it would be torn out from under its own
+    in-flight callback. Descendants inherit the scope, which is all the
+    buttons need. %>
 <nav id="sw-reader-chrome"
+     x-data="swDeleteDoc()" @keydown.escape.window="delOpen = false"
      hx-boost="true" hx-target="#app-container" hx-select="#app-container"
      hx-swap="outerHTML" hx-select-oob="#sw-reader-nav">
 
@@ -349,6 +416,7 @@
       <% end %>
       <% docs_groups.each do |dir, entries| %>
         <% dir_label = @file_list.label_for(dir) %>
+        <% deletable = deletable_dirs.include?(dir) %>
         <div class="dir-section">
           <div class="dir-header expanded" onclick="toggleSection(this)">
             <span class="dir-arrow">▶</span>
@@ -377,6 +445,22 @@
                       .rb gets no badge -- it's the implied default. %>
                   <% if filepath.end_with?('.org') %><span class="sw-reader-file-badge">org</span><% end %>
                 </a>
+                <%# One row = one file: a .rb/.org pair are two entries with
+                    two independent delete buttons, and deleting one never
+                    cascades to its sibling. Opens the confirm dialog and
+                    nothing else -- the actual POST only ever fires from the
+                    dialog's own Delete button -- there is no JS confirm dialog
+                    anywhere on this page;
+                    the design doc rules it out). Same to_json-then-h quoting
+                    the Save-as-doc widget documents below: a filesystem name
+                    can legally contain a quote or an apostrophe, and either
+                    escape alone breaks out of the attribute. %>
+                <% if deletable %>
+                  <button type="button" class="sw-doc-delete"
+                          title="Delete <%= ERB::Util.h(File.basename(filepath)) %>"
+                          aria-label="Delete <%= ERB::Util.h(File.basename(filepath)) %>"
+                          @click.prevent.stop="askDelete(<%= ERB::Util.h(filepath.to_json) %>, <%= ERB::Util.h(File.basename(filepath).to_json) %>)">🗑</button>
+                <% end %>
               </li>
             <% end %>
           </ul>
@@ -663,6 +747,46 @@
   </div>
 <% end %>
   </div>
+
+<%# Delete confirm (stream_weaver-uvaj). Outside #sw-reader-files and
+    #sw-reader-nav on purpose: both are swapped by the very request this
+    dialog triggers. Rendered only when something on screen is actually
+    deletable. position:fixed, so its placement in the rail's flex column
+    doesn't affect where it appears -- and the rail collapses with `left`
+    rather than `transform` precisely so fixed descendants stay
+    viewport-fixed (see #sw-reader-chrome's CSS comment). %>
+<% if deletable_dirs.any? %>
+  <div x-show="delOpen" x-cloak class="sw-doc-delete-modal" @click.self="delOpen = false">
+    <div class="sw-doc-delete-dialog" @click.stop>
+      <h3>Delete this doc?</h3>
+      <p class="hint">
+        <%# Deliberately conditional about git: only ONE of the two deletable
+            roots is a repo. The global store (~/.streamweaver/canvas) has no
+            git safety net at all, and promising one there would be a lie at
+            exactly the moment it matters most. %>
+        <code x-text="delName"></code> is removed from disk. Nothing is staged or
+        committed — inside a repo the deletion simply shows up in <code>git status</code>,
+        the same as deleting the file in Finder.
+      </p>
+      <div x-show="delError" x-text="delError" class="sw-doc-delete-error"></div>
+      <div class="sw-doc-delete-actions">
+        <button type="button" class="sw-doc-delete-cancel" @click="delOpen = false" :disabled="delBusy">Cancel</button>
+        <%# hx-select-oob is here, not on #sw-reader-files: htmx resolves it
+            from the element passed as the request's `source`, and this button
+            is the one element that can carry the wider Browse-style OOB
+            without ALSO becoming an ancestor of the ordinary file links --
+            which would make every sidebar click re-render the rail and blow
+            away accordion state (stream_weaver-8v1). %>
+        <button type="button" class="sw-doc-delete-confirm"
+                <%= browse_oob %>
+                @click="doDelete()" :disabled="delBusy">
+          <span x-show="!delBusy">Delete</span>
+          <span x-show="delBusy">Deleting…</span>
+        </button>
+      </div>
+    </div>
+  </div>
+<% end %>
 </nav>
 
 <script>
@@ -675,6 +799,80 @@
   function toggleSection(header) {
     header.classList.toggle('expanded');
     header.nextElementSibling.classList.toggle('collapsed');
+  }
+
+  // Delete a saved doc (stream_weaver-uvaj). Defined as a global rather than
+  // inlined into x-data so the same component can be re-created verbatim
+  // every time htmx swaps the rail. This inline script runs during parsing,
+  // Alpine's CDN tag is `defer`, so the function always exists by the time
+  // Alpine evaluates the attribute.
+  function swDeleteDoc() {
+    return {
+      delOpen: false, delPath: null, delName: null, delBusy: false, delError: null,
+
+      // The row button's only job. Nothing is deleted until the dialog's own
+      // Delete button calls doDelete() -- there is deliberately no JS
+      // confirm dialog anywhere on this page.
+      askDelete(path, name) {
+        this.delPath = path;
+        this.delName = name;
+        this.delError = null;
+        this.delOpen = true;
+      },
+
+      async doDelete() {
+        if (this.delBusy) return;
+        this.delBusy = true;
+        this.delError = null;
+        let landing;
+        try {
+          const res = await fetch('/delete-doc', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({path: this.delPath, file: swCurrentFileIndex()})
+          });
+          const data = await res.json();
+          if (res.ok && data.ok) {
+            landing = data.file;
+            this.delOpen = false;
+          } else {
+            this.delError = data.error || ('HTTP ' + res.status);
+          }
+        } catch (e) {
+          this.delError = e.message;
+        }
+        this.delBusy = false;
+        // Strictly after this component's own state is settled: the refresh
+        // swaps #sw-reader-files, and Alpine tears down every component
+        // inside it as it goes.
+        if (landing !== undefined) swRefreshAfterDelete(landing);
+      }
+    };
+  }
+
+  function swCurrentFileIndex() {
+    const n = parseInt(new URLSearchParams(window.location.search).get('file'), 10);
+    return Number.isInteger(n) ? n : null;
+  }
+
+  // Re-fetches the doc AND both sidebar regions through htmx rather than
+  // reloading the page. `source` is the element htmx resolves hx-select-oob
+  // from, and the dialog's Delete button carries the same wider OOB the
+  // Browse links use -- the chrome's default (#sw-reader-nav alone)
+  // deliberately leaves the file rail untouched, which is exactly what has to
+  // change here. fileIndex is null when nothing survived: ?file=0 against an
+  // empty list renders the no-doc-open placeholder rather than a 404.
+  function swRefreshAfterDelete(fileIndex) {
+    const repo = new URLSearchParams(window.location.search).get('repo');
+    let url = '/?file=' + (fileIndex === null ? 0 : fileIndex);
+    if (repo) url += '&repo=' + encodeURIComponent(repo);
+    window.history.replaceState(null, '', url);
+    htmx.ajax('GET', url, {
+      source: document.querySelector('.sw-doc-delete-confirm'),
+      target: '#app-container',
+      select: '#app-container',
+      swap: 'outerHTML'
+    });
   }
 
   // Rail collapse. Below 1100px the rail is collapsed by default and the

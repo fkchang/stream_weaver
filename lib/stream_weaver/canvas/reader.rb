@@ -43,6 +43,15 @@ module StreamWeaver
           new(files, args: args, history_roots: history_roots, labels: labels)
         end
 
+        # A list with no files, still remembering where it was looking.
+        # Deliberately not reachable from .build (which raises NoFilesError
+        # instead, so `canvas-read nosuchdir` still fails loudly at boot) --
+        # this is only for a list that HAD files and lost its last one while
+        # the reader was running (stream_weaver-uvaj).
+        def self.empty(args, history_roots: [], labels: {})
+          new([], args: args, history_roots: history_roots, labels: labels)
+        end
+
         def initialize(files, args:, history_roots: [], labels: {})
           @files = files
           @args = args
@@ -72,14 +81,26 @@ module StreamWeaver
 
           self.class.build(@args, history_roots: @history_roots, labels: @labels)
         rescue NoFilesError
-          # Every source directory vanished entirely (deleted, unmounted,
-          # or -- in specs -- a Dir.mktmpdir block that already exited)
-          # since this list was built. Keep serving the last-known list
-          # rather than raising: a stale list is still useful navigation, a
-          # crashed request is not. Matches browse_entries/
-          # resolve_browse_dir's existing philosophy elsewhere in this
-          # class -- filesystem drift degrades gracefully, never 500s.
-          self
+          # Two very different situations land here and they want opposite
+          # answers:
+          #
+          # * Every source directory VANISHED (deleted, unmounted, or -- in
+          #   specs -- a Dir.mktmpdir block that already exited). Keep
+          #   serving the last-known list rather than raising: a stale list
+          #   is still useful navigation, a crashed request is not, and the
+          #   paths may well come back. Matches browse_entries/
+          #   resolve_browse_dir's existing philosophy elsewhere in this
+          #   class -- filesystem drift degrades gracefully, never 500s.
+          # * The directories are all still THERE and simply hold no docs
+          #   any more -- which is exactly what deleting the last one
+          #   produces (stream_weaver-uvaj). Here the list really is empty,
+          #   and answering with the stale one leaves the file you just
+          #   deleted in the rail behind a link that 500s on File.read.
+          if @args.any? { |arg| File.exist?(arg) }
+            self.class.empty(@args, history_roots: @history_roots, labels: @labels)
+          else
+            self
+          end
         end
 
         def groups
@@ -249,6 +270,86 @@ module StreamWeaver
           root && File.join(root, StreamWeaver::Canvas::DocStore::DOCS_SUBPATH)
         end
 
+        # The only two docs roots this process is allowed to delete from
+        # (stream_weaver-uvaj), canonicalized. Both resolve from THIS
+        # process's own state -- the repo canvas-read was launched in, and
+        # the global store -- never from what an attaching client claims,
+        # and never from the peer repos DocRoots surfaces for reading. A
+        # peer repo's docs are readable here and permanently undeletable:
+        # narrower blast radius wins over full reach (design doc, Delete).
+        def deletable_roots
+          [repo_docs_root, DocStore::DEFAULT_ROOT].compact.filter_map { |root| canonical_file(root) }
+        end
+
+        # Symlink- and `..`-resolved absolute path, or nil for anything that
+        # doesn't resolve to something on disk. One helper for every
+        # comparison below, so the delete guard and the "is this the file we
+        # just deleted?" lookup can't drift apart on how they canonicalize.
+        # expand_path first, for `~` (and its ArgumentError on `~nosuchuser`).
+        def canonical_file(path)
+          File.realpath(File.expand_path(path.to_s))
+        rescue SystemCallError, ArgumentError, TypeError
+          nil
+        end
+
+        # True when a sidebar group's directory is one of those two roots --
+        # what decides whether its rows render a delete control at all. The
+        # UI just stops you asking for something POST /delete-doc would
+        # refuse anyway; the server-side check below is the actual boundary.
+        def deletable_dir?(dir)
+          real = canonical_file(dir)
+          !real.nil? && deletable_roots.include?(real)
+        end
+
+        # The canonical absolute path when `raw` names a doc file sitting
+        # DIRECTLY in one of the deletable roots; nil for anything else.
+        #
+        # The containment test is equality on the canonicalized direct
+        # PARENT, not `start_with?` against the root. A prefix match would
+        # happily accept a sibling directory whose name merely begins with
+        # the root's (`..._canvas_evil/x.rb`), and would accept arbitrarily
+        # nested subdirectories the sidebar never lists. realpath resolves
+        # every `..` and symlink first, so neither a traversal
+        # (`<root>/../../../etc/x.rb`) nor a symlink planted inside the root
+        # pointing out of it survives the comparison -- the link resolves to
+        # its target, whose parent is not the root.
+        #
+        # Deliberately NOT hardened against a symlink swapped in between
+        # this check and the File.delete that follows: single-user local
+        # tool, explicitly out of the threat model (design doc, Explicitly
+        # declined).
+        def deletable_path(raw)
+          return nil unless raw.is_a?(String) && !raw.empty? && !raw.include?("\0")
+          return nil unless raw.end_with?('.rb', '.org')
+
+          real = canonical_file(raw)
+          return nil unless real && File.file?(real)
+
+          deletable_roots.include?(File.dirname(real)) ? real : nil
+        end
+
+        # Which `?file=N` to land on after a delete, read off the REBUILT
+        # list (file_list re-globs itself once the directory mtime moves).
+        # `deleted` is the removed file's index in the pre-delete list,
+        # `current` the index that was open in the browser.
+        #
+        # Deleting the open doc keeps the same position, because the next
+        # surviving doc slides into it -- clamped to the last index, which
+        # is what "step back one" means when the deleted doc was last. A doc
+        # deleted from ABOVE the open one shifts it down by one, so the same
+        # file stays on screen instead of the rail silently jumping. nil
+        # means nothing is left to open.
+        def index_after_delete(deleted, current)
+          size = file_list&.size.to_i
+          return nil if size.zero?
+
+          current = nil unless current.is_a?(Integer) && current >= 0
+          return 0 unless current
+
+          adjusted = deleted && current > deleted ? current - 1 : current
+          [adjusted, size - 1].min
+        end
+
         # Which repo group the sidebar shows, from the `?repo=` param
         # (stream_weaver-iugu). Returns a label, or nil meaning "all."
         #
@@ -360,6 +461,12 @@ module StreamWeaver
         index = params[:file].to_i
         list  = self.class.file_list
         path  = list&.at(index)
+        # "Nothing left to open" is a real state now (stream_weaver-uvaj:
+        # you just deleted the last doc), not a bad request -- answering a
+        # successful delete with a 404 page would be a lie about what
+        # happened. Renders the same no-doc-open placeholder a bare Browse
+        # already uses.
+        return render_no_doc(list) if path.nil? && list && list.size.zero?
         halt 404, 'File not found' unless path
 
         dsl = File.read(path)
@@ -524,6 +631,45 @@ module StreamWeaver
         end
       end
 
+      # Deletes one saved doc (stream_weaver-uvaj). Body:
+      # {"path": "<absolute path>", "file": <currently-open index or null>}.
+      #
+      # Reader-only on purpose: BridgeServer has no doc inventory to delete
+      # from. Plain File.delete, no git shelling -- the unstaged deletion
+      # showing up in `git status` afterward is the intended outcome, and
+      # committing it is the user's call, same as deleting in Finder.
+      #
+      # 403 (not 404) for a path outside the two deletable roots: the
+      # request was understood and refused, and a 404 would leak whether the
+      # file exists. Never reachable from Browse mode, which can point at
+      # any directory on the machine -- arbitrary-path READ is a reviewed,
+      # accepted risk there; arbitrary-path DELETE would not be.
+      post '/delete-doc' do
+        content_type :json
+        body = begin
+          JSON.parse(request.body.read, symbolize_names: true)
+        rescue StandardError
+          {}
+        end
+
+        path = self.class.deletable_path(body[:path])
+        halt 403, { ok: false, error: 'Not a deletable doc path' }.to_json unless path
+
+        # Resolved BEFORE the delete, while the file is still in the list:
+        # this is the position the doc occupied, which is what tells the
+        # client whether the open doc's index shifts.
+        list    = self.class.file_list
+        deleted = list&.files&.index { |f| self.class.canonical_file(f) == path }
+
+        begin
+          File.delete(path)
+        rescue SystemCallError => e
+          halt 500, { ok: false, error: e.message }.to_json
+        end
+
+        { ok: true, path: path, file: self.class.index_after_delete(deleted, body[:file]) }.to_json
+      end
+
       # Evaluates `dsl` and returns a Doc carrying the rendered HTML plus the
       # theme/layout/inline CSS the DSL declared for itself -- the reader shell
       # needs all four, and render_dsl's HTML-only return threw the rest away
@@ -619,6 +765,19 @@ module StreamWeaver
       # dropping #sw-reader-nav from any one of them would silently stop
       # that link's swap from refreshing the nav bar.
       BROWSE_OOB = 'hx-select-oob="#sw-reader-nav, #sw-reader-files"'
+
+      # The docs-mode counterpart of a bare GET /browse: sidebar and nav
+      # render against an empty list, and #app-container falls back to the
+      # same "pick a file" placeholder, because @doc is nil. Reached only
+      # when the last doc was deleted out from under the reader
+      # (stream_weaver-uvaj) -- @current_index stays unset, so the layout's
+      # Prev/Next/Export block is skipped exactly as it is for a browsed file.
+      def render_no_doc(list)
+        @file_list       = list
+        @doc             = nil
+        @mermaid_zoom_js = MERMAID_ZOOM_JS
+        erb :reader_layout, layout: false
+      end
 
       # Populates every ivar reader_layout.erb's Browse sidebar needs,
       # shared by GET /browse and GET /open so both compute breadcrumbs and

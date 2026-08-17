@@ -172,6 +172,53 @@ RSpec.describe StreamWeaver::Canvas::DocRoots do
       File.write(@registry, "#{gone}\n")
       expect(discovered_roots).to eq([])
     end
+
+    # Existing but empty is not the same as worth listing (stream_weaver-uvaj):
+    # a root whose last doc was just deleted -- from the reader, by a git pull,
+    # by hand -- would otherwise stay in the rail as a heading that discloses
+    # nothing and a repo-filter chip that selects nothing.
+    describe 'roots with nothing in them' do
+      it 'drops a scanned root that currently holds no docs' do
+        empty = File.join(@scan, 'emptied', StreamWeaver::Canvas::DocStore::DOCS_SUBPATH)
+        FileUtils.mkdir_p(empty)
+        stocked = make_repo(@scan, 'stocked')
+
+        expect(discovered_roots).to eq([stocked])
+      end
+
+      it 'drops a registered root that currently holds no docs' do
+        empty = File.join(@tmp, 'emptied', StreamWeaver::Canvas::DocStore::DOCS_SUBPATH)
+        FileUtils.mkdir_p(empty)
+        described_class.record(empty)
+
+        expect(discovered_roots).to eq([])
+      end
+
+      it 'counts an .org-only root as having docs' do
+        root = make_repo(@scan, 'org-only', 'doc.org')
+        expect(discovered_roots).to eq([root])
+      end
+
+      # The two roots the host process owns are exempt: they are where its own
+      # Save-as-doc writes, and the reader mtime-watches every root it is
+      # handed, so dropping an empty one would mean the FIRST doc saved into it
+      # needed a restart to appear.
+      it 'keeps the host repo docs root even while it holds no docs' do
+        host = File.join(@tmp, 'host', StreamWeaver::Canvas::DocStore::DOCS_SUBPATH)
+        FileUtils.mkdir_p(host)
+        ENV['STREAMWEAVER_DOC_ROOT'] = host
+
+        expect(described_class.roots).to include(host)
+      end
+
+      it 'keeps the global store even while it holds no docs' do
+        global = File.join(@tmp, 'globalstore')
+        FileUtils.mkdir_p(global)
+        stub_const('StreamWeaver::Canvas::DocStore::DEFAULT_ROOT', global)
+
+        expect(described_class.roots).to include(global)
+      end
+    end
   end
 
   describe '.record_if_new' do

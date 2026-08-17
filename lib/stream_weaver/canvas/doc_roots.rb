@@ -133,7 +133,20 @@ module StreamWeaver
       # different parents are two roots, and a basename-keyed hash would
       # silently drop one of them. Basename is a display label only -- see
       # #labels, which disambiguates collisions instead of discarding them.
+      #
+      # A discovered root that currently holds no `*.{rb,org}` is dropped:
+      # File.directory? alone answers "does this place exist," not "is there
+      # anything here to show," and a root that once had docs and no longer
+      # does (a `git pull` that removed them, deleting the last one from the
+      # reader -- stream_weaver-uvaj) is a sidebar heading that discloses
+      # nothing. The two roots the host process owns are exempt and always
+      # listed while they exist as directories: DocStore.path is the repo the
+      # reader was launched from and the target of its own Save-as-doc, and
+      # DocStore::DEFAULT_ROOT is the global fallback store -- both need to
+      # stay wired up (mtime-watched by the reader's FileList) so the FIRST
+      # doc saved into an empty one shows up without a restart.
       def roots
+        always     = [DocStore.path, DocStore::DEFAULT_ROOT].compact.map { |p| File.expand_path(p) }
         candidates = [DocStore.path, *scanned, *registered, DocStore::DEFAULT_ROOT]
         seen = {}
         candidates.each do |candidate|
@@ -141,10 +154,18 @@ module StreamWeaver
 
           expanded = File.expand_path(candidate)
           next unless File.directory?(expanded)
+          next unless always.include?(expanded) || docs?(expanded)
 
           seen[canonical(expanded)] ||= expanded
         end
         seen.values
+      end
+
+      # True when `root` directly contains at least one doc file. Same
+      # '*.{rb,org}' glob FileList.build uses to populate the sidebar, so
+      # "root is listed" and "root produces a group" can't disagree.
+      def docs?(root)
+        Dir.glob(File.join(root, '*.{rb,org}')).any?
       end
 
       # {root => label} for `roots_list`, insertion-ordered. Labels are

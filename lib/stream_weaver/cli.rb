@@ -1561,27 +1561,31 @@ module StreamWeaver
     # Docs roots are no longer just this repo's: DocRoots unions a scan of
     # ~/work with the append-only registry and the global store, so a doc
     # saved in one repo is readable from a canvas-read launched in another.
-    # Roots with no .rb/.org files in them are dropped here rather than
-    # passed through -- an empty group is a sidebar heading that does nothing.
+    # Dropping roots with no .rb/.org in them is DocRoots.roots' own job now
+    # (stream_weaver-uvaj) rather than a second filter here -- with one
+    # deliberate difference this file no longer overrides: the host repo's
+    # root and the global store stay in the list even while empty, so a doc
+    # saved into one mid-session is picked up by FileList's directory-mtime
+    # watch instead of needing a restart.
     def self.canvas_read_default_args
       require_relative 'canvas/doc_roots'
 
       docs_path    = StreamWeaver::Canvas::DocStore.path
       history_root = StreamWeaver::Canvas::History.root
 
-      # '*.{rb,org}', not '*.rb': .org is a first-class doc format
-      # (stream_weaver-gnj8 taught FileList.build to glob both), so a repo
-      # holding only .org docs was being reported as having no docs at all
-      # and silently dropped from the default.
-      docs_roots = StreamWeaver::Canvas::DocRoots.roots.select do |root|
-        Dir.glob(File.join(root, '*.{rb,org}')).any?
-      end
+      docs_roots   = StreamWeaver::Canvas::DocRoots.roots
       labels       = StreamWeaver::Canvas::DocRoots.labels(docs_roots)
       session_dirs = Dir.glob(File.join(history_root, '*/')).map { |d| d.sub(%r{/\z}, '') }.sort
 
       args = docs_roots + session_dirs
 
-      if args.empty?
+      # "Nothing to read anywhere," not "no directories": the host repo's docs
+      # root and the global store are now listed even while empty (they're
+      # where a save would land, and the reader watches them for one), so a
+      # non-empty `args` no longer implies there is anything IN it. Someone
+      # running this for the first time with no docs at all still needs the
+      # how-to-use hint rather than FileList's "No .rb or .org files found".
+      if args.none? { |dir| StreamWeaver::Canvas::DocRoots.docs?(dir) }
         $stderr.puts "Usage: streamweaver canvas-read <file|dir> [file|dir ...]"
         $stderr.puts "       streamweaver canvas-read   (no args; defaults to #{docs_path} + ~/.streamweaver/history/)"
         exit 1
