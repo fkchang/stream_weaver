@@ -260,6 +260,56 @@ RSpec.describe StreamWeaver::Canvas::DocStore do
     it 'rejects bare ".org" (which would normalize to empty basename), same as bare ".rb"' do
       expect { described_class.save('.org', 'x') }.to raise_error(ArgumentError)
     end
+
+    # canvas-read rescans the docs directory on every render (stream_weaver-iugu),
+    # so the window in which a reader can catch a save in progress is now hit
+    # constantly. A plain File.write truncates before it fills, which is exactly
+    # what those readers must never see (stream_weaver-5nvz).
+    describe 'atomicity' do
+      it 'never truncates the target -- a reader mid-save still sees the previous content' do
+        path = described_class.save('doc', 'old')
+        previous = File.read(path)
+
+        # Sample the target at the last instant before the swap: that is what a
+        # concurrent reader would get.
+        seen = nil
+        allow(File).to receive(:rename).and_wrap_original do |orig, *args|
+          seen = File.read(path)
+          orig.call(*args)
+        end
+
+        described_class.save('doc', 'new')
+
+        expect(seen).to eq(previous)
+        expect(File.read(path)).to eq("#{described_class::STAMP}\nnew")
+      end
+
+      it 'leaves no temp file behind on a successful save' do
+        described_class.save('hello', 'x')
+        expect(Dir.children(@root)).to contain_exactly('hello.rb')
+      end
+
+      it 'leaves no temp file behind in a freshly created directory' do
+        nested = File.join(@root, 'brand-new')
+        ENV['STREAMWEAVER_DOC_ROOT'] = nested
+
+        path = described_class.save('hello', "header1 'Hi'")
+
+        expect(path).to eq(File.join(nested, 'hello.rb'))
+        expect(File.read(path)).to eq("#{described_class::STAMP}\nheader1 'Hi'")
+        expect(Dir.children(nested)).to contain_exactly('hello.rb')
+      end
+
+      it 'cleans up the temp file and leaves the old doc intact when the swap fails' do
+        described_class.save('doc', 'old')
+        allow(File).to receive(:rename).and_raise(Errno::EACCES)
+
+        expect { described_class.save('doc', 'new') }.to raise_error(Errno::EACCES)
+
+        expect(Dir.children(@root)).to contain_exactly('doc.rb')
+        expect(File.read(File.join(@root, 'doc.rb'))).to eq("#{described_class::STAMP}\nold")
+      end
+    end
   end
 
   # Shared by BOTH Save-as-doc routes (BridgeServer and Reader) so the two

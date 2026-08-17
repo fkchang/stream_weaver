@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'fileutils'
+require 'securerandom'
 
 module StreamWeaver
   module Canvas
@@ -101,6 +102,16 @@ module StreamWeaver
       # line unconditionally. Prepending the .rb-style stamp in front of it
       # would violate that and, being a bare `#` line rather than a `#+`
       # keyword, wouldn't even be recognized by org-ruby.
+      #
+      # The write is atomic: content goes to a temp file in the SAME directory
+      # (so the rename stays on one filesystem, where POSIX guarantees it is
+      # atomic) and is then renamed over the target. A plain File.write
+      # truncates first, so a concurrent reader -- canvas-read's docs scan on
+      # every render, or another process's GET -- can observe an empty or
+      # half-written file. The temp name is dotted and .tmp-suffixed so it
+      # matches neither the *.rb nor the *.org globs even in the instant it
+      # exists, and it is removed if the write or rename fails so a failure
+      # never litters the docs directory.
       def save(name, dsl)
         filename = normalize_name(name)
         dir = path
@@ -108,7 +119,14 @@ module StreamWeaver
 
         full = File.join(dir, filename)
         content = filename.end_with?('.org') ? dsl : stamp(dsl)
-        File.write(full, content)
+        tmp = File.join(dir, ".#{filename}.#{Process.pid}.#{SecureRandom.hex(4)}.tmp")
+        begin
+          File.write(tmp, content)
+          File.rename(tmp, full)
+        rescue StandardError
+          FileUtils.rm_f(tmp)
+          raise
+        end
         full
       end
 
