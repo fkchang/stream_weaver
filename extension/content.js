@@ -5,16 +5,21 @@
 // network request. That JSON is GitHub's internal shape and will change
 // eventually, so a Raw-link fetch stands behind it.
 //
-// Detection is by content, not filename. `DocStore` stamps every saved doc
-// with a marker comment, which travels with the file regardless of path or
-// extension -- so this works on gists, forks, and files someone moved.
+// Detection is by content, not filename. `DocStore` stamps every saved .rb
+// doc with a marker comment, which travels with the file regardless of path
+// or extension -- so this works on gists, forks, and files someone moved.
+// .org docs carry their own equivalent marker instead (org-doc-format-design.md's
+// '#+STREAMWEAVER_DSL: 1', a real org header keyword, not a StreamWeaver
+// invention) -- checked the same content-not-filename way, so a renamed or
+// extensionless .org doc still gets recognized.
 
 const STAMP_RE = /^#\s*streamweaver-doc:\s*v(\d+)\s*$/;
+const ORG_MARKER_RE = /^#\+STREAMWEAVER_DSL:\s*\d+/;
 const STAMP_SCAN_LINES = 10;
 const BUTTON_ID = "sw-view-rendered";
 
 function isStreamWeaverDoc(lines) {
-  return lines.slice(0, STAMP_SCAN_LINES).some((l) => STAMP_RE.test(l));
+  return lines.slice(0, STAMP_SCAN_LINES).some((l) => STAMP_RE.test(l) || ORG_MARKER_RE.test(l));
 }
 
 // Pulls the file's lines out of GitHub's embedded payload.

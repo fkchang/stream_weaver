@@ -45,6 +45,12 @@ rescue StandardError => e
 end
 builder.build("opal-parser")
 builder.build("stream_weaver/opal_entry")
+# Org::Reader (org -> DSL text) only, not Writer -- Writer needs `ripper`
+# (MRI-only, not Opal-compatible) and the extension only ever reads .org
+# docs, never writes them. Lets sandbox.js convert .org source to DSL text
+# client-side before compiling, the same two-step org -> rb -> render path
+# canvas-read uses server-side (org-doc-format-design.md).
+builder.build("stream_weaver/org/reader")
 File.write(File.join(VENDOR, "sw-runtime.js"), builder.to_s)
 
 # --- 2. Theme CSS -----------------------------------------------------------

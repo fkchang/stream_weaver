@@ -17,11 +17,30 @@
     parent.postMessage({ type: "sw:render-failed", stage, detail }, "*");
   }
 
+  // '#+STREAMWEAVER_DSL: 1' is the org format's own version marker, first
+  // line always (org-doc-format-design.md) -- same check content.js uses to
+  // decide whether to offer the button in the first place, repeated here
+  // since the sandbox only receives raw source, not the extension of the
+  // file it came from.
+  const ORG_MARKER_RE = /^#\+STREAMWEAVER_DSL:\s*\d+/m;
+
+  // Org::Reader is bundled into sw-runtime.js (build_extension) alongside
+  // the rest of the StreamWeaver runtime -- Reader only, not Writer, since
+  // Writer needs `ripper` (MRI-only) and the extension only ever reads
+  // .org, never writes it. Already-compiled, so this is a direct Opal JS
+  // call (Opal's $-prefixed method convention), not a second Opal.eval --
+  // no need to re-parse a call expression through the self-hosted parser.
+  function orgToDsl(source) {
+    return Opal.StreamWeaver.Org.Reader.$to_dsl(source);
+  }
+
   // Ruby's heredocs are how doc bodies carry prose, and Opal's self-hosted
   // parser cannot lex any form of them -- unlike the MRI-hosted compiler,
   // which handles them fine. Rewriting them to quoted strings first is what
   // makes in-browser compilation work on real documents.
   function toCompilableRuby(source, name) {
+    if (ORG_MARKER_RE.test(source)) source = orgToDsl(source);
+
     const rewrite = self.swRewriteHeredocs;
     if (typeof rewrite !== "function") throw new Error("heredoc rewriter not loaded");
 
