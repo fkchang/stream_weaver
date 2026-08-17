@@ -29,6 +29,59 @@
     #frame { flex: 1 1 auto; border: 0; width: 100%; background: #fff; }
     #status { padding: 2rem; color: #59636e; }
     #status.error { color: #82071e; white-space: pre-wrap; font-family: ui-monospace, monospace; }
+
+    /* Local-file entry point (S2). Same page, a second way in: shown instead
+       of the "Rendering…" status when there's no GitHub-supplied doc to
+       render (see viewer.js's hasExtensionContext/key check for exactly when
+       that is). */
+    /* :not([hidden]), not a bare #drop-zone rule -- an ID selector otherwise
+       outranks the browser's built-in `[hidden] { display: none }` rule, so
+       `dropZone.hidden = true` in viewer.js would set the attribute but the
+       element would stay visually flexed anyway. */
+    #drop-zone:not([hidden]) {
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    #drop-zone-inner {
+      max-width: 28rem;
+      padding: 3rem 3.5rem;
+      text-align: center;
+      color: #59636e;
+      border: 2px dashed #d1d9e0;
+      border-radius: 12px;
+    }
+    #drop-zone.drag-over #drop-zone-inner {
+      border-color: #0969da;
+      background: #ddf4ff;
+      color: #1f2328;
+    }
+    #drop-zone code {
+      padding: .1rem .35rem;
+      background: #eaeef2;
+      border-radius: 4px;
+      font-family: ui-monospace, monospace;
+      font-size: .9em;
+    }
+    #drop-zone-hint { margin-top: .5rem; font-size: .85em; }
+    #file-picker-btn {
+      padding: 0;
+      color: #0969da;
+      background: none;
+      border: none;
+      font: inherit;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    #drop-zone-error {
+      margin-top: 1rem;
+      color: #82071e;
+      white-space: pre-wrap;
+      font-family: ui-monospace, monospace;
+      font-size: .8125rem;
+    }
   </style>
 </head>
 <body>
@@ -37,6 +90,23 @@
     <a class="source" id="source-link" target="_blank" rel="noopener">View source on GitHub</a>
   </header>
   <div id="status">Rendering…</div>
+  <!--
+    Local-file entry point (S2): a drop zone / file picker for previewing a
+    .org or .rb file straight off disk, no GitHub page, no server. It feeds
+    the exact same "sw:render" postMessage the GitHub-button path uses below
+    -- see viewer.js's startRender()/handleFile(). Hidden by default; shown
+    in place of #status when viewer.js decides there's no GitHub-supplied doc
+    to render instead.
+  -->
+  <div id="drop-zone" hidden>
+    <div id="drop-zone-inner">
+      <p>Drop a StreamWeaver <code>.org</code> or <code>.rb</code> file here,<br>
+         or <button type="button" id="file-picker-btn">choose a file</button>.</p>
+      <p id="drop-zone-hint">Rendered entirely in this tab -- nothing is uploaded.</p>
+      <div id="drop-zone-error" hidden></div>
+    </div>
+  </div>
+  <input type="file" id="file-input" accept=".org,.rb" hidden>
   <!--
     The doc renders inside this sandboxed frame, not here. Compiling Ruby in
     the browser requires eval, which Manifest V3 forbids on a normal extension

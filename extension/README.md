@@ -120,6 +120,69 @@ instead of relying on message-ordering luck.
 the live runtime — there is nothing to interact with in a document, so it skips
 event delegation and the re-render loop.
 
+## Local-file preview (no GitHub, no server)
+
+`viewer.html` has a second way in besides the GitHub button: a drop zone /
+file picker, built into the same page, for previewing any `.org` or `.rb`
+file straight off disk. No GitHub page, no server, and — once the file is
+read — no extension APIs either. It feeds the exact same
+`postMessage({type: "sw:render", ...})` call into `sandbox.js` that the
+GitHub flow uses, so `sandbox.js` needed zero changes; this is purely a
+second supplier wired into `viewer.js`, the same way `content.js` is the
+first.
+
+**Two independent signals decide which mode `viewer.js` starts in**, because
+they catch two different situations:
+
+- **No `chrome.storage.session` / `chrome.runtime` at all** — this page was
+  opened completely outside the extension: a bare `file://` open, or a plain
+  `http://` page (a real Chromium quirk worth naming: `window.chrome` and
+  even `chrome.runtime` exist as stub objects on ordinary pages, but
+  `chrome.storage` does not — the check tests for `chrome.storage.session`
+  specifically, not just `typeof chrome`, or every non-extension page would
+  incorrectly look like extension context). There is no session storage to
+  read regardless of what's in the URL, so this alone is enough to pick the
+  drop zone. This is also *why* the drop zone had to be inline on
+  `viewer.html` rather than a separate page: re-verifying this feature needs
+  to work by opening a bare file or a throwaway local server, not by loading
+  the packed extension into a real Chrome UI every time.
+- **`chrome` APIs exist but no `key` query param** — inside the extension,
+  but opened without a doc handed to it (bookmarked, or opened fresh from
+  `chrome://extensions`). `content.js` always sets a key today, but nothing
+  enforces that, so this page degrades to something useful instead of a
+  dead-end "No document key" error.
+
+A `key` that *is* present but fails to resolve (an expired or
+already-consumed `chrome.storage.session` entry) stays a hard error rather
+than falling back to the drop zone — that case means a doc *was* specified
+and is now gone, worth surfacing distinctly from "nothing was ever
+specified."
+
+**The drop zone is inline on `viewer.html`, not a separate page.** The design
+doc left this open; extending the existing page won this over a second page
+mostly for the reason above (bare-file testability) but also because it's
+the simpler change — one page, one script, one set of `sw:render`/
+`sw:rendered`/`sw:render-failed` handlers, instead of duplicating the
+sandbox-iframe wiring a second time.
+
+**Validation is by file extension, not content-sniffed.** Unlike the GitHub
+path's content-based `#+STREAMWEAVER_DSL:`/stamp detection (which exists to
+survive forks and renames), a locally picked file has no ambiguity about
+"is this the doc I meant to open" — the user just chose it. `handleFile()`
+in `viewer.js` rejects anything not matching `/\.(org|rb)$/i` with an
+inline error and leaves the drop zone open to try again, rather than
+attempting to render arbitrary text and failing deep inside the Opal
+compiler with a confusing message.
+
+**A CSS trap worth naming for anyone touching this again:** `#drop-zone`'s
+layout rule was originally a bare `#drop-zone { display: flex; ... }`. An ID
+selector outranks the browser's built-in `[hidden] { display: none }` rule
+by specificity, so `dropZone.hidden = true` in `viewer.js` was setting the
+attribute correctly while the element stayed visually flexed anyway — caught
+live (the drop zone kept showing through a fully rendered doc) rather than
+by inspection. Fixed by scoping the rule to `#drop-zone:not([hidden])`
+instead.
+
 ## Verified
 
 Against a real repo (`github.com/fkchang/streamweaver-doc-demo`), live, both
@@ -134,6 +197,28 @@ blocks, 11 TOC links, 3 callouts, 1 typeset mermaid SVG, 200 Prism tokens, 0
 network requests, 0 page errors. Detection checked against a real captured
 GitHub blob page: a plain `Rakefile` gets no button; the same page with
 stamped content does.
+
+The local-file entry point was verified with the same rigor that applies
+everywhere else in this file: a real `.org` doc (an incident-report fixture with
+doc_header, sidebar_toc, two callout variants, two tables, two mermaid
+diagrams, code blocks, and in-page anchor links) and its `.rb` twin, both
+picked through `#file-input` against `viewer.html` served over a throwaway
+local HTTP server (bare `file://` hits an unrelated Chromium restriction —
+sandboxed null-origin iframes can't load `file://` resources, which would
+have blocked `sandbox.html` regardless of this feature; `http://` sidesteps
+it while still exercising the "no chrome APIs" code path identically, since
+a plain HTTP page has no `chrome.storage.session` either). Both files
+rendered with correct title, sidebar TOC, callouts, tables, and 2 mermaid
+SVGs apiece (confirmed inside the sandbox iframe's own document, not just
+the outer page), 0 console errors. The drop zone appeared correctly with no
+stashed source present (including with a `?key=` param set, since a bare
+page's `chrome.storage` is genuinely absent — the exact case the detection
+logic is built for) and picking an unsupported file (`.txt`) showed an
+inline error without losing the drop zone, recoverable by picking a valid
+file next. Drag-and-drop itself (as opposed to the file picker) was not
+independently exercised — both paths call the same `handleFile()`, and only
+the event source differs (`change` vs `drop`), so this is a low-risk gap,
+not an unverified render path.
 
 ## Known gaps
 
@@ -157,3 +242,19 @@ stamped content does.
   `DocStore`'s real stamp. No known gap in the extension specifically; noted
   here because a dedicated `.rb` marker convention (mirroring `.org`'s) would
   still be a nice simplification if one lands upstream.
+- **Local-file drag-and-drop wasn't independently exercised, only the file
+  picker was** — no headless tool used for this verification round can
+  synthesize an OS-level drag gesture carrying a real `File`. Low risk: both
+  entry points call the same `handleFile()`, and the `drop` handler is a
+  handful of lines (`e.preventDefault()`, pull `e.dataTransfer.files[0]`,
+  delegate) with nothing render-path-specific in it.
+- **The "stashed key present but expired" error path (`load()`'s "That
+  document is no longer available" branch) was confirmed by code review, not
+  live** — a real Chromium page always carries a `chrome.runtime` stub even
+  outside an extension (see the local-file-preview section above), but never
+  a working `chrome.storage.session`, so a headless page can't be made to
+  take that exact branch without loading the packed extension into a real
+  Chrome UI. The branch itself is untouched by this change (S2 only added a
+  new `if` above `load()`, matching the acceptance criteria's file-drop
+  scope), so the review-only confirmation is for the *routing*, not new
+  logic.
