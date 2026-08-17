@@ -1,8 +1,11 @@
 # Design: preview surfaces for StreamWeaver `.org` docs
 
-Status: S1 shipped (stream_weaver-yf3a, commit 558b5b6). S2, S3 approved,
-not started. Tracked via `bd` issues, not OpenSpec -- see "On OpenSpec"
-below for why that tool is no longer part of this project's workflow.
+Status: S1 shipped (stream_weaver-yf3a, commit 558b5b6). S2 shipped
+(stream_weaver-m04v, commit 172409d -- built via an isolated-worktree
+subagent, reviewed and independently re-verified live before merge). S3
+approved, not started. Tracked via `bd` issues, not OpenSpec -- see "On
+OpenSpec" below for why that tool is no longer part of this project's
+workflow.
 
 ## The gap that started this
 
