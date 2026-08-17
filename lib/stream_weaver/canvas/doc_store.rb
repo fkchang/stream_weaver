@@ -2,6 +2,12 @@
 
 require 'fileutils'
 require 'securerandom'
+# Mutually required with doc_roots (which needs DOCS_SUBPATH/DEFAULT_ROOT for
+# its scan and its global group). Safe in both load orders: Ruby marks a file
+# as loaded before evaluating it, so the second require is a no-op, and
+# neither file touches the other's constants at load time -- only inside
+# method bodies.
+require 'stream_weaver/canvas/doc_roots'
 
 module StreamWeaver
   module Canvas
@@ -127,6 +133,15 @@ module StreamWeaver
           FileUtils.rm_f(tmp)
           raise
         end
+
+        # Half of canvas-read's cross-repo discovery (stream_weaver-iugu):
+        # saving into a repo is what makes that repo's docs findable from a
+        # canvas-read launched anywhere else. Deliberately after the rename,
+        # so a failed write never registers a root that has no docs in it.
+        # DocRoots.record swallows its own filesystem errors -- a registry
+        # that can't be written must never fail the save it followed.
+        DocRoots.record(dir)
+
         full
       end
 

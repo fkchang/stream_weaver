@@ -8,6 +8,7 @@ require 'stream_weaver/app'
 require 'stream_weaver/views'
 require 'stream_weaver/adapter/alpinejs'
 require 'stream_weaver/canvas/doc_store'
+require 'stream_weaver/canvas/doc_roots'
 require 'stream_weaver/page_shell'
 require 'stream_weaver/export/html_exporter'
 require 'stream_weaver/org/writer'
@@ -19,9 +20,14 @@ module StreamWeaver
       class NoFilesError < StandardError; end
 
       class FileList
-        attr_reader :files, :history_roots
+        attr_reader :files, :history_roots, :labels
 
-        def self.build(args, history_roots: [])
+        # `labels` is {root_path => display_label} for multi-repo discovery
+        # (stream_weaver-iugu). Optional and defaulted so the single-root and
+        # history-root callers that predate it are untouched -- a directory
+        # with no label falls back to its own basename, which is exactly what
+        # the sidebar showed before labels existed.
+        def self.build(args, history_roots: [], labels: {})
           files = args.flat_map do |arg|
             if File.directory?(arg)
               Dir.glob(File.join(arg, '*.{rb,org}')).sort
@@ -34,13 +40,14 @@ module StreamWeaver
 
           raise NoFilesError, "No .rb or .org files found in: #{args.join(', ')}" if files.empty?
 
-          new(files, args: args, history_roots: history_roots)
+          new(files, args: args, history_roots: history_roots, labels: labels)
         end
 
-        def initialize(files, args:, history_roots: [])
+        def initialize(files, args:, history_roots: [], labels: {})
           @files = files
           @args = args
           @history_roots = history_roots.map { |p| File.expand_path(p) }
+          @labels = labels.each_with_object({}) { |(root, label), out| out[File.expand_path(root)] = label }
           @dir_mtimes = snapshot_dir_mtimes
         end
 
@@ -63,7 +70,7 @@ module StreamWeaver
         def rebuild_if_stale
           return self unless stale?
 
-          self.class.build(@args, history_roots: @history_roots)
+          self.class.build(@args, history_roots: @history_roots, labels: @labels)
         rescue NoFilesError
           # Every source directory vanished entirely (deleted, unmounted,
           # or -- in specs -- a Dir.mktmpdir block that already exited)
@@ -88,10 +95,47 @@ module StreamWeaver
           @history_roots.any? { |r| dir == r || dir.start_with?(r + '/') }
         end
 
+        # Display name for a docs directory: its registered label when it has
+        # one (the repo it belongs to), otherwise its own basename.
+        def label_for(dir)
+          @labels[dir] || @labels[File.expand_path(dir)] || File.basename(dir)
+        end
+
+        # Label for an arbitrary root path, compared canonically -- the host
+        # repo's docs root arrives from Reader.repo_docs_root, which resolves
+        # via Dir.pwd and can differ from the registered spelling by a
+        # symlink (/tmp vs /private/tmp on macOS). nil when no group matches,
+        # which is what tells the filter to fall back rather than select a
+        # group that isn't there.
+        def label_for_root(path)
+          return nil unless path
+
+          expanded = File.expand_path(path)
+          return @labels[expanded] if @labels.key?(expanded)
+
+          key = DocRoots.canonical(expanded)
+          hit = @labels.keys.find { |k| DocRoots.canonical(k) == key }
+          hit && @labels[hit]
+        end
+
         # Sidebar splits: docs (explicit args) render above, history (auto-collected
         # snapshots from ~/.streamweaver/history/) renders below collapsed.
-        def docs_groups
-          indexed_groups.reject { |dir, _| history_dir?(dir) }
+        #
+        # `repo:` narrows to one label (stream_weaver-iugu). It filters which
+        # GROUPS render, never the file indices inside them -- ?file=N stays a
+        # position in the whole list, so a filtered sidebar and an unfiltered
+        # one address the same files and no link changes meaning when the
+        # filter does.
+        def docs_groups(repo: nil)
+          groups = indexed_groups.reject { |dir, _| history_dir?(dir) }
+          return groups unless repo
+
+          groups.select { |dir, _| label_for(dir) == repo }
+        end
+
+        # Labels of every docs group with at least one file, in sidebar order.
+        def repo_labels
+          indexed_groups.keys.reject { |dir| history_dir?(dir) }.map { |dir| label_for(dir) }.uniq
         end
 
         def history_groups
@@ -205,6 +249,40 @@ module StreamWeaver
           root && File.join(root, StreamWeaver::Canvas::DocStore::DOCS_SUBPATH)
         end
 
+        # Which repo group the sidebar shows, from the `?repo=` param
+        # (stream_weaver-iugu). Returns a label, or nil meaning "all."
+        #
+        # - `?repo=all` (or any label with no matching group) is the explicit
+        #   clear. An unknown label falling back to "all" rather than 404ing
+        #   is deliberate: a bookmarked filter whose repo has since been
+        #   deleted should still show you your docs.
+        # - No param at all defaults to the repo the reader process was
+        #   launched from, so `cd myrepo && canvas-read` opens on myrepo's
+        #   docs. Falls back to the global store, then to "all" -- launched
+        #   from a repo with no docs of its own, showing everything beats
+        #   showing an empty rail.
+        def resolve_repo_filter(raw, list)
+          return nil unless list
+
+          value = raw.to_s
+          return nil if value == 'all'
+          return list.repo_labels.include?(value) ? value : nil unless value.empty?
+
+          default_repo_filter(list)
+        end
+
+        def default_repo_filter(list)
+          labels = list.repo_labels
+          # The host repo has no label of its own to compare against -- it
+          # arrives as a path -- so it's matched by path. The global store
+          # is matched by its label instead, since that label is a constant
+          # DocRoots assigns and is the same thing `?repo=` addresses.
+          host = list.label_for_root(repo_docs_root)
+          return host if host && labels.include?(host)
+
+          DocRoots::GLOBAL_LABEL if labels.include?(DocRoots::GLOBAL_LABEL)
+        end
+
         # {dirs:, files:} immediately under `dir` -- one level, not recursive
         # (Browse navigates by clicking in, not by a pre-walked tree). Dotfiles
         # excluded (matches normal file-browser expectations; a .git directory
@@ -289,6 +367,12 @@ module StreamWeaver
         @file_list       = list
         @current_index   = index
         @current_file    = path
+        # @repo_filter is the resolved label the sidebar renders; @repo_param
+        # is the raw param, carried through every in-sidebar link so an
+        # explicit filter survives navigation instead of snapping back to the
+        # host-repo default on the next click.
+        @repo_filter     = self.class.resolve_repo_filter(params[:repo], list)
+        @repo_param      = params[:repo].to_s.empty? ? nil : params[:repo].to_s
         @mermaid_zoom_js = MERMAID_ZOOM_JS
         erb :reader_layout, layout: false
       end

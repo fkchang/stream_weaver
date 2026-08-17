@@ -15,8 +15,14 @@
   # replaces them entirely) -- skipping them isn't just wasted work, it
   # avoids a NoMethodError the day canvas-read ships a "no configured
   # files, Browse only" boot mode, where @file_list would be nil.
-  docs_groups    = browse_mode ? {} : @file_list.docs_groups
+  docs_groups    = browse_mode ? {} : @file_list.docs_groups(repo: @repo_filter)
   history_groups = browse_mode ? {} : @file_list.history_groups
+  # Repo filter (stream_weaver-iugu). repo_labels lists every discovered docs
+  # root; repo_qs carries the ACTIVE filter through every /?file=N link so it
+  # survives navigation -- without it, one Prev/Next click silently snaps the
+  # rail back to the host-repo default.
+  repo_labels    = browse_mode ? [] : @file_list.repo_labels
+  repo_qs        = @repo_param ? "&amp;repo=#{ERB::Util.url_encode(@repo_param)}" : ''
   is_history     = @current_file && !browse_mode && @file_list.history_dir?(File.dirname(@current_file))
   default_name   = if is_history
                      session   = File.basename(File.dirname(@current_file))
@@ -119,6 +125,26 @@
       display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.35rem;
       font-size: 0.65rem; font-weight: 600; letter-spacing: 0.02em;
       color: #6b7280; background: #e5e7eb; border-radius: 3px;
+    }
+
+    /* Repo filter (stream_weaver-iugu) -- same chip treatment as
+       .browse-shortcuts below, since it is the same kind of control (a row
+       of small jump targets above the listing) and two different-looking
+       chip rows in one 220px rail would read as two unrelated mechanisms.
+       Only the .active state is new: unlike Browse's shortcuts, exactly one
+       of these is always the current view. */
+    #sw-reader-files .repo-filter {
+      padding: 0.5rem 1rem; display: flex; gap: 0.4rem; flex-wrap: wrap;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    #sw-reader-files .repo-filter a {
+      font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 3px;
+      background: #e5e7eb; color: #374151; text-decoration: none;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #sw-reader-files .repo-filter a:hover { background: #d1d5db; }
+    #sw-reader-files .repo-filter a.active {
+      background: #dbeafe; color: #1d4ed8; font-weight: 600;
     }
 
     /* Browse (stream_weaver-rdh). .browse-listing reuses .dir-files li a's
@@ -305,8 +331,24 @@
       </ul>
     <% else %>
       <h2><%= history_groups.any? ? 'Docs' : 'Files' %></h2>
+      <%# Repo filter (stream_weaver-iugu). Only rendered once there is more
+          than one repo to choose between -- a single-repo rail has nothing to
+          filter and the row would be pure noise. Each link carries browse_oob
+          for the same reason Browse's links do: the sidebar's own CONTENT has
+          to change, and the chrome's default OOB (#sw-reader-nav alone,
+          stream_weaver-8v1) deliberately leaves #sw-reader-files untouched. %>
+      <% if repo_labels.size > 1 %>
+        <div class="repo-filter">
+          <% repo_labels.each do |label| %>
+            <a href="/?file=<%= @current_index || 0 %>&amp;repo=<%= ERB::Util.url_encode(label) %>"
+               class="<%= label == @repo_filter ? 'active' : '' %>" <%= browse_oob %>><%= ERB::Util.h(label) %></a>
+          <% end %>
+          <a href="/?file=<%= @current_index || 0 %>&amp;repo=all"
+             class="<%= @repo_filter.nil? ? 'active' : '' %>" <%= browse_oob %>>All</a>
+        </div>
+      <% end %>
       <% docs_groups.each do |dir, entries| %>
-        <% dir_label = File.basename(dir) %>
+        <% dir_label = @file_list.label_for(dir) %>
         <div class="dir-section">
           <div class="dir-header expanded" onclick="toggleSection(this)">
             <span class="dir-arrow">▶</span>
@@ -315,7 +357,7 @@
           <ul class="dir-files">
             <% entries.each do |filepath, idx| %>
               <li>
-                <a href="/?file=<%= idx %>"
+                <a href="/?file=<%= idx %><%= repo_qs %>"
                    class="<%= idx == @current_index ? 'active' : '' %>"
                    title="<%= filepath %>">
                   <%# History entries are always .rb (written by canvas-push,
@@ -357,7 +399,7 @@
               <ul class="dir-files collapsed">
                 <% entries.each do |filepath, idx| %>
                   <li>
-                    <a href="/?file=<%= idx %>"
+                    <a href="/?file=<%= idx %><%= repo_qs %>"
                        class="<%= idx == @current_index ? 'active' : '' %>"
                        title="<%= filepath %>">
                       <%= File.basename(filepath, '.rb') %>
@@ -383,13 +425,13 @@
       <% prev_idx = @current_index - 1 %>
       <% next_idx = @current_index + 1 %>
       <% if prev_idx >= 0 %>
-        <a href="/?file=<%= prev_idx %>" class="nav-link" data-nav="prev">◀ Prev</a>
+        <a href="/?file=<%= prev_idx %><%= repo_qs %>" class="nav-link" data-nav="prev">◀ Prev</a>
       <% else %>
         <span class="nav-link nav-link--disabled">◀ Prev</span>
       <% end %>
       <span class="counter"><%= @current_index + 1 %> of <%= @file_list.size %></span>
       <% if next_idx < @file_list.size %>
-        <a href="/?file=<%= next_idx %>" class="nav-link" data-nav="next">Next ▶</a>
+        <a href="/?file=<%= next_idx %><%= repo_qs %>" class="nav-link" data-nav="next">Next ▶</a>
       <% else %>
         <span class="nav-link nav-link--disabled">Next ▶</span>
       <% end %>

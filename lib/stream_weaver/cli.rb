@@ -1430,12 +1430,15 @@ module StreamWeaver
       StreamWeaver::Canvas::Reader.configure_defaults!(theme: theme, layout: layout)
 
       history_roots = []
+      labels = {}
       if args.empty?
-        args, history_roots = canvas_read_default_args
+        args, history_roots, labels = canvas_read_default_args
+      else
+        register_explicit_roots(args)
       end
 
       begin
-        file_list = StreamWeaver::Canvas::Reader::FileList.build(args, history_roots: history_roots)
+        file_list = StreamWeaver::Canvas::Reader::FileList.build(args, history_roots: history_roots, labels: labels)
       rescue StreamWeaver::Canvas::Reader::NoFilesError => e
         $stderr.puts "Error: #{e.message}"
         exit 1
@@ -1450,7 +1453,12 @@ module StreamWeaver
       puts "canvas-read  #{file_list.size} file(s)  →  #{url}"
       puts "Ctrl-C to stop"
 
-      Thread.new { sleep 0.8; open_browser(url) }
+      # SW_NO_OPEN was already honored by `streamweaver run`/the bridge
+      # (server.rb) but never by canvas-read, so booting one for a test or a
+      # script flooded the desktop with tabs. Checked here rather than inside
+      # open_browser so server.rb's explicit `open_browser: true` override
+      # keeps working.
+      Thread.new { sleep 0.8; open_browser(url) } unless ENV['SW_NO_OPEN']
 
       StreamWeaver::Canvas::Reader.run!
     end
@@ -1544,19 +1552,34 @@ module StreamWeaver
     end
 
     # Resolves the no-arg default for `streamweaver canvas-read`. Returns
-    # [args, history_roots] where args is the list of directories/files for
-    # FileList.build and history_roots tags ~/.streamweaver/history/ paths so
-    # the sidebar can render them in a separate collapsed section.
+    # [args, history_roots, labels] where args is the list of
+    # directories/files for FileList.build, history_roots tags
+    # ~/.streamweaver/history/ paths so the sidebar can render them in a
+    # separate collapsed section, and labels names each docs root for the
+    # sidebar's repo filter (stream_weaver-iugu).
+    #
+    # Docs roots are no longer just this repo's: DocRoots unions a scan of
+    # ~/work with the append-only registry and the global store, so a doc
+    # saved in one repo is readable from a canvas-read launched in another.
+    # Roots with no .rb/.org files in them are dropped here rather than
+    # passed through -- an empty group is a sidebar heading that does nothing.
     def self.canvas_read_default_args
+      require_relative 'canvas/doc_roots'
+
       docs_path    = StreamWeaver::Canvas::DocStore.path
       history_root = StreamWeaver::Canvas::History.root
 
-      has_docs   = File.directory?(docs_path) && Dir.glob(File.join(docs_path, '*.rb')).any?
+      # '*.{rb,org}', not '*.rb': .org is a first-class doc format
+      # (stream_weaver-gnj8 taught FileList.build to glob both), so a repo
+      # holding only .org docs was being reported as having no docs at all
+      # and silently dropped from the default.
+      docs_roots = StreamWeaver::Canvas::DocRoots.roots.select do |root|
+        Dir.glob(File.join(root, '*.{rb,org}')).any?
+      end
+      labels       = StreamWeaver::Canvas::DocRoots.labels(docs_roots)
       session_dirs = Dir.glob(File.join(history_root, '*/')).map { |d| d.sub(%r{/\z}, '') }.sort
 
-      args = []
-      args << docs_path if has_docs
-      args.concat(session_dirs)
+      args = docs_roots + session_dirs
 
       if args.empty?
         $stderr.puts "Usage: streamweaver canvas-read <file|dir> [file|dir ...]"
@@ -1565,11 +1588,37 @@ module StreamWeaver
       end
 
       summary = []
-      summary << "docs: #{docs_path}" if has_docs
-      summary << "history: #{session_dirs.size} session(s)" if session_dirs.any?
+      summary << "#{docs_roots.size} doc root(s)" if docs_roots.any?
+      summary << "#{session_dirs.size} history session(s)" if session_dirs.any?
       puts "canvas-read  using default — #{summary.join(', ')}"
+      # Every root printed, not just a count: a rail that suddenly lists five
+      # repos should be traceable to the paths that produced it without
+      # guessing. Same reason the scan roots and their override are named --
+      # a repo that ISN'T listed is the case that needs explaining.
+      docs_roots.each { |root| puts "  #{labels[root]}: #{root}" }
+      if docs_roots.any?
+        scan = StreamWeaver::Canvas::DocRoots.scan_roots
+        puts "  scanned: #{scan.empty? ? '(none)' : scan.join(', ')} (override: STREAMWEAVER_DOCS_SCAN_ROOTS)"
+      end
 
-      [args, [history_root]]
+      [args, [history_root], labels]
+    end
+
+    # Records an explicitly-passed docs directory in the registry when
+    # nothing already discovers it (stream_weaver-iugu) -- opening a
+    # pre-existing doc once is what backfills a repo living outside the
+    # scan roots, so there is no separate registration command to know about.
+    def self.register_explicit_roots(args)
+      require_relative 'canvas/doc_roots'
+
+      args.each do |arg|
+        dir = if File.directory?(arg)
+                arg
+              elsif File.file?(arg)
+                File.dirname(arg)
+              end
+        StreamWeaver::Canvas::DocRoots.record_if_new(dir) if dir
+      end
     end
 
     def self.canvas_reset(args)

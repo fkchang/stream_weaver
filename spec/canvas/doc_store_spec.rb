@@ -176,6 +176,45 @@ RSpec.describe StreamWeaver::Canvas::DocStore do
     end
   end
 
+  # Half of canvas-read's cross-repo discovery (stream_weaver-iugu): saving
+  # into a repo is what makes that repo's docs findable from a canvas-read
+  # launched anywhere else, with no registration step to remember.
+  describe '.save registry side effect' do
+    around do |ex|
+      prev = ENV['STREAMWEAVER_DOCS_REGISTRY']
+      Dir.mktmpdir do |d|
+        ENV['STREAMWEAVER_DOCS_REGISTRY'] = File.join(d, 'docs_roots.log')
+        @registry = ENV['STREAMWEAVER_DOCS_REGISTRY']
+        ex.run
+      end
+    ensure
+      ENV['STREAMWEAVER_DOCS_REGISTRY'] = prev
+    end
+
+    it 'records the docs root it wrote to' do
+      described_class.save('hello', "header1 'Hi'")
+      expect(File.readlines(@registry, chomp: true)).to eq([@root])
+    end
+
+    it 'does not re-record the same root on every save' do
+      3.times { |i| described_class.save("doc#{i}", "header1 'Hi'") }
+      expect(File.readlines(@registry, chomp: true)).to eq([@root])
+    end
+
+    it 'does not record anything when the save itself fails' do
+      expect { described_class.save('bad name!', "header1 'Hi'") }.to raise_error(ArgumentError)
+      expect(File.exist?(@registry)).to be(false)
+    end
+
+    # Discovery is a convenience; the save is the user's actual work.
+    it 'still saves when the registry cannot be written' do
+      allow(StreamWeaver::Canvas::DocRoots).to receive(:registry_path)
+        .and_return('/proc/nonexistent/docs_roots.log')
+      path = described_class.save('hello', "header1 'Hi'")
+      expect(File.read(path)).to include("header1 'Hi'")
+    end
+  end
+
   describe '.save' do
     it 'writes the DSL to <path>/<name>.rb and returns the absolute path' do
       path = described_class.save('hello', "header1 'Hi'")

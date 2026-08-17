@@ -15,6 +15,20 @@ require 'rack/test'
 Rack::Test.send(:remove_const, :DEFAULT_HOST)
 Rack::Test::DEFAULT_HOST = '127.0.0.1'
 
+# Canvas::DocRoots (stream_weaver-iugu) reads ~/.streamweaver/docs_roots.log
+# and scans ~/work by default. Neither belongs in a test run: DocStore.save
+# appends to the registry on every successful write, so an unredirected suite
+# would permanently pollute the developer's real registry with tmpdir paths,
+# and the scan would make every canvas-read spec depend on whatever happens to
+# be checked out under ~/work. Redirected globally here rather than in each
+# spec's around block, because the leak is silent -- a spec that forgets is
+# still green.
+require 'tmpdir'
+require 'fileutils'
+SPEC_DOCS_REGISTRY = File.join(Dir.tmpdir, "streamweaver-spec-docs-roots-#{Process.pid}.log")
+ENV['STREAMWEAVER_DOCS_REGISTRY']   = SPEC_DOCS_REGISTRY
+ENV['STREAMWEAVER_DOCS_SCAN_ROOTS'] = ''
+
 # Single definition of the state key alias for all resource specs
 SK = StreamWeaver::Resource::StateKeys
 
@@ -28,4 +42,6 @@ RSpec.configure do |config|
   config.expect_with :rspec do |c|
     c.syntax = :expect
   end
+
+  config.after(:suite) { FileUtils.rm_f(SPEC_DOCS_REGISTRY) }
 end
