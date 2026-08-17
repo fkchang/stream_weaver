@@ -38,6 +38,12 @@ builder = Opal::Builder.new(missing_require_severity: :ignore)
 builder.append_paths(STUBS)
 builder.append_paths(File.join(ROOT, "lib"))
 builder.build("opal")
+# Must come immediately after `opal` (which defines Opal.regexp) and before
+# every other builder.build call below -- each compiled file captures its
+# own `$regexp = Opal.regexp` local alias at load time, so this has to run
+# before any of them load to be seen. See regexp_anchor_patch.rb's own
+# header comment for what bug this fixes and why.
+builder.build("stream_weaver/opal/regexp_anchor_patch")
 %w[set cgi json digest thread].each do |lib|
   builder.build(lib)
 rescue StandardError => e
