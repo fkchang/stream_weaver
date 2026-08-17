@@ -45,10 +45,21 @@
 
     if (msg.type === "sw:sandbox-ready") {
       sandboxReady = true;
+      // Unhide the frame before, not after, asking it to render -- not just
+      // cosmetic. sandbox.js's render() calls mermaid.run() synchronously as
+      // part of handling "sw:render", and mermaid measures real DOM layout
+      // (getBBox etc.) to position diagram nodes. A hidden iframe (or any
+      // hidden ancestor) has no layout box, so those measurements come back
+      // NaN and mermaid fails with `<g> transform: "translate(undefined,
+      // NaN)"` -- reproduced directly, this exact sequencing is the cause.
+      // postMessage delivery to the frame is async, so unhiding here (before
+      // sendWhenReady's postMessage even goes out) guarantees the frame has
+      // real layout by the time the frame's own message handler -- and
+      // therefore render()/mermaid.run() -- executes.
+      frame.hidden = false;
       sendWhenReady();
     } else if (msg.type === "sw:rendered") {
       status.hidden = true;
-      frame.hidden = false;
     } else if (msg.type === "sw:render-failed") {
       showError(`StreamWeaver could not render this doc.\n\n${msg.stage}: ${msg.detail}`);
     }
