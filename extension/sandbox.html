@@ -20,6 +20,14 @@
     Every script is local. MV3 forbids remote script outright, which is why
     mermaid and Prism are bundled rather than pulled from a CDN.
   -->
+  <!-- Rendered docs are full of links (markdown links, external URLs). Without
+       this, a plain <a href> click -- or doc-controlled script setting
+       location -- navigates this frame in place to whatever it points at,
+       which viewer.html's iframe sandbox attribute then constrains but
+       doesn't prevent outright. Forcing every link to a new tab means the
+       destination is a normal, visible-URL-bar tab instead of something
+       loaded inside this doc viewer's chrome. -->
+  <base target="_blank">
   <link rel="stylesheet" href="vendor/sw-theme.css">
   <link rel="stylesheet" href="vendor/prism-tomorrow.min.css">
 

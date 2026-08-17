@@ -22,11 +22,13 @@ module StreamWeaver
     # Doc names are validated against an allowlist (alnum + . _ -, must start
     # with alnum) and an explicit '..'-substring + null-byte check. Bad names
     # raise ArgumentError -- raising rather than sanitizing keeps the contract
-    # explicit and avoids silently writing to an unexpected file. The .rb
-    # extension is forced and idempotent: save("foo") and save("foo.rb") both
-    # write to <path>/foo.rb. Extra dots within the name are allowed
-    # (auth-flow.v2 -> auth-flow.v2.rb) since the allowlist already permits
-    # '.' and descriptive multi-segment names are useful.
+    # explicit and avoids silently writing to an unexpected file. The
+    # extension is forced and idempotent: .rb and .org are both valid
+    # (save("foo") and save("foo.rb") both write to <path>/foo.rb; likewise
+    # for .org), defaulting to .rb when neither is present. Extra dots
+    # within the name are allowed (auth-flow.v2 -> auth-flow.v2.rb) since
+    # the allowlist already permits '.' and descriptive multi-segment names
+    # are useful.
     #
     # No cleanup method: Tier 2 is permanent. Git is the cleanup mechanism.
     module DocStore
@@ -156,6 +158,13 @@ module StreamWeaver
       def stamp(dsl)
         text = dsl.to_s
         return text if stamped?(text)
+        # Defense in depth, not currently reachable: `save`'s own
+        # filename.end_with?('.org') check is what actually protects org
+        # content today (`stamp` has no other caller). Kept here too so a
+        # future caller of `stamp` directly can't reintroduce the exact bug
+        # c1df5f6 fixed -- the .rb-style stamp corrupting .org's hard
+        # requirement that '#+STREAMWEAVER_DSL: 1' be the literal first line.
+        return text if text.start_with?('#+')
         return "#{STAMP}\n" if text.empty?
 
         "#{STAMP}\n#{text}"

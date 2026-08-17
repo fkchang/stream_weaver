@@ -2,6 +2,13 @@
    the toolbar it joins, rather than as something bolted on. Deliberately
    scoped to the one class -- the extension has no business restyling GitHub. */
 
+/* GitHub's <html> always carries data-color-mode="auto" plus BOTH
+   data-light-theme and data-dark-theme (they name which theme to switch to
+   in each mode, not which one is active) -- a [data-dark-theme] selector
+   matches unconditionally, on every page, regardless of the user's actual
+   theme. GitHub's own Primer CSS custom properties already track the real
+   active theme with no selector needed at all, so the button tracks
+   GitHub's theme automatically instead of guessing at it. */
 .sw-view-rendered-btn {
   display: inline-flex;
   align-items: center;
@@ -9,17 +16,16 @@
   margin-right: 8px;
   padding: 3px 12px;
   font: 500 12px/20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #1f2328;
-  background: #f6f8fa;
-  border: 1px solid rgba(31, 35, 40, 0.15);
+  color: var(--fgColor-default, #1f2328);
+  background: var(--bgColor-muted, #f6f8fa);
+  border: 1px solid var(--borderColor-default, rgba(31, 35, 40, 0.15));
   border-radius: 6px;
   cursor: pointer;
   white-space: nowrap;
 }
 
 .sw-view-rendered-btn:hover {
-  background: #eef1f4;
-  border-color: rgba(31, 35, 40, 0.15);
+  background: var(--bgColor-neutral-muted, #eef1f4);
 }
 
 .sw-view-rendered-btn--floating {
@@ -30,18 +36,4 @@
   padding: 8px 16px;
   font-size: 13px;
   box-shadow: 0 3px 8px rgba(31, 35, 40, 0.2);
-}
-
-/* GitHub sets data-color-mode on <html>; match it rather than relying on
-   prefers-color-scheme, which disagrees when the user has pinned a theme. */
-[data-color-mode="dark"] .sw-view-rendered-btn,
-[data-dark-theme] .sw-view-rendered-btn {
-  color: #f0f6fc;
-  background: #21262d;
-  border-color: #3d444d;
-}
-
-[data-color-mode="dark"] .sw-view-rendered-btn:hover,
-[data-dark-theme] .sw-view-rendered-btn:hover {
-  background: #30363d;
 }

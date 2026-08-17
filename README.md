@@ -223,6 +223,32 @@ streamweaver push mynotes --dsl 'md "# Analysis Results\n\n## Key Findings\n- ..
 
 **Pro tip:** iTerm2 has a [built-in browser](https://iterm2.com/documentation-web.html) that fits into split panes - run Claude Code on the left, canvas on the right, same window.
 
+### Saving & Sharing Docs
+
+A canvas session's "Save as doc" button writes it to disk in two possible
+formats:
+
+- **`.rb`** — the DSL source, canonical. Always lossless.
+- **`.org`** — a human-readable, roundtrippable export (`streamweaver
+  org-export <file.rb>` / `org-render <file.org>` from the CLI, or the
+  Save-as-Org button in the UI). `:doc`-vocabulary content (`doc_header`,
+  `callout`, `card`, `table`, etc.) round-trips cleanly and reads like a real
+  document in GitHub's own file view or any generic org-mode viewer, with no
+  StreamWeaver tooling required. Content outside that vocabulary still
+  round-trips (a verbatim-recovered raw block), just without the readability
+  payoff. Saving as org shows a coverage notice when a doc isn't a good fit
+  for the format — never blocks the save.
+
+Where a doc saves is automatic today: repo-local
+(`<repo>/docs/streamweaver_canvas/`) if you're inside a git repo, `~/.streamweaver/canvas`
+otherwise — no way to choose yet. An explicit "global vs. this repo" toggle
+is designed but not built (`docs/plans/canvas-doc-location-and-discovery.md`);
+expect this UX to change.
+
+Saved `.rb`/`.org` docs checked into a GitHub repo render with full
+StreamWeaver styling via the [browser extension](extension/README.md) — see
+below.
+
 ### Templates for Common Patterns
 
 ```bash
@@ -240,6 +266,25 @@ streamweaver template wizard mysession '{"steps": [...]}'
 # Data table with selection
 streamweaver template table mysession '{"headers": ["File", "Size"], "rows": [...]}'
 ```
+
+---
+
+## Browser Extension
+
+A Chrome extension renders StreamWeaver `.rb`/`.org` docs on GitHub with full
+styling — sidebar nav, callouts, cards, tables, mermaid — for viewers who have
+neither StreamWeaver nor Ruby installed. Rendering happens entirely
+client-side (Opal compiles the Ruby in the browser); no server, no CI step,
+no network requests.
+
+```bash
+bin/vendor_browser_assets   # once
+bin/build_extension
+```
+
+Then `chrome://extensions` → Developer mode → Load unpacked → select
+`extension/`. See [`extension/README.md`](extension/README.md) for how it
+works and current known gaps.
 
 ---
 

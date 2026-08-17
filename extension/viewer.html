@@ -41,8 +41,27 @@
     The doc renders inside this sandboxed frame, not here. Compiling Ruby in
     the browser requires eval, which Manifest V3 forbids on a normal extension
     page; a sandboxed page is the one place it is allowed. See sandbox.html.
+
+    The `sandbox` attribute here is a second, independent layer, not a
+    duplicate of manifest.json's declarative sandbox CSP for sandbox.html.
+    That CSP governs sandbox.html specifically; it says nothing about
+    wherever a doc-controlled navigation (a rendered link, or script setting
+    location) might send this iframe next -- self-navigation isn't gated by
+    "allow-scripts allow-popups" alone, and the destination is an arbitrary
+    URL, not one of the manifest's declared sandbox pages, so it would load
+    with full, unsandboxed privileges inside this iframe -- still visually
+    contained under the "<doc name> · View source on GitHub" header, a
+    credible phishing surface reached by opening an untrusted repo's file.
+    The HTML sandbox attribute applies to this iframe's browsing context
+    itself, so it constrains whatever ends up loaded there, original or
+    navigated-to, regardless of the CSP the destination document declares
+    for itself. allow-popups-to-escape-sandbox exists for the <base
+    target="_blank"> in sandbox.html's <head>: an in-doc link opens as a
+    normal, unsandboxed new tab with a visible URL bar instead of navigating
+    this frame in place.
   -->
-  <iframe id="frame" src="sandbox.html" hidden></iframe>
+  <iframe id="frame" src="sandbox.html"
+          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" hidden></iframe>
   <script src="viewer.js"></script>
 </body>
 </html>

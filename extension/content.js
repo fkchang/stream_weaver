@@ -7,7 +7,10 @@
 //
 // Detection is by content, not filename. `DocStore` stamps every saved .rb
 // doc with a marker comment, which travels with the file regardless of path
-// or extension -- so this works on gists, forks, and files someone moved.
+// or extension -- so this works on forks and files someone moved (NOT
+// gists: those live on gist.github.com, a different origin manifest.json's
+// content_scripts doesn't match -- the marker itself would travel there
+// fine, the extension just never runs on that page today).
 // .org docs carry their own equivalent marker instead (org-doc-format-design.md's
 // '#+STREAMWEAVER_DSL: 1', a real org header keyword, not a StreamWeaver
 // invention) -- checked the same content-not-filename way, so a renamed or

@@ -130,6 +130,17 @@ module StreamWeaver
           b.append_paths(@stubs_root)
           b.append_paths(@lib_root)
           b.build("opal")
+          # Must come immediately after "opal" (which defines Opal.regexp) --
+          # see regexp_anchor_patch.rb's own header comment for what bug
+          # this fixes and why the position matters (every compiled file
+          # captures its own local reference to the function it patches, at
+          # load time). This build (`streamweaver opal-build`, the AOT
+          # per-file compile path) doesn't currently hit the bug this
+          # patches -- nothing in its output builds a runtime-interpolated
+          # \A/\z-anchored regex today -- but bin/build_extension's bundle
+          # does, and keeping both Opal builders in sync means the fix
+          # doesn't silently stop applying the moment that changes.
+          b.build("stream_weaver/opal/regexp_anchor_patch")
           build_stdlib(b)
           b.build("stream_weaver/opal_entry")
         end
