@@ -3,8 +3,13 @@
 Status: S1 shipped (stream_weaver-yf3a, commit 558b5b6). S2 shipped
 (stream_weaver-m04v, commit 172409d -- built via an isolated-worktree
 subagent, reviewed and independently re-verified live before merge). S3
-approved, not started. Tracked via `bd` issues, not OpenSpec -- see "On
-OpenSpec" below for why that tool is no longer part of this project's
+shipped (stream_weaver-qrzw, commit f516989 -- same subagent pattern;
+merge needed a 3-way conflict in extension/README.md resolved by hand
+since S2 and S3's worktrees both branched before the other landed; the
+agent's key CSP finding was independently reproduced with a fresh gist
+before closing). S4/S5/S6 not started. Tracked via `bd` issues, not
+OpenSpec -- see "On OpenSpec" below for why that tool is no longer part
+of this project's
 workflow.
 
 ## The gap that started this
