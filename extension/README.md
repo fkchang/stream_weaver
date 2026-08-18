@@ -3,8 +3,9 @@
 Renders StreamWeaver docs on GitHub the way they look when run, instead of as
 raw source — for viewers who have neither StreamWeaver nor Ruby installed.
 
-**Status:** working, verified live against real github.com. Renders both
-`.rb` (DSL source) and `.org` (the roundtrippable export) docs.
+**Status:** working, verified live against real github.com and real gists on
+gist.github.com. Renders both `.rb` (DSL source) and `.org` (the
+roundtrippable export) docs, on either host.
 
 ## Build and load
 
@@ -45,9 +46,7 @@ sandbox.html  compiles the Ruby (converting .org to DSL text first, if
 `#+STREAMWEAVER_DSL: 1` header keyword (a real org keyword, not a
 StreamWeaver invention — see `docs/superpowers/specs/2026-08-13-org-doc-format-design.md`).
 Both travel with the file through forks and moves, where a path or extension
-rule would not. Not gists, currently — those live on `gist.github.com`,
-which `manifest.json`'s `content_scripts` doesn't match; the marker would
-travel there fine, the extension just doesn't run on that page yet.
+rule would not, and both travel to gists too (see "Gist support" below).
 
 **Two formats, one runtime.** `StreamWeaver::Org::Reader` (org → DSL text
 only, not `Writer` — `Writer` needs `ripper`, which isn't Opal-compatible,
@@ -183,6 +182,64 @@ live (the drop zone kept showing through a fully rendered doc) rather than
 by inspection. Fixed by scoping the rule to `#drop-zone:not([hidden])`
 instead.
 
+## Gist support
+
+`manifest.json`'s `content_scripts.matches` also lists
+`https://gist.github.com/*`, a second origin alongside `github.com`. Once
+there, `content.js` feeds the exact same `handleClick(source, name)` →
+`chrome.storage.session` → viewer/sandbox pipeline described above — gist
+support is entirely a `content.js`/`manifest.json` change, no renderer code
+touched.
+
+**A gist page's DOM is not a blob page's DOM, confirmed by inspecting a real
+one, not assumed.** Two things a blob page relies on don't hold on a gist:
+
+- **No embedded-JSON payload.** A blob page's `rawLinesFromPage()` finds the
+  whole file in a `script[type="application/json"]` block; a gist page's
+  equivalent scripts carry only UI chrome (locale, feature flags, a keyboard-
+  shortcuts doc URL) — never file content.
+- **A rendered `.org` file's raw text isn't in the DOM at all.** GitHub
+  renders `.org` into formatted prose the same as it does on a blob page, but
+  a gist page has no code-view fallback showing the raw source underneath —
+  the `#+STREAMWEAVER_DSL: 1` marker line is gone from the page entirely once
+  rendered. (An `.rb` gist, by contrast, syntax-highlights line-by-line in an
+  old-style `table.highlight`, which *does* keep the raw stamp visible in the
+  DOM — but relying on that would mean two different scraping strategies for
+  the two formats, one of them tied to markup GitHub could swap out. Fetching
+  the Raw link works for both, so that's the only path this uses.)
+
+So gist detection always fetches: each file on a gist page lives in its own
+`.file` block with its own `.file-actions` toolbar containing a Raw link
+(`gist.github.com/.../raw/<sha>/<name>`, which 301s to
+`gist.githubusercontent.com/.../raw/<sha>/<name>`) — confirmed against a real
+multi-file gist, not assumed, so a single-file gist (exactly one `.file`
+block) and a multi-file gist take the same code path. `gistFileBlocks()`
+collects `{file, actions, name, rawUrl}` for every file block; `scanGistPage()`
+fetches each Raw URL, runs the fetched text through the same
+`isStreamWeaverDoc()` check as everything else, and mounts a button into that
+file's own `.file-actions` (falling back to a floating button only if that div
+is missing) — so a gist with, say, an `.org` doc next to an unrelated `.rb`
+script gets exactly one button, on the matching file. Each `.file` block gets
+a `data-sw-scanned` marker the moment its fetch starts, not when it resolves —
+the mutation observer that re-triggers `scan()` on every DOM change would
+otherwise be able to fire a second fetch for the same file during the async
+gap before the first one finishes.
+
+**`gist.githubusercontent.com` needed its own `host_permissions` entry, and a
+content-script `fetch` to it works despite gist.github.com's own page CSP
+forbidding that exact host.** `raw.githubusercontent.com` was already listed
+for the blob-page fallback; the gist Raw link's redirect target is a
+different host, so it's now listed too. The CSP part is worth naming because
+it looked like it should fail: `gist.github.com`'s page CSP `connect-src`
+allows `raw.githubusercontent.com` but not `gist.githubusercontent.com` — a
+plain unprivileged `fetch()` run as page script hits exactly that wall
+(confirmed with a direct test). But `content.js`'s `fetch()` is a *content
+script's* fetch, not the page's, and a host listed in `host_permissions`
+lets it reach that host regardless of the page's own CSP — confirmed by
+watching the real network log during a live click-through: a 301 from
+`gist.github.com/.../raw/...` to `gist.githubusercontent.com/.../raw/...`,
+then a 200 with the full doc body.
+
 ## Verified
 
 Against a real repo (`github.com/fkchang/streamweaver-doc-demo`), live, both
@@ -219,6 +276,47 @@ file next. Drag-and-drop itself (as opposed to the file picker) was not
 independently exercised — both paths call the same `handleFile()`, and only
 the event source differs (`change` vs `drop`), so this is a low-risk gap,
 not an unverified render path.
+
+**Gist support was verified with the packed extension genuinely loaded**, not
+just by reading the code: `browse` (this repo's headless-QA tool) has an
+undocumented `BROWSE_EXTENSIONS_DIR` env var that loads an arbitrary unpacked
+extension, but only its `--headed` launch path strips Playwright's default
+`--disable-extensions` flag (its plain headless/off-screen path doesn't,
+confirmed by inspecting the launched Chromium's actual argv and by a
+temporary in-page marker the content script never set) — so `--headed` was
+the one that actually worked, and the browser was genuinely running with this
+extension loaded, real content scripts included.
+
+Two real throwaway public gists were published via `gh gist create` for the
+test — one `.org`, one `.rb`, both realistic multi-section incident-report
+docs (doc_header, sidebar_toc, callouts, tables, a code block, a comparison
+block, a card, two mermaid diagrams each) — plus a third with no marker as
+the negative-case control, plus a fourth multi-file gist (mixing a stamped
+`.org`, a stamped `.rb`, and an unstamped `.rb` in one gist) to check the
+multi-file mounting logic specifically. All four confirmed live:
+
+- The button appeared on both stamped gists and did not appear on the
+  unstamped control (confirmed the control's file *was* fetched and checked —
+  `data-sw-scanned` was set — it just correctly didn't match).
+- Clicking through rendered both docs correctly end to end: doc_header,
+  sidebar_toc, all callout variants, tables, the code block, the comparison
+  block, the card, and both mermaid diagrams (2 rendered `<svg>` elements
+  each), with 0 console errors, confirmed inside the sandbox iframe's own
+  document.
+- The multi-file gist mounted exactly two buttons — one per matching file, on
+  that file's own `.file-actions`, not the unstamped file — after the
+  necessarily-sequential per-file fetches finished (see Known gaps).
+- Repo blob-page behavior was re-verified after these changes (`makeButton`'s
+  signature changed to support gist's multi-button case) and still works
+  unchanged: button appears, click renders, 0 console errors.
+
+The four test gists were deleted after verification via `gh gist delete`, or
+would have been — GitHub had already removed all four by the time cleanup
+ran (`404` on both the web page and the API, for a `GET`, not just a
+`DELETE`), most likely automated abuse detection reacting to the burst of
+scripted navigation and fetch traffic this verification generated in a short
+window. Not something this session did or could prevent; noted here since
+"cleanup succeeded" isn't quite the right description of what happened.
 
 ## Known gaps
 
@@ -258,3 +356,21 @@ not an unverified render path.
   new `if` above `load()`, matching the acceptance criteria's file-drop
   scope), so the review-only confirmation is for the *routing*, not new
   logic.
+- **Gist files are scanned one at a time, not in parallel.** `scanGistPage()`
+  awaits each file's fetch before starting the next, so a gist with many
+  files takes proportionally longer to finish scanning (confirmed directly:
+  a 3-file gist needed roughly 2-3 seconds before its second matching file's
+  button appeared, not instant). Fine for the handful of files a real gist
+  typically holds; would be worth parallelizing (`Promise.all`) if gists with
+  dozens of files turn out to be a real usage pattern.
+- **Anonymous gists (URL shape `gist.github.com/<id>`, no username segment)
+  were not tested.** `isGistPage()`'s regex matches on the trailing hex id
+  and doesn't require a username segment, so this should work unchanged, but
+  every gist created for this round of testing was attached to an
+  authenticated account (`gh gist create` always attaches to the signed-in
+  user), so the anonymous case is inferred from the regex, not observed.
+- **Private gists were not tested.** Untested for the same reason private
+  repos' embedded-JSON path was already covered but its raw-URL fallback
+  wasn't (see the private-repos gap above) — a private gist's Raw link should
+  work the same way (the content script fetches from an already-authenticated
+  page, same as the blob-page fallback), but wasn't verified live.

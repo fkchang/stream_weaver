@@ -7,14 +7,22 @@
 //
 // Detection is by content, not filename. `DocStore` stamps every saved .rb
 // doc with a marker comment, which travels with the file regardless of path
-// or extension -- so this works on forks and files someone moved (NOT
-// gists: those live on gist.github.com, a different origin manifest.json's
-// content_scripts doesn't match -- the marker itself would travel there
-// fine, the extension just never runs on that page today).
+// or extension -- so this works on forks and files someone moved, and on
+// gists too (gist.github.com is a second origin `manifest.json`'s
+// content_scripts matches, alongside github.com).
 // .org docs carry their own equivalent marker instead (org-doc-format-design.md's
 // '#+STREAMWEAVER_DSL: 1', a real org header keyword, not a StreamWeaver
 // invention) -- checked the same content-not-filename way, so a renamed or
 // extensionless .org doc still gets recognized.
+//
+// Gist pages don't embed file content in page JSON the way a repo blob page
+// does -- confirmed by inspecting a real gist page's DOM, not assumed: an
+// .org file's raw text isn't even in the DOM (GitHub renders it into
+// formatted prose, keyword lines and all, dropping the raw source), and a
+// gist can hold multiple files, each in its own `.file` block with its own
+// Raw link. So every gist file is read the same way regardless of format:
+// fetch its Raw link (`gist.github.com/.../raw/<sha>/<name>`, which
+// redirects to `gist.githubusercontent.com`) and scan the fetched text.
 
 const STAMP_RE = /^#\s*streamweaver-doc:\s*v(\d+)\s*$/;
 const ORG_MARKER_RE = /^#\+STREAMWEAVER_DSL:\s*\d+/;
@@ -72,9 +80,21 @@ function isBlobPage() {
   return /^\/[^/]+\/[^/]+\/blob\//.test(location.pathname);
 }
 
-function makeButton(onClick) {
+// A gist URL is "/<user>/<gist-id>" (or, for an anonymous gist, just
+// "/<gist-id>") -- nothing like a repo blob's "/<owner>/<repo>/blob/...".
+// The id itself is the reliable anchor: a hex string GitHub assigns, never
+// a real username segment.
+function isGistPage() {
+  return location.hostname === "gist.github.com" && /\/[0-9a-f]{20,}$/i.test(location.pathname);
+}
+
+// `id` is omitted for gist buttons -- a gist page can hold several files, so
+// several buttons can coexist, and a duplicate DOM id would be invalid HTML.
+// Blob pages pass BUTTON_ID, keeping their existing single-button dedup
+// (`document.getElementById(BUTTON_ID)` in scan()) unchanged.
+function makeButton(onClick, id) {
   const button = document.createElement("button");
-  button.id = BUTTON_ID;
+  if (id) button.id = id;
   button.type = "button";
   button.className = "sw-view-rendered-btn";
   button.textContent = "View rendered";
@@ -100,6 +120,38 @@ function mountButton(button) {
   }
 }
 
+// Each file on a gist page lives in its own `.file` block, with its own Raw
+// link inside `.file-actions` -- confirmed against a real multi-file gist,
+// not assumed: a single-file gist has exactly one `.file` block, so this
+// same code path covers both without a separate "only file" case. Filenames
+// come from `.file-info a`'s text (falls back to the Raw URL's last segment,
+// in case that selector ever changes) since a gist's file-content pages
+// don't expose a query-string equivalent of a blob page's `filePath()`.
+function gistFileBlocks() {
+  return Array.from(document.querySelectorAll(".file"))
+    .map((file) => {
+      const rawLink = file.querySelector('a[href*="/raw/"]');
+      if (!rawLink) return null;
+      const rawUrl = new URL(rawLink.getAttribute("href"), location.origin).href;
+      const nameEl = file.querySelector(".file-info a");
+      const name = nameEl ? nameEl.textContent.trim() : decodeURIComponent(rawUrl.split("/").pop());
+      return { file, actions: file.querySelector(".file-actions"), name, rawUrl };
+    })
+    .filter(Boolean);
+}
+
+// Mirrors `mountButton`'s toolbar-anchor-with-floating-fallback shape, but
+// scoped per file block rather than once per page, since a gist can carry
+// more than one StreamWeaver doc.
+function mountFileButton(button, actions) {
+  if (actions) {
+    actions.prepend(button);
+  } else {
+    button.classList.add("sw-view-rendered-btn--floating");
+    document.body.appendChild(button);
+  }
+}
+
 async function handleClick(source, name) {
   // Docs run to tens of kilobytes, which is far past what a query string
   // should carry, so the source goes through session storage and only a
@@ -109,8 +161,33 @@ async function handleClick(source, name) {
   chrome.runtime.sendMessage({ type: "sw:open-viewer", key, name });
 }
 
-async function scan() {
-  if (!isBlobPage()) return;
+// Marks a `.file` block once it's been fetched-and-checked, so repeated
+// scans (the mutation observer below re-triggers on every DOM change) don't
+// re-fetch the same Raw URL -- fetch is async, so without this a burst of
+// mutations during the async gap could fire several fetches for one file.
+const GIST_SCANNED_ATTR = "data-sw-scanned";
+
+async function scanGistPage() {
+  for (const { file, actions, name, rawUrl } of gistFileBlocks()) {
+    if (file.hasAttribute(GIST_SCANNED_ATTR)) continue;
+    file.setAttribute(GIST_SCANNED_ATTR, "1");
+
+    let lines;
+    try {
+      const text = await (await fetch(rawUrl)).text();
+      lines = text.split("\n");
+    } catch {
+      continue;
+    }
+
+    if (!isStreamWeaverDoc(lines)) continue;
+
+    const source = lines.join("\n");
+    mountFileButton(makeButton(() => handleClick(source, name)), actions);
+  }
+}
+
+async function scanBlobPage() {
   if (document.getElementById(BUTTON_ID)) return;
 
   let lines = rawLinesFromPage();
@@ -130,7 +207,15 @@ async function scan() {
   if (!isStreamWeaverDoc(lines)) return;
 
   const source = lines.join("\n");
-  mountButton(makeButton(() => handleClick(source, filePath())));
+  mountButton(makeButton(() => handleClick(source, filePath()), BUTTON_ID));
+}
+
+async function scan() {
+  if (isGistPage()) {
+    await scanGistPage();
+  } else if (isBlobPage()) {
+    await scanBlobPage();
+  }
 }
 
 // GitHub navigates without full page loads, so the button has to be re-added

@@ -5,13 +5,16 @@
   "description": "Renders StreamWeaver docs on GitHub the way they look when run, instead of as Ruby source.",
 
   "permissions": ["storage"],
-  "host_permissions": ["https://raw.githubusercontent.com/*"],
+  "host_permissions": [
+    "https://raw.githubusercontent.com/*",
+    "https://gist.githubusercontent.com/*"
+  ],
 
   "background": { "service_worker": "background.js" },
 
   "content_scripts": [
     {
-      "matches": ["https://github.com/*"],
+      "matches": ["https://github.com/*", "https://gist.github.com/*"],
       "js": ["content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
