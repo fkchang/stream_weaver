@@ -18,7 +18,7 @@ module StreamWeaver
                     :current_menu, :current_modal, :modal_context, :current_deck,
                     :current_slide, :current_app_shell, :current_row_key_thunk,
                     :checkbox_keys, :action_tokens, :generation, :fragment_stack, :state_version,
-                    :table_counter, :current_scope,
+                    :table_counter, :current_scope, :url_tab_keys,
                     :form_for_active, :form_for_submit_label, :form_for_cancel_label, :form_for_validate
 
       def initialize
@@ -32,6 +32,7 @@ module StreamWeaver
         self.generation = "0"
         self.fragment_stack = []
         self.state_version = 0
+        self.url_tab_keys = []
       end
     end
 
@@ -44,6 +45,12 @@ module StreamWeaver
 
     # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
     ENDPOINT_VERBS = %i[get post put patch delete].freeze
+
+    # Request params owned by Sinatra/StreamWeaver routing. A `url: true` tabs group
+    # reads its key from request params, so these keys can never be claimed. Mirrors
+    # the sync_params_to_state exclusion lists (server.rb / service.rb) -- a key those
+    # strip would validate here and then silently never receive its value.
+    RESERVED_URL_TAB_KEYS = %w[app_id splat captures button_id].freeze
 
     # Paths/prefixes owned by StreamWeaver's own framework routes (see server.rb / service.rb).
     # An `endpoint` registered on one of these is never reached -- the internal route is always
@@ -835,10 +842,12 @@ module StreamWeaver
     # Navigation DSL methods
     # =========================================
 
-    def tabs(key, variant: :line, **options, &block)
+    def tabs(key, variant: :line, url: false, **options, &block)
+      tabs_component = Components::Tabs.new(key, variant: variant, url: url, **options)
+      claim_url_tab_key!(tabs_component) if url
+
       @_state[key] ||= 0
 
-      tabs_component = Components::Tabs.new(key, variant: variant, **options)
       components << tabs_component
 
       parent_components = components
@@ -874,6 +883,21 @@ module StreamWeaver
 
       capture_children_then_append(tab_component, &block)
     end
+
+    # Validates and records a `url: true` tabs key. Keys live on render_state so
+    # tracking resets with every DSL evaluation -- the same app re-rendering per
+    # request must not look like a duplicate declaration of itself.
+    def claim_url_tab_key!(group)
+      key = group.key
+      name = key.to_s
+
+      raise ArgumentError, "tabs #{key.inspect}: url: true does not support lazy: true yet" if group.lazy
+      raise ArgumentError, "tabs #{key.inspect}: reserved request param -- pick another key for url: true tabs" if RESERVED_URL_TAB_KEYS.include?(name)
+      raise ArgumentError, "tabs #{key.inspect}: already claimed by another url: true tabs group" if render_state.url_tab_keys.include?(name)
+
+      render_state.url_tab_keys << name
+    end
+    private :claim_url_tab_key!
 
     def breadcrumbs(separator: "/", **options, &block)
       breadcrumbs_component = Components::Breadcrumbs.new(separator: separator, **options)

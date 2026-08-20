@@ -428,6 +428,144 @@ RSpec.describe StreamWeaver::App do
     end
   end
 
+  describe "url tabs option" do
+    def tabs_component(app)
+      app.components.find { |c| c.is_a?(StreamWeaver::Components::Tabs) }
+    end
+
+    it "stores url: true on the Tabs component" do
+      app = described_class.new("Test") do
+        tabs :section, url: true do
+          tab("A") { text "a" }
+        end
+      end
+      app.rebuild_with_state({})
+
+      expect(tabs_component(app).url).to be(true)
+    end
+
+    it "leaves url false on plain tabs" do
+      app = described_class.new("Test") do
+        tabs :section do
+          tab("A") { text "a" }
+        end
+      end
+      app.rebuild_with_state({})
+
+      expect(tabs_component(app).url).to be(false)
+    end
+
+    it "raises when url: true is combined with lazy: true" do
+      app = described_class.new("Test") do
+        tabs :section, url: true, lazy: true do
+          tab("A") { text "a" }
+        end
+      end
+
+      expect { app.rebuild_with_state({}) }
+        .to raise_error(ArgumentError, /lazy/i)
+    end
+
+    it "allows url: true with lazy: false" do
+      app = described_class.new("Test") do
+        tabs :section, url: true, lazy: false do
+          tab("A") { text "a" }
+        end
+      end
+
+      expect { app.rebuild_with_state({}) }.not_to raise_error
+      expect(tabs_component(app).url).to be(true)
+    end
+
+    StreamWeaver::App::RESERVED_URL_TAB_KEYS.map(&:to_sym).each do |reserved|
+      it "raises when a url tabs key is the reserved key #{reserved}" do
+        app = described_class.new("Test") do
+          tabs reserved, url: true do
+            tab("A") { text "a" }
+          end
+        end
+
+        expect { app.rebuild_with_state({}) }
+          .to raise_error(ArgumentError, /#{reserved}/)
+      end
+    end
+
+    it "raises when a reserved url tabs key is declared as a string" do
+      app = described_class.new("Test") do
+        tabs "app_id", url: true do
+          tab("A") { text "a" }
+        end
+      end
+
+      expect { app.rebuild_with_state({}) }
+        .to raise_error(ArgumentError, /app_id/)
+    end
+
+    it "allows a reserved key on plain tabs" do
+      app = described_class.new("Test") do
+        tabs :app_id do
+          tab("A") { text "a" }
+        end
+      end
+
+      expect { app.rebuild_with_state({}) }.not_to raise_error
+    end
+
+    it "raises when two url tabs groups share the same key" do
+      app = described_class.new("Test") do
+        tabs :section, url: true do
+          tab("A") { text "a" }
+        end
+        tabs :section, url: true do
+          tab("B") { text "b" }
+        end
+      end
+
+      expect { app.rebuild_with_state({}) }
+        .to raise_error(ArgumentError, /section/)
+    end
+
+    it "allows two url tabs groups with distinct keys" do
+      app = described_class.new("Test") do
+        tabs :section, url: true do
+          tab("A") { text "a" }
+        end
+        tabs :panel, url: true do
+          tab("B") { text "b" }
+        end
+      end
+
+      app.rebuild_with_state({})
+      groups = app.components.select { |c| c.is_a?(StreamWeaver::Components::Tabs) }
+      expect(groups.map(&:key)).to eq(%i[section panel])
+      expect(groups.map(&:url)).to all(be(true))
+    end
+
+    it "does not treat a repeated key as duplicate when only one group is a url tabs group" do
+      app = described_class.new("Test") do
+        tabs :section, url: true do
+          tab("A") { text "a" }
+        end
+        tabs :section do
+          tab("B") { text "b" }
+        end
+      end
+
+      expect { app.rebuild_with_state({}) }.not_to raise_error
+    end
+
+    it "does not treat re-evaluation of the same app as a duplicate" do
+      app = described_class.new("Test") do
+        tabs :section, url: true do
+          tab("A") { text "a" }
+        end
+      end
+
+      app.rebuild_with_state({})
+      expect { app.rebuild_with_state({}) }.not_to raise_error
+    end
+  end
+
   describe "#rebuild_with_state" do
     it "re-evaluates DSL block" do
       app = described_class.new("Test") do
