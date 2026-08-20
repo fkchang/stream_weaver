@@ -128,3 +128,38 @@ text_area :paste_area, transient: true
 ### 5. Stale Session After Restart
 Static dev secret preserves cookies across restarts. If your state schema changed, old cookies cause errors.
 **Fix**: Store state as recoverable strings (not fragile indices). Use `--reset` flag or clear cookies after schema changes.
+
+### 6. Transient Fields Never Resync From the Server
+`transient: true` is documented above (#4) as "exclude from the session cookie" — but the
+Alpine adapter's morph-merge goes further than that: it also skips writing the server's value
+back into the browser's reactive store on *every* subsequent update, not just full-cookie
+snapshots (`adapter/alpinejs.rb`, the `htmx:beforeSwap` handler — `if (transientKeys.has(k))
+return;`). In practice this means once a transient field's DOM node exists, only the user's own
+typing ever changes what it shows — a server-side `s[:x] = ""` after a button handler, or a
+fresh prefill for a *different* record reusing the same state key, is silently dropped.
+
+**Wrong** — clearing a transient field after its own submit handler:
+```ruby
+text_field :custom_item, submit: false, transient: true
+button "Add" do |s|
+  add_item(s[:custom_item])
+  s[:custom_item] = ""   # never reaches the browser — field still shows the old value
+end
+```
+
+**Wrong** — reusing one transient key across multiple records' edit forms (e.g. a schema-driven
+edit UI where every row's Time/Date field binds to the same `:edit_time`/`:edit_date` key
+instead of a per-row key): opening row B's edit form after row A's still shows row A's value,
+because the fresh prefill for row B never overwrites what's already sitting in the browser.
+
+**Fix**: if a field's value must ever be authoritatively reset by the server (a post-submit
+clear, a fresh prefill on reopen), don't mark it `transient: true` unless it's genuinely a
+one-shot, never-cleared, never-reused input (the large-paste-area case #4 was written for).
+Short single-value fields rarely have a real cookie-size reason to be transient — dropping the
+flag is usually simpler than working around the resync gap. If cookie size is the actual
+concern *and* the field needs server-driven resets, the two needs are currently in tension —
+there's no flag that gives "excluded from cookie" without also losing resync.
+
+Found via `~/work/cultiv-ai/apps/health_dashboard/app.rb`, 2026-08-20 — a custom-item field
+that never visually cleared after Add, and an entry-edit form's Time/Date fields that leaked
+one edit's value into the next.
