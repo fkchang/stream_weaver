@@ -2323,20 +2323,39 @@ module StreamWeaver
         active_index = (state[key] || 0).to_i
         variant_class = "sw-tabs-#{component.variant}"
         lazy = component.lazy
+        routed = route_tabs?(component)
+        warn_route_tabs_ignored(view) if component.url && !routed
 
-        view.div(
+        # For a routed group the URL decides which tab is showing -- on first
+        # paint and again on every back/forward step -- so the rendered index
+        # never reaches the markup.
+        active_tab = routed ? "swRouteTabs.read('#{key}', #{component.children.size})" : active_index.to_s
+
+        container_attrs = {
           id: "tabs-#{key}",
           class: "sw-tabs #{variant_class}",
-          "x-data" => "{ activeTab: #{active_index} }"
-        ) do
-          # Hidden input syncs tab state with server on other HTMX requests
-          view.input(type: "hidden", name: key.to_s, "x-model" => "activeTab")
+          "x-data" => "{ activeTab: #{active_tab} }"
+        }
+
+        if routed
+          container_attrs["@popstate.window"] = "activeTab = #{active_tab}"
+          inject_route_tabs_js(view)
+        end
+
+        view.div(**container_attrs) do
+          # Hidden input syncs tab state with server on other HTMX requests.
+          # Route tabs skip it: the URL is their authority, so letting a form
+          # submit write this index into the session would fight it.
+          view.input(type: "hidden", name: key.to_s, "x-model" => "activeTab") unless routed
 
           # Tab headers
           view.div(class: "sw-tabs-list") do
             component.children.each_with_index do |tab, index|
               tab_classes = ["sw-tab-trigger"]
-              tab_classes << "sw-tab-active" if index == active_index
+              # A routed group names no active trigger server-side: a morph that
+              # rewrote this attribute would not re-run the :class effect below
+              # (activeTab never changed), stranding the highlight on a stale index.
+              tab_classes << "sw-tab-active" if index == active_index && !routed
 
               if lazy
                 # Lazy mode: tab switch does Alpine UI + HTMX morph to fetch active tab content
@@ -2353,14 +2372,18 @@ module StreamWeaver
                 ) { tab.label }
               else
                 # Standard mode: Alpine handles UI instantly, server response discarded
+                click = "activeTab = #{index}"
+                click += "; swRouteTabs.push('#{key}', #{index})" if routed
+
                 trigger_attrs = {
                   type: "button",
                   class: tab_classes.join(" "),
                   ":class" => "{ 'sw-tab-active': activeTab === #{index} }",
-                  "@click" => "activeTab = #{index}"
+                  "@click" => click
                 }
-                # Canvas has no server session to sync -- the next push rebuilds state
-                unless websocket_mode?
+                # Canvas has no server session to sync -- the next push rebuilds
+                # state. Route tabs have one but must not touch it.
+                unless websocket_mode? || routed
                   trigger_attrs["hx-post"] = url("/update")
                   trigger_attrs["hx-vals"] = JSON.generate({ key.to_s => index })
                   trigger_attrs["hx-swap"] = "none"
@@ -2387,6 +2410,32 @@ module StreamWeaver
             end
           end
         end
+      end
+
+      # Whether this tabs group reflects its active tab in the URL. Canvas has
+      # no app URL to reflect into, so `url: true` degrades there.
+      #
+      # @param component [Tabs] The tabs component
+      # @return [Boolean]
+      def route_tabs?(component)
+        component.url && !websocket_mode?
+      end
+
+      # Tell the agent that pushed this page why its tabs are not in the URL.
+      # Once per render pass, so every pushed page says it -- guarding on the
+      # adapter would silence it after the first page a server renders.
+      def warn_route_tabs_ignored(view)
+        return if view.instance_variable_get(:@_route_tabs_warned)
+        view.instance_variable_set(:@_route_tabs_warned, true)
+        warn "StreamWeaver: tabs url: true is ignored on canvas -- a canvas page has no app URL to carry the active tab"
+      end
+
+      # Inject sw-route-tabs.js once per render
+      def inject_route_tabs_js(view)
+        return if view.instance_variable_get(:@_route_tabs_js_injected)
+        view.instance_variable_set(:@_route_tabs_js_injected, true)
+        js_path = File.join(__dir__, '..', 'assets', 'js', 'sw-route-tabs.js')
+        view.script { view.raw(view.safe(File.read(js_path))) } if File.exist?(js_path)
       end
 
       # Render a breadcrumbs navigation trail
