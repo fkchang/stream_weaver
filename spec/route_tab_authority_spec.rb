@@ -62,6 +62,23 @@ RSpec.describe 'route tab URL authority' do
       expect(active_index).to eq(0)
     end
 
+    it 'parses a leading-zero parameter as decimal, matching the client' do
+      # ?view=010 is where radix handling shows: Integer() reads it as octal 8
+      # while the client's parseInt(raw, 10) reads 10. Twelve tabs keep both
+      # candidates in range so the wrong parse can't hide behind the clamp.
+      twelve_tabs = StreamWeaver::App.new('Route Tabs') do
+        tabs :view, url: true do
+          12.times { |i| tab("Tab #{i}") { text "panel #{i}" } }
+        end
+        text "server-active:#{state[:view]}"
+      end
+      Rack::Test::Session.new(Rack::MockSession.new(twelve_tabs.generate)).tap do |session|
+        session.get '/?view=010'
+        expect(session.last_response).to be_ok
+        expect(session.last_response.body[/server-active:(\d+)/, 1]&.to_i).to eq(10)
+      end
+    end
+
     it 'renders the first tab when the parameter arrives as an array' do
       get '/?view[]='
 

@@ -903,7 +903,9 @@ module StreamWeaver
     def coerce_tab_index(value)
       case value
       when Integer then value
-      when String then Integer(value, exception: false) || 0
+      # \A\d+\z + base-10, matching sw-route-tabs.js exactly -- Integer() would
+      # read a leading zero as octal and disagree with the client on ?view=010.
+      when String then value.match?(/\A\d+\z/) ? value.to_i : 0
       else 0
       end
     end
