@@ -447,14 +447,14 @@
                 </a>
                 <%# One row = one file: a .rb/.org pair are two entries with
                     two independent delete buttons, and deleting one never
-                    cascades to its sibling. Opens the confirm dialog and
-                    nothing else -- the actual POST only ever fires from the
-                    dialog's own Delete button -- there is no JS confirm dialog
-                    anywhere on this page;
-                    the design doc rules it out). Same to_json-then-h quoting
-                    the Save-as-doc widget documents below: a filesystem name
-                    can legally contain a quote or an apostrophe, and either
-                    escape alone breaks out of the attribute. %>
+                    cascades to its sibling. This button opens the confirm
+                    dialog and nothing else -- the actual POST only ever fires
+                    from the dialog's own Delete button (no JS confirm dialog
+                    anywhere on this page; the design doc rules it out). Same
+                    to_json-then-h quoting the Save-as-doc widget documents
+                    below: a filesystem name can legally contain a quote or an
+                    apostrophe, and either escape alone breaks out of the
+                    attribute. %>
                 <% if deletable %>
                   <button type="button" class="sw-doc-delete"
                           title="Delete <%= ERB::Util.h(File.basename(filepath)) %>"
