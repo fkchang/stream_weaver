@@ -11,7 +11,9 @@ module StreamWeaver
   # executable closures are created while the DSL is evaluated. FAC-P1.3 named
   # actions will remove that discovery rebuild for buttons.
   class InteractionRunner
-    ROUTE_PARAMS = %w[splat captures app_id button_id key form_name _sw_fragment].freeze
+    # The framework-wide routing params, plus the ones only interaction dispatch
+    # puts on the wire.
+    ROUTE_PARAMS = (App::ROUTE_OWNED_PARAMS + %w[key form_name _sw_fragment]).freeze
 
     def initialize(app:, state:, params:, interaction:, target: nil, adapter:, agentic: false,
                    persist:, prepare_state: nil, result_container: nil, auto_close: false,

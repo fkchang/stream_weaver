@@ -104,7 +104,7 @@ module StreamWeaver
 
         # Sync form params to state hash
         def sync_params_to_state(state, excluded_keys: [])
-          excluded = %w[splat captures] + excluded_keys.map(&:to_s)
+          excluded = App::ROUTE_OWNED_PARAMS + excluded_keys.map(&:to_s)
 
           params.each do |key, value|
             next if excluded.include?(key)
@@ -138,6 +138,9 @@ module StreamWeaver
           end
         end
 
+        # A full GET's URL -- never the session -- decides a `url: true` tabs
+        # group's index (see App#tab_index_source). Renders answering a POST leave
+        # those groups on the state they were given.
         def render_app(state, is_htmx: false)
           adapter = settings.adapter
           streamlit_app = settings.streamlit_app
@@ -147,7 +150,8 @@ module StreamWeaver
             inject_deck_state!(state)
             generation = session[:sw_action_generation] ||= SecureRandom.hex(12)
             streamlit_app.rebuild_with_state(state, generation: generation,
-              state_version: (session[:sw_state_version] || 0))
+              state_version: (session[:sw_state_version] || 0),
+              url_params: (params if request.get?))
             session[:sw_action_manifest] = streamlit_app.render_state.action_tokens.to_a
 
             # Scrub transient keys that leaked into the session

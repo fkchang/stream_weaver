@@ -432,9 +432,9 @@ module StreamWeaver
         session[:state_versions][app_id] = version
       end
 
-      # Sync form params to state hash (copied from server.rb)
+      # Sync form params to state hash (mirrors server.rb's helper of the same name)
       def sync_params_to_state(state, excluded_keys: [])
-        excluded = %w[splat captures app_id button_id] + excluded_keys.map(&:to_s)
+        excluded = App::ROUTE_OWNED_PARAMS + excluded_keys.map(&:to_s)
         params.each do |key, value|
           next if excluded.include?(key)
           state[key.to_sym] = coerce_param_value(value, state[key.to_sym])

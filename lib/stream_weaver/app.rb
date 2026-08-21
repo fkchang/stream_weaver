@@ -21,7 +21,7 @@ module StreamWeaver
                     :current_menu, :current_modal, :modal_context, :current_deck,
                     :current_slide, :current_app_shell, :current_row_key_thunk,
                     :checkbox_keys, :action_tokens, :generation, :fragment_stack, :state_version,
-                    :table_counter, :current_scope, :url_tab_keys,
+                    :table_counter, :current_scope, :url_tab_keys, :url_params,
                     :form_for_active, :form_for_submit_label, :form_for_cancel_label, :form_for_validate
 
       def initialize
@@ -49,11 +49,13 @@ module StreamWeaver
     # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
     ENDPOINT_VERBS = %i[get post put patch delete].freeze
 
-    # Request params owned by Sinatra/StreamWeaver routing. A `url: true` tabs group
-    # reads its key from request params, so these keys can never be claimed. Mirrors
-    # the sync_params_to_state exclusion lists (server.rb / service.rb) -- a key those
-    # strip would validate here and then silently never receive its value.
-    RESERVED_URL_TAB_KEYS = %w[app_id splat captures button_id].freeze
+    # Request params owned by Sinatra/StreamWeaver routing rather than by the app.
+    # This is the single source of truth for that set: every param-to-state sync
+    # strips them (server.rb / service.rb #sync_params_to_state, and
+    # InteractionRunner::ROUTE_PARAMS, which adds its own dispatch-only params),
+    # and a `url: true` tabs group can never claim one -- the key would validate
+    # here and then silently never receive its value.
+    ROUTE_OWNED_PARAMS = %w[app_id splat captures button_id].freeze
 
     # Paths/prefixes owned by StreamWeaver's own framework routes (see server.rb / service.rb).
     # An `endpoint` registered on one of these is never reached -- the internal route is always
@@ -284,11 +286,14 @@ module StreamWeaver
       @_state = current_state
     end
 
-    def rebuild_with_state(current_state, generation: "0", state_version: 0)
+    # @param url_params [Hash, nil] params of the URL being rendered; nil when no
+    #   URL is behind this render. See #tab_index_source for what reads it.
+    def rebuild_with_state(current_state, generation: "0", state_version: 0, url_params: nil)
       @_state = current_state
       @render_state = RenderState.new
       @render_state.generation = generation.to_s
       @render_state.state_version = state_version.to_i
+      @render_state.url_params = url_params
       apply_scope_lifecycle
       flash_messages if chrome
       evaluate_dsl_block(@block)
@@ -851,7 +856,7 @@ module StreamWeaver
 
       # Coerce before the block: `tab` reads this index mid-evaluation to decide
       # which lazy panels to evaluate, so it has to be a usable Integer by then.
-      @_state[key] = coerce_tab_index(@_state[key])
+      @_state[key] = coerce_tab_index(tab_index_source(key, url: url))
 
       components << tabs_component
 
@@ -894,6 +899,19 @@ module StreamWeaver
       end
     end
     private :coerce_tab_index
+
+    # Only the URL decides a `url: true` group's index. State cannot serve even
+    # as a fallback: the param has already been synced into it, so a stale index
+    # is indistinguishable from a fresh one -- and an absent param means tab 0
+    # as surely as `?view=0` does. Renders with no URL behind them (a POST
+    # morph, a canvas push, an export) keep the index they were handed.
+    def tab_index_source(key, url:)
+      url_params = render_state.url_params
+      return @_state[key] unless url && url_params
+
+      url_params[key.to_s]
+    end
+    private :tab_index_source
 
     # Captures the render_state accumulators that an evaluation pass writes to,
     # returning a callable that puts them back. Used where a pass is thrown away
@@ -948,7 +966,7 @@ module StreamWeaver
       name = key.to_s
 
       raise ArgumentError, "tabs #{key.inspect}: url: true does not support lazy: true yet" if group.lazy
-      raise ArgumentError, "tabs #{key.inspect}: reserved request param -- pick another key for url: true tabs" if RESERVED_URL_TAB_KEYS.include?(name)
+      raise ArgumentError, "tabs #{key.inspect}: reserved request param -- pick another key for url: true tabs" if ROUTE_OWNED_PARAMS.include?(name)
       raise ArgumentError, "tabs #{key.inspect}: already claimed by another url: true tabs group" if render_state.url_tab_keys.include?(name)
 
       render_state.url_tab_keys << name

@@ -477,7 +477,7 @@ RSpec.describe StreamWeaver::App do
       expect(tabs_component(app).url).to be(true)
     end
 
-    StreamWeaver::App::RESERVED_URL_TAB_KEYS.map(&:to_sym).each do |reserved|
+    StreamWeaver::App::ROUTE_OWNED_PARAMS.map(&:to_sym).each do |reserved|
       it "raises when a url tabs key is the reserved key #{reserved}" do
         app = described_class.new("Test") do
           tabs reserved, url: true do
@@ -563,6 +563,94 @@ RSpec.describe StreamWeaver::App do
 
       app.rebuild_with_state({})
       expect { app.rebuild_with_state({}) }.not_to raise_error
+    end
+  end
+
+  describe "route tab URL authority" do
+    def three_tab_app(**tabs_options)
+      described_class.new("Test") do
+        tabs :view, **tabs_options do
+          tab("A") { text "a" }
+          tab("B") { text "b" }
+          tab("C") { text "c" }
+        end
+      end
+    end
+
+    it "takes the active index from the request params" do
+      app = three_tab_app(url: true)
+      app.rebuild_with_state({}, url_params: { "view" => "2" })
+
+      expect(app.state[:view]).to eq(2)
+    end
+
+    it "ignores a stale session index when the param is absent" do
+      app = three_tab_app(url: true)
+      app.rebuild_with_state({ view: 2 }, url_params: { "other" => "x" })
+
+      expect(app.state[:view]).to eq(0)
+    end
+
+    it "ignores a stale session index when the param is out of range" do
+      app = three_tab_app(url: true)
+      app.rebuild_with_state({ view: 2 }, url_params: { "view" => "999" })
+
+      expect(app.state[:view]).to eq(0)
+    end
+
+    it "ignores a stale session index when the param is not a number" do
+      app = three_tab_app(url: true)
+      app.rebuild_with_state({ view: 2 }, url_params: { "view" => "abc" })
+
+      expect(app.state[:view]).to eq(0)
+    end
+
+    it "ignores a stale session index when the param arrives as an array" do
+      app = three_tab_app(url: true)
+      app.rebuild_with_state({ view: 2 }, url_params: { "view" => [""] })
+
+      expect(app.state[:view]).to eq(0)
+    end
+
+    it "resolves the same index however many times the same params are replayed" do
+      app = three_tab_app(url: true)
+      state = {}
+      app.rebuild_with_state(state, url_params: { "view" => "1" })
+      state[:view] = 2
+      app.rebuild_with_state(state, url_params: { "view" => "1" })
+
+      expect(app.state[:view]).to eq(1)
+    end
+
+    it "keeps the state index when no request is behind the render" do
+      app = three_tab_app(url: true)
+      app.rebuild_with_state({ view: 2 })
+
+      expect(app.state[:view]).to eq(2)
+    end
+
+    it "leaves plain tabs reading their index from state" do
+      app = three_tab_app
+      app.rebuild_with_state({ view: 2 }, url_params: { "view" => "1" })
+
+      expect(app.state[:view]).to eq(2)
+    end
+
+    it "resolves each group's own key from one snapshot" do
+      app = described_class.new("Test") do
+        tabs :view, url: true do
+          tab("A") { text "a" }
+          tab("B") { text "b" }
+        end
+        tabs :panel, url: true do
+          tab("C") { text "c" }
+          tab("D") { text "d" }
+        end
+      end
+      app.rebuild_with_state({}, url_params: { "panel" => "1" })
+
+      expect(app.state[:view]).to eq(0)
+      expect(app.state[:panel]).to eq(1)
     end
   end
 

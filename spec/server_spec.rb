@@ -81,6 +81,23 @@ RSpec.describe "StreamWeaver Server" do
       expect(state[:subscribe]).to eq(false)           # checkbox: false preserved
       expect(state[:color]).to be_nil.or(eq(""))      # select: blank stripped or empty
     end
+
+    # These params name a route, not app state. The service and the interaction
+    # dispatcher have always stripped them; standalone stripping only two of the
+    # four let the same query string land in state on GET and vanish on POST.
+    StreamWeaver::App::ROUTE_OWNED_PARAMS.each do |routing_param|
+      it "keeps the routing param #{routing_param} out of state" do
+        get "/?#{routing_param}=hijacked"
+
+        expect(last_request.session[:streamlit_state][routing_param.to_sym]).to be_nil
+      end
+    end
+
+    it "still syncs an ordinary query param into state" do
+      get '/?name=Ada'
+
+      expect(last_request.session[:streamlit_state][:name]).to eq("Ada")
+    end
   end
 
   describe "POST /update" do
@@ -110,6 +127,18 @@ RSpec.describe "StreamWeaver Server" do
 
       session_state = last_request.session[:streamlit_state]
       expect(session_state[:name]).to eq("Alice")
+    end
+
+    # The GET twin of this loop lives above. Both paths strip the same set from
+    # the same constant; they used to keep hand-copied lists and had drifted.
+    StreamWeaver::App::ROUTE_OWNED_PARAMS.each do |routing_param|
+      it "keeps the routing param #{routing_param} out of state" do
+        post '/update', { routing_param => "hijacked", "name" => "Alice" }
+
+        session_state = last_request.session[:streamlit_state]
+        expect(session_state[routing_param.to_sym]).to be_nil
+        expect(session_state[:name]).to eq("Alice")
+      end
     end
   end
 
