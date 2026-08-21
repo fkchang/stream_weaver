@@ -12,6 +12,9 @@ module StreamWeaver
     # Mutable state used only while evaluating one render tree. App-definition
     # metadata intentionally remains on App so it survives fresh render states.
     class RenderState
+      # Pass-scoped accumulators (button_counter, table_counter, seen_component_ids,
+      # url_tab_keys) must also be captured in App#rewind_point -- a discarded
+      # evaluation pass that skips one leaves ids/claims drifted on re-run.
       attr_accessor :components, :layout_slots, :button_counter, :seen_component_ids,
                     :current_form, :form_context, :current_checkbox_group,
                     :current_tabs, :current_breadcrumbs, :current_dropdown,
@@ -846,20 +849,73 @@ module StreamWeaver
       tabs_component = Components::Tabs.new(key, variant: variant, url: url, **options)
       claim_url_tab_key!(tabs_component) if url
 
-      @_state[key] ||= 0
+      # Coerce before the block: `tab` reads this index mid-evaluation to decide
+      # which lazy panels to evaluate, so it has to be a usable Integer by then.
+      @_state[key] = coerce_tab_index(@_state[key])
 
       components << tabs_component
 
       parent_components = components
       render_state.current_tabs = tabs_component
       self.components = []
+      rewind_render_state = rewind_point if tabs_component.lazy
 
       evaluate_dsl_block(block)
+
+      # Clamp after the block: the tab count doesn't exist until the nested
+      # `tab` calls have appended, and an index past the end matches no panel.
+      requested = @_state[key]
+      @_state[key] = 0 unless requested.between?(0, components.size - 1)
+
+      if rewind_render_state && @_state[key] != requested
+        # Lazy tabs pick which blocks to evaluate while the block is still
+        # running, so an out-of-range index skipped every panel and left the
+        # group empty. The corrected index needs a second pass -- and the first
+        # pass is discarded, so its render_state marks are rewound with it.
+        self.components = []
+        rewind_render_state.call
+        evaluate_dsl_block(block)
+      end
 
       tabs_component.children = components
       self.components = parent_components
       render_state.current_tabs = nil
     end
+
+    # A tab index reaches state from a URL param, a stale session, or a tab
+    # group that shrank under it, so it can arrive as anything at all. Values
+    # with no sensible integer reading collapse to the first tab; integer
+    # strings are kept, since `url: true` groups read their index from params.
+    def coerce_tab_index(value)
+      case value
+      when Integer then value
+      when String then Integer(value, exception: false) || 0
+      else 0
+      end
+    end
+    private :coerce_tab_index
+
+    # Captures the render_state accumulators that an evaluation pass writes to,
+    # returning a callable that puts them back. Used where a pass is thrown away
+    # and re-run (see #tabs): re-running without rewinding double-counts, and
+    # ids that shift between renders break dispatch for exactly the requests the
+    # re-run exists to rescue. Mirrors #with_clean_form_context, but the rewind
+    # is deliberately explicit -- the caller only knows it needs one after the
+    # block has already run.
+    def rewind_point
+      button_counter = render_state.button_counter
+      table_counter = render_state.table_counter
+      seen_component_ids = render_state.seen_component_ids.dup
+      url_tab_keys = render_state.url_tab_keys.dup
+
+      lambda do
+        render_state.button_counter = button_counter
+        render_state.table_counter = table_counter
+        render_state.seen_component_ids = seen_component_ids
+        render_state.url_tab_keys = url_tab_keys
+      end
+    end
+    private :rewind_point
 
     def tab(label, **options, &block)
       tab_component = Components::Tab.new(label, **options)
@@ -874,7 +930,7 @@ module StreamWeaver
       current = render_state.current_tabs
       if current&.lazy
         index = components.size
-        active = (@_state[current.key] || 0).to_i
+        active = @_state[current.key]
         if index != active
           components << tab_component
           return tab_component

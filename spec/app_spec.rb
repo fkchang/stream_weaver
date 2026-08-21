@@ -566,6 +566,177 @@ RSpec.describe StreamWeaver::App do
     end
   end
 
+  describe "active tab index clamping" do
+    def three_tab_app(**tabs_options)
+      described_class.new("Test") do
+        tabs :section, **tabs_options do
+          tab("A") { text "a" }
+          tab("B") { text "b" }
+          tab("C") { text "c" }
+        end
+      end
+    end
+
+    def tabs_component(app)
+      app.components.find { |c| c.is_a?(StreamWeaver::Components::Tabs) }
+    end
+
+    it "clamps an out-of-range index to the first tab, leaving every panel intact" do
+      app = three_tab_app
+      app.rebuild_with_state({ section: 7 })
+
+      expect(app.state[:section]).to eq(0)
+      expect(tabs_component(app).children.map(&:label)).to eq(%w[A B C])
+      expect(tabs_component(app).children.map { |t| t.children.size }).to eq([1, 1, 1])
+    end
+
+    it "clamps a negative index to the first tab" do
+      app = three_tab_app
+      app.rebuild_with_state({ section: -1 })
+
+      expect(app.state[:section]).to eq(0)
+    end
+
+    it "clamps a non-numeric string index to the first tab" do
+      app = three_tab_app
+      app.rebuild_with_state({ section: "abc" })
+
+      expect(app.state[:section]).to eq(0)
+    end
+
+    it "clamps a value the renderer cannot coerce" do
+      app = three_tab_app
+      app.rebuild_with_state({ section: [1, 2] })
+
+      expect(app.state[:section]).to eq(0)
+    end
+
+    it "clamps a stale index left over from a larger tab group" do
+      app = described_class.new("Test") do
+        tabs :section do
+          tab("A") { text "a" }
+        end
+      end
+      app.rebuild_with_state({ section: 2 })
+
+      expect(app.state[:section]).to eq(0)
+    end
+
+    it "keeps a valid in-range index" do
+      app = three_tab_app
+      app.rebuild_with_state({ section: 2 })
+
+      expect(app.state[:section]).to eq(2)
+    end
+
+    it "coerces an in-range integer string to an integer" do
+      app = three_tab_app
+      app.rebuild_with_state({ section: "2" })
+
+      expect(app.state[:section]).to eq(2)
+    end
+
+    it "clamps an out-of-range index on url tabs too" do
+      app = three_tab_app(url: true)
+      app.rebuild_with_state({ section: 7 })
+
+      expect(app.state[:section]).to eq(0)
+    end
+
+    it "clamps an out-of-range index on lazy tabs, keeping the first panel populated" do
+      app = three_tab_app(lazy: true)
+      app.rebuild_with_state({ section: 7 })
+
+      expect(app.state[:section]).to eq(0)
+      expect(tabs_component(app).children.first.children.size).to eq(1)
+    end
+
+    it "seeds a missing index to the first tab" do
+      app = three_tab_app
+      app.rebuild_with_state({})
+
+      expect(app.state[:section]).to eq(0)
+    end
+
+    describe "lazy re-run side effects" do
+      # Both renders must run the *same* body proc: a block button's id hashes
+      # its block's source_location, so two separately written bodies would
+      # differ for reasons that have nothing to do with the clamp.
+      let(:block_button_body) { proc { button("Go") {} } }
+      let(:blockless_button_body) { proc { button("Go", submit: false) } }
+
+      def lazy_app_with_button(body, strict_ids: false)
+        described_class.new("Test", strict_ids: strict_ids) do
+          tabs :section, lazy: true do
+            instance_exec(&body)
+            tab("A") { text "a" }
+            tab("B") { text "b" }
+            tab("C") { text "c" }
+          end
+        end
+      end
+
+      def button_ids(app)
+        tabs_component(app).children
+                           .select { |c| c.is_a?(StreamWeaver::Components::Button) }
+                           .map(&:id)
+      end
+
+      it "does not raise a duplicate id when the lazy re-run re-evaluates a button" do
+        app = lazy_app_with_button(block_button_body, strict_ids: true)
+
+        expect { app.rebuild_with_state({ section: 7 }) }.not_to raise_error
+      end
+
+      it "gives a block button the same id on a clamped render as on an unclamped one" do
+        clamped = lazy_app_with_button(block_button_body)
+        unclamped = lazy_app_with_button(block_button_body)
+        clamped.rebuild_with_state({ section: 7 })
+        unclamped.rebuild_with_state({ section: 0 })
+
+        expect(button_ids(clamped)).to eq(button_ids(unclamped))
+      end
+
+      it "gives a blockless button the same id on a clamped render as on an unclamped one" do
+        clamped = lazy_app_with_button(blockless_button_body)
+        unclamped = lazy_app_with_button(blockless_button_body)
+        clamped.rebuild_with_state({ section: 7 })
+        unclamped.rebuild_with_state({ section: 0 })
+
+        expect(button_ids(clamped)).to eq(button_ids(unclamped))
+      end
+
+      it "gives a column-DSL table the same dom id on a clamped render as on an unclamped one" do
+        body = proc { table([{ name: "x" }]) { column :name } }
+        clamped = lazy_app_with_button(body)
+        unclamped = lazy_app_with_button(body)
+        clamped.rebuild_with_state({ section: 7 })
+        unclamped.rebuild_with_state({ section: 0 })
+
+        table_dom_ids = lambda do |app|
+          tabs_component(app).children
+                             .select { |c| c.is_a?(StreamWeaver::Components::Table) }
+                             .map(&:dom_id)
+        end
+        expect(table_dom_ids.call(clamped)).to eq(table_dom_ids.call(unclamped))
+      end
+
+      it "does not report a nested url tabs group as already claimed on the re-run" do
+        app = described_class.new("Test") do
+          tabs :outer, lazy: true do
+            tabs :inner, url: true do
+              tab("X") { text "x" }
+            end
+            tab("A") { text "a" }
+            tab("B") { text "b" }
+          end
+        end
+
+        expect { app.rebuild_with_state({ outer: 7 }) }.not_to raise_error
+      end
+    end
+  end
+
   describe "#rebuild_with_state" do
     it "re-evaluates DSL block" do
       app = described_class.new("Test") do
