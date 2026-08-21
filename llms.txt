@@ -599,6 +599,8 @@ curl -sX POST "http://localhost:<bridge-port>/canvas/<session>/save-doc" \
 
 History entries also show a 💾 button so the user can promote any past snapshot to a doc without re-pushing.
 
+The reader also discovers docs roots across the whole machine (scan of `$STREAMWEAVER_DOCS_SCAN_ROOTS`, default `~/work`, unioned with an auto-written registry at `~/.streamweaver/docs_roots.log`), grouped by repo with a repo filter — and it renders StreamWeaver-flavored `.org` docs (`#+STREAMWEAVER_DSL:` marker) everywhere `.rb` docs work.
+
 ## Agent Skills (Install These Before Hand-Rolling the Above)
 
 If you are Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, or another agent that uses the `SKILL.md` convention, StreamWeaver ships two skills that already encode the canvas-push workflow above as trained procedure — check whether they're loaded before building visual UI from this doc's raw examples:
