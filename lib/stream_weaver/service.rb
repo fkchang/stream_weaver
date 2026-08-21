@@ -866,7 +866,8 @@ module StreamWeaver
       adapter = Adapter::AlpineJS.new(url_prefix: "/admin")
 
       admin_app.with_render_lock do
-        admin_app.rebuild_with_state(state, generation: action_generation('admin'), state_version: state_version('admin'))
+        admin_app.rebuild_with_state(state, generation: action_generation('admin'),
+          state_version: state_version('admin'), url_params: params)
         set_action_manifest('admin', admin_app.render_state.action_tokens)
         set_app_state('admin', state)
 
@@ -984,7 +985,11 @@ module StreamWeaver
       end
 
       streamlit_app.with_render_lock do
-        streamlit_app.rebuild_with_state(state, generation: action_generation(app_id), state_version: state_version(app_id))
+        # Only a URL decides a `url: true` tabs group's index (App#tab_index_source).
+        # No `request.get?` guard is needed here as in server.rb's shared render_app:
+        # the POST routes below render through InteractionRunner, which passes none.
+        streamlit_app.rebuild_with_state(state, generation: action_generation(app_id),
+          state_version: state_version(app_id), url_params: params)
         set_action_manifest(app_id, streamlit_app.render_state.action_tokens)
         set_app_state(app_id, state)
 
@@ -1018,7 +1023,8 @@ module StreamWeaver
       adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
       is_htmx = request.env.key?('HTTP_HX_REQUEST')
       streamlit_app.with_render_lock do
-        streamlit_app.rebuild_with_state(state, generation: action_generation(app_id), state_version: state_version(app_id))
+        streamlit_app.rebuild_with_state(state, generation: action_generation(app_id),
+          state_version: state_version(app_id), url_params: params)
         set_action_manifest(app_id, streamlit_app.render_state.action_tokens)
         if is_htmx
           Views::AppContentView.new(streamlit_app, state, adapter, false).call
