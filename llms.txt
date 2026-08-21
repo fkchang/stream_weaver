@@ -326,6 +326,36 @@ end.run!
 
 **Important:** `route_by` is opt-in — apps without it are unaffected.
 
+### Route Tabs (`tabs url: true`)
+
+Puts a tab group's active index in a query param, so a tab is bookmarkable:
+
+```ruby
+tabs :view, url: true do        # active tab lives in ?view=<index>
+  tab("Overview") { text "..." }
+  tab("Findings") { text "..." }
+end
+
+# Read state BELOW the declaration — above it, state[:view] is still the raw
+# pre-authority value (param string or stale session index), not the resolved Integer.
+md "Active view: #{state[:view]}"
+```
+
+Tab switching is client-side (History API), so no request is made; back/forward and
+bookmarks work. Multiple groups compose, one param per key (`/?view=2&panel=1`).
+
+**URL authority:** on a full GET the param wins — present and valid → that index,
+absent or invalid → tab 0, never the session value. Same URL, same tabs, always.
+`?view=999`, `?view=abc`, `?view[]=` all return 200 on tab 0; `?view=2` is a valid deep
+link. A route-tab group therefore can't be server-side preset (`state[:view] ||= 1`
+above the declaration is overwritten) — link to `/?view=1` instead.
+
+Raises at build time: reserved keys (`app_id`, `splat`, `captures`, `button_id`),
+duplicate `url:` keys, or `url: true` combined with `lazy: true`. On canvas, `url:` is
+ignored (plain client tabs + one logged warning; the page URL is untouched).
+
+Plain tabs also clamp: an out-of-range index renders tab 0 instead of blank panels.
+
 ### Resource Scaffolding
 
 Use `resource` for convention-over-configuration CRUD. One block replaces ~40 lines of route/state/form boilerplate:

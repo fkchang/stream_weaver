@@ -348,6 +348,51 @@ tabs :demo, variant: :enclosed do ... end    # Boxed tabs
 tabs :demo, variant: :"soft-rounded" do ... end  # Pill-style
 ```
 
+An out-of-range index (a stale session value, or a group that shrank) renders tab 0
+rather than blanking every panel.
+
+### Route tabs (`url: true`)
+
+```ruby
+tabs :view, url: true do
+  tab("Overview") { text "..." }
+  tab("Findings") { text "..." }
+end
+# active tab lives in ?view=<index> — bookmarkable, back/forward-aware
+```
+
+Switching tabs is client-side (History API `pushState`/`popstate`) — zero requests.
+Multiple `url: true` groups compose, one param per key: `/?view=2&panel=1`.
+
+**The URL is authoritative on a full GET.** Param present and valid → that index.
+Absent or invalid → tab 0, *never* the session value. The same URL always renders the
+same tabs.
+
+Invalid values degrade instead of erroring — `?view=999`, `?view=abc`, and `?view[]=`
+all return 200 with tab 0 active. Integer strings (`?view=2`) are valid deep links.
+Build-time `ArgumentError`s: a reserved request param as the key (`app_id`, `splat`,
+`captures`, `button_id`), two groups claiming the same key, or `url: true` with
+`lazy: true`.
+
+**Gotcha — read `state[:view]` *below* the declaration.** Above it, the key still holds
+the raw pre-authority value (the param string, or a stale session index); the resolved
+integer only exists once the group has applied URL authority:
+
+```ruby
+tabs :view, url: true do ... end
+md "Active view: #{state[:view]}"   # resolved Integer
+```
+
+**Gotcha — a route-tab group cannot be server-side preset.** `state[:view] ||= 1` above
+the declaration is overwritten by URL authority (tab 0 on a bare GET). That is the
+authority rule working as designed; use a deep link (`/?view=1`) instead.
+
+On canvas pages `url:` is ignored — the group renders as plain client-side tabs and one
+warning is logged per render pass, since a canvas page has no app URL to carry the tab.
+
+See `examples/layout/route_tabs_demo.rb` for a two-group demo that exercises both
+gotchas.
+
 ## Breadcrumbs
 
 ```ruby
