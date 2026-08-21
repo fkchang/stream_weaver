@@ -351,6 +351,12 @@ tabs :demo, variant: :"soft-rounded" do ... end  # Pill-style
 An out-of-range index (a stale session value, or a group that shrank) renders tab 0
 rather than blanking every panel.
 
+**Deprecated: `tabs :key, lazy: true`.** Lazy tabs defer evaluating inactive panels and
+fetch the newly-active one with a server round-trip, which a canvas page has no route
+for — inactive panels there stay empty forever (`stream_weaver-pkh`). The mode still
+works exactly as before and warns once per process. Migrate to route tabs (`url: true`)
+below; a lazy route-tab mode will replace this one.
+
 ### Route tabs (`url: true`)
 
 ```ruby

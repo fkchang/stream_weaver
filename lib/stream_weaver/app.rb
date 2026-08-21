@@ -57,6 +57,12 @@ module StreamWeaver
     # here and then silently never receive its value.
     ROUTE_OWNED_PARAMS = %w[app_id splat captures button_id].freeze
 
+    # Latch for the once-per-process lazy-tabs deprecation warning
+    # (see #warn_lazy_tabs_deprecated). Writable so specs can re-arm it.
+    class << self
+      attr_accessor :lazy_tabs_deprecation_warned
+    end
+
     # Paths/prefixes owned by StreamWeaver's own framework routes (see server.rb / service.rb).
     # An `endpoint` registered on one of these is never reached -- the internal route is always
     # defined first, and Sinatra dispatches to the first matching route. We still warn at
@@ -853,6 +859,9 @@ module StreamWeaver
     def tabs(key, variant: :line, url: false, **options, &block)
       tabs_component = Components::Tabs.new(key, variant: variant, url: url, **options)
       claim_url_tab_key!(tabs_component) if url
+      # `url: true` with lazy has already raised above, so reaching here with
+      # lazy set means the deprecated POST-morph mode.
+      warn_lazy_tabs_deprecated(key) if tabs_component.lazy
 
       # Coerce before the block: `tab` reads this index mid-evaluation to decide
       # which lazy panels to evaluate, so it has to be a usable Integer by then.
@@ -957,6 +966,27 @@ module StreamWeaver
 
       capture_children_then_append(tab_component, &block)
     end
+
+    # Lazy tabs fetch the newly-active panel with an `hx-post` morph, which a
+    # canvas page has no route for -- inactive panels there render as a
+    # placeholder comment and can never receive content (beads
+    # stream_weaver-pkh). Route tabs are the direction this goes instead, and a
+    # lazy route-tab mode is meant to replace this one; until then the mode
+    # still works exactly as before and only says so.
+    #
+    # Once per process, not once per declaration: a lazy app re-evaluates its
+    # whole DSL on every interaction, so a per-render warning would bury the
+    # logs of the busiest apps -- the ones most likely to be using lazy.
+    def warn_lazy_tabs_deprecated(key)
+      return if self.class.lazy_tabs_deprecation_warned
+
+      self.class.lazy_tabs_deprecation_warned = true
+      warn "StreamWeaver: tabs #{key.inspect} -- lazy: true is deprecated. Switching a lazy tab " \
+           "round-trips to the server, which canvas cannot serve (stream_weaver-pkh). Prefer route " \
+           "tabs (tabs #{key.inspect}, url: true); lazy route tabs will replace this mode. " \
+           "Warned once per process."
+    end
+    private :warn_lazy_tabs_deprecated
 
     # Validates and records a `url: true` tabs key. Keys live on render_state so
     # tracking resets with every DSL evaluation -- the same app re-rendering per
