@@ -553,198 +553,44 @@
 
 <% if is_history %>
   <%# Save-as-doc widget — promotes this history snapshot to docs/streamweaver_canvas/.
-      Mirrors bridge_server.rb's save_doc_widget look-and-feel (sw-save-doc-* CSS,
-      Alpine modal). Lives inside #sw-reader-nav so the OOB swap refreshes its
-      file: index on every boosted navigation. Its <style> deliberately stays in
-      this same is_history conditional (spec/canvas/reader_promote_history_spec.rb
-      asserts the sw-save-doc-* strings are absent entirely for docs files), which
-      is also why these unscoped .sw-save-doc-* selectors are not part of the
-      #sw-reader-chrome-css block the scoping guard checks. %>
-  <style>@layer sw-reader-chrome {
-    [x-cloak] { display: none !important; }
-    /* The widget now lives inside #sw-reader-nav (a flex row) so the OOB swap
-       refreshes its file: index. display:contents keeps it from becoming a
-       fourth flex item and pushing Next off the right edge -- both its real
-       children are position:fixed, so nothing lands in the flow. */
-    .sw-save-doc-host { display: contents; }
-    .sw-save-doc-btn {
-      position: fixed; bottom: 1rem; right: 1rem; z-index: 50;
-      background: var(--sw-color-primary, #1f6feb); color: #fff;
-      border: none; border-radius: 999px; padding: 0.55rem 1rem;
-      font-size: 0.85rem; font-weight: 600; cursor: pointer;
-      box-shadow: 0 6px 16px rgba(28,25,23,0.18);
-      opacity: 0.85; transition: opacity 120ms ease, transform 120ms ease;
-    }
-    .sw-save-doc-btn:hover { opacity: 1; transform: translateY(-1px); }
-    .sw-save-doc-modal {
-      position: fixed; inset: 0; z-index: 60;
-      background: rgba(15, 17, 23, 0.45);
-      display: flex; align-items: center; justify-content: center;
-    }
-    .sw-save-doc-dialog {
-      background: #fff; border-radius: 8px; padding: 1.5rem;
-      width: min(440px, 90vw); box-shadow: 0 20px 50px rgba(0,0,0,0.25);
-      font-family: 'Source Sans 3', system-ui, sans-serif;
-      color: #111827; text-align: left;
-    }
-    .sw-save-doc-dialog h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; }
-    .sw-save-doc-dialog p.hint {
-      margin: 0 0 1rem 0; color: #6b7280; font-size: 0.85rem;
-    }
-    .sw-save-doc-dialog input[type=text] {
-      width: 100%; padding: 0.55rem 0.75rem;
-      border: 1px solid #d1d5db; border-radius: 5px;
-      font-size: 0.95rem; font-family: ui-monospace, monospace;
-      box-sizing: border-box;
-    }
-    .sw-save-doc-dialog input[type=text]:focus {
-      outline: 2px solid var(--sw-color-primary, #1f6feb); outline-offset: -1px;
-      border-color: transparent;
-    }
-    .sw-save-doc-error {
-      margin-top: 0.75rem; padding: 0.5rem 0.75rem;
-      background: #fee2e2; color: #991b1b; border-radius: 4px;
-      font-size: 0.85rem;
-    }
-    .sw-save-doc-success {
-      margin-top: 0.75rem; padding: 0.5rem 0.75rem;
-      background: #dcfce7; color: #166534; border-radius: 4px;
-      font-size: 0.85rem; word-break: break-all;
-    }
-    .sw-save-doc-notice {
-      margin-top: 0.5rem; padding: 0.5rem 0.75rem;
-      background: #fef9c3; color: #854d0e; border-radius: 4px;
-      font-size: 0.85rem;
-    }
-    .sw-save-doc-actions {
-      display: flex; justify-content: flex-end; gap: 0.5rem;
-      margin-top: 1rem;
-    }
-    .sw-save-doc-actions button {
-      padding: 0.45rem 1rem; border-radius: 5px;
-      font-size: 0.9rem; cursor: pointer; border: 1px solid transparent;
-    }
-    .sw-save-doc-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .sw-save-doc-cancel { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
-    .sw-save-doc-cancel:hover:not(:disabled) { background: #e5e7eb; }
-    .sw-save-doc-save {
-      background: var(--sw-color-primary, #1f6feb); color: #fff;
-    }
-    .sw-save-doc-save:hover:not(:disabled) { filter: brightness(1.05); }
-    .sw-save-doc-save-org {
-      background: #fff; color: var(--sw-color-primary, #1f6feb);
-      border-color: var(--sw-color-primary, #1f6feb);
-    }
-    .sw-save-doc-save-org:hover:not(:disabled) { background: #eff6ff; }
-  }</style>
-  <div x-data="{
-    open: false,
-    <%# to_json gives valid JS-string quoting (handles embedded quotes/apostrophes
-        from a filesystem-derived name correctly); ERB::Util.h then HTML-escapes
-        the result for the surrounding "..." attribute. Either alone is wrong: bare
-        to_json leaks a literal " that closes the attribute early (the exact q4y
-        regression above); the old ERB::Util.h(name) with hand-written '...' quotes
-        HTML-escapes ' to &#39;, which the HTML parser decodes back to a literal '
-        before Alpine ever sees it, so an apostrophe in the name still breaks out. %>
-    name: <%= ERB::Util.h(default_name.to_json) %>,
-    file: <%= @current_index %>,
-    format: 'rb',
-    saving: false,
-    savedPath: null,
-    error: null,
-    coverage: null,
-    notice: null,
-    openDialog() {
-      this.error = null; this.savedPath = null; this.coverage = null; this.notice = null;
-      this.format = 'rb';
-      this.open = true;
-      this.$nextTick(() => this.$refs.input && this.$refs.input.select());
-    },
-    // Tiered copy for the org-coverage notice (Phase 2 design spec's
-    // Save-as-Org UX section, including its 2026-08-14 copy-accuracy
-    // correction: N/M must name passthrough_verbatim/passthrough_lossy
-    // specifically, not a conflated total-recognized count, or a doc
-    // with mostly-verbatim elements gets told MORE of it is lossy
-    // than actually is). Only ever non-null after a format=org save
-    // whose response included coverage; a plain .rb save leaves
-    // coverage null so this stays hidden.
-    orgNotice() {
-      if (!this.coverage) return null;
-      const { total, recognized, passthrough_verbatim, passthrough_lossy } = this.coverage;
-      if (recognized === total) return null;
-      let body;
-      if (passthrough_verbatim > 0 && passthrough_lossy > 0) {
-        body = `${passthrough_verbatim} element(s) will show as raw code in a plain org viewer (nothing lost); ${passthrough_lossy} more can't be verbatim-recovered and will be replaced with a placeholder comment instead — those specific parts won't survive the round trip.`;
-      } else if (passthrough_lossy > 0) {
-        body = `${passthrough_lossy} element(s) can't be verbatim-recovered and will be replaced with a placeholder comment — those specific parts won't survive the round trip.`;
-      } else {
-        body = `${passthrough_verbatim} element(s) will show as raw code in a plain org viewer — nothing is lost, just not styled.`;
-      }
-      return recognized / total < 0.5
-        ? `This looks like an app, not a document — Org format won't add much here. ${body}`
-        : body;
-    },
-    async save() {
-      if (this.saving) return;
-      this.saving = true; this.error = null; this.coverage = null; this.notice = null;
-      try {
-        const res = await fetch('/save-doc', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({file: this.file, name: this.name, format: this.format})
-        });
-        const data = await res.json();
-        if (res.ok && data.ok) {
-          this.savedPath = data.path;
-          this.coverage = data.coverage || null;
-          this.notice = this.orgNotice();
-          // A tiered notice can be a full sentence or two -- the default
-          // 1.8s auto-close (tuned for a one-line success confirmation)
-          // isn't enough time to read it.
-          setTimeout(() => { this.open = false; }, this.notice ? 6000 : 1800);
-        } else {
-          this.error = data.error || ('HTTP ' + res.status);
-        }
-      } catch (e) {
-        this.error = e.message;
-      } finally {
-        this.saving = false;
-      }
-    }
-  }" class="sw-save-doc-host" @keydown.escape.window="open = false">
-    <button class="sw-save-doc-btn" @click="openDialog()" title="Save this history snapshot as a persistent doc">
-      💾 Save as doc
-    </button>
-    <div x-show="open" x-cloak class="sw-save-doc-modal" @click.self="open = false">
-      <div class="sw-save-doc-dialog" @click.stop>
-        <h3>Save snapshot as doc</h3>
-        <p class="hint">
-          <span x-show="format !== 'org'">Promotes this history entry to <code>docs/streamweaver_canvas/&lt;name&gt;.rb</code> (or <code>~/.streamweaver/canvas/</code> outside a git repo).</span>
-          <span x-show="format === 'org'">Promotes this history entry to a human-readable <code>&lt;name&gt;.org</code> sibling file alongside the canonical <code>.rb</code>.</span>
-        </p>
-        <input type="text" x-model="name" x-ref="input"
-               @keydown.enter.prevent="save()"
-               :disabled="saving"
-               placeholder="my-canvas-doc">
-        <div x-show="error" x-text="error" class="sw-save-doc-error"></div>
-        <div x-show="savedPath" class="sw-save-doc-success">
-          ✓ Saved to <code x-text="savedPath"></code>
-        </div>
-        <div x-show="notice" x-text="notice" class="sw-save-doc-notice"></div>
-        <div class="sw-save-doc-actions">
-          <button class="sw-save-doc-cancel" @click="open = false" :disabled="saving">Cancel</button>
-          <button class="sw-save-doc-save-org" @click="format = 'org'; save()" :disabled="saving" title="Save as a plain-text .org sibling file">
-            <span x-show="!(saving && format === 'org')">Save as Org</span>
-            <span x-show="saving && format === 'org'">Saving...</span>
-          </button>
-          <button class="sw-save-doc-save" @click="format = 'rb'; save()" :disabled="saving">
-            <span x-show="!(saving && format === 'rb')">Save</span>
-            <span x-show="saving && format === 'rb'">Saving...</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+      Chrome (CSS + Alpine skeleton) shared with the canvas page's own widget via
+      SaveDocWidget (stream_weaver-e13); only the endpoint, default-name source,
+      the file: index, and copy below are specific to the reader. Rendered inside
+      this same is_history conditional (not hoisted up with #sw-reader-chrome-css)
+      because spec/canvas/reader_promote_history_spec.rb asserts the sw-save-doc-*
+      strings are absent entirely for docs files. %>
+  <%
+    # to_json gives valid JS-string quoting (handles embedded quotes/apostrophes
+    # from a filesystem-derived name correctly); ERB::Util.h then HTML-escapes
+    # the result for the surrounding "..." attribute. Either alone is wrong: bare
+    # to_json leaks a literal " that closes the attribute early (the exact q4y
+    # regression the spec below guards against); the old ERB::Util.h(name) with
+    # hand-written '...' quotes HTML-escapes ' to &#39;, which the HTML parser
+    # decodes back to a literal ' before Alpine ever sees it, so an apostrophe in
+    # the name still breaks out.
+  %>
+  <%= StreamWeaver::Canvas::SaveDocWidget.render(
+    endpoint: '/save-doc',
+    button_title: 'Save this history snapshot as a persistent doc',
+    dialog_title: 'Save snapshot as doc',
+    hint_html: <<~HINT.strip,
+      <span x-show="format !== 'org'">Promotes this history entry to <code>docs/streamweaver_canvas/&lt;name&gt;.rb</code> (or <code>~/.streamweaver/canvas/</code> outside a git repo).</span>
+      <span x-show="format === 'org'">Promotes this history entry to a human-readable <code>&lt;name&gt;.org</code> sibling file alongside the canonical <code>.rb</code>.</span>
+    HINT
+    # The reader's default name is derived from the archived snapshot's own
+    # filename, not wall-clock "now", so it's computed once server-side and
+    # needs no client-side recompute on openDialog() (reset_name_js: '').
+    name_init: ERB::Util.h(default_name.to_json),
+    extra_alpine_data: "file: #{@current_index},\n    ",
+    extra_body_fields: 'file: this.file, ',
+    # display:contents keeps the widget (inside #sw-reader-nav, a flex row so
+    # the OOB swap refreshes its file: index on every boosted navigation) from
+    # becoming a fourth flex item and pushing Next off the right edge -- both
+    # its real children are position:fixed, so nothing lands in the flow.
+    host_class: 'sw-save-doc-host',
+    css_layer: 'sw-reader-chrome',
+    dialog_css_extra: "\n      color: #111827; text-align: left;"
+  ) %>
 <% end %>
   </div>
 

@@ -8,6 +8,7 @@ require_relative 'protocol'
 require_relative 'session'
 require_relative 'bridge'
 require_relative 'doc_store'
+require_relative 'save_doc_widget'
 require_relative '../org/writer'
 
 # Load StreamWeaver core for adapter and views
@@ -294,88 +295,26 @@ module StreamWeaver
 
       # Floating "Save as doc" button + Alpine.js modal that POSTs the
       # session's last-good DSL to /canvas/:name/save-doc, promoting it from
-      # ephemeral history to docs/streamweaver_canvas/<name>.rb.
+      # ephemeral history to docs/streamweaver_canvas/<name>.rb. Chrome shared
+      # with the reader's own Save-as-doc widget via SaveDocWidget
+      # (stream_weaver-e13); only the endpoint, default-name source, and copy
+      # below are specific to the live canvas page.
       def save_doc_widget(session_name)
-        <<~HTML
-          <style>
-            [x-cloak] { display: none !important; }
-            .sw-save-doc-btn {
-              position: fixed; bottom: 1rem; right: 1rem; z-index: 50;
-              background: var(--sw-color-primary, #1f6feb); color: #fff;
-              border: none; border-radius: 999px; padding: 0.55rem 1rem;
-              font-size: 0.85rem; font-weight: 600; cursor: pointer;
-              box-shadow: 0 6px 16px rgba(28,25,23,0.18);
-              opacity: 0.85; transition: opacity 120ms ease, transform 120ms ease;
-            }
-            .sw-save-doc-btn:hover { opacity: 1; transform: translateY(-1px); }
-            .sw-save-doc-modal {
-              position: fixed; inset: 0; z-index: 60;
-              background: rgba(15, 17, 23, 0.45);
-              display: flex; align-items: center; justify-content: center;
-            }
-            .sw-save-doc-dialog {
-              background: #fff; border-radius: 8px; padding: 1.5rem;
-              width: min(440px, 90vw); box-shadow: 0 20px 50px rgba(0,0,0,0.25);
-              font-family: 'Source Sans 3', system-ui, sans-serif;
-            }
-            .sw-save-doc-dialog h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; }
-            .sw-save-doc-dialog p.hint {
-              margin: 0 0 1rem 0; color: #6b7280; font-size: 0.85rem;
-            }
-            .sw-save-doc-dialog input[type=text] {
-              width: 100%; padding: 0.55rem 0.75rem;
-              border: 1px solid #d1d5db; border-radius: 5px;
-              font-size: 0.95rem; font-family: ui-monospace, monospace;
-              box-sizing: border-box;
-            }
-            .sw-save-doc-dialog input[type=text]:focus {
-              outline: 2px solid var(--sw-color-primary, #1f6feb); outline-offset: -1px;
-              border-color: transparent;
-            }
-            .sw-save-doc-error {
-              margin-top: 0.75rem; padding: 0.5rem 0.75rem;
-              background: #fee2e2; color: #991b1b; border-radius: 4px;
-              font-size: 0.85rem;
-            }
-            .sw-save-doc-success {
-              margin-top: 0.75rem; padding: 0.5rem 0.75rem;
-              background: #dcfce7; color: #166534; border-radius: 4px;
-              font-size: 0.85rem; word-break: break-all;
-            }
-            .sw-save-doc-notice {
-              margin-top: 0.5rem; padding: 0.5rem 0.75rem;
-              background: #fef9c3; color: #854d0e; border-radius: 4px;
-              font-size: 0.85rem;
-            }
-            .sw-save-doc-actions {
-              display: flex; justify-content: flex-end; gap: 0.5rem;
-              margin-top: 1rem;
-            }
-            .sw-save-doc-actions button {
-              padding: 0.45rem 1rem; border-radius: 5px;
-              font-size: 0.9rem; cursor: pointer; border: 1px solid transparent;
-            }
-            .sw-save-doc-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
-            .sw-save-doc-cancel { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
-            .sw-save-doc-cancel:hover:not(:disabled) { background: #e5e7eb; }
-            .sw-save-doc-save {
-              background: var(--sw-color-primary, #1f6feb); color: #fff;
-            }
-            .sw-save-doc-save:hover:not(:disabled) { filter: brightness(1.05); }
-            .sw-save-doc-save-org {
-              background: #fff; color: var(--sw-color-primary, #1f6feb);
-              border-color: var(--sw-color-primary, #1f6feb);
-            }
-            .sw-save-doc-save-org:hover:not(:disabled) { background: #eff6ff; }
-          </style>
-          <div x-data="{
-            open: false,
-            name: '',
-            format: 'rb',
-            saving: false,
-            savedPath: null,
-            error: null,
-            coverage: null,
+        StreamWeaver::Canvas::SaveDocWidget.render(
+          endpoint: "/canvas/#{session_name}/save-doc",
+          button_title: 'Save this canvas as a persistent doc',
+          dialog_title: 'Save canvas as doc',
+          hint_html: <<~HINT.strip,
+            <span x-show="format !== 'org'">Writes to <code>docs/streamweaver_canvas/&lt;name&gt;.rb</code> (or <code>~/.streamweaver/canvas/</code> outside a git repo).</span>
+            <span x-show="format === 'org'">Writes a human-readable <code>&lt;name&gt;.org</code> sibling file alongside the canonical <code>.rb</code>.</span>
+          HINT
+          name_init: "''",
+          reset_name_js: 'this.name = this.defaultName();',
+          # defaultName() recomputes a fresh timestamp on every openDialog()
+          # call (a long-lived canvas session can be saved many times), unlike
+          # the reader's fixed snapshot-derived name -- see SaveDocWidget's
+          # name_init/reset_name_js doc comment.
+          extra_alpine_data: <<~JS
             defaultName() {
               const d = new Date();
               const pad = n => String(n).padStart(2, '0');
@@ -383,100 +322,8 @@ module StreamWeaver
               const hm = pad(d.getHours()) + pad(d.getMinutes());
               return '#{session_name}-' + ymd + '-' + hm;
             },
-            notice: null,
-            openDialog() {
-              this.error = null; this.savedPath = null; this.coverage = null; this.notice = null;
-              this.name = this.defaultName();
-              this.format = 'rb';
-              this.open = true;
-              this.$nextTick(() => this.$refs.input && this.$refs.input.select());
-            },
-            // Tiered copy for the org-coverage notice (Phase 2 design spec's
-            // Save-as-Org UX section, including its 2026-08-14 copy-accuracy
-            // correction: N/M must name passthrough_verbatim/passthrough_lossy
-            // specifically, not a conflated total-recognized count, or a doc
-            // with mostly-verbatim elements gets told MORE of it is lossy
-            // than actually is). Only ever non-null after a format=org save
-            // whose response included coverage; a plain .rb save leaves
-            // coverage null so this stays hidden.
-            orgNotice() {
-              if (!this.coverage) return null;
-              const { total, recognized, passthrough_verbatim, passthrough_lossy } = this.coverage;
-              if (recognized === total) return null;
-              let body;
-              if (passthrough_verbatim > 0 && passthrough_lossy > 0) {
-                body = `${passthrough_verbatim} element(s) will show as raw code in a plain org viewer (nothing lost); ${passthrough_lossy} more can't be verbatim-recovered and will be replaced with a placeholder comment instead — those specific parts won't survive the round trip.`;
-              } else if (passthrough_lossy > 0) {
-                body = `${passthrough_lossy} element(s) can't be verbatim-recovered and will be replaced with a placeholder comment — those specific parts won't survive the round trip.`;
-              } else {
-                body = `${passthrough_verbatim} element(s) will show as raw code in a plain org viewer — nothing is lost, just not styled.`;
-              }
-              return recognized / total < 0.5
-                ? `This looks like an app, not a document — Org format won't add much here. ${body}`
-                : body;
-            },
-            async save() {
-              if (this.saving) return;
-              this.saving = true; this.error = null; this.coverage = null; this.notice = null;
-              try {
-                const res = await fetch('/canvas/#{session_name}/save-doc', {
-                  method: 'POST',
-                  headers: {'Content-Type': 'application/json'},
-                  body: JSON.stringify({name: this.name, format: this.format})
-                });
-                const data = await res.json();
-                if (res.ok && data.ok) {
-                  this.savedPath = data.path;
-                  this.coverage = data.coverage || null;
-                  this.notice = this.orgNotice();
-                  // A tiered notice can be a full sentence or two -- the
-                  // default 1.8s auto-close (tuned for a one-line success
-                  // confirmation) isn't enough time to read it.
-                  setTimeout(() => { this.open = false; }, this.notice ? 6000 : 1800);
-                } else {
-                  this.error = data.error || ('HTTP ' + res.status);
-                }
-              } catch (e) {
-                this.error = e.message;
-              } finally {
-                this.saving = false;
-              }
-            }
-          }" @keydown.escape.window="open = false">
-            <button class="sw-save-doc-btn" @click="openDialog()" title="Save this canvas as a persistent doc">
-              💾 Save as doc
-            </button>
-            <div x-show="open" x-cloak class="sw-save-doc-modal" @click.self="open = false">
-              <div class="sw-save-doc-dialog" @click.stop>
-                <h3>Save canvas as doc</h3>
-                <p class="hint">
-                  <span x-show="format !== 'org'">Writes to <code>docs/streamweaver_canvas/&lt;name&gt;.rb</code> (or <code>~/.streamweaver/canvas/</code> outside a git repo).</span>
-                  <span x-show="format === 'org'">Writes a human-readable <code>&lt;name&gt;.org</code> sibling file alongside the canonical <code>.rb</code>.</span>
-                </p>
-                <input type="text" x-model="name" x-ref="input"
-                       @keydown.enter.prevent="save()"
-                       :disabled="saving"
-                       placeholder="my-canvas-doc">
-                <div x-show="error" x-text="error" class="sw-save-doc-error"></div>
-                <div x-show="savedPath" class="sw-save-doc-success">
-                  ✓ Saved to <code x-text="savedPath"></code>
-                </div>
-                <div x-show="notice" x-text="notice" class="sw-save-doc-notice"></div>
-                <div class="sw-save-doc-actions">
-                  <button class="sw-save-doc-cancel" @click="open = false" :disabled="saving">Cancel</button>
-                  <button class="sw-save-doc-save-org" @click="format = 'org'; save()" :disabled="saving" title="Save as a plain-text .org sibling file">
-                    <span x-show="!(saving && format === 'org')">Save as Org</span>
-                    <span x-show="saving && format === 'org'">Saving...</span>
-                  </button>
-                  <button class="sw-save-doc-save" @click="format = 'rb'; save()" :disabled="saving">
-                    <span x-show="!(saving && format === 'rb')">Save</span>
-                    <span x-show="saving && format === 'rb'">Saving...</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        HTML
+          JS
+        )
       end
 
       def polling_script(session_name, current_version)
