@@ -155,6 +155,96 @@ Declares a static named route. Renders the block when the current URL matches. U
 
 ---
 
+### `form_for`
+
+A resource-bound form primitive: seeds fields from a record, infers create vs. update
+from record identity, renders inputs via the shared field-type table, and wires submit
+to coerce → validate → `store.create`/`update` → flash + PRG. It's what `resource`'s own
+default `new`/`edit` views call under the hood — `form_for` exposes the same machinery
+for use inside your own override blocks.
+
+```ruby
+resource :person, store: PersonStore do
+  field :name, :string
+  field :role, :enum, values: %w[lead champion decision_maker]
+
+  edit do |person|
+    header1 "Edit #{person[:name]}"
+    form_for :person, record: person do
+      submit_label "Save"
+      cancel_label "Cancel"
+    end
+  end
+
+  new do
+    header1 "New Person"
+    form_for :person do
+      submit_label "Create"
+    end
+  end
+end
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `resource_name` | `nil` | A registered `resource` name — reuses its `store:`/`fields:` |
+| `record:` | `nil` | The record being edited. `nil`, or an id-less hash, means create mode |
+| `store:` | resource's store | Required if `resource_name` is omitted |
+| `fields:` | resource's fields | Required if `resource_name` is omitted |
+| `name:` | `"#{singular}_form"` | Scope/form name override |
+| `on_success:` | resource's default transition | `Proc`, `instance_exec`'d with the new/updated id |
+| `validate:` | `nil` | `Proc`, called with coerced values, returns `Hash[field, Array[String]]` of extra errors |
+
+Can also be used standalone, without a `resource` block, by passing `store:`/`fields:`
+directly:
+
+```ruby
+form_for store: PersonStore, fields: [
+  StreamWeaver::Field.new(:name, :string, {}),
+  StreamWeaver::Field.new(:age, :integer, {})
+], name: :person_form
+```
+
+**Create vs. update inference** — a `nil` `record:`, or a `record:` whose `:id` is nil,
+means create; a present record with an id means update. This also sets the default
+submit label (`"Create"` / `"Save"`).
+
+**Seeding and dirty-draft safety** — the form's scope is seeded from `record:` only on
+the first render for that record id, and never re-seeded on subsequent re-renders for
+the same id — an unrelated re-render (a sidebar filter, a toast dismiss) never clobbers
+an in-progress edit. Switching to a different record id (e.g. navigating from editing
+person `1` to editing person `2`) re-seeds fresh, so there's no cross-record leakage.
+
+**Validation** — coercion failures (`:integer`/`:number` fields that don't parse) and any
+`validate { }` block errors both populate `state[:"#{name}_form_errors"]`, rendered as a
+single `Alert(variant: :error)` summary above the fields. A validation failure is a
+same-request re-render, not a redirect — the user's just-typed values stay in the scope
+and the store is never called.
+
+**Success** — on a valid submit, `form_for` calls `store.create`/`store.update`, sets
+`flash[:notice]`, and transitions to the resource's `show` action (or `index` if the
+resource doesn't declare `show`) with the URL pushed via the existing PRG mechanism.
+Pass `on_success:` to override the transition — required for standalone (non-`resource`)
+usage, which has no resource action to fall back to.
+
+**In-block DSL** — inside the `form_for do ... end` block:
+
+| Call | Effect |
+|---|---|
+| `submit_label "text"` | Overrides the default submit button label |
+| `cancel_label "text"` | Adds a Cancel button (omitted by default) |
+| `validate { \|values\| ... }` | Registers the extra validation hook described above |
+| any other field/component call | Renders alongside the auto-generated fields, inside the same form |
+
+All three (`submit_label`/`cancel_label`/`validate`) raise if called outside a `form_for`
+block.
+
+**Inline-edit example** — the course's [Turbo Frame inline-editing pattern](for_llms.md#turbo-frame-style-inline-editing-with-form_for)
+(click a title to edit it in place, submit swaps back to the display view) is a direct
+`form_for` use case; see `docs/for_llms.md` for the worked example.
+
+---
+
 ## Named-Route Helpers
 
 Defined automatically on the App instance when `resource :post` is declared:

@@ -274,18 +274,25 @@ flips `completed` too, because the generic endpoint permitted all three fields).
   examples green)" in `gsd/analysis/00-analysis-and-plan.md`, described as infrastructure to
   build on, not a gap.
 
-`form_with`-style block-yielding record binding (`form_with(model: @record) { |f| f.text_field
-:title }`) is explicitly **not yet implemented** — `docs/streamweaver-frontend-vision.md`
-lists it under "Forms (open question)": "This is not yet implemented. It is on the roadmap."
-The plan doc's Phase 3 names `form_for` model binding as a still-to-do decision doc + build item
-("kills rivet's nine hand-managed `edit_*` keys").
+**Update (2026-08-22, story `document-form-for`)**: `form_for` — the `form_with`-style
+record-bound form primitive named above as a still-to-do item — shipped 2026-07-10
+(`lib/stream_weaver/app.rb:598`, decision doc `gsd/analysis/decisions/form-for.md`).
+Given a resource name (or explicit `store:`/`fields:`), it seeds fields from a
+`record:`, infers create vs. update from record identity, coerces + validates on
+submit, and PRGs to `show` on success — the same block-yielding record-binding
+ergonomics `form_with(model:)` gives Rails. It's what `resource`'s own default
+`new`/`edit` views call under the hood, and is available directly inside override
+blocks for custom layouts. It was simply undocumented until this story; full
+reference and a worked Turbo-Frame-inline-editing example are now in
+`docs/resource-dsl.md#form_for` and `docs/for_llms.md`.
 
-**Gap assessment: PARTIAL** — `resource`/`field` already delivers the strong-params-equivalent
+**Gap assessment: HAVE** — `resource`/`field` already delivers the strong-params-equivalent
 safety property Turbo's demo is warning about (a StreamWeaver `resource` form cannot
-accidentally write undeclared fields, by construction), and CRUD scaffolding is genuinely
-shipped. What's missing is the Rails-familiar block-yielding form-builder ergonomics
-(`form_with(model:)`) for hand-written (non-`resource`) forms — today's `form` block is closer
-to Rails' `form_tag` than `form_with(model:)`.
+accidentally write undeclared fields, by construction), CRUD scaffolding is shipped, and
+`form_for` now closes the block-yielding form-builder ergonomics gap for record-bound
+forms. What remains PARTIAL is `form_with`-equivalent ergonomics for hand-written,
+non-record forms — today's plain `form` block is still closer to Rails' `form_tag` than
+`form_with`.
 
 ---
 
@@ -390,7 +397,7 @@ than invent a new documentation mechanism.
 | 7 | Turbo Streams (multi-region push) | HAVE, with a tracked correctness bug |
 | 8 | Server-push (websocket/SSE) | PARTIAL — SSE only, timer-triggered only |
 | 9 | Stimulus vs. Alpine | PARTIAL, by design |
-| 10 | Form conventions / strong params | PARTIAL |
+| 10 | Form conventions / strong params | HAVE (`form_for`, record-bound) / PARTIAL (hand-written non-record forms) |
 | 11 | URL/history semantics | HAVE |
 | 12 | Scaffolding/generators | PARTIAL |
 | 13 | Agent progressive disclosure | N/A (StreamWeaver-only concept) — HAVE, mature |

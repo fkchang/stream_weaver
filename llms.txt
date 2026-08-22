@@ -372,6 +372,91 @@ Generates index / show / new / edit / destroy with deep-linkable URLs, named-rou
 
 See `docs/resource-dsl.md` for full reference: field types, `only`/`except`, store protocol, `_sw_` state schema, override blocks.
 
+### Record-Bound Forms (`form_for`)
+
+`form_for` is the primitive `resource`'s own `new`/`edit` views build on: seeds fields from a record, infers create vs. update from record identity, coerces + validates on submit, then `store.create`/`update` → flash notice → PRG to the resource's `show` action. Use it inside `resource` override blocks (or standalone) whenever you need more control than the default form gives you:
+
+```ruby
+resource :person, store: PersonStore do
+  field :name, :string
+  field :role, :enum, values: %w[lead champion decision_maker]
+
+  edit do |person|
+    header1 "Edit #{person[:name]}"
+    form_for :person, record: person do
+      submit_label "Save"
+      cancel_label "Cancel"
+    end
+  end
+end
+```
+
+- `record:` present with an `:id` → update mode (`"Save"`); `nil`/absent → create mode (`"Create"`).
+- Seeds the form scope from `record:` only on first render for that id — an unrelated re-render never clobbers an in-progress edit; switching to a different id re-seeds fresh.
+- Validation failures (coercion or a `validate { |values| ... }` block) populate an error `Alert` above the fields and re-render same-request, keeping the user's typed values — never a redirect.
+- `on_success:` overrides the default show/index transition; required for standalone (non-`resource`) usage.
+
+Full reference (all options, in-block DSL, standalone usage): `docs/resource-dsl.md#form_for`.
+
+### Turbo Frame-Style Inline Editing with `form_for`
+
+The learnhotwire.com course's canonical Turbo Frames demo: click a todo's title, it turns into an edit field in place, submit swaps back to the display — no full navigation. Rails does this with two matching-`dom_id` frames; StreamWeaver gets the same *result* (deep-linkable edit state, no hand-written JS, no full page reload — HTMX swaps the container) from `resource` + `form_for`, using the resource's own routed `edit` action instead of a client-side frame swap:
+
+```ruby
+require 'stream_weaver'
+require 'securerandom'
+
+module TodoStore
+  @todos = [{ id: '1', title: 'Buy milk', completed: false }]
+  def self.all;              @todos; end
+  def self.find(id);         @todos.find { |t| t[:id] == id }; end
+  def self.create(attrs);    id = SecureRandom.hex(4); @todos << { id: id, **attrs }; id; end
+  def self.update(id, attrs) t = find(id); t&.merge!(attrs); !!t; end
+  def self.destroy(id);      @todos.reject! { |t| t[:id] == id }; true; end
+end
+
+app 'My Todos' do
+  resource :todo, store: TodoStore do
+    field :title,     :string
+    field :completed, :boolean
+
+    # Row shows the title as plain text with an Edit link — click it to swap
+    # this row's spot for an inline form_for, submit swaps back to the row.
+    index do |todos|
+      header1 'My Todos'
+      todos.each do |todo|
+        hstack do
+          text todo[:title]
+          link_to 'Edit', href: edit_todo_path(todo)
+        end
+      end
+    end
+
+    # /todo/:id/edit — form_for seeds :title/:completed from the record,
+    # submit coerces + validates, calls TodoStore.update, flashes, and
+    # PRGs back to :show (URL pushed, deep-linkable either way).
+    edit do |todo|
+      header1 "Edit #{todo[:title]}"
+      form_for :todo, record: todo do
+        submit_label 'Save'
+        cancel_label 'Cancel'
+      end
+    end
+  end
+end.run!
+```
+
+**Key mapping** (Rails → StreamWeaver): matching `dom_id` frames that swap in place →
+`resource`'s routed `edit` action (`edit_todo_path(todo)`) whose default/override view
+calls `form_for :todo, record: todo`; Rails' `form_with model: @todo` field/value
+seeding + strong-params allowlist → `form_for`'s record seeding + `field` declarations
+(only declared fields are read from submitted state); Rails' controller-driven
+create/update + redirect-back-to-show → `form_for`'s built-in coerce → validate →
+`store.update` → flash → PRG to `show`, all for free. What StreamWeaver does not yet do
+is a same-DOM-fragment swap scoped to just the one row (that's `deferred-fragments-src`
+in the `streamweaver-way` epic) — today the edit view is its own routed, deep-linkable
+page/fragment, not a client-side frame replacement.
+
 ### Feedback
 ```ruby
 alert(variant: :success) { text "Saved!" }
