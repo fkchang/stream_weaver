@@ -451,10 +451,14 @@ module StreamWeaver
     #   content afterwards -- the Turbo `turbo_frame_tag ..., src:` equivalent.
     #   The block does not run on the initial render at all, so a slow region
     #   cannot delay the page.
+    # @param lazy [Boolean] Hold the deferred fetch until the fragment is
+    #   visible -- Turbo's `loading="lazy"`. Implies `defer:`, the way Turbo's
+    #   `loading` only means anything on a frame that loads from `src`.
     # @param placeholder [String, Proc, nil] What stands in until the content
     #   lands. A String renders as text, a Proc is evaluated as DSL, nil gets a
     #   small spinner. Only read when `defer:` is set.
-    def fragment(name, defer: false, placeholder: nil, &block)
+    def fragment(name, defer: false, lazy: false, placeholder: nil, &block)
+      defer ||= lazy
       name = validate_scalar_key!(name, context: "fragment")
       raise ArgumentError, "fragment: block required" unless block
       raise ArgumentError, "fragment: placeholder: requires defer: true" if placeholder && !defer
@@ -468,7 +472,7 @@ module StreamWeaver
       end
       id = disambiguate_component_id(candidate_id, label: name.to_s, source_loc: block.source_location)
       deferred = defer && !materializes_deferred?(id)
-      component = Components::Fragment.new(name, id, deferred: deferred)
+      component = Components::Fragment.new(name, id, deferred: deferred, lazy: lazy)
       components << component
       parent = components
       render_state.fragment_stack << id

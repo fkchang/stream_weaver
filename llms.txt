@@ -513,6 +513,113 @@ materialize, so its block executes and only its content comes back over the wire
 - `defer:` is an option on `fragment`. The bare `defer { ... }` display verb is an unimplemented
   stub that silently drops its block — do not use it.
 
+### Lazy Fragments (`fragment ..., lazy: true`)
+
+`defer: true` fetches the moment the page loads. Adding `lazy: true` holds that fetch until the
+fragment is **visible** — Turbo's `loading="lazy"`. Visible means visible, whatever caused it:
+scrolled into the viewport, or a CSS rule flipping an ancestor out of `display: none`. It is not
+"scrolled near" and it is not "hovered"; a hover only counts because the hover changed `display`.
+
+```ruby
+fragment :revenue_report, lazy: true do
+  text expensive_quarterly_rollup   # runs the first time this region is seen, never before
+end
+```
+
+**`lazy: true` implies `defer: true`** — write both if it reads better, but `lazy:` alone is
+enough. `placeholder:` works the same as on any deferred fragment.
+
+**The two guarantees**:
+
+- **A CSS-hidden fragment never fetches.** `display: none` means no fetch, for as long as it
+  lasts. This is what makes the hover-card recipe below cost nothing on page load.
+- **It fetches exactly once.** The content lands in the DOM and stays there; hiding and
+  re-showing the region does not fetch again.
+
+**How it works**: the placeholder wrapper carries `hx-trigger="intersect once"` instead of
+`hx-trigger="load"`, which htmx backs with an `IntersectionObserver` — the same browser API Turbo
+uses. (`revealed`, the other htmx visibility trigger, reads `getBoundingClientRect()`, which
+reports an all-zero rect for a hidden element and so counts it as revealed; it would fetch every
+hidden fragment on page load. See `docs/research/2026-08-22-lazy-fragments-trigger-decision.md`.)
+The wrapper also gets a `sw-fragment-lazy` class, which disappears with the wrapper once the
+content lands — so `document.querySelectorAll('.sw-fragment-lazy').length` counts what has not
+fetched yet, which is how you verify a hidden fragment stayed hidden.
+
+#### Recipe: hover cards, with no JavaScript
+
+CSS reveals the card; revealing it is what fires the fetch. Nothing on the page has fetched
+anything until the pointer arrives.
+
+```ruby
+app 'Directory' do
+  use_stylesheet <<~CSS
+    .hovercard-host { position: relative; display: inline-block; }
+    .hovercard-pop  { display: none; position: absolute; top: 1.6rem; left: 0; z-index: 20; }
+    .hovercard-host:hover .hovercard-pop { display: block; }
+  CSS
+
+  div(class: 'hovercard-host') do
+    text 'Ada Lovelace'
+    div(class: 'hovercard-pop') do
+      fragment :ada_card, lazy: true, placeholder: 'Loading…' do
+        text expensive_profile_lookup('ada')
+      end
+    end
+  end
+end.run!
+```
+
+#### Recipe: infinite scroll, as nested fragments
+
+Each page's block ends by declaring the *next* page as its own lazy fragment. Page N+1 does not
+exist in the DOM until page N has landed and been scrolled past, so this is the whole of the
+pagination logic — no scroll handler, no page counter in state.
+
+```ruby
+def scroll_page(number)
+  fragment :"page_#{number}", lazy: true, placeholder: 'Loading…' do
+    Post.page(number).each { |post| card { text post.title } }
+    scroll_page(number + 1) if Post.page?(number + 1)
+  end
+end
+
+app('Feed') { scroll_page(1) }.run!
+```
+
+Nested fragment ids are `parent--child`, so page 3's id is
+`sw-frag-page-1--page-2--page-3`. Each fetch re-runs its ancestors' blocks (see the deferred
+nesting note above), so keep the per-page work cheap.
+
+#### Recipe: a tab panel that loads when you open it
+
+Route tabs (`tabs :view, url: true`) render inactive panels as `display: none`, so a lazy
+fragment inside one waits until that tab is selected — and then fetches just itself, without the
+whole-container morph the deprecated `tabs ..., lazy: true` mode used. Put the fragment **inside**
+a `tab` block, never beside one at the top level of the `tabs` block (a non-tab child there shifts
+every panel index):
+
+```ruby
+tabs :view, url: true do
+  tab('Summary') { text summary_line }
+  tab('Revenue') do
+    fragment :revenue, lazy: true, placeholder: -> { spinner(label: 'Loading…') } do
+      revenue_table
+    end
+  end
+end
+```
+
+**Things to know**:
+
+- Everything true of `defer:` is true here: the block is skipped on the shell render, current
+  input values ride along with the fetch, a named-action button inside it does not fire (use a
+  block button), and a static export runs the block inline.
+- A full-container swap re-renders a lazy fragment back to its placeholder and **re-arms** it —
+  but lazily. If it is off-screen or hidden when that happens, it waits, where a plain `defer:`
+  fragment would refetch immediately.
+- The wrapper is what the observer watches, so give it something with height. The default spinner
+  placeholder has it; a placeholder that renders nothing gives the observer a zero-area target.
+
 ### Feedback
 ```ruby
 alert(variant: :success) { text "Saved!" }

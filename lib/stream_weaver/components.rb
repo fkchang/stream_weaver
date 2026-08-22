@@ -106,12 +106,13 @@ module StreamWeaver
 
     class Fragment < Base
       attr_accessor :children
-      attr_reader :name, :id, :deferred
+      attr_reader :name, :id, :deferred, :lazy
 
-      def initialize(name, id, deferred: false)
+      def initialize(name, id, deferred: false, lazy: false)
         @name = name.to_sym
         @id = id
         @deferred = deferred
+        @lazy = lazy
         @children = []
       end
 
@@ -130,10 +131,17 @@ module StreamWeaver
       # instead of reusing an already-initialized one, which is what re-arms
       # htmx's `load` trigger. Its own id keeps the morph from matching it
       # positionally against materialized content.
+      # `intersect once` is IntersectionObserver-backed, so it fires on whatever
+      # makes the element visible and never fires for one with no layout box --
+      # Turbo's `loading="lazy"` rule. `revealed`, the other candidate, reads
+      # getBoundingClientRect() and so counts a display:none element as revealed
+      # (docs/research/2026-08-22-lazy-fragments-trigger-decision.md).
       def render_deferred(view, state)
         attrs = view.adapter.htmx_attrs(view.adapter.url("/update"), view: view, loading: false,
-                                        sw_deferred: true, "hx-trigger" => "load")
-        view.div(id: "#{id}--deferred", class: "sw-fragment-deferred", "aria-busy" => "true", **attrs) do
+                                        sw_deferred: true,
+                                        "hx-trigger" => lazy ? "intersect once" : "load")
+        classes = ["sw-fragment-deferred", ("sw-fragment-lazy" if lazy)].compact.join(" ")
+        view.div(id: "#{id}--deferred", class: classes, "aria-busy" => "true", **attrs) do
           render_children(view, state)
         end
       end

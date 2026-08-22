@@ -77,6 +77,18 @@ RSpec.describe "deferred fragments" do
       expect(StreamWeaver::ActionToken.decode(token)).to include(f: "sw-frag-stats")
     end
 
+    # The auto-fetch attributes ride an inner wrapper with an id of its own so a
+    # full-container morph replaces it rather than matching materialized content
+    # against it positionally and reusing an already-initialized element. A
+    # deferred fragment that lost this would refetch on the reused element; a
+    # `lazy: true` one would sit on its placeholder forever, since htmx's `once`
+    # latch lives in that element's internal data.
+    it "wraps the auto-fetch in an element with its own id" do
+      app = StreamWeaver::App.new("Wrapper id") { fragment(:stats, defer: true) { text "REAL STATS" } }
+
+      expect(render(app)).to include('id="sw-frag-stats--deferred"')
+    end
+
     it "leaves non-deferred fragments executing inline" do
       app = StreamWeaver::App.new("Mixed") do
         fragment(:eager) { text "EAGER BODY" }
