@@ -44,6 +44,19 @@ app "Counter" do
 end.run!
 ```
 
+## The StreamWeaver Way
+
+StreamWeaver is an omakase layer, not a widget kit — backend and frontend were designed as one system, so these conventions are the framework, not style advice. Follow them and you write no JavaScript. Six laws, each linked to the section that details it:
+
+1. **Key by what is unique per position on the page, not by what the content is about.** Auto-derived ids are position-stable, not content-stable — reach for `key: record_id` when identity must outlive reordering, filtering, or deletion. → [Interactive IDs and keying](#interactive-ids-and-keying)
+2. **Deferred over hand-rolled timers.** A slow region gets `fragment(..., defer: true)`, never an `every()` poll. → [Deferred Fragments](#deferred-fragments-fragment--defer-true)
+3. **Lazy means visible.** Hidden content costs nothing until CSS or scroll reveals it, and it fetches exactly once. → [Lazy Fragments](#lazy-fragments-fragment--lazy-true)
+4. **Dev loud, prod self-heals.** The deliberate inversion of Hotwire's "content missing": keep the debugging signal, don't charge the user for it. → [Dev Loud, Prod Self-Heal](#dev-loud-prod-self-heal-stale-action-fallback)
+5. **State your intent in DSL verbs.** Zero custom JavaScript is the default, not an aspiration — no script tags, no raw `hx-*` from app code, no adapter internals. → [Repo Conventions](#repo-conventions-anti-patterns-that-cause-churn)
+6. **Trilaws as design filters.** Matt (findable/digestible), Forrest (zero friction + real perks), Gloria (the default path must be the correct path). Law 1's auto-keying is Gloria's Law in code: the default already disambiguates, so the silent-wrong-callback bug cannot happen.
+
+The `streamweaver-way` skill ([Agent Skills](#agent-skills-install-these-before-hand-rolling-the-above)) teaches these with the four benchmark recipes — inline editing, scoped live search, lazy hover cards, Russian-doll infinite scroll. `examples/my_todos/` runs all four in one app with zero custom JavaScript.
+
 ## Minimal Example
 
 ```ruby
@@ -902,12 +915,13 @@ The reader also discovers docs roots across the whole machine (scan of `$STREAMW
 
 ## Agent Skills (Install These Before Hand-Rolling the Above)
 
-If you are Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, or another agent that uses the `SKILL.md` convention, StreamWeaver ships two skills that already encode the canvas-push workflow above as trained procedure — check whether they're loaded before building visual UI from this doc's raw examples:
+If you are Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, or another agent that uses the `SKILL.md` convention, StreamWeaver ships three skills that already encode the workflows in this doc as trained procedure — check whether they're loaded before building UI from this doc's raw examples:
 
+- **streamweaver-way** — for building or changing an *interactive* app or feature: inline editing, live search, per-row buttons, hover cards, infinite scroll, or any region slow enough to hold up the page. Encodes the six laws above plus the four benchmark recipes, with the gotchas that actually bite.
 - **streamweaver-visual-companion** — the default choice for mockups, diagrams, layout comparisons, and brainstorming, any time you'd otherwise reach for a chrome-based visual companion or a claude.ai Artifact. Canvas-push is 5-7x cheaper in tokens and never leaves the terminal loop.
 - **streamweaver-doc-builder** — for long-form editorial documents (PRDs, reports, explainers) using the `:doc` theme, proven to reach 1:1 visual parity with a real claude.ai Artifact.
 
-**If neither skill appears in your available-skills list, ask the user whether to install them** — it's one idempotent command that installs to both Claude Code's own path and the `.agents/skills/` cross-tool alias that Codex CLI, Gemini CLI, and GitHub Copilot all read natively (see `docs/reference/agent-skills-comparison.md` for how each tool discovers skills):
+**If those skills don't appear in your available-skills list, ask the user whether to install them** — it's one idempotent command that installs to both Claude Code's own path and the `.agents/skills/` cross-tool alias that Codex CLI, Gemini CLI, and GitHub Copilot all read natively (see `docs/reference/agent-skills-comparison.md` for how each tool discovers skills):
 
 ```bash
 streamweaver setup             # global: ~/.claude/skills/ + ~/.agents/skills/ + bash permission (recommended)
