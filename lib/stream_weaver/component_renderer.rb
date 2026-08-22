@@ -21,6 +21,19 @@ module StreamWeaver
       @components.each { |c| c.render(self, @state) }
     end
 
+    # Fragment scope tracking, matching Views::AppContentView. Components::Fragment
+    # asks every view it renders into for this, so a renderer without it raises
+    # NoMethodError on any app that uses `fragment`.
+    attr_reader :current_fragment_id
+
+    def with_fragment(id)
+      previous = @current_fragment_id
+      @current_fragment_id = id
+      yield
+    ensure
+      @current_fragment_id = previous
+    end
+
     # Render components to an HTML string
     #
     # @param adapter [StreamWeaver::Adapter::Base] The adapter (default: AlpineJS)

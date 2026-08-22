@@ -453,9 +453,65 @@ seeding + strong-params allowlist → `form_for`'s record seeding + `field` decl
 (only declared fields are read from submitted state); Rails' controller-driven
 create/update + redirect-back-to-show → `form_for`'s built-in coerce → validate →
 `store.update` → flash → PRG to `show`, all for free. What StreamWeaver does not yet do
-is a same-DOM-fragment swap scoped to just the one row (that's `deferred-fragments-src`
-in the `streamweaver-way` epic) — today the edit view is its own routed, deep-linkable
-page/fragment, not a client-side frame replacement.
+is a same-DOM-fragment swap scoped to just the one row — today the edit view is its own
+routed, deep-linkable page/fragment, not a client-side frame replacement. For the other
+half of the Turbo Frames story — rendering the shell now and letting a slow region land
+later — see [Deferred Fragments](#deferred-fragments-fragment--defer-true) below.
+
+### Deferred Fragments (`fragment ..., defer: true`)
+
+`fragment(:name) { ... }` marks a region of the page that interactions inside it can swap on
+its own, instead of swapping the whole app container. Adding `defer: true` makes it the
+equivalent of Turbo's `turbo_frame_tag ..., src:`: **the block does not run on the initial
+render at all.** The page ships immediately with a placeholder, and the fragment fetches its
+own content right after — no custom JavaScript in your app, just the option:
+
+```ruby
+app 'Dashboard' do
+  header1 'Dashboard'          # renders instantly
+  text "#{Order.count} orders" # renders instantly
+
+  # This block never runs during the page render. The shell responds, the
+  # browser fetches this fragment, and the content swaps in when ready.
+  fragment :revenue_report, defer: true do
+    text expensive_quarterly_rollup   # 1.5s of work, off the critical path
+  end
+end.run!
+```
+
+**Placeholder** — what stands in until the content lands. Three forms:
+
+```ruby
+fragment(:stats, defer: true) { ... }                              # default: small spinner
+fragment(:stats, defer: true, placeholder: 'Loading stats…') { ... } # a String renders as text
+fragment(:stats, defer: true, placeholder: -> { skeleton_rows(5) }) { ... } # a Proc runs as DSL
+```
+
+**How it works**: the deferred fragment renders its placeholder wrapped in an element carrying
+`hx-trigger="load"` pointing at the same signed fragment-update endpoint every in-fragment
+interaction already uses. That fetch re-runs the DSL with this fragment marked as the one to
+materialize, so its block executes and only its content comes back over the wire.
+
+**Things to know**:
+
+- The block is skipped on the shell render, so anything it registers as a side effect (actions,
+  timers) is not registered until the fetch. Keep registration outside deferred blocks.
+- **A named-action button (`button 'X', action: :foo`) inside a deferred fragment does not fire.**
+  The fetch mints its token outside the session's action manifest, so clicking it re-renders the
+  fragment without running the action. Put such buttons in a non-deferred fragment, or use a block
+  button (`button('X') { |s| ... }`), which dispatches by id and is unaffected.
+- Current input values are posted with the fetch, so a deferred fragment can read `state` set by
+  fields elsewhere on the page.
+- Nesting works and chains: a `defer:` fragment inside a plain fragment loads in place; a
+  `defer:` fragment inside another `defer:` fragment loads after its parent does. Because
+  every fetch re-runs the DSL, a nested fetch also runs its ancestors' blocks — two nested
+  1.5s panels cost 1.5s for the outer fetch and 3s for the inner one. Nest deferred
+  fragments for staging, not to divide one expensive block into cheaper pieces.
+- An interaction that swaps the whole app container re-renders the deferred fragment as its
+  placeholder, and it fetches again. That keeps the shell fast on every render rather than
+  paying the slow cost inline.
+- `defer:` is an option on `fragment`. The bare `defer { ... }` display verb is an unimplemented
+  stub that silently drops its block — do not use it.
 
 ### Feedback
 ```ruby

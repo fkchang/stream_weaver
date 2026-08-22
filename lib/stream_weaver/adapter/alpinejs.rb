@@ -1277,6 +1277,7 @@ module StreamWeaver
       def htmx_attrs(post_url, view: nil, loading: true, indicator: nil, **overrides)
         fragment_updates = Array(overrides.delete(:sw_updates)).compact.map(&:to_s)
         fragment_primary = overrides.delete(:sw_primary)
+        fragment_deferred = overrides.delete(:sw_deferred)
         fragment_id = view.current_fragment_id if view&.respond_to?(:current_fragment_id)
         target = fragment_id ? "##{fragment_id}" : HTMX_TARGET
         named_action_scope = begin
@@ -1290,6 +1291,11 @@ module StreamWeaver
           fragment_payload = { f: fragment_id }
           fragment_payload[:u] = fragment_updates unless fragment_updates.empty?
           fragment_payload[:p] = fragment_primary.to_s if fragment_primary
+          # A deferred fragment's own auto-fetch is a read, not a mutation, and
+          # several fire at once on one page load. Signing that fact here lets
+          # InteractionRunner skip the state patch, which is versioned and so
+          # cannot be claimed by concurrent requests (see #deferred_fetch?).
+          fragment_payload[:d] = 1 if fragment_deferred
           signed_fragment = ActionToken.encode(fragment_payload)
           post_url = "#{post_url}#{separator}_sw_fragment=#{CGI.escape(signed_fragment)}"
         end

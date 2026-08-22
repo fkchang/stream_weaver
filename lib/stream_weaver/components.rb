@@ -106,18 +106,40 @@ module StreamWeaver
 
     class Fragment < Base
       attr_accessor :children
-      attr_reader :name, :id
+      attr_reader :name, :id, :deferred
 
-      def initialize(name, id)
+      def initialize(name, id, deferred: false)
         @name = name.to_sym
         @id = id
+        @deferred = deferred
         @children = []
       end
 
       def render(view, state)
-        view.div(id: id) do
-          view.with_fragment(id) { children.each { |child| child.render(view, state) } }
+        view.with_fragment(id) do
+          view.div(id: id) do
+            deferred ? render_deferred(view, state) : render_children(view, state)
+          end
         end
+      end
+
+      private
+
+      # The auto-fetch attributes ride an inner wrapper rather than the
+      # container so a later full-container morph replaces the trigger element
+      # instead of reusing an already-initialized one, which is what re-arms
+      # htmx's `load` trigger. Its own id keeps the morph from matching it
+      # positionally against materialized content.
+      def render_deferred(view, state)
+        attrs = view.adapter.htmx_attrs(view.adapter.url("/update"), view: view, loading: false,
+                                        sw_deferred: true, "hx-trigger" => "load")
+        view.div(id: "#{id}--deferred", class: "sw-fragment-deferred", "aria-busy" => "true", **attrs) do
+          render_children(view, state)
+        end
+      end
+
+      def render_children(view, state)
+        children.each { |child| child.render(view, state) }
       end
     end
 

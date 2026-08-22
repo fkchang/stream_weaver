@@ -21,7 +21,7 @@ module StreamWeaver
                     :current_menu, :current_modal, :modal_context, :current_deck,
                     :current_slide, :current_app_shell, :current_row_key_thunk,
                     :checkbox_keys, :action_tokens, :generation, :fragment_stack, :state_version,
-                    :table_counter, :current_scope, :url_tab_keys, :url_params,
+                    :table_counter, :current_scope, :url_tab_keys, :url_params, :deferred_target,
                     :form_for_active, :form_for_submit_label, :form_for_cancel_label, :form_for_validate
 
       def initialize
@@ -56,6 +56,11 @@ module StreamWeaver
     # and a `url: true` tabs group can never claim one -- the key would validate
     # here and then silently never receive its value.
     ROUTE_OWNED_PARAMS = %w[app_id splat captures button_id].freeze
+
+    # `deferred_target:` value meaning "run every deferred block inline". For
+    # renders with no client to fetch anything afterwards -- a static export.
+    # Never collides with a real target: fragment ids are all `sw-frag-`-prefixed.
+    ALL_DEFERRED = "all"
 
     # Latch for the once-per-process lazy-tabs deprecation warning
     # (see #warn_lazy_tabs_deprecated). Writable so specs can re-arm it.
@@ -294,12 +299,17 @@ module StreamWeaver
 
     # @param url_params [Hash, nil] params of the URL being rendered; nil when no
     #   URL is behind this render. See #tab_index_source for what reads it.
-    def rebuild_with_state(current_state, generation: "0", state_version: 0, url_params: nil)
+    # @param deferred_target [String, nil] The fragment id this pass is rendering
+    #   for. A `defer: true` fragment executes its block only when it is that
+    #   fragment or one of its ancestors (see #fragment); every other pass
+    #   renders its placeholder instead.
+    def rebuild_with_state(current_state, generation: "0", state_version: 0, url_params: nil, deferred_target: nil)
       @_state = current_state
       @render_state = RenderState.new
       @render_state.generation = generation.to_s
       @render_state.state_version = state_version.to_i
       @render_state.url_params = url_params
+      @render_state.deferred_target = deferred_target&.to_s
       apply_scope_lifecycle
       flash_messages if chrome
       evaluate_dsl_block(@block)
@@ -437,9 +447,17 @@ module StreamWeaver
     # App-specific display components
     # =========================================
 
-    def fragment(name, &block)
+    # @param defer [Boolean] Render the shell now and fetch this fragment's
+    #   content afterwards -- the Turbo `turbo_frame_tag ..., src:` equivalent.
+    #   The block does not run on the initial render at all, so a slow region
+    #   cannot delay the page.
+    # @param placeholder [String, Proc, nil] What stands in until the content
+    #   lands. A String renders as text, a Proc is evaluated as DSL, nil gets a
+    #   small spinner. Only read when `defer:` is set.
+    def fragment(name, defer: false, placeholder: nil, &block)
       name = validate_scalar_key!(name, context: "fragment")
       raise ArgumentError, "fragment: block required" unless block
+      raise ArgumentError, "fragment: placeholder: requires defer: true" if placeholder && !defer
 
       safe_name = name.to_s.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-|\-\z/, "")
       raise ArgumentError, "fragment: name must contain a letter or number" if safe_name.empty?
@@ -449,18 +467,42 @@ module StreamWeaver
         "#{render_state.fragment_stack.last}--#{safe_name}"
       end
       id = disambiguate_component_id(candidate_id, label: name.to_s, source_loc: block.source_location)
-      component = Components::Fragment.new(name, id)
+      deferred = defer && !materializes_deferred?(id)
+      component = Components::Fragment.new(name, id, deferred: deferred)
       components << component
       parent = components
       render_state.fragment_stack << id
       self.components = []
-      evaluate_dsl_block(block)
+      evaluate_dsl_block(deferred ? placeholder_block(placeholder) : block)
       component.children = components
       self.components = parent
       component
     ensure
       render_state.fragment_stack.pop if id && render_state.fragment_stack.last == id
     end
+
+    # True when this pass is the fetch that materializes fragment `id`, or the
+    # fetch of a fragment nested inside it. Nested fragment ids are literally
+    # `parent--child` (see #fragment), so an ancestor is a prefix of its
+    # descendants -- which is what lets a deferred fragment nested inside
+    # another deferred fragment be reached by a second fetch.
+    def materializes_deferred?(id)
+      target = render_state.deferred_target
+      return false unless target
+      return true if target == ALL_DEFERRED
+
+      target == id || target.start_with?("#{id}--")
+    end
+    private :materializes_deferred?
+
+    def placeholder_block(placeholder)
+      case placeholder
+      when Proc then placeholder
+      when nil then proc { spinner(size: :sm, label: "Loading…") }
+      else proc { text placeholder.to_s }
+      end
+    end
+    private :placeholder_block
 
     def lesson_text(content_or_options = nil, **options, &block)
       if content_or_options.is_a?(String)

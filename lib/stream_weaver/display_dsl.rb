@@ -894,7 +894,10 @@ module StreamWeaver
     # presenter) while still reaching the DSL via the yielded argument.
     def evaluate_dsl_block(block, receiver = self)
       return unless block
-      block.arity >= 1 ? block.call(receiver) : receiver.instance_eval(&block)
+      # instance_exec, not instance_eval: instance_eval yields the receiver to
+      # the block, which a zero-arity lambda -- the natural way to write
+      # `placeholder: -> { ... }` -- refuses to accept.
+      block.arity >= 1 ? block.call(receiver) : receiver.instance_exec(&block)
     end
 
     def with_container(component, &block)
@@ -913,6 +916,12 @@ module StreamWeaver
     def on_start(&block); end
     def after(seconds, &block); end
     def every(seconds, &block); end
-    def defer(&block); end
+
+    # Never implemented, and it reads exactly like the deferred-rendering verb
+    # an author would reach for -- so it raises instead of silently dropping the
+    # block it is given.
+    def defer(*)
+      raise NoMethodError, "defer is not a verb; use `fragment(:name, defer: true) { ... }`"
+    end
   end
 end

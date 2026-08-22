@@ -149,7 +149,10 @@ module StreamWeaver
         # from a DSL *string* into a bare App, so @block is nil there and
         # rebuilding would re-evaluate nothing, wiping every component
         # (stream_weaver-65z).
-        @app.rebuild_with_state(@state) if @app.block
+        # ALL_DEFERRED: a static export has no client to run a deferred
+        # fragment's auto-fetch, so every deferred block runs inline here or its
+        # content is silently lost to a placeholder.
+        @app.rebuild_with_state(@state, deferred_target: App::ALL_DEFERRED) if @app.block
 
         body_html = render_body
         body_html = inline_images_in_html(body_html) if inline_images

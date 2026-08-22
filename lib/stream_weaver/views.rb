@@ -3814,7 +3814,9 @@ module StreamWeaver
       def view_template
         with_fragment(@fragment.id) { @fragment.children.each { |child| child.render(self, @state) } }
         @updates.each_with_index { |fragment, i| render_extra(fragment, @extra_swaps[i]) }
-        raw safe(StatePatchView.new(@state_patch).call)
+        # nil for a deferred fragment's auto-fetch, which claims no state
+        # version (see InteractionRunner#deferred_fetch?).
+        raw safe(StatePatchView.new(@state_patch).call) if @state_patch
       end
     end
 

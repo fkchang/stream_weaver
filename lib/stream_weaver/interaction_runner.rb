@@ -49,7 +49,7 @@ module StreamWeaver
         before_state = deep_copy(state)
         prepare_state&.call(state)
         prepare_form_state if interaction == :form
-        app.rebuild_with_state(state, generation: generation, state_version: state_version) if discovery_required?
+        rebuild if discovery_required?
 
         unless interaction == :form
           sync_params_to_state
@@ -60,7 +60,7 @@ module StreamWeaver
         persist.call(state)
 
         completion_response || begin
-          app.rebuild_with_state(state, generation: generation, state_version: state_version)
+          rebuild
           persist_manifest&.call(app.render_state.action_tokens)
           scoped_response(before_state, components_before) || Views::AppContentView.new(app, state, adapter, agentic).call
         end
@@ -81,6 +81,16 @@ module StreamWeaver
       Marshal.load(Marshal.dump(value))
     rescue TypeError
       value.transform_values { |item| item.dup rescue item }
+    end
+
+    # Every rebuild in this request names the fragment the request is scoped to,
+    # so a `defer: true` fragment the client is fetching executes its block on
+    # this pass instead of rendering its placeholder again (see App#fragment).
+    # The name comes off the signed scope token, so it is the server's own
+    # claim, not the browser's.
+    def rebuild
+      app.rebuild_with_state(state, generation: generation, state_version: state_version,
+                                    deferred_target: declared_scope&.fetch(:fragment))
     end
 
     def scoped_response(before_state, components_before)
@@ -141,9 +151,19 @@ module StreamWeaver
         extras += [flash_fragment] if flash_fragment && !extras.include?(flash_fragment)
       end
 
-      version = state_version + 1
-      persist_state_version&.call(version)
-      patch = state_patch(before_state, state, version)
+      # A deferred fragment's auto-fetch carries no state patch. Every deferred
+      # fragment on a page fires its `load` trigger in the same tick, so all
+      # their requests leave with the same `sw_state_version` cookie and would
+      # each claim version N+1 -- the client applies the first and reloads on
+      # the rest (see the `patch.version !== currentVersion + 1` guard in the
+      # adapter's swap hook), which reloads into the same race. A deferred fetch
+      # dispatches nothing (see #dispatch's `:update` branch) and returns values
+      # the client already holds, so it has no patch to skip.
+      unless deferred_fetch?
+        version = state_version + 1
+        persist_state_version&.call(version)
+        patch = state_patch(before_state, state, version)
+      end
 
       # Row-granular table swaps (stream_weaver-95k). A named action's row
       # mutation can be narrowed whether the table it touched is the primary
@@ -252,11 +272,23 @@ module StreamWeaver
       { fragment: payload[:f].to_s, updates: Array(payload[:u]).map(&:to_s), primary: payload[:p]&.to_s }
     end
 
+    # Memoized: every rebuild now consults the scope too (see #rebuild), and
+    # decoding re-verifies the token's signature each time.
     def decoded_fragment_param
+      return @decoded_fragment_param if defined?(@decoded_fragment_param)
+
       token = params["_sw_fragment"] || params[:_sw_fragment]
-      ActionToken.decode(token) if token
-    rescue ActionToken::Invalid
-      nil
+      @decoded_fragment_param = begin
+        ActionToken.decode(token) if token
+      rescue ActionToken::Invalid
+        nil
+      end
+    end
+
+    # Signed by the adapter when it renders a `defer: true` fragment's own
+    # auto-fetch (see Adapter::AlpineJS#htmx_attrs), never by a browser.
+    def deferred_fetch?
+      !named_action? && !decoded_fragment_param.nil? && !decoded_fragment_param[:d].nil?
     end
 
     def fragment_param_present?
