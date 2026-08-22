@@ -43,6 +43,11 @@ end
 # The Russian doll: each page's content ends with the NEXT page's lazy
 # placeholder, so the pages materialize one at a time as the reader scrolls and
 # the app never has to know how many there are up front.
+#
+# NOTE: page 1 is deliberately lazy here TOO, so this demo's "zero fetches on
+# load" check holds — that exercises the primitive, not the Turbo parity shape.
+# For a real feed, render the current page's rows in the shell and lazy-wrap
+# only the NEXT page — see the streamweaver-way skill's infinite-scroll recipe.
 def scroll_page(number)
   fragment :"page_#{number}", lazy: true, placeholder: -> { spinner(size: :sm, label: "Loading page #{number}…") } do
     text slow_work("Page #{number}")

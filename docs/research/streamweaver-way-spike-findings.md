@@ -521,3 +521,9 @@ carried forward explicitly rather than silently dropped — two are the same und
 (input `updates:` wiring), one is a cosmetic flash-text nit. None block the four features from
 working; all three are documented in place (in-app copy or this table) rather than patched,
 per this story's "do not modify `lib/`" rule.
+
+**Addendum 2026-08-22 (post clean-room skill test):** resolution row 4a's original shape
+(every page including page 1 wrapped in `lazy:`) shipped an EMPTY shell — no rows in the raw
+HTML, masked in browsers by page 1's in-viewport sentinel fetching instantly. Corrected in
+dc06bcf to the true Turbo shape: current page renders inline, only the NEXT page is a nested
+lazy fragment. The dated measurements above describe the pre-correction build.
