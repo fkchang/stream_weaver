@@ -82,7 +82,7 @@ module StreamWeaver
     # @param assets_dirs [Array<String>] Extra directories (besides the
     #   calling script's own directory) that local_asset/stylesheets: are
     #   allowed to serve local files from (stream_weaver-1lo).
-    def initialize(title, layout: :default, chrome: true, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], strict_ids: false, loading_indicators: true, assets_dirs: [], &block)
+    def initialize(title, layout: :default, chrome: true, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], strict_ids: nil, loading_indicators: true, assets_dirs: [], &block)
       @title = title
       @layout = layout
       @chrome = chrome
@@ -93,7 +93,9 @@ module StreamWeaver
       @render_mutex = Mutex.new
       @state_key = :streamlit_state
       @_state = {}
-      @strict_ids = strict_ids
+      # nil means "unset" -- fall back to the global (StreamWeaver.strict_ids
+      # / SW_STRICT_IDS). An explicit true/false here always wins.
+      @strict_ids = strict_ids.nil? ? StreamWeaver.strict_ids? : strict_ids
       @loading_indicators = loading_indicators
       @_warned_duplicate_ids = Set.new
       @scripts = scripts
@@ -730,10 +732,13 @@ module StreamWeaver
 
     def button(label, action: nil, key: nil, id: nil, **options, &block)
       raise ArgumentError, "button cannot use both action: and a block" if action && block
-      key = validate_scalar_key!(key || id, context: "button")
+      # Identity precedence: id: (verbatim override) > key: (content-stable
+      # derivation) > auto-derivation from label + block source_location.
+      explicit_id = validate_scalar_key!(id, context: "button")
+      key = validate_scalar_key!(key, context: "button")
       if action
         row_key = render_state.current_row_key_thunk&.value
-        action_key = key || row_key
+        action_key = key || explicit_id || row_key
         action_key = validate_scalar_key!(action_key, context: "named action button")
         raise ArgumentError, "named action button: key: is required" if action_key.nil?
         options[:action_token] = action_token(
@@ -743,14 +748,17 @@ module StreamWeaver
           primary: options.delete(:primary)
         )
       end
-      # Generate stable ID: use source location for buttons with blocks,
-      # fallback to counter for blockless buttons (submit: false)
+      # Generate stable ID: an explicit id: is used verbatim; otherwise use
+      # source location for buttons with blocks, falling back to a counter for
+      # blockless buttons (submit: false).
       # If key: is provided, mix it in to disambiguate buttons in loops
       # (order-independent -- unlike a positional index, reordering the
       # collection doesn't change a keyed button's id). Inside a table's
       # component cell, the row's key is auto-mixed in too (FAC-P2.1
       # decision 3), on top of any explicit key: also passed.
-      if block || action
+      if explicit_id
+        stable_id = sanitize_explicit_id(explicit_id)
+      elsif block || action
         row_key = render_state.current_row_key_thunk&.value
         combined_key = [row_key, key].compact
         source_loc = block ? block.source_location.join(':') : "action:#{action}"
@@ -1724,41 +1732,19 @@ module StreamWeaver
         RESERVED_ENDPOINT_PREFIXES.any? { |prefix| path.start_with?(prefix) }
     end
 
-    # Ensures a component's key/id is a stable scalar -- never a positional
-    # index or an arbitrary object's #inspect, which would silently break on
-    # any collection reorder.
-    def validate_scalar_key!(key, context:)
-      return key if key.nil?
-      unless key.is_a?(String) || key.is_a?(Symbol) || key.is_a?(Integer)
-        raise ArgumentError, "#{context}: key: must be a String, Symbol, or Integer, got #{key.class}"
-      end
-      key
+    # Auto-disambiguation (DisplayDSL#disambiguate_component_id) counts
+    # occurrences per render pass, so the App's table lives on render_state --
+    # a rebuild starts from a clean slate and #rewind_point can restore it.
+    def seen_component_ids
+      render_state.seen_component_ids
     end
 
-    # Detects two interactive components resolving to the same id within a
-    # single build (typically same-label buttons in a loop, sharing block
-    # source_location). First occurrence keeps its id unchanged; each further
-    # occurrence gets a stable "-dup-N" suffix so it remains independently
-    # dispatchable (FAC-P0.1). Warns once per id per process, or raises if
-    # strict_ids: true was passed to the App.
-    def disambiguate_component_id(candidate_id, label:, source_loc:)
-      occurrence = render_state.seen_component_ids[candidate_id]
-      render_state.seen_component_ids[candidate_id] = occurrence + 1
-      return candidate_id if occurrence.zero?
+    def warned_duplicate_ids
+      @_warned_duplicate_ids
+    end
 
-      loc = source_loc ? source_loc.join(':') : 'unknown location'
-      message = "StreamWeaver: duplicate component id for \"#{label}\" at #{loc} " \
-                "-- likely the same label/block in a loop. Pass a stable key:, e.g. " \
-                "button(#{label.inspect}, key: item.id) { ... }, for distinct, order-independent ids."
-
-      raise ArgumentError, message if @strict_ids
-
-      unless @_warned_duplicate_ids.include?(candidate_id)
-        @_warned_duplicate_ids << candidate_id
-        warn "#{message} Auto-assigned a unique id for now."
-      end
-
-      "#{candidate_id}-dup-#{occurrence + 1}"
+    def strict_ids?
+      @strict_ids
     end
 
     def define_path_helpers(defn)

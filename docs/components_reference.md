@@ -145,15 +145,28 @@ end
 button "Preview Button", submit: false
 button "Cancel", style: :secondary, submit: false
 
-# Unique ID for buttons in loops (prevents callback collisions)
+# Stable identity for buttons in loops
 voices.each do |v|
-  button "Test", id: v[:name] do |state|
+  button "Test", key: v[:name] do |state|
     speak(v[:name])  # Each button triggers its own callback
   end
 end
+
+# Verbatim id when other code targets the element by selector
+button "Delete", id: "delete-voice-#{v[:name]}" do |state| ... end
 ```
 
-**Note:** When creating buttons inside a loop, use `id:` to give each button a unique identifier. Without this, all buttons share the same internal ID and only the last callback fires.
+**Identity precedence: `id:` > `key:` > auto-derivation.** Auto-derived ids hash
+the label plus the block's source location, so loop iterations derive the same
+id — StreamWeaver auto-disambiguates each repeat occurrence (`-dup-N`) and warns
+once, so every button dispatches its own callback with no author intervention.
+Those suffixes are position-stable, not content-stable: inserting or deleting an
+earlier item shifts the later ones. Pass `key: record_id` (String/Symbol/Integer
+only — anything else raises) when identity must survive reordering or deletion,
+and `id:` when you need the emitted DOM id verbatim. `strict_ids: true` (per app,
+`StreamWeaver.strict_ids = true` globally, or `SW_STRICT_IDS=1`) turns the
+warning into a raise in dev/test — production still only warns. Full write-up in
+`llms.txt` under "Interactive IDs and keying".
 
 ## Layout Containers
 
