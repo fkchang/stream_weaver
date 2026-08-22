@@ -8,6 +8,7 @@ require 'json'
 require 'fileutils'
 require 'digest'
 require_relative 'session_store'
+require_relative 'dev_fallback_overlay'
 
 module StreamWeaver
   # Generated Sinatra application for serving the StreamWeaver app
@@ -91,6 +92,17 @@ module StreamWeaver
 
       # Helper methods for state synchronization
       helpers do
+        # dev-loud-failure-overlay: follows this file's existing RACK_ENV
+        # convention (line ~22's `== 'production'`, line ~48's `== 'test'`)
+        # rather than Sinatra's settings.environment/development? -- that
+        # settings value is fixed once at class-load time (spec_helper sets
+        # RACK_ENV=test before requiring stream_weaver), so it can't be
+        # toggled per-request/per-example the way a plain ENV read can.
+        # Anything that isn't explicitly production or test counts as dev.
+        def sw_dev_mode?
+          !%w[production test].include?(ENV['RACK_ENV'])
+        end
+
         # Coerce a form parameter value to the appropriate Ruby type
         def coerce_param_value(value, current_value)
           case
@@ -300,10 +312,20 @@ module StreamWeaver
             state_version: (session[:sw_state_version] || 0),
             persist_state_version: ->(version) { session[:sw_state_version] = version }
           ).call
-        rescue StaleActionDefinition
+        rescue StaleActionDefinition => e
           status 409
           headers 'HX-Retarget' => '#app-container'
-          render_app(state, is_htmx: true)
+          content = render_app(state, is_htmx: true)
+          # dev-loud-failure-overlay: production keeps the silent self-heal
+          # above completely unchanged; dev additionally prepends a visible,
+          # dismissible overlay naming the stale target + likely cause
+          # (StreamWeaver's analog of Hotwire's "content missing"). See
+          # docs/for_llms.md, "Dev loud, prod self-heal".
+          if sw_dev_mode?
+            StreamWeaver::DevFallbackOverlay.render(action: e.action, fragment: e.fragment, cause: e.cause) + content
+          else
+            content
+          end
         rescue => e
           render_error("/action/#{params[:button_id]}", e)
         end

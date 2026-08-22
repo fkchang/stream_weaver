@@ -121,6 +121,13 @@ module StreamWeaver
               raw(safe(StreamWeaver::CSS.layer_wrap(StreamWeaver::Theme.visual_skills_css)))
             end
 
+            # Dev-loud-failure overlay styling (dev-loud-failure-overlay).
+            # Always emitted -- inert unless RACK_ENV=development actually
+            # renders `.sw-dev-fallback` markup into a fallback response.
+            style do
+              raw(safe(StreamWeaver::CSS.layer_wrap(StreamWeaver::CSS.dev_fallback_css)))
+            end
+
             # Dark mode: check localStorage / system preference, apply .dark on <html>
             # Also provides swToggleTheme() / swGetTheme() for auto-mode support
             script do

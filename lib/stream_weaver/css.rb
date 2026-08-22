@@ -161,6 +161,70 @@ module StreamWeaver
           }
         CSS
       end
+
+      # Dev-only "content missing" overlay (dev-loud-failure-overlay).
+      # Always emitted -- inert in production since DevFallbackOverlay only
+      # ever renders the `.sw-dev-fallback` markup these rules target when
+      # RACK_ENV=development. Styleable via the --sw-dev-fallback-* tokens;
+      # authors can also override the `.sw-dev-fallback` class hook directly.
+      def dev_fallback_css
+        <<~CSS
+          .sw-dev-fallback {
+            --sw-dev-fallback-bg: #fff7ed;
+            --sw-dev-fallback-border: #f59e0b;
+            --sw-dev-fallback-text: #7c2d12;
+            --sw-dev-fallback-accent: #b45309;
+            margin: 0 0 var(--sw-spacing-md, 1.25rem);
+            font-family: 'Source Sans 3', system-ui, sans-serif;
+          }
+
+          .sw-dev-fallback__dismiss:checked ~ .sw-dev-fallback__panel {
+            display: none;
+          }
+
+          .sw-dev-fallback__panel {
+            position: relative;
+            background: var(--sw-dev-fallback-bg);
+            border: 1px solid var(--sw-dev-fallback-border);
+            border-left: 4px solid var(--sw-dev-fallback-accent);
+            border-radius: var(--sw-radius-md, 6px);
+            padding: 0.75rem 2rem 0.75rem 1rem;
+            color: var(--sw-dev-fallback-text);
+            font-size: 0.875rem;
+            line-height: 1.5;
+          }
+
+          .sw-dev-fallback__panel > p {
+            margin: 0.25rem 0;
+          }
+
+          .sw-dev-fallback__title {
+            font-weight: 600;
+          }
+
+          .sw-dev-fallback__target code,
+          .sw-dev-fallback__cause code {
+            background: rgba(0, 0, 0, 0.06);
+            border-radius: 3px;
+            padding: 0.05rem 0.3rem;
+          }
+
+          .sw-dev-fallback__note {
+            font-size: 0.8rem;
+            opacity: 0.8;
+          }
+
+          .sw-dev-fallback__close {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.6rem;
+            cursor: pointer;
+            font-size: 1.1rem;
+            line-height: 1;
+            color: var(--sw-dev-fallback-accent);
+          }
+        CSS
+      end
     end
   end
 end
