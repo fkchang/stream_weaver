@@ -262,10 +262,11 @@ end.run!
 
 ### 4. Russian-doll infinite scroll (nested lazy fragments)
 
-Page N's block ends by declaring page N+1 as its own lazy fragment, nested inside it.
-Page N+1 does not exist in the DOM — and never fetches — until page N has landed and been
-scrolled past. That recursion is the entire pagination logic: no scroll handler, no page
-counter in state, no "Load more" button.
+**The page the reader is on renders in the shell; only the NEXT page is lazy.** Page N's
+rows go out inline, and its block ends by declaring page N+1 as a lazy fragment whose own
+block recurses. Page N+1 does not exist in the DOM — and never fetches — until page N has
+been scrolled past. That recursion is the entire pagination logic: no scroll handler, no
+page counter in state, no "Load more" button.
 
 ```ruby
 # One page's slice -- never everything-so-far. Empty return terminates the chain.
@@ -273,10 +274,16 @@ TodoStore::PER_PAGE = 10
 def TodoStore.page(number) = all.drop(([number.to_i, 1].max - 1) * PER_PAGE).first(PER_PAGE)
 
 def scroll_page(number)
-  fragment(:"page_#{number}", lazy: true, placeholder: 'Loading…') do
-    TodoStore.page(number).each { |t| card { text t[:title] } }
-    # The guard is load-bearing: without it the chain dead-ends in a blank fragment.
-    scroll_page(number + 1) unless TodoStore.page(number + 1).empty?
+  # THIS page renders now, in whatever response we're already writing.
+  TodoStore.page(number).each { |t| card { text t[:title] } }
+
+  # Only the NEXT page is deferred. The guard is load-bearing: without it the
+  # chain dead-ends in an empty fragment that fetches nothing.
+  nxt = number + 1
+  unless TodoStore.page(nxt).empty?
+    fragment(:"page_#{nxt}", lazy: true, placeholder: 'Loading…') do
+      scroll_page(nxt)   # recursion lives INSIDE the lazy fragment
+    end
   end
 end
 
@@ -285,11 +292,22 @@ app('Feed') { scroll_page(1) }.run!
 
 **Gotchas**
 
+- **Do not wrap page 1 in the lazy fragment.** Writing
+  `fragment(:"page_#{number}", lazy: true) { rows; recurse }` and calling it with `1` is
+  the tempting shape and it is wrong: the block is skipped on the shell render (see the
+  three rules above), so the served HTML contains no rows at all — just a placeholder. It
+  *looks* like it works only because page 1's placeholder sits in the initial viewport, so
+  the observer fires immediately. A lazy fragment already in the viewport fetches at once,
+  which is exactly what hides this mistake. Render the current page, lazy the next one —
+  that is also what Turbo does, and it is what keeps the shell honest for crawlers, for a
+  reader with no JavaScript, and for anyone reading the served HTML.
 - Have the store return **one page's slice** (`all.drop((n - 1) * PER_PAGE).first(PER_PAGE)`),
   never everything-so-far. Each response should be a constant size; if payloads grow
   per page, you're re-sending rows.
 - Each fetch re-runs its ancestors' blocks, so keep per-page work cheap. Nested ids are
-  `parent--child`, so page 3 is `sw-frag-page-1--page-2--page-3`.
+  `parent--child`: page 2's fragment is declared beside page 1's rows, so it is
+  `sw-frag-page-2`; page 3's is declared inside page 2's block, giving
+  `sw-frag-page-2--page-3`.
 - **Inside a tab, the lazy fragment goes INSIDE a `tab` block, never beside one** at the
   top level of a `tabs` block — a non-tab child there shifts every panel index. Route tabs
   (`tabs :view, url: true`) render inactive panels as `display: none`, so a lazy fragment

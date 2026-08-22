@@ -634,24 +634,40 @@ end.run!
 
 #### Recipe: infinite scroll, as nested fragments
 
-Each page's block ends by declaring the *next* page as its own lazy fragment. Page N+1 does not
-exist in the DOM until page N has landed and been scrolled past, so this is the whole of the
-pagination logic — no scroll handler, no page counter in state.
+**The page the reader is on renders inline; only the *next* page is lazy.** Each response
+carries its own rows plus one placeholder for the page after it, so page N+1 does not exist in
+the DOM until page N has been scrolled past. That is the whole of the pagination logic — no
+scroll handler, no page counter in state.
 
 ```ruby
 def scroll_page(number)
-  fragment :"page_#{number}", lazy: true, placeholder: 'Loading…' do
-    Post.page(number).each { |post| card { text post.title } }
-    scroll_page(number + 1) if Post.page?(number + 1)
+  # THIS page renders now, in whatever response we're already writing.
+  Post.page(number).each { |post| card { text post.title } }
+
+  # Only the NEXT page is deferred.
+  nxt = number + 1
+  if Post.page?(nxt)
+    fragment :"page_#{nxt}", lazy: true, placeholder: 'Loading…' do
+      scroll_page(nxt)   # recursion lives INSIDE the lazy fragment
+    end
   end
 end
 
 app('Feed') { scroll_page(1) }.run!
 ```
 
-Nested fragment ids are `parent--child`, so page 3's id is
-`sw-frag-page-1--page-2--page-3`. Each fetch re-runs its ancestors' blocks (see the deferred
-nesting note above), so keep the per-page work cheap.
+**Do not wrap page `number` itself in the lazy fragment.** A deferred block is skipped on the
+shell render, so `fragment(:"page_#{number}", lazy: true) { rows; recurse }` called with `1`
+serves HTML containing no rows at all — just a placeholder. It *looks* correct only because
+page 1's placeholder sits in the initial viewport, so the IntersectionObserver fires
+immediately; a lazy fragment that is already visible fetches at once, which is precisely what
+hides the mistake. Rendering the current page inline is also what Turbo does, and it is what
+keeps the served HTML honest for crawlers and for a reader with no JavaScript.
+
+Nested fragment ids are `parent--child`: page 2's fragment is declared beside page 1's rows so
+its id is `sw-frag-page-2`, and page 3's is declared inside page 2's block, giving
+`sw-frag-page-2--page-3`. Each fetch re-runs its ancestors' blocks (see the deferred nesting
+note above), so keep the per-page work cheap.
 
 #### Recipe: a tab panel that loads when you open it
 

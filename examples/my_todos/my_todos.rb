@@ -54,17 +54,29 @@ FEATURE_PATHS = {
 # feature-local key set by an earlier request cannot leak into a later view.
 VIEW_RESET = { editing_id: nil }.freeze
 
-# The Russian doll: page N's block ends by declaring page N+1 as its own lazy
-# fragment, nested inside it. Page N+1 does not exist in the DOM -- and never
-# fetches -- until page N has landed and the reader scrolls past it. This is
-# the whole of the pagination logic: no scroll handler, no page counter in
-# state (llms.txt "Recipe: infinite scroll, as nested fragments").
+# The Russian doll, in Turbo's actual shape: the page the reader is ON renders
+# inline in whatever response we are already writing, and only the NEXT page is
+# wrapped in a lazy fragment. Rails does exactly this -- a frame around the
+# current page's rows, plus a separate `loading: :lazy` frame for `@pagy.next`.
+# Page N+1 does not exist in the DOM -- and never fetches -- until page N has
+# been scrolled past. That recursion is the whole of the pagination logic: no
+# scroll handler, no page counter in state (llms.txt "Recipe: infinite scroll,
+# as nested fragments").
+#
+# Do NOT wrap page `number` itself in the lazy fragment. A deferred block is
+# skipped on the shell render, so that shape serves HTML with zero rows in it;
+# it only LOOKS right because page 1's placeholder lands in the initial viewport
+# and the observer fires immediately.
 def scroll_todos_page(number)
-  fragment(:"todos_page_#{number}", lazy: true, placeholder: 'Loading…') do
-    TodoStore.page(number).each { |t| text "#{t[:completed] ? '☑' : '☐'}  #{t[:title]}" }
-    # The guard is the chapter's `@pagy.next` check: without it Rails renders a
-    # frame with a blank id and the chain dead-ends in "Content missing".
-    scroll_todos_page(number + 1) unless TodoStore.page(number + 1).empty?
+  TodoStore.page(number).each { |t| text "#{t[:completed] ? '☑' : '☐'}  #{t[:title]}" }
+
+  # The guard is the chapter's `@pagy.next` check: without it Rails renders a
+  # frame with a blank id and the chain dead-ends in "Content missing".
+  nxt = number + 1
+  return if TodoStore.page(nxt).empty?
+
+  fragment(:"todos_page_#{nxt}", lazy: true, placeholder: 'Loading…') do
+    scroll_todos_page(nxt)
   end
 end
 
@@ -261,13 +273,14 @@ app 'My Todos', layout: :wide do
   # ==========================================================================
   # 4. Infinite scroll
   #
-  # Rails: nested "Russian doll" frames -- page N's response contains page N+1's
-  # placeholder frame, already `loading: :lazy`, so scrolling to the bottom
-  # fetches the next page and nothing is ever removed from the DOM.
-  # StreamWeaver: the same nesting, with `fragment(..., lazy: true)` -- see
-  # `scroll_todos_page` above. No button, no scroll listener, no page counter
-  # in state: scrolling to page N's bottom is what makes page N+1's fragment
-  # visible, which is what fetches it.
+  # Rails: nested "Russian doll" frames -- each response renders the CURRENT
+  # page's rows inline and appends page N+1's placeholder frame, already
+  # `loading: :lazy`, so scrolling to the bottom fetches the next page and
+  # nothing is ever removed from the DOM.
+  # StreamWeaver: the same shape, with `fragment(..., lazy: true)` around the
+  # NEXT page only -- see `scroll_todos_page` above. No button, no scroll
+  # listener, no page counter in state: scrolling to page N's bottom is what
+  # makes page N+1's fragment visible, which is what fetches it.
   # ==========================================================================
   when :infinite_scroll
     header1 'Infinite scroll'
@@ -280,14 +293,20 @@ app 'My Todos', layout: :wide do
 
     div class: 'spike-gap' do
       header3 'How it works now'
-      md 'Each page is `fragment(:"todos_page_N", lazy: true)`; its block ends ' \
-         'by declaring page N+1 as its own lazy fragment, nested inside it. ' \
-         'Page N+1 is not in the DOM -- and has not fetched -- until page N ' \
-         'has landed and scrolling reveals it. Each response carries only that ' \
-         'page\'s rows (`TodoStore.page(n)`), not everything loaded so far: a ' \
-         'constant per-page payload where the old click-driven version grew ' \
-         'with every click. See findings doc, feature 4 resolution for the ' \
-         'measured byte counts.'
+      md 'The page you are ON renders inline; only the NEXT page is wrapped in ' \
+         '`fragment(:"todos_page_N+1", lazy: true)`. So this shell already ' \
+         'carries page 1\'s ten rows plus exactly one placeholder — view source ' \
+         'and the rows are really there, which is the same progressive-' \
+         'enhancement guarantee Rails gives you. Page N+1 is not in the DOM -- ' \
+         'and has not fetched -- until scrolling reveals its placeholder. Each ' \
+         'response carries only that page\'s rows (`TodoStore.page(n)`), not ' \
+         'everything loaded so far: a constant per-page payload where the old ' \
+         'click-driven version grew with every click. Wrapping page N itself in ' \
+         'the lazy fragment is the tempting shape and it is wrong -- the block ' \
+         'is skipped on the shell render, so the served HTML has no rows at ' \
+         'all, and it only looks right because page 1\'s placeholder starts in ' \
+         'the viewport. See findings doc, feature 4 resolution for the measured ' \
+         'byte counts.'
     end
   end
 end.run!
