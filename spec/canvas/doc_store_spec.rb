@@ -353,6 +353,40 @@ RSpec.describe StreamWeaver::Canvas::DocStore do
 
   # Shared by BOTH Save-as-doc routes (BridgeServer and Reader) so the two
   # buttons can never write differently shaped files (stream_weaver-csf).
+  # stream_weaver-j3b3: the Save-as-doc toggle's server-side landing spot.
+  describe '.save scope/source_dir' do
+    it "defaults to scope: :repo with no source_dir, which is the existing auto-detected `path`" do
+      path = described_class.save('hello', 'x')
+      expect(path).to eq(File.join(@root, 'hello.rb'))
+    end
+
+    it 'writes under <source_dir>/docs/streamweaver_canvas when scope is :repo and source_dir is given' do
+      Dir.mktmpdir do |repo|
+        path = described_class.save('hello', 'x', scope: :repo, source_dir: repo)
+        expect(path).to eq(File.join(repo, 'docs', 'streamweaver_canvas', 'hello.rb'))
+        expect(File.read(path)).to include('x')
+      end
+    end
+
+    it 'writes to DEFAULT_ROOT when scope is :global, even with a source_dir given' do
+      Dir.mktmpdir do |global_root|
+        # stub_const, not ENV['STREAMWEAVER_DOC_ROOT'] -- that env var short-
+        # circuits `.path` entirely (see the class comment) and would mask a
+        # regression where scope: :global stopped routing to DEFAULT_ROOT.
+        stub_const('StreamWeaver::Canvas::DocStore::DEFAULT_ROOT', global_root)
+        Dir.mktmpdir do |repo|
+          path = described_class.save('hello', 'x', scope: :global, source_dir: repo)
+          expect(path).to eq(File.join(global_root, 'hello.rb'))
+        end
+      end
+    end
+
+    it 'falls back to auto-detected `path` when scope is :repo but source_dir is nil' do
+      path = described_class.save('hello', 'x', scope: :repo, source_dir: nil)
+      expect(path).to eq(File.join(@root, 'hello.rb'))
+    end
+  end
+
   describe '.dsl_with_metadata' do
     it 'prepends use_theme/use_layout so canvas-read re-renders the same look' do
       expect(described_class.dsl_with_metadata("header1 'Hi'", theme: :doc, layout: :wide))

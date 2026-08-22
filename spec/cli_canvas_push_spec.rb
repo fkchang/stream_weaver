@@ -7,6 +7,7 @@ require 'stringio'
 require 'stream_weaver/cli'
 require 'stream_weaver/canvas/client'
 require 'stream_weaver/canvas/history'
+require 'stream_weaver/canvas/doc_store'
 
 RSpec.describe StreamWeaver::CLI do
   describe '.canvas_push (history auto-save)' do
@@ -155,6 +156,75 @@ RSpec.describe StreamWeaver::CLI do
         stdout, stderr = capture_io { described_class.canvas_push([session_name]) }
         expect(stdout).to include("Pushed to #{session_name}")
         expect(stderr).to include('history save skipped')
+      end
+    end
+  end
+
+  describe '.canvas_push (source_dir, stream_weaver-j3b3)' do
+    let(:dsl) { "header1 'Hi'" }
+    let(:session_name) { 'mytest' }
+
+    around do |ex|
+      prev = ENV['STREAMWEAVER_HISTORY_ROOT']
+      Dir.mktmpdir do |d|
+        ENV['STREAMWEAVER_HISTORY_ROOT'] = d
+        if described_class.instance_variable_defined?(:@history_cleaned)
+          described_class.remove_instance_variable(:@history_cleaned)
+        end
+        ex.run
+      end
+    ensure
+      ENV['STREAMWEAVER_HISTORY_ROOT'] = prev
+    end
+
+    before do
+      allow($stdin).to receive(:tty?).and_return(false)
+      allow($stdin).to receive(:read).and_return(dsl)
+    end
+
+    def capture_io
+      old_stdout = $stdout
+      old_stderr = $stderr
+      $stdout = StringIO.new
+      $stderr = StringIO.new
+      yield
+      [$stdout.string, $stderr.string]
+    ensure
+      $stdout = old_stdout
+      $stderr = old_stderr
+    end
+
+    it "includes DocStore.git_root(Dir.pwd) as source_dir -- computed from THIS process's cwd, not the bridge's" do
+      Dir.mktmpdir do |repo|
+        FileUtils.mkdir_p(File.join(repo, '.git'))
+        sent_source_dir = nil
+        allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+          sent_source_dir = msg[:source_dir]
+          nil
+        end
+
+        Dir.chdir(repo) do
+          capture_io { described_class.canvas_push([session_name]) }
+        end
+
+        expect(sent_source_dir).to eq(File.realpath(repo))
+      end
+    end
+
+    it 'sends a nil source_dir when pushed from outside any git repo' do
+      Dir.mktmpdir do |no_repo|
+        sent_msg = nil
+        allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+          sent_msg = msg
+          nil
+        end
+        allow(StreamWeaver::Canvas::DocStore).to receive(:git_root).and_return(nil)
+
+        Dir.chdir(no_repo) do
+          capture_io { described_class.canvas_push([session_name]) }
+        end
+
+        expect(sent_msg[:source_dir]).to be_nil
       end
     end
   end

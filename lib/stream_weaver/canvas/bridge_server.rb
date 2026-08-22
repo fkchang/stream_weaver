@@ -150,6 +150,11 @@ module StreamWeaver
         doc_name = body[:name]
         format = body[:format] || 'rb'
         halt 422, { ok: false, error: "unrecognized format: #{format.inspect}" }.to_json unless %w[rb org].include?(format)
+        # The Save-as-doc toggle (stream_weaver-j3b3): 'global' always means
+        # DEFAULT_ROOT; anything else (including a missing/malformed value)
+        # means "this repo", resolved from the session's own source_dir --
+        # never the server's cwd.
+        scope = body[:scope] == 'global' ? :global : :repo
 
         if format == 'org'
           begin
@@ -166,7 +171,7 @@ module StreamWeaver
             # ArgumentError the .rb path below already gets for free, instead
             # of silently coercing it via #to_s into a technically-valid name.
             org_name = doc_name.is_a?(String) ? "#{doc_name.sub(/\.(rb|org)\z/, '')}.org" : doc_name
-            path = StreamWeaver::Canvas::DocStore.save(org_name, org_text)
+            path = StreamWeaver::Canvas::DocStore.save(org_name, org_text, scope: scope, source_dir: session.source_dir)
             return { ok: true, path: path, coverage: coverage }.to_json
           rescue ArgumentError => e
             halt 422, { ok: false, error: e.message }.to_json
@@ -182,7 +187,7 @@ module StreamWeaver
         )
 
         begin
-          path = StreamWeaver::Canvas::DocStore.save(doc_name, dsl)
+          path = StreamWeaver::Canvas::DocStore.save(doc_name, dsl, scope: scope, source_dir: session.source_dir)
           { ok: true, path: path }.to_json
         rescue ArgumentError => e
           halt 422, { ok: false, error: e.message }.to_json
@@ -274,7 +279,7 @@ module StreamWeaver
             <div id="app-container" #{container_attrs(session.state, adapter)}>
               #{initial_content}
             </div>
-            #{save_doc_widget(session_name)}
+            #{save_doc_widget(session_name, session)}
             <script>
               #{polling_script(session_name, session.html_version)}
             </script>
@@ -299,11 +304,12 @@ module StreamWeaver
       # with the reader's own Save-as-doc widget via SaveDocWidget
       # (stream_weaver-e13); only the endpoint, default-name source, and copy
       # below are specific to the live canvas page.
-      def save_doc_widget(session_name)
+      def save_doc_widget(session_name, session)
         StreamWeaver::Canvas::SaveDocWidget.render(
           endpoint: "/canvas/#{session_name}/save-doc",
           button_title: 'Save this canvas as a persistent doc',
           dialog_title: 'Save canvas as doc',
+          source_dir: session.source_dir,
           hint_html: <<~HINT.strip,
             <span x-show="format !== 'org'">Writes to <code>docs/streamweaver_canvas/&lt;name&gt;.rb</code> (or <code>~/.streamweaver/canvas/</code> outside a git repo).</span>
             <span x-show="format === 'org'">Writes a human-readable <code>&lt;name&gt;.org</code> sibling file alongside the canonical <code>.rb</code>.</span>

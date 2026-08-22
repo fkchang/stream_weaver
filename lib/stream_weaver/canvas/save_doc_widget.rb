@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'erb'
+
 module StreamWeaver
   module Canvas
     # Renders the floating "Save as doc" button + Alpine.js modal that POSTs
@@ -43,12 +45,20 @@ module StreamWeaver
       # dialog_css_extra - extra CSS declarations appended into the
       #   `.sw-save-doc-dialog` rule (reader adds `color`/`text-align` that the
       #   canvas dialog doesn't need, having inherited page defaults already).
+      # source_dir - absolute path of the repo the caller resolves "This
+      #   repo" to (stream_weaver-j3b3), or nil when the caller has none to
+      #   offer. When present, a scope toggle ("This repo (<basename>)" vs.
+      #   "Global") is rendered above the name field, defaulting to "This
+      #   repo"; when nil the toggle is omitted entirely and the save is
+      #   always Global -- a manual choice, never a silent auto-resolution
+      #   (canvas-doc-location-and-discovery.md).
       def render(
         endpoint:,
         button_title:,
         dialog_title:,
         hint_html:,
         name_init:,
+        source_dir: nil,
         reset_name_js: '',
         extra_alpine_data: '',
         extra_body_fields: '',
@@ -60,6 +70,7 @@ module StreamWeaver
         style_close = css_layer ? '}</style>' : '</style>'
         host_css    = host_class ? "\n            .#{host_class} { display: contents; }" : ''
         host_attr   = host_class ? %( class="#{host_class}") : ''
+        scope_html  = scope_toggle_html(source_dir)
 
         <<~HTML
           #{style_open}
@@ -86,6 +97,17 @@ module StreamWeaver
             .sw-save-doc-dialog h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; }
             .sw-save-doc-dialog p.hint {
               margin: 0 0 1rem 0; color: #6b7280; font-size: 0.85rem;
+            }
+            .sw-save-doc-scope {
+              display: flex; gap: 1rem; margin: 0 0 0.5rem 0;
+              font-size: 0.85rem;
+            }
+            .sw-save-doc-scope label {
+              display: flex; align-items: center; gap: 0.35rem; cursor: pointer;
+            }
+            .sw-save-doc-scope-path {
+              margin: 0 0 0.75rem 0; color: #6b7280; font-size: 0.78rem;
+              font-family: ui-monospace, monospace; word-break: break-all;
             }
             .sw-save-doc-dialog input[type=text] {
               width: 100%; padding: 0.55rem 0.75rem;
@@ -136,6 +158,7 @@ module StreamWeaver
           <div x-data="{
             open: false,
             name: #{name_init},
+            scope: '#{source_dir ? 'repo' : 'global'}',
             #{extra_alpine_data}format: 'rb',
             saving: false,
             savedPath: null,
@@ -180,7 +203,7 @@ module StreamWeaver
                 const res = await fetch('#{endpoint}', {
                   method: 'POST',
                   headers: {'Content-Type': 'application/json'},
-                  body: JSON.stringify({#{extra_body_fields}name: this.name, format: this.format})
+                  body: JSON.stringify({#{extra_body_fields}name: this.name, format: this.format, scope: this.scope})
                 });
                 const data = await res.json();
                 if (res.ok && data.ok) {
@@ -210,6 +233,7 @@ module StreamWeaver
                 <p class="hint">
                   #{hint_html}
                 </p>
+                #{scope_html}
                 <input type="text" x-model="name" x-ref="input"
                        @keydown.enter.prevent="save()"
                        :disabled="saving"
@@ -233,6 +257,22 @@ module StreamWeaver
               </div>
             </div>
           </div>
+        HTML
+      end
+
+      # Builds the "This repo (<basename>)" vs. "Global" radio toggle, or ''
+      # when there's no repo to offer -- the caller-visible contract is
+      # `render`'s `source_dir:` kwarg (see its doc comment above).
+      def scope_toggle_html(source_dir)
+        return '' unless source_dir
+
+        repo_label = "This repo (#{ERB::Util.h(File.basename(source_dir))})"
+        <<~HTML
+          <div class="sw-save-doc-scope">
+            <label><input type="radio" x-model="scope" value="repo"> #{repo_label}</label>
+            <label><input type="radio" x-model="scope" value="global"> Global</label>
+          </div>
+          <p class="sw-save-doc-scope-path" x-show="scope === 'repo'">#{ERB::Util.h(source_dir)}</p>
         HTML
       end
     end

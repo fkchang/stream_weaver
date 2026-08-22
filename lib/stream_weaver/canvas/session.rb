@@ -8,7 +8,7 @@ module StreamWeaver
     class Session
       VALID_LAYOUTS = %i[default wide full fluid].freeze
 
-      attr_reader :name, :state, :websockets, :created_at, :layout, :dsl, :theme, :stylesheets
+      attr_reader :name, :state, :websockets, :created_at, :layout, :dsl, :theme, :stylesheets, :source_dir
       attr_accessor :html, :html_version, :pane_id
 
       # @param name [String] Session name
@@ -25,6 +25,7 @@ module StreamWeaver
         @html_version = 0
         @dsl = nil
         @stylesheets = []
+        @source_dir = nil
         @pending_toasts = []
         @pane_id = nil
         @mutex = Mutex.new
@@ -43,6 +44,15 @@ module StreamWeaver
       # @param content [String] Raw DSL source
       def set_dsl(content)
         @dsl = content
+      end
+
+      # Set the directory the current DSL was pushed from. Called by
+      # Bridge#handle_push only on successful render, same as #set_dsl -- a
+      # failed push must not desync source_dir from the DSL it's paired with
+      # (canvas-doc-location-and-discovery.md).
+      # @param dir [String, nil] Absolute git root path, or nil outside a repo
+      def set_source_dir(dir)
+        @source_dir = dir
       end
 
       # Replace the inline stylesheets carried by the current DSL (stream_weaver-9uk).

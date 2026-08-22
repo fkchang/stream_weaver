@@ -55,7 +55,7 @@ module StreamWeaver
         when 'create'
           handle_create(message[:name], layout: (message[:layout] || :fluid).to_sym, theme: (message[:theme] || :default).to_sym)
         when 'push'
-          handle_push(message[:name], message[:dsl])
+          handle_push(message[:name], message[:dsl], message[:source_dir])
         when 'toast'
           handle_toast(message[:name], message[:message], message[:variant], message[:duration])
         when 'close'
@@ -109,7 +109,7 @@ module StreamWeaver
         }
       end
 
-      def handle_push(name, dsl)
+      def handle_push(name, dsl, source_dir = nil)
         session = get_session(name)
         return { type: 'error', message: "Session not found: #{name}" } unless session
 
@@ -126,11 +126,14 @@ module StreamWeaver
         if result.error
           { type: 'push_error', message: result.error }
         else
-          # Persist raw DSL and its inline stylesheets only on successful
-          # render so a later failed push doesn't clobber the user's
-          # last-good content or re-skin (stream_weaver-9uk).
+          # Persist raw DSL, its inline stylesheets, and the directory it was
+          # pushed from only on successful render so a later failed push
+          # doesn't clobber the user's last-good content, re-skin
+          # (stream_weaver-9uk), or desync source_dir from the DSL it's
+          # paired with (canvas-doc-location-and-discovery.md).
           session.set_dsl(dsl)
           session.set_stylesheets(result.stylesheets)
+          session.set_source_dir(source_dir)
           { type: 'push_ok' }
         end
       end

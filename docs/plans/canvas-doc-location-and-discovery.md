@@ -1,6 +1,6 @@
 # Canvas doc location & discovery
 
-**Status:** most of this shipped. One small piece left, speced below.
+**Status:** shipped (`stream_weaver-j3b3`).
 **Related:** epic `stream_weaver-mdc`.
 **History:** this file carried a lot of exploration that isn't needed anymore — a rejected `DocIndex` registry, a canvas-server-attach mechanism, an automatic silent-resolution design that a Codex review correctly rejected as over-scoped for a problem the user hadn't actually hit. See `git log -p -- docs/plans/canvas-doc-location-and-discovery.md` if any of that ever matters again. Not repeated below.
 
@@ -11,7 +11,7 @@
 - Delete a saved doc from the sidebar — `stream_weaver-uvaj`.
 - Atomic doc writes — `stream_weaver-5nvz`.
 
-## The one real problem left
+## The one real problem left (now fixed)
 
 Docs save to the global store (`~/.streamweaver/canvas`) even when working in a repo, because `DocStore.save`'s automatic resolution asks "is the *server's* cwd a repo?" — meaningless once one canvas server outlives any single repo. Today the workaround is manually copying the file out of global into the right repo after the fact.
 
@@ -29,4 +29,4 @@ Two things surfaced while investigating this that are real but unrelated — par
 
 ## Beads
 
-`stream_weaver-e13` (extract shared Save-as-doc widget — precondition), new issue for `source_dir` + toggle (to file). `stream_weaver-16fx` (attach-or-boot) deferred — needs materially more design than scoped, not blocking this.
+`stream_weaver-e13` (extract shared Save-as-doc widget — precondition, shipped) and `stream_weaver-j3b3` (`source_dir` + toggle, shipped). `stream_weaver-16fx` (attach-or-boot) deferred — needs materially more design than scoped, not blocking this.

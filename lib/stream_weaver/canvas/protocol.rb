@@ -45,8 +45,11 @@ module StreamWeaver
         end
 
         # Claude → Bridge: Push DSL content to session
-        def self.push(name, dsl)
-          { type: 'push', name: name, dsl: dsl }
+        # @param source_dir [String, nil] Git root of the pushing side's cwd
+        #   (DocStore.git_root(Dir.pwd) computed by the caller), or nil
+        #   outside a repo. Not the bridge's own cwd -- see Session#source_dir.
+        def self.push(name, dsl, source_dir: nil)
+          { type: 'push', name: name, dsl: dsl, source_dir: source_dir }
         end
 
         # Claude → Bridge: Close a session

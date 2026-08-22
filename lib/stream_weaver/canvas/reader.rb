@@ -590,6 +590,12 @@ module StreamWeaver
         name   = body[:name]
         format = body[:format] || 'rb'
         halt 422, { ok: false, error: "unrecognized format: #{format.inspect}" }.to_json unless %w[rb org].include?(format)
+        # The Save-as-doc toggle (stream_weaver-j3b3). No source_dir is passed
+        # to DocStore.save below -- unlike BridgeServer, the reader has no
+        # live session to carry one, so "This repo" keeps resolving the same
+        # way it always has: DocStore's own auto-detection off the reader
+        # process's cwd (see reader_layout.erb's SaveDocWidget.render call).
+        scope = body[:scope] == 'global' ? :global : :repo
 
         # FileList#at already refuses non-Integer/negative indices; File.exist?
         # covers the case an in-range index still points at a file that's
@@ -619,10 +625,10 @@ module StreamWeaver
             # it with the same ArgumentError the .rb path below already gets
             # for free, instead of silently coercing it via #to_s.
             org_name = name.is_a?(String) ? "#{name.sub(/\.(rb|org)\z/, '')}.org" : name
-            saved_path = StreamWeaver::Canvas::DocStore.save(org_name, org_text)
+            saved_path = StreamWeaver::Canvas::DocStore.save(org_name, org_text, scope: scope)
             { ok: true, path: saved_path, coverage: writer.coverage }.to_json
           else
-            saved_path = StreamWeaver::Canvas::DocStore.save(name, dsl)
+            saved_path = StreamWeaver::Canvas::DocStore.save(name, dsl, scope: scope)
             { ok: true, path: saved_path }.to_json
           end
         rescue ArgumentError => e

@@ -102,6 +102,14 @@ module StreamWeaver
       # file with the same name (Tier 2 docs are user-managed; collisions
       # mean the user is intentionally updating).
       #
+      # scope/source_dir (stream_weaver-j3b3): a caller with an explicit
+      # destination in mind (the Save-as-doc toggle) passes both. `scope:
+      # :global` always writes to DEFAULT_ROOT. `scope: :repo` (the default)
+      # writes under `source_dir` when given; when `source_dir` is nil (no
+      # caller preference, e.g. a caller with no repo context to offer) it
+      # falls back to the existing auto-detected `path` -- unchanged
+      # behavior for every pre-existing caller.
+      #
       # Only .rb output gets the `# streamweaver-doc: v1` stamp -- .org output
       # already self-identifies via its own `#+STREAMWEAVER_DSL: 1` header
       # keyword (org-doc-format-design.md), which must be the file's first
@@ -118,9 +126,9 @@ module StreamWeaver
       # matches neither the *.rb nor the *.org globs even in the instant it
       # exists, and it is removed if the write or rename fails so a failure
       # never litters the docs directory.
-      def save(name, dsl)
+      def save(name, dsl, scope: :repo, source_dir: nil)
         filename = normalize_name(name)
-        dir = path
+        dir = target_dir(scope, source_dir)
         FileUtils.mkdir_p(dir)
 
         full = File.join(dir, filename)
@@ -229,6 +237,16 @@ module StreamWeaver
         "#{stripped}#{ext}"
       end
       private_class_method :normalize_name
+
+      # Resolves the destination directory for `save`'s scope/source_dir
+      # arguments. See `save`'s comment for the semantics.
+      def target_dir(scope, source_dir)
+        return DEFAULT_ROOT if scope == :global
+        return File.join(source_dir, DOCS_SUBPATH) if source_dir
+
+        path
+      end
+      private_class_method :target_dir
     end
   end
 end

@@ -581,6 +581,12 @@
     # filename, not wall-clock "now", so it's computed once server-side and
     # needs no client-side recompute on openDialog() (reset_name_js: '').
     name_init: ERB::Util.h(default_name.to_json),
+    # stream_weaver-j3b3: the reader has no live session/source_dir to carry
+    # (see the save-doc route's own comment) -- this just computes the same
+    # git-root auto-detection DocStore.save already does internally, so the
+    # toggle's label/hide-when-nil matches what "This repo" actually resolves
+    # to today.
+    source_dir: StreamWeaver::Canvas::DocStore.git_root(Dir.pwd),
     extra_alpine_data: "file: #{@current_index},\n    ",
     extra_body_fields: 'file: this.file, ',
     # display:contents keeps the widget (inside #sw-reader-nav, a flex row so

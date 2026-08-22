@@ -233,6 +233,82 @@ RSpec.describe StreamWeaver::Canvas::BridgeServer, type: :request do
       body = JSON.parse(last_response.body)
       expect(body['ok']).to eq(false)
     end
+
+    # stream_weaver-j3b3: the Save-as-doc toggle. STREAMWEAVER_DOC_ROOT is set
+    # to @doc_root by the outer `around`, so "the same as auto-detection"
+    # would also land in @doc_root -- these use a distinct source_dir to
+    # prove the toggle, not the env var, is what's driving the destination.
+    describe 'the scope toggle' do
+      it "writes under the session's source_dir when scope is 'repo'" do
+        Dir.mktmpdir do |repo|
+          session = described_class.bridge.create_session('s1')
+          session.set_dsl("header1 'Hi'")
+          session.set_source_dir(repo)
+
+          post '/canvas/s1/save-doc',
+               { name: 'mydoc', scope: 'repo' }.to_json,
+               'CONTENT_TYPE' => 'application/json'
+
+          expect(last_response.status).to eq(200)
+          body = JSON.parse(last_response.body)
+          expected = File.join(repo, 'docs', 'streamweaver_canvas', 'mydoc.rb')
+          expect(body['path']).to eq(expected)
+          expect(File.exist?(expected)).to eq(true)
+        end
+      end
+
+      it 'writes to DEFAULT_ROOT when scope is global, regardless of source_dir' do
+        Dir.mktmpdir do |global_root|
+          # DocStore.save's scope: :global path bypasses STREAMWEAVER_DOC_ROOT
+          # entirely, so stub the constant itself rather than the env var --
+          # never touch the real ~/.streamweaver/canvas in a test.
+          stub_const('StreamWeaver::Canvas::DocStore::DEFAULT_ROOT', global_root)
+          Dir.mktmpdir do |repo|
+            session = described_class.bridge.create_session('s1')
+            session.set_dsl("header1 'Hi'")
+            session.set_source_dir(repo)
+
+            post '/canvas/s1/save-doc',
+                 { name: 'mydoc', scope: 'global' }.to_json,
+                 'CONTENT_TYPE' => 'application/json'
+
+            expect(last_response.status).to eq(200)
+            body = JSON.parse(last_response.body)
+            expect(body['path']).to eq(File.join(global_root, 'mydoc.rb'))
+          end
+        end
+      end
+
+      it 'defaults to repo scope when the toggle value is missing (falls back to auto-detection since source_dir is nil here)' do
+        session = described_class.bridge.create_session('s1')
+        session.set_dsl("header1 'Hi'")
+
+        post '/canvas/s1/save-doc',
+             { name: 'mydoc' }.to_json,
+             'CONTENT_TYPE' => 'application/json'
+
+        expect(last_response.status).to eq(200)
+        body = JSON.parse(last_response.body)
+        expect(body['path']).to start_with(@doc_root)
+      end
+
+      it "applies the same scope toggle on the org path" do
+        Dir.mktmpdir do |repo|
+          session = described_class.bridge.create_session('s1')
+          session.set_dsl(%(md "hello"\n))
+          session.set_source_dir(repo)
+
+          post '/canvas/s1/save-doc',
+               { name: 'mydoc', format: 'org', scope: 'repo' }.to_json,
+               'CONTENT_TYPE' => 'application/json'
+
+          expect(last_response.status).to eq(200)
+          body = JSON.parse(last_response.body)
+          expected = File.join(repo, 'docs', 'streamweaver_canvas', 'mydoc.org')
+          expect(body['path']).to eq(expected)
+        end
+      end
+    end
   end
 end
 
@@ -245,6 +321,17 @@ RSpec.describe StreamWeaver::Canvas::Session do
       expect(session.dsl).to eq("header1 'Hi'")
       session.set_dsl("header1 'Bye'")
       expect(session.dsl).to eq("header1 'Bye'")
+    end
+  end
+
+  describe '#set_source_dir / #source_dir (stream_weaver-j3b3)' do
+    it 'starts as nil and stores the last set source_dir' do
+      session = described_class.new('s1')
+      expect(session.source_dir).to be_nil
+      session.set_source_dir('/repo/one')
+      expect(session.source_dir).to eq('/repo/one')
+      session.set_source_dir('/repo/two')
+      expect(session.source_dir).to eq('/repo/two')
     end
   end
 end
@@ -271,6 +358,40 @@ RSpec.describe StreamWeaver::Canvas::Bridge do
       result = bridge.send(:handle_push, 's1', "raise 'boom'")
       expect(result[:type]).to eq('push_error')
       expect(bridge.get_session('s1').dsl).to be_nil
+    end
+  end
+
+  describe '#handle_push source_dir retention (stream_weaver-j3b3)' do
+    let(:bridge) { described_class.new(port: 0) }
+
+    before { bridge.create_session('s1') }
+
+    it 'stores source_dir on a successful render' do
+      bridge.send(:handle_push, 's1', "header1 'Hi'", '/repo/one')
+      expect(bridge.get_session('s1').source_dir).to eq('/repo/one')
+    end
+
+    it 'does NOT replace stored source_dir when a later render fails (guarded the same shape as DSL retention)' do
+      bridge.send(:handle_push, 's1', "header1 'Good'", '/repo/one')
+      result = bridge.send(:handle_push, 's1', "raise 'boom'", '/repo/two')
+      expect(result[:type]).to eq('push_error')
+      expect(bridge.get_session('s1').source_dir).to eq('/repo/one')
+    end
+
+    it 'leaves source_dir nil when the very first push fails' do
+      result = bridge.send(:handle_push, 's1', "raise 'boom'", '/repo/one')
+      expect(result[:type]).to eq('push_error')
+      expect(bridge.get_session('s1').source_dir).to be_nil
+    end
+
+    it 'stores nil source_dir when pushed from outside any repo' do
+      bridge.send(:handle_push, 's1', "header1 'Hi'", nil)
+      expect(bridge.get_session('s1').source_dir).to be_nil
+    end
+
+    it "carries source_dir through handle_claude_message's 'push' dispatch" do
+      bridge.handle_claude_message(type: 'push', name: 's1', dsl: "header1 'Hi'", source_dir: '/repo/three')
+      expect(bridge.get_session('s1').source_dir).to eq('/repo/three')
     end
   end
 end

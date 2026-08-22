@@ -1177,9 +1177,14 @@ module StreamWeaver
       dsl = prepend_stylesheets(dsl, stylesheet_paths) unless stylesheet_paths.empty?
 
       require_relative 'canvas/client'
+      require_relative 'canvas/doc_store'
+
+      # Computed on THIS (the pushing) side's cwd, not the bridge's -- the
+      # bridge process outlives any single repo (stream_weaver-j3b3).
+      source_dir = Canvas::DocStore.git_root(Dir.pwd)
 
       response = Canvas::Client.send_message(
-        Canvas::Protocol::Messages.push(session_name, dsl)
+        Canvas::Protocol::Messages.push(session_name, dsl, source_dir: source_dir)
       )
 
       # Check for DSL errors reported back from the bridge
@@ -1696,9 +1701,10 @@ module StreamWeaver
         open_browser(response[:url])
 
         # Push the pick UI
+        require_relative 'canvas/doc_store'
         dsl = Canvas::Helpers.pick_dsl(title, choices)
         Canvas::Client.send_message(
-          Canvas::Protocol::Messages.push(session_name, dsl)
+          Canvas::Protocol::Messages.push(session_name, dsl, source_dir: Canvas::DocStore.git_root(Dir.pwd))
         )
 
         # Wait for response
@@ -1769,9 +1775,10 @@ module StreamWeaver
         open_browser(response[:url])
 
         # Push the confirm UI
+        require_relative 'canvas/doc_store'
         dsl = Canvas::Helpers.confirm_dsl(message, yes_label: yes_label, no_label: no_label)
         Canvas::Client.send_message(
-          Canvas::Protocol::Messages.push(session_name, dsl)
+          Canvas::Protocol::Messages.push(session_name, dsl, source_dir: Canvas::DocStore.git_root(Dir.pwd))
         )
 
         # Wait for response

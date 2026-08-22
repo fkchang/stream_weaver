@@ -57,6 +57,37 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'promote-from-history' do
       expect(body['path']).to start_with(@doc_root)
     end
 
+    # stream_weaver-j3b3: reader has no live session/source_dir, so "repo"
+    # scope keeps resolving via DocStore's own auto-detection (here,
+    # STREAMWEAVER_DOC_ROOT from the outer `around`) -- unchanged from
+    # before this toggle existed. Only the "always writes here regardless"
+    # part of scope: :global is new reader behavior.
+    describe 'the scope toggle' do
+      it "writes via the existing auto-detection when scope is 'repo' (default, unchanged behavior)" do
+        post '/save-doc',
+             { file: 1, name: 'my-snapshot', scope: 'repo' }.to_json,
+             'CONTENT_TYPE' => 'application/json'
+
+        expect(last_response.status).to eq(200)
+        body = JSON.parse(last_response.body)
+        expect(body['path']).to start_with(@doc_root)
+      end
+
+      it 'writes to DEFAULT_ROOT when scope is global' do
+        Dir.mktmpdir do |global_root|
+          stub_const('StreamWeaver::Canvas::DocStore::DEFAULT_ROOT', global_root)
+
+          post '/save-doc',
+               { file: 1, name: 'my-snapshot', scope: 'global' }.to_json,
+               'CONTENT_TYPE' => 'application/json'
+
+          expect(last_response.status).to eq(200)
+          body = JSON.parse(last_response.body)
+          expect(body['path']).to eq(File.join(global_root, 'my-snapshot.rb'))
+        end
+      end
+    end
+
     it 'returns 422 when file index is out of range' do
       post '/save-doc',
            { file: 999, name: 'my-snapshot' }.to_json,
@@ -233,6 +264,18 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'promote-from-history' do
       expect(match).not_to be_nil,
         'x-data attribute did not contain openDialog() and save() as expected — ' \
         'it likely closed prematurely on an internal double-quote'
+    end
+
+    # stream_weaver-j3b3: the reader computes source_dir itself (no session
+    # to carry one) via the same git-root auto-detection DocStore.save
+    # already used internally -- this spec process's own cwd is a real git
+    # repo (this checkout), so the toggle should show, not hide.
+    it "shows the This repo toggle, resolved from the reader process's own cwd" do
+      source_dir = StreamWeaver::Canvas::DocStore.git_root(Dir.pwd)
+      expect(source_dir).not_to be_nil # sanity: this checkout IS a git repo
+
+      expect(html).to include('x-model="scope"')
+      expect(html).to include("This repo (#{File.basename(source_dir)})")
     end
   end
 
