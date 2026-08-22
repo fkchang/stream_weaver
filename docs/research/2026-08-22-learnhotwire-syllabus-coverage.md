@@ -61,10 +61,10 @@ below is grounded in this actual structure, not invented from the syllabus text 
 | Course lesson(s) | What it teaches | StreamWeaver equivalent today | Status | Parity demo |
 |---|---|---|---|---|
 | Web Components From Scratch | Turbo Frame is just `customElements.define` — build a minimal one by hand to demystify it | Already dissected in concept map §2 (`alex_turbo_frames_transcript.txt`); StreamWeaver's `fragment` is a server DSL concept, not a client custom element, so there's no equivalent "build it from scratch" teaching moment needed — the mechanism is inherently server-driven | N/A — different mechanism, not a missing capability | n/a |
-| Turbo Frame Inline Editing | Click "Edit", frame swaps to a form, submit swaps back to display, all scoped to one frame | `fragment :name` + `updates:` (§2 PARTIAL) gives the client-visible outcome; `resource`'s `edit_view :modal` (default) or `:page` gives a full inline-edit-to-view cycle already, docs/resource-dsl.md | HAVE (via `resource`) / PARTIAL (via raw `fragment`) | Todo row: click "Edit" → row fragment swaps to inline field inputs bound via `form_for(record: todo)`, submit swaps back to display row — this is `resource :todo, edit_view: :page` today, or a hand-rolled `fragment` toggling state[:editing_id] |
-| Search With Turbo Frames | Type in a search box, frame updates with filtered results, URL unaffected | `text_field submit: false` + fragment `updates:` gives the same live-filter-without-full-reload result; StreamWeaver's default *is* submit-on-keystroke reactivity, so this is arguably StreamWeaver's home turf | HAVE | Todo list search box filters the todo table fragment on every keystroke via a `text_field` bound to `state[:query]`, `fragment :todo_list do table filtered_todos end` |
-| Hovercards With Turbo Frames | Hover over a name, a lazy frame (`loading=lazy`) fetches and shows a card, keyed correctly per-position (dom_id lesson) | None — concept map §6 (MISSING: no visibility-based lazy load) and §3 (MISSING: no `dom_id`-style positional keying convention) both block this | MISSING | n/a — would need visibility-lazy fragments (see Recommended story additions) plus a positional-key convention before a hovercard-per-todo-assignee demo is buildable without hand-rolled IDs |
-| Infinite Scroll Turbo Frames | Nested lazy frames — each response embeds the next page's already-lazy placeholder frame | None (concept map §6 explicit: "No hover-card or infinite-scroll pattern... exists anywhere in `lib/`") | MISSING | n/a — same blocker as hovercards; StreamWeaver has no IntersectionObserver-triggered fetch primitive at all today |
+| Turbo Frame Inline Editing | Click "Edit", frame swaps to a form, submit swaps back to display, all scoped to one frame | Rails uses two matching-`dom_id` `turbo_frame_tag`s (display + edit) that swap by id; key elements: shared `dom_id`, the edit link living inside the frame it replaces, a narrow nested-resource `url:` for strong-params safety. StreamWeaver does the equivalent via one `fragment("todo-#{id}")` per row branching on `state[:editing_id]`, with `form_for(fields: TITLE_ONLY, record: todo)` inside it — every element rendered inside a fragment auto-scopes to it, so Edit and Save both swap just that row, and `form_for`'s declared `fields:` make the unsafe write unexpressible rather than just discouraged | HAVE | `examples/my_todos/` `/` — click Edit on any of 6 rows, only that row morphs to a form (verified server-side this story: edit fetch 1,327 bytes vs. 108,792-byte full page; save 806 bytes, completed glyph preserved across save) (browser-verified 2026-08-22 pending main-thread pass) |
+| Search With Turbo Frames | Type in a search box, frame updates with filtered results, URL unaffected | Rails names a sibling frame from outside it (`data: {turbo_frame: :todos}`) plus a Stimulus `autosubmit` controller calling `requestSubmit()`; key elements: `data-turbo-frame`, `method: :get` for a cacheable URL, a controller most authors get wrong (`submit()` vs `requestSubmit()`). StreamWeaver's `text_field` auto-submits on keystroke with zero controller — the `autosubmit` chapter collapses to nothing — but has no `data-turbo-frame` equivalent: an input can only target its own enclosing fragment or the whole container, never a sibling. Both arrangements filter correctly (the fragment-scoped param-merge bug the spike found is fixed, `deferred-fragments-src`/InteractionRunner) | HAVE (with a documented trade-off) | `examples/my_todos/` `/search` — arrangement A (field outside, Rails' layout): whole-container swap, 3,184 bytes. Arrangement B (field inside, scoped): 800-834 byte scoped morph. Verified server-side this story: outside "milk" then inside "coffee" in sequence produces zero state bleed (834-byte scoped response shows only "coffee" results) (browser-verified 2026-08-22 pending main-thread pass) |
+| Hovercards With Turbo Frames | Hover over a name, a lazy frame (`loading=lazy`) fetches and shows a card, keyed correctly per-position (dom_id lesson) | Rails uses `turbo_frame_tag todo.user, :hovercard, src:, loading: :lazy` inside a `div.hovercard`; key elements: CSS does the reveal (`display: none` → `:hover` → `block`), `loading="lazy"`'s IntersectionObserver does the fetch (only because the reveal made it visible), fetch-once, and the frame keyed by position (the todo) not content (the user) — the chapter demos keying by user as a live duplicate-id bug. StreamWeaver does the equivalent via `fragment(:"hovercard_#{todo_id}", lazy: true)` inside the same CSS `:hover` wrapper, keyed by `todo_id` per the same rule (llms.txt "Interactive IDs and keying") | HAVE | `examples/my_todos/` `/hover-cards` — verified server-side this story: 0 eager card fetches on initial GET (6 `sw-fragment-lazy` wrappers, `hx-trigger="intersect once"`, zero card content in the response body); booted with `SW_HOVERCARD_DELAY=1.5`, shell GET took 0.085s (was 9.151s eager); individual card POST fetch took 1.517s/1.530s, paid once, per card (browser-verified 2026-08-22 pending main-thread pass) |
+| Infinite Scroll Turbo Frames | Nested lazy frames — each response embeds the next page's already-lazy placeholder frame | Rails nests `turbo_frame_tag :todos_page, @pagy.page` around each page's rows plus a `loading: :lazy` frame for `@pagy.next`, keyed to the next page's URL; key elements: nesting (not replacing) so nothing is ever removed from the DOM, the `@pagy.next` guard so the last page dead-ends cleanly instead of blank-id "Content missing." StreamWeaver does the equivalent via a recursive `scroll_todos_page(n)` helper: `fragment(:"todos_page_#{n}", lazy: true)` whose block ends by declaring page `n+1` as its own nested lazy fragment (`if n < TodoStore.page_count` is the `@pagy.next` guard), nested ids `parent--child` per the framework's convention | HAVE | `examples/my_todos/` `/infinite-scroll` — verified server-side this story: walked all 6 pages via curl, payload sizes 809/877/934/993/1060/371 bytes (growth is only the lengthening nested-id string, not accumulated rows — O(1) per page vs. the spike's O(n) click-driven design), page 6 terminates with no further nested placeholder (browser-verified 2026-08-22 pending main-thread pass) |
 
 ---
 
@@ -196,19 +196,22 @@ streamweaver-way skill), full-syllabus parity surfaces these:
 
 | Status | Count |
 |---|---|
-| HAVE | 12 |
-| PARTIAL | 21 |
-| MISSING | 11 |
+| HAVE | 15 |
+| PARTIAL | 20 |
+| MISSING | 9 |
 | N-A-BY-DESIGN / N/A | 21 |
 | **Total rows** | **65** |
 
-Counted across all eight section tables above (one row per syllabus lesson-cluster). Roughly a
-third of the full syllabus is architecturally N/A (no bundler, no page cache, Alpine's own API
-surface standing in 1:1 for Stimulus's), just under a fifth is solidly HAVE, and the PARTIAL
-bucket — the largest — is dominated by two repeated root causes: (1) push/broadcast is
-timer-triggered-only rather than triggerable from arbitrary server code, and (2) the div-based
-`modal` hasn't picked up the native-`<dialog>` pattern already proven elsewhere in the same
-codebase.
+Counted across all eight section tables above (one row per syllabus lesson-cluster). Updated
+2026-08-22 (`my-todos-zero-js`): Turbo Frames' Hovercards and Infinite Scroll rows moved
+MISSING → HAVE (`visibility-lazy-fragments` + `deferred-fragments-src` closed both), and Inline
+Editing consolidated from a split HAVE/PARTIAL into a clean HAVE (the raw-`fragment` path now
+delivers the row-scoped swap `resource` alone didn't). Roughly a third of the full syllabus is
+architecturally N/A (no bundler, no page cache, Alpine's own API surface standing in 1:1 for
+Stimulus's), and the PARTIAL bucket — still the largest — is dominated by two repeated root
+causes: (1) push/broadcast is timer-triggered-only rather than triggerable from arbitrary server
+code, and (2) the div-based `modal` hasn't picked up the native-`<dialog>` pattern already proven
+elsewhere in the same codebase.
 
 ---
 
@@ -222,7 +225,7 @@ the arc stands.
 
 | Epic (Tyrion slug) | Owns syllabus sections/rows | Status |
 |---|---|---|
-| streamweaver-way | Turbo Frames (all rows); cross-cutting: strict-ids keying, deferred/eager fragments, visibility-lazy, dev-loud failure, form_for docs; Way skill | ACTIVE (0/8) |
+| streamweaver-way | Turbo Frames (all rows); cross-cutting: strict-ids keying, deferred/eager fragments, visibility-lazy, dev-loud failure, form_for docs; Way skill | ACTIVE (6/8 done, `my-todos-zero-js` in progress) |
 | turbo-streams-parity | Turbo Streams (all non-N/A rows): broadcast-from-anywhere, refresh-fragment (broadcasts_refreshes), extensible stream actions, morph/scroll preservation | pending — blocked on streamweaver-way + now-view session-scoped-broadcast fix |
 | modal-dialogs-parity | Modal Dialogs (all rows): native `<dialog>` modal, modal form flows, dialog lifecycle | pending — blocked on turbo-streams-parity |
 | stimulus-role-parity | Stimulus rows not N-A-by-design: sortable drag-and-drop, submits-with label swap, autogrow textarea, Alpine lifecycle guardrails | pending — blocked on modal-dialogs-parity |

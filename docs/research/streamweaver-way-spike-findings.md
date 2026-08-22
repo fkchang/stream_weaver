@@ -496,3 +496,28 @@ Turbo's nested frames send a constant page), button disappeared at exhaustion (6
 `The selector "[x-model]" on hx-include returned no matches!` on any page whose active
 fragment/form contains no x-model element (seen on F1 edit-form render). Noisy console on
 every such interaction; candidate cheap fix alongside dev-loud-failure-overlay.
+
+---
+
+## Resolution (2026-08-22, story `my-todos-zero-js`)
+
+Every stumble recorded above, resolved or re-filed. `examples/my_todos/` is now the parity
+proof, not the spike — all four features work end to end, zero custom JavaScript.
+
+| # | Finding | Resolved by | Evidence |
+|---|---|---|---|
+| 1 | Inline editing — WORKS | No change needed | Re-verified server-side this story: edit fetch 1,327 bytes, save 806 bytes, title renamed, `☑` preserved — matches original measurements exactly |
+| 2 | Search — an input cannot target a sibling fragment | Still open, re-filed (not this story's scope) | `text_field` still doesn't wire `updates:` to `sw_updates`; confirmed unchanged in `adapter/alpinejs.rb#render_text_field`. `lib/` untouched per this story's rule. Documented in the app as "The remaining trade-off," not a break |
+| 2b | Search — fragment-scoped `/update` path doesn't merge posted `x-model` params (the browser-pass ADDENDUM break point) | `deferred-fragments-src` story — `InteractionRunner` now merges posted state before every scoped rebuild | `spec/deferred_fragments_spec.rb` "fragment-scoped param merge (spike ADDENDUM regression)", `spec/live_input_fragment_wiring_spec.rb`; this story's curl verification: sequential outside("milk")-then-inside("coffee") test shows zero state bleed, 834-byte scoped response contains only the inside result |
+| 3 | Hover cards — no visibility-triggered fetch primitive | `visibility-lazy-fragments` story — `fragment(..., lazy: true)` | This story: rebuilt each card as `fragment(:"hovercard_#{todo_id}", lazy: true)` keyed by todo (not user, per the transcript's key-by-position rule). Verified: 0 eager card fetches on page load, shell renders in 0.085s with `SW_HOVERCARD_DELAY=1.5` set (was 9.151s), each card's fetch pays 1.5s once, only when requested |
+| 4a | Infinite scroll — no visibility trigger | `visibility-lazy-fragments` (same primitive as #3) | This story: Russian-doll `scroll_todos_page` recursion, each page a `fragment(..., lazy: true)` |
+| 4b | Infinite scroll — no nested/appending fragments, O(n) per click | `deferred-fragments-src` + `visibility-lazy-fragments` (nested fragment ids, `parent--child`) | This story: `TodoStore.page(n)` returns one page's slice; verified nested fetches through page 6 (terminal) — payload sizes 809/877/934/993/1060/371 bytes, growth is only the lengthening nested-id string, not accumulated rows. `through_page` (the cumulative helper) removed as dead code |
+| a | `defer { ... }` silently drops its block | Fixed — `defer` now raises `NoMethodError` pointing at `fragment(:name, defer: true)` | `lib/stream_weaver/display_dsl.rb` (`8627b4b feat(fragments): defer: option renders the shell without running the block`) |
+| b | `updates:` on `text_field` is silently accepted and ignored | Still open, re-filed — same item as #2 above | Not fixed by any preceding story; documented in-app, not patched (`lib/` off-limits this story) |
+| c | Per-row `form_for` flash text leaks the form name (`"Todo_1 updated."`) | Still open, re-filed — cosmetic, not blocking | Reproduced again this story (save response includes `"Todo_1 updated."`); no story in this epic touched `form_for`'s flash-noun derivation |
+
+**Net**: 6 of 9 recorded items resolved by the epic's primitive stories; 3 remain open and are
+carried forward explicitly rather than silently dropped — two are the same underlying gap
+(input `updates:` wiring), one is a cosmetic flash-text nit. None block the four features from
+working; all three are documented in place (in-app copy or this table) rather than patched,
+per this story's "do not modify `lib/`" rule.

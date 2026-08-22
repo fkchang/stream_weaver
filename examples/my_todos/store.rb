@@ -28,6 +28,8 @@ module UserStore
 end
 
 module TodoStore
+  PER_PAGE = 10
+
   TITLES = [
     'Buy milk', 'Ship the parity spike', 'Review the fragment docs',
     'Book the offsite', 'Refactor the store protocol', 'Write release notes',
@@ -74,12 +76,11 @@ module TodoStore
       all.select { |t| t[:title].downcase.include?(needle) }
     end
 
-    # Cumulative pages, `1..page`, because StreamWeaver has no nested-frame
-    # append -- see docs/research/streamweaver-way-spike-findings.md, feature 4.
-    def through_page(page, per_page: 10)
-      all.first([page.to_i, 1].max * per_page)
-    end
-
-    def page_count(per_page: 10) = (all.length / per_page.to_f).ceil
+    # A single page's slice -- the Russian-doll infinite-scroll recipe fetches
+    # one page per request, not everything-so-far. See
+    # docs/research/streamweaver-way-spike-findings.md, feature 4 resolution.
+    # An empty return is the recursion's own termination signal -- see
+    # scroll_todos_page in my_todos.rb.
+    def page(number) = all.drop(([number.to_i, 1].max - 1) * PER_PAGE).first(PER_PAGE)
   end
 end

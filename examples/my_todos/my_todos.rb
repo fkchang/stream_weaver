@@ -1,14 +1,16 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# My Todos -- StreamWeaver parity spike against the learnhotwire.com course's
+# My Todos -- StreamWeaver parity PROOF against the learnhotwire.com course's
 # Rails app (github.com/learnhotwire/rails), Turbo Frames chapter.
 #
-# Rule of the spike: ZERO custom JavaScript in app code. No script tags, no
-# inline JS, no hand-written Alpine. Only DSL verbs and CSS. Where a feature
-# cannot be built inside that rule, the app says so on screen and
-# docs/research/streamweaver-way-spike-findings.md records exactly where it
-# broke.
+# Rule: ZERO custom JavaScript in app code. No script tags, no inline JS, no
+# hand-written Alpine. Only DSL verbs and CSS. All four chapter features --
+# inline editing, search, hover cards, infinite scroll -- work end to end
+# under that rule, on the primitives shipped by this epic (strict-ids keying,
+# deferred/lazy fragments). This app started as a spike (SDRD: build to
+# discover); docs/research/streamweaver-way-spike-findings.md is the full
+# history, now with every recorded stumble resolved or re-filed.
 #
 #   SW_NO_OPEN=1 ruby examples/my_todos/my_todos.rb
 #
@@ -20,8 +22,8 @@ require_relative 'store'
 # The chapter's hover card is "three lines of CSS, no JavaScript": the frame is
 # display:none until :hover flips it to display:block, and Turbo's
 # loading="lazy" IntersectionObserver fires the fetch at exactly that moment.
-# StreamWeaver gets the CSS half; see feature 3 in the findings doc for the half
-# it does not get.
+# StreamWeaver gets both halves -- the CSS reveal, plus `fragment(...,
+# lazy: true)`'s own visibility-triggered fetch. See feature 3 below.
 HOVERCARD_CSS = <<~CSS
   .hovercard { position: relative; display: inline-block; cursor: help; }
   .hovercard .hovercard-panel {
@@ -52,6 +54,20 @@ FEATURE_PATHS = {
 # feature-local key set by an earlier request cannot leak into a later view.
 VIEW_RESET = { editing_id: nil }.freeze
 
+# The Russian doll: page N's block ends by declaring page N+1 as its own lazy
+# fragment, nested inside it. Page N+1 does not exist in the DOM -- and never
+# fetches -- until page N has landed and the reader scrolls past it. This is
+# the whole of the pagination logic: no scroll handler, no page counter in
+# state (llms.txt "Recipe: infinite scroll, as nested fragments").
+def scroll_todos_page(number)
+  fragment(:"todos_page_#{number}", lazy: true, placeholder: 'Loading…') do
+    TodoStore.page(number).each { |t| text "#{t[:completed] ? '☑' : '☐'}  #{t[:title]}" }
+    # The guard is the chapter's `@pagy.next` check: without it Rails renders a
+    # frame with a blank id and the chain dead-ends in "Content missing".
+    scroll_todos_page(number + 1) unless TodoStore.page(number + 1).empty?
+  end
+end
+
 app 'My Todos', layout: :wide do
   use_stylesheet HOVERCARD_CSS
 
@@ -75,7 +91,6 @@ app 'My Todos', layout: :wide do
   )
 
   state[:feature] ||= :inline_edit
-  state[:page] ||= 1
 
   navbar do
     nav_item 'Inline editing',  href: '/',                active: state[:feature] == :inline_edit
@@ -84,7 +99,7 @@ app 'My Todos', layout: :wide do
     nav_item 'Infinite scroll', href: '/infinite-scroll', active: state[:feature] == :infinite_scroll
   end
 
-  fragment(:flash) { }
+  fragment(:flash) { flash_messages }
 
   case state[:feature].to_sym
   # ==========================================================================
@@ -136,18 +151,23 @@ app 'My Todos', layout: :wide do
   # Rails: the form sits OUTSIDE the results frame and names it with
   # `data: {turbo_frame: :todos}`; a Stimulus `autosubmit` controller turns
   # keystrokes into `requestSubmit()`.
-  # StreamWeaver: `text_field` auto-submits on input with no controller at all,
-  # but it has no equivalent of `data-turbo-frame` -- see the two arrangements
-  # below and feature 2 in the findings doc.
+  # StreamWeaver: `text_field` auto-submits on input with no controller at all.
+  # Both arrangements below now filter correctly -- the fragment-scoped param
+  # merge bug the spike found is fixed (InteractionRunner merges posted state
+  # before every scoped rebuild; see spec/live_input_fragment_wiring_spec.rb
+  # and spec/deferred_fragments_spec.rb's regression coverage). What's left is
+  # a genuine trade-off, not a break: shown in both arrangements below.
   # ==========================================================================
   when :search
     header1 'Search'
-    alert(variant: :warning) do
-      text 'PARTIAL -- submit-as-you-type is free, but an input cannot name a ' \
-           'sibling fragment.'
-      text 'A below is the Rails layout (field outside the results); it swaps the ' \
-           'whole app body. B moves the field inside the fragment to get a scoped ' \
-           'swap, at the cost of the field re-rendering itself on every keystroke.'
+    alert(variant: :success) do
+      text 'WORKS -- submit-as-you-type is free in both arrangements below, ' \
+           'with no custom JavaScript.'
+      text 'A is the Rails layout (field outside the results): swaps the whole ' \
+           'app body, so it costs more bytes but the field never re-renders ' \
+           'itself. B moves the field inside the fragment for a scoped morph ' \
+           '-- fewer bytes, and focus/caret survive the morph -- at the cost ' \
+           'of the field re-rendering itself on every keystroke.'
     end
 
     header3 'A. Rails arrangement -- field outside the results region'
@@ -169,46 +189,57 @@ app 'My Todos', layout: :wide do
     end
 
     div class: 'spike-gap' do
-      header3 'Where it breaks'
-      md '`text_field` never passes `sw_updates:` to `htmx_attrs`, so an input ' \
-         'targets its own enclosing fragment or `#app-container` -- there is no ' \
-         '`data-turbo-frame` equivalent. Worse, `text_field :query, updates: ' \
-         ':results` is accepted and silently ignored. See findings doc, feature 2.'
+      header3 'The remaining trade-off'
+      md 'Both arrangements filter correctly now. What StreamWeaver still ' \
+         'lacks is a `data-turbo-frame` equivalent: `text_field` never passes ' \
+         '`sw_updates:` to `htmx_attrs`, so an input can only target its own ' \
+         'enclosing fragment (B) or `#app-container` (A) -- it cannot name a ' \
+         'sibling fragment from outside it. `text_field :query, updates: ' \
+         ':results` is accepted and silently ignored (a real gap, tracked, ' \
+         'not fixed by this story). Until that lands, A pays the whole-body ' \
+         'swap and B pays the self-re-render -- pick per feature which cost ' \
+         'you\'d rather carry.'
     end
 
   # ==========================================================================
-  # 3. Hover cards  -- EXPECTED GAP
+  # 3. Hover cards
   #
   # Rails: `turbo_frame_tag todo.user, :hovercard, src: ..., loading: :lazy`
   # inside a `div.hovercard`. CSS reveals it; `loading=lazy` means the fetch
   # only happens because the reveal made it visible.
-  # StreamWeaver: the CSS reveal works. The lazy fetch has no primitive, so
-  # every card below is rendered eagerly, in the same request as the list.
+  # StreamWeaver: `fragment(..., lazy: true)` is the same two-part interlock --
+  # CSS does the revealing, `hx-trigger="intersect once"` does the fetching,
+  # and it never fires while the card is `display: none`.
   # ==========================================================================
   when :hover_cards
     header1 'Hover cards'
-    alert(variant: :warning) do
-      text 'PARTIAL -- CSS reveal works, lazy fetch does not exist.'
-      text 'Every card below was rendered eagerly with the list. Boot with ' \
-           'SW_HOVERCARD_DELAY=1.5 to feel what the missing laziness costs.'
+    alert(variant: :success) do
+      text 'WORKS -- CSS reveals the card, and revealing it is what fires the ' \
+           'fetch. Nothing has fetched until the pointer arrives.'
+      text 'Boot with SW_HOVERCARD_DELAY=1.5 and hover a name: the shell above ' \
+           'already rendered; only the hovered card pays the 1.5s, once.'
     end
 
     TodoStore.all.first(6).each do |todo|
       user = UserStore.find(todo[:user_id])
       div class: 'todo-row' do
         hstack spacing: :sm do
-          text "☐  #{todo[:title]} —"
+          text "#{todo[:completed] ? '☑' : '☐'}  #{todo[:title]} —"
           # Keyed by the todo, not the user: the chapter (38:52) demos two todos
-          # sharing an assignee emitting the same frame id twice. StreamWeaver
-          # has no dom_id helper, so the convention is hand-applied here.
+          # sharing an assignee emitting the same frame id twice. The fragment
+          # name below carries that same rule -- key by what is unique per
+          # position on the page (the todo), not by what the content is about
+          # (the user) -- per llms.txt "Interactive IDs and keying".
           div class: 'hovercard' do
             text user[:name]
             div class: 'hovercard-panel' do
-              UserStore.delay
-              card do
-                header3 user[:name]
-                text user[:role]
-                text "#{TodoStore.all.count { |t| t[:user_id] == user[:id] }} todos"
+              fragment(:"hovercard_#{todo[:id]}", lazy: true, placeholder: 'Loading…') do
+                UserStore.delay
+                card do
+                  header3 user[:name]
+                  text user[:role]
+                  text "#{TodoStore.all.count { |t| t[:user_id] == user[:id] }} todos"
+                end
               end
             end
           end
@@ -217,47 +248,46 @@ app 'My Todos', layout: :wide do
     end
 
     div class: 'spike-gap' do
-      header3 'Where it breaks'
-      md 'No DSL verb defers a region until it becomes visible. `tabs lazy: true` ' \
-         'is click-triggered (and deprecated), `every` is post-load, and `defer` ' \
-         'is an unimplemented no-op that silently drops its block. See findings ' \
-         'doc, feature 3.'
+      header3 'How it works now'
+      md 'Each card is its own `fragment(:"hovercard_#{todo[:id]}", lazy: ' \
+         'true)`. The CSS wrapper hides it (`display: none`), so the fragment' \
+         '\'s IntersectionObserver never fires -- no request goes out. Hovering ' \
+         'flips the CSS to `display: block`, which is what makes the fragment ' \
+         'visible, which is what fires the fetch. It fetches exactly once: ' \
+         'hover away and back, and the content that already landed stays put, ' \
+         'no second request. Six cards, zero eager cost.'
     end
 
   # ==========================================================================
-  # 4. Infinite scroll  -- EXPECTED GAP
+  # 4. Infinite scroll
   #
   # Rails: nested "Russian doll" frames -- page N's response contains page N+1's
   # placeholder frame, already `loading: :lazy`, so scrolling to the bottom
   # fetches the next page and nothing is ever removed from the DOM.
-  # StreamWeaver: no nested lazy frames and no visibility trigger, so this
-  # degrades to a click-driven "Load more" that re-sends every row loaded so far.
+  # StreamWeaver: the same nesting, with `fragment(..., lazy: true)` -- see
+  # `scroll_todos_page` above. No button, no scroll listener, no page counter
+  # in state: scrolling to page N's bottom is what makes page N+1's fragment
+  # visible, which is what fetches it.
   # ==========================================================================
   when :infinite_scroll
     header1 'Infinite scroll'
-    alert(variant: :warning) do
-      text 'DEGRADED -- click-to-load-more, not scroll-to-load-more.'
+    alert(variant: :success) do
+      text 'WORKS -- scroll-to-load-more, nested "Russian doll" fragments, ' \
+           'each fetch sends exactly its own page.'
     end
 
-    fragment(:todo_pages) do
-      page = state[:page].to_i
-      loaded = TodoStore.through_page(page)
-      loaded.each { |t| text "#{t[:completed] ? '☑' : '☐'}  #{t[:title]}" }
-      text "Showing #{loaded.length} of #{TodoStore.all.length} (page #{page} of #{TodoStore.page_count})"
-
-      # The `if` is the chapter's `@pagy.next` guard: without it Rails renders a
-      # frame with a blank id and the chain dead-ends in "Content missing".
-      if page < TodoStore.page_count
-        button('Load more') { |s| s[:page] = page + 1 }
-      end
-    end
+    scroll_todos_page(1)
 
     div class: 'spike-gap' do
-      header3 'Where it breaks'
-      md 'Two gaps compose here: no visibility trigger (so a button stands in ' \
-         'for the scroll), and no nested/appending fragments (so each click ' \
-         're-sends every row already on screen instead of just the new page). ' \
-         'See findings doc, feature 4.'
+      header3 'How it works now'
+      md 'Each page is `fragment(:"todos_page_N", lazy: true)`; its block ends ' \
+         'by declaring page N+1 as its own lazy fragment, nested inside it. ' \
+         'Page N+1 is not in the DOM -- and has not fetched -- until page N ' \
+         'has landed and scrolling reveals it. Each response carries only that ' \
+         'page\'s rows (`TodoStore.page(n)`), not everything loaded so far: a ' \
+         'constant per-page payload where the old click-driven version grew ' \
+         'with every click. See findings doc, feature 4 resolution for the ' \
+         'measured byte counts.'
     end
   end
 end.run!
