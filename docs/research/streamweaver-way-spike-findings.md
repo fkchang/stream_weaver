@@ -455,3 +455,44 @@ SW_NO_OPEN=1 STREAMWEAVER_PORT=4599 ruby examples/my_todos/my_todos.rb
 
 Then `/` (inline editing), `/search`, `/hover-cards`, `/infinite-scroll`. Boot with
 `SW_HOVERCARD_DELAY=1.5` to reproduce the eager-render timing above. Kill the process when done.
+
+---
+
+## Main-thread browser verification pass (2026-08-22, playwright-cli)
+
+All four routes exercised in a real headless Chrome per the handoff checklist. Server-side
+findings above stand, with two NEW browser-only findings.
+
+**F1 inline editing — PASS.** Row 1 alone morphed to the form (other 5 rows untouched, no
+page flash); Save applied the new title AND preserved the completed glyph (the edit-safe
+demo); Cancel restored display mode unchanged. Form seeds correctly from the record.
+
+**F2 search — split verdict, and a NEW break point.**
+- Outside arrangement (A): WORKS end to end in browser — typed "milk" filtered to 5 of 60,
+  URL pushed to /search?query=milk, deep link /search?query=oat seeded the field and
+  filtered on GET. (Cost stands: whole-container swap.)
+- Inside arrangement (B): focus + caret SURVIVE the idiomorph fragment morph (the checklist's
+  load-bearing unknown — idiomorph holds), BUT the filter never applies. Instrumented
+  htmx:configRequest shows the value IS sent (query_inside=milx in request params); the
+  fragment response still renders with stale state (60 of 60). Proof of locality: a
+  subsequent OUTSIDE-field interaction (full-container path) applied BOTH values — section B
+  then showed 0 of 60 for the previously-typed "milx". **Break point: the fragment-scoped
+  /update path renders without merging posted x-model params into state; the full-container
+  path merges them.** This is the same pipeline deferred-fragments-src will ride — the state
+  merge ordering must be fixed or designed around there.
+
+**F3 hover cards — PARTIAL as documented, gap signature confirmed.** Hovering an assignee
+revealed the .hovercard-panel via pure CSS (display none → visible, positioned correctly),
+and performance.getEntriesByType("resource") recorded **zero new requests** — the observable
+signature of the missing visibility-lazy primitive (Rails fires one fetch here). Eager cost
+not re-measured in browser; server measurement (9.151s vs 0.003s) stands.
+
+**F4 infinite scroll — DEGRADED as documented, behavior correct.** Load more accumulated
+10 → 40 → 60 rows (never replaced), scroll position retained across morphs (scrollY stayed
+400), responses GREW 1538 → 1893 → 2248 bytes (each response re-sends every on-screen row;
+Turbo's nested frames send a constant page), button disappeared at exhaustion (60 of 60).
+
+**NEW framework wart (browser console):** htmx logs
+`The selector "[x-model]" on hx-include returned no matches!` on any page whose active
+fragment/form contains no x-model element (seen on F1 edit-form render). Noisy console on
+every such interaction; candidate cheap fix alongside dev-loud-failure-overlay.
