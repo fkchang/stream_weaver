@@ -645,6 +645,51 @@ Reference: `lib/stream_weaver/views/canvas/reader_layout.erb`.
 
 **Future direction:** once Idiomorph (bd `stream_weaver-2ds`) lands, the OOB and active-class boilerplate goes away — morph diffs the rendered HTML and surgically updates only what changed, including class attributes. See `docs/streamweaver-frontend-vision.md` for the full thesis.
 
+## Dev Loud, Prod Self-Heal (Stale Action Fallback)
+
+Every named action's token embeds a digest of the app's registered actions
+plus a per-session generation. When a request arrives whose token no longer
+matches either (`lib/stream_weaver/interaction_runner.rb`'s
+`StaleActionDefinition`) — most commonly because the dev server hot-reloaded
+code and the browser is still holding a token minted before the reload —
+`lib/stream_weaver/server.rb`'s `/action/:button_id` route responds `409` +
+`HX-Retarget: #app-container` and re-renders the whole app. **This
+self-healing full-container swap is unconditional and stays byte-for-byte
+identical in production**: a user never sees an error, the app just
+silently recovers.
+
+This is a **deliberate inversion of Hotwire's philosophy**. Turbo Frames
+treat a missing/stale frame target as "content missing" and surface it loud
+by design — Rails' own course material calls this Turbo's single best
+debugging aid, because a silent frame swap during development hides the
+exact wiring bug the author needs to see. StreamWeaver keeps Hotwire's
+signal without inheriting its user-facing cost: **in development only**
+(`RACK_ENV` not `production`/`test` — see `sw_dev_mode?` in server.rb), the
+same 409 response additionally prepends a dismissible `.sw-dev-fallback`
+overlay (`lib/stream_weaver/dev_fallback_overlay.rb`) naming:
+
+- the stale target — the scoped fragment id the token declared (or the
+  action name, when no fragment was declared)
+- the likely cause — action token stale after a code reload (definitions
+  changed) or a server restart/session reset (generation changed)
+
+The overlay is framework-emitted HTML only — a checkbox+label CSS pattern
+dismisses it without a page reload, no inline `onclick`, no script tag, so
+app code stays zero-JS. Default styling comes from `--sw-dev-fallback-*`
+custom properties (`CSS.dev_fallback_css`); restyle via the `.sw-dev-fallback`
+class hook the same way any other framework CSS is overridden.
+
+**Decision note — only one loud-failure cause is reachable through this
+path.** The 409 route only ever raises `StaleActionDefinition` for a
+digest/generation mismatch (a stale token). A separately-missing fragment
+target (e.g. `find_fragment` returning nil after a conditional re-render
+removed it) is a *different*, non-exceptional code path inside
+`InteractionRunner#scoped_response` — it already falls back to the same
+`HX-Retarget: #app-container` swap, but at `200`, not `409`, and isn't
+raised as an exception at all. That branch is out of scope for this
+overlay; only "stale action token" is distinguishable at the 409 rescue
+site today.
+
 ## Repo Conventions (Anti-Patterns That Cause Churn)
 
 Common failure modes when LLMs build StreamWeaver apps. Avoid these.

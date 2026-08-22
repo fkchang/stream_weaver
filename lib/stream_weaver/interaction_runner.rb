@@ -1,7 +1,24 @@
 # frozen_string_literal: true
 
 module StreamWeaver
-  class StaleActionDefinition < StandardError; end
+  # Raised when a named action's token no longer matches the app's current
+  # action definitions (code reload changed the registered action set) or
+  # the session's action generation (server restart / session reset).
+  # server.rb's dev-mode fallback overlay (dev-loud-failure-overlay) reads
+  # #action/#fragment/#cause off the raised instance to name the stale
+  # target and likely cause -- kwargs are optional so existing
+  # `raise StaleActionDefinition` / `rescue StaleActionDefinition` call
+  # sites (and specs) that don't care about the detail keep working.
+  class StaleActionDefinition < StandardError
+    attr_reader :action, :fragment, :cause
+
+    def initialize(msg = nil, action: nil, fragment: nil, cause: nil)
+      @action = action
+      @fragment = fragment
+      @cause = cause
+      super(msg || "stale action token#{" for action #{action.inspect}" if action}")
+    end
+  end
 
   # Owns the state-to-response pipeline for every interactive request.
   #
@@ -342,7 +359,10 @@ module StreamWeaver
           payload = decoded_action
           return unless payload
           return unless action_manifest.include?(ActionToken.fingerprint(target))
-          raise StaleActionDefinition if payload[:d] != app.action_definition_digest || payload[:g].to_s != generation
+          if payload[:d] != app.action_definition_digest || payload[:g].to_s != generation
+            cause = payload[:d] != app.action_definition_digest ? :definition_changed : :generation_changed
+            raise StaleActionDefinition.new(action: payload[:a], fragment: payload[:f], cause: cause)
+          end
           @named_action_authorized = true
           app.bind_dispatch_state(state)
           app.actions[payload[:a].to_sym]&.call(state, payload[:k])

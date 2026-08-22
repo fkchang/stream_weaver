@@ -225,4 +225,41 @@ RSpec.describe "named actions over HTTP" do
     expect(last_response.headers["HX-Retarget"]).to eq("#app-container")
     expect(last_response.body).to include("Select")
   end
+
+  # dev-loud-failure-overlay: same 409/StaleActionDefinition fallback, but
+  # in dev mode it additionally names the stale target and likely cause
+  # (StreamWeaver's analog of Hotwire's "content missing"). Production keeps
+  # the silent self-heal above byte-for-byte unchanged.
+  def post_stale_action(rack_env)
+    get "/"
+    token = last_response.body[%r{/action/([^"']+)}, 1]
+    session = last_request.session.to_h
+    definition.action(:deployed_later) { |_state, _key| }
+
+    previous_env = ENV["RACK_ENV"]
+    ENV["RACK_ENV"] = rack_env
+    begin
+      env "rack.session", session
+      post "/action/#{token}"
+    ensure
+      ENV["RACK_ENV"] = previous_env
+    end
+  end
+
+  it "development mode: names the stale target and cause in a dismissible overlay" do
+    post_stale_action("development")
+
+    expect(last_response.status).to eq(409)
+    expect(last_response.body).to include("sw-dev-fallback")
+    expect(last_response.body).to include("action select") # the stale token's action name
+    expect(last_response.body).to include("stale")
+  end
+
+  it "production mode: renders no dev overlay (silent self-heal, unchanged)" do
+    post_stale_action("production")
+
+    expect(last_response.status).to eq(409)
+    expect(last_response.headers["HX-Retarget"]).to eq("#app-container")
+    expect(last_response.body).not_to include("sw-dev-fallback")
+  end
 end
