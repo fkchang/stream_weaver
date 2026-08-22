@@ -352,6 +352,12 @@ SW_STRICT_IDS=1 ruby my_app.rb                              # env, e.g. in CI
 
 ## Going deeper (pointers only — these are not summarized here)
 
+**The narrated twin.** `docs/tutorials/the-streamweaver-way.md` — "Build My Todos:
+the StreamWeaver Way" builds these same four features step by step, why-first, each
+step naming the law it obeys, the gotcha it avoids, and the measured number. This
+skill prescribes; the tutorial explains. Point a human at the tutorial. Also runs as
+a `:doc`-theme app: `SW_NO_OPEN=1 ruby examples/tutorials/streamweaver_way_tutorial.rb`.
+
 **The worked example set.** `examples/my_todos/` is all four recipes above in one running
 app, annotated with the Rails mechanism each one mirrors. Boot it with
 `SW_NO_OPEN=1 ruby examples/my_todos/my_todos.rb`, and `SW_HOVERCARD_DELAY=1.5` to feel

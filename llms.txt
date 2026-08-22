@@ -57,6 +57,8 @@ StreamWeaver is an omakase layer, not a widget kit — backend and frontend were
 
 The `streamweaver-way` skill ([Agent Skills](#agent-skills-install-these-before-hand-rolling-the-above)) teaches these with the four benchmark recipes — inline editing, scoped live search, lazy hover cards, Russian-doll infinite scroll. `examples/my_todos/` runs all four in one app with zero custom JavaScript.
 
+**Tutorial — `docs/tutorials/the-streamweaver-way.md`.** "Build My Todos: the StreamWeaver Way" rebuilds those same four features step by step, why-first: each step names the law it obeys, the gotcha it avoids, and the measured number where one exists (deferring a 1.5s region: 0.018s shell vs 1.508s fragment fetch; hover cards: 0.085s shell vs 9.151s eager; search: 800-byte scoped morph vs 2,123-byte whole-body swap; infinite scroll: O(1) per page vs O(n) per click). The skill *prescribes*; the tutorial *narrates* — read the tutorial when you want the reasoning, the skill when you want the answer. Runs as a `:doc`-theme app too: `SW_NO_OPEN=1 ruby examples/tutorials/streamweaver_way_tutorial.rb`.
+
 ## Minimal Example
 
 ```ruby
@@ -1047,6 +1049,7 @@ For comprehensive reference, see these docs:
 | `docs/crud-patterns.md` | CRUD: create/edit/delete modals, URL-addressable edit pages, store adapters |
 | `docs/streamweaver-frontend-vision.md` | Strategic direction: htmx + Alpine + Idiomorph as a Hotwire-equivalent stack for Ruby devs |
 | `docs/porting-artifacts.md` | Porting a claude.ai Artifact into StreamWeaver at visual parity: dissect, gap-assess, port, verify, promote |
+| `docs/tutorials/the-streamweaver-way.md` | **Tutorial** — "Build My Todos: the StreamWeaver Way": the four benchmark features rebuilt step by step, each naming its law, its gotcha, and its measured number. The narrated twin of the `streamweaver-way` skill |
 
 ## Live Streaming with `every` Timers
 
