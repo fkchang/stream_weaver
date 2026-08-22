@@ -845,17 +845,25 @@ module StreamWeaver
     # App overrides these with full callback-wiring implementations.
     # =========================================
 
-    def button(label, id: nil, **options, &block)
+    # Feed-context buttons carry the same identity guarantees as App#button:
+    # id: is an explicit override, key: gives content-stable identity, and
+    # repeat occurrences are auto-disambiguated (id: > key: > auto-derivation).
+    def button(label, key: nil, id: nil, **options, &block)
       require 'digest/md5'
-      if block
-        source_loc = block.source_location.join(':')
-        id_input = id ? "#{label}:#{id}" : "#{label}:#{source_loc}"
-        stable_id = Digest::MD5.hexdigest(id_input)[0..7]
+      explicit_id = validate_scalar_key!(id, context: "button")
+      key = validate_scalar_key!(key, context: "button")
+      stable_id = if explicit_id
+        sanitize_explicit_id(explicit_id)
+      elsif block
+        id_input = key ? "#{label}:#{key}" : "#{label}:#{block.source_location.join(':')}"
+        Digest::MD5.hexdigest(id_input)[0..7]
       else
         @button_counter = (@button_counter || 0) + 1
-        stable_id = @button_counter.to_s
+        @button_counter.to_s
       end
-      components << Components::Button.new(label, stable_id, **options, &block)
+      btn = Components::Button.new(label, stable_id, **options, &block)
+      btn.id = disambiguate_component_id(btn.id, label: label, source_loc: block&.source_location)
+      components << btn
     end
 
     def select(key, choices, **options)
@@ -885,6 +893,75 @@ module StreamWeaver
     end
 
     private
+
+    # =========================================
+    # Interactive component identity (FAC-P0.1)
+    # =========================================
+
+    # Ensures a component's key/id is a stable scalar -- never a positional
+    # index or an arbitrary object's #inspect, which would silently break on
+    # any collection reorder.
+    def validate_scalar_key!(key, context:)
+      return key if key.nil?
+      unless key.is_a?(String) || key.is_a?(Symbol) || key.is_a?(Integer)
+        raise ArgumentError, "#{context}: key: must be a String, Symbol, or Integer, got #{key.class}"
+      end
+      key
+    end
+
+    # An explicit id: is used verbatim (it is the author's override), minus
+    # characters that aren't legal in an HTML id / CSS selector.
+    def sanitize_explicit_id(id)
+      id.to_s.gsub(/[^a-zA-Z0-9_-]+/, '_')
+    end
+
+    # Detects two interactive components resolving to the same id within a
+    # single build (typically same-label buttons in a loop, sharing block
+    # source_location). First occurrence keeps its id unchanged; each further
+    # occurrence gets a stable "-dup-N" suffix so it remains independently
+    # dispatchable -- no author intervention required.
+    #
+    # Occurrence-index ids are POSITION-stable, not CONTENT-stable: they hold
+    # steady across rerenders of the same list, but deleting or inserting an
+    # earlier item shifts the later suffixes. That is why the warning points
+    # at key:, which binds identity to the record instead of the slot.
+    #
+    # Under strict_ids the collision raises (dev) or warns (production) --
+    # after auto-disambiguation a residual collision is not reachable, so
+    # strict mode is really "tell me my ids are position-derived, loudly".
+    def disambiguate_component_id(candidate_id, label:, source_loc:)
+      occurrence = seen_component_ids[candidate_id]
+      seen_component_ids[candidate_id] = occurrence + 1
+      return candidate_id if occurrence.zero?
+
+      loc = source_loc ? Array(source_loc).join(':') : 'unknown location'
+      message = "StreamWeaver: duplicate component id for \"#{label}\" at #{loc} " \
+                "-- likely the same label/block in a loop. Pass a stable key:, e.g. " \
+                "button(#{label.inspect}, key: item.id) { ... }, for distinct, order-independent ids."
+
+      raise ArgumentError, message if strict_ids? && !StreamWeaver.production_env?
+
+      unless warned_duplicate_ids.include?(candidate_id)
+        warned_duplicate_ids << candidate_id
+        warn "#{message} Auto-assigned a unique id for now."
+      end
+
+      "#{candidate_id}-dup-#{occurrence + 1}"
+    end
+
+    # Occurrence table for auto-disambiguation. App overrides this with its
+    # pass-scoped render_state accumulator so every rebuild starts clean.
+    def seen_component_ids
+      @seen_component_ids ||= Hash.new(0)
+    end
+
+    def warned_duplicate_ids
+      @_warned_duplicate_ids ||= Set.new
+    end
+
+    def strict_ids?
+      StreamWeaver.strict_ids?
+    end
 
     # Evaluates a user-supplied DSL block (FAC-P0.3). Arity-0 blocks keep the
     # legacy instance_eval behavior (self inside the block is `receiver`).

@@ -243,6 +243,56 @@ copy_button "Copy summary", text: report_text
 code_block source, lang: "ruby", copy: true
 ```
 
+### Interactive IDs and keying
+
+Every interactive component needs an id the server can dispatch on. StreamWeaver
+derives one for you; you only reach for `key:`/`id:` when you want identity to
+survive something the derivation can't see.
+
+**Precedence: `id:` > `key:` > auto-derivation.**
+
+```ruby
+button "Delete" do |s| ... end                  # auto: label + block source location
+button "Delete", key: todo[:id] do |s| ... end  # content-stable: bound to the record
+button "Delete", id: "delete-todo-#{todo[:id]}" # verbatim override -- you own the id
+```
+
+- **auto-derivation** hashes the label plus the block's source location. Two loop
+  iterations render the same label at the same line, so they derive the same id;
+  StreamWeaver auto-disambiguates each repeat occurrence with a `-dup-N` suffix
+  (and warns once, pointing at `key:`). Every button stays independently
+  dispatchable with zero author intervention -- the old silent wrong-callback
+  bug cannot happen.
+- **`key:`** accepts stable scalars ONLY -- String, Symbol, or Integer. Arrays,
+  hashes, and arbitrary objects raise `ArgumentError`, because their
+  stringification is not a stable identity. Never pass a positional index.
+- **`id:`** is the full explicit override: the emitted DOM id is
+  `btn_<label>_<your id>` verbatim, which is what you want when other code
+  (SSE pushes, CSS, tests) targets the element by selector.
+
+**Key by what is unique per position, not by content.** Auto-derived ids
+(including the `-dup-N` suffixes) are POSITION-stable, not CONTENT-stable: they
+hold steady across rerenders of the same list, but inserting or deleting an
+earlier item shifts every later occurrence's suffix. If a row's identity must
+outlive reordering, filtering, or deletion -- per-row Delete/Edit buttons, hover
+cards, anything whose payload is "this record" -- pass `key: record_id`. The
+classic failure is two cards sharing one derived id: hovering the second shows
+the first one's data, and nothing errors.
+
+**`strict_ids`** turns a derived-id collision from a warning into a hard failure,
+so a loop that relies on position-stability can't ship unnoticed:
+
+```ruby
+StreamWeaver::App.new("My App", strict_ids: true) { ... }   # per app
+StreamWeaver.strict_ids = true                              # global (boot file)
+SW_STRICT_IDS=1 ruby my_app.rb                              # env, e.g. in CI
+```
+
+It raises in development (and test), and degrades to a warning when
+`RACK_ENV=production` -- a live page should not 500 over an id the framework
+already disambiguated. The same rules apply to `clickable(action:, key:)`,
+`fragment` names, and feed/canvas-pushed buttons.
+
 ### Layout
 ```ruby
 card do
@@ -736,7 +786,8 @@ end
 ```ruby
 app "Title",
   layout: :wide,        # :default, :wide, :full, :fluid
-  theme: :dashboard     # :default, :dashboard, :document, :doc (artifact-exact editorial; supports dark via data-sw-theme="dark" on <html>)
+  theme: :dashboard,    # :default, :dashboard, :document, :doc (artifact-exact editorial; supports dark via data-sw-theme="dark" on <html>)
+  strict_ids: true      # raise (dev) / warn (prod) on derived-id collisions -- see "Interactive IDs and keying"
 do
   # ...
 end

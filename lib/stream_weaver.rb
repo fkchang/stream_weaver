@@ -57,6 +57,24 @@ module StreamWeaver
     # pattern) can be loaded into a running service without starting a second
     # server inside it and killing the service.
     attr_accessor :service_loading
+
+    # Opts every App into strict interactive-id checking without threading
+    # strict_ids: through each construction site. An explicit
+    # App.new(strict_ids: true/false) always wins over this global; the
+    # SW_STRICT_IDS env var is the fallback so CI can turn it on for a run.
+    attr_writer :strict_ids
+
+    def strict_ids?
+      return @strict_ids unless @strict_ids.nil?
+      %w[1 true yes].include?(ENV['SW_STRICT_IDS'].to_s.downcase)
+    end
+
+    # Mirrors server.rb's RACK_ENV convention. Strict-id violations raise
+    # everywhere except production, where taking a live page down over an id
+    # the framework has already auto-disambiguated would be the worse failure.
+    def production_env?
+      ENV['RACK_ENV'] == 'production'
+    end
   end
 
   def self.default_adapter

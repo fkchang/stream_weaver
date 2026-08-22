@@ -26,10 +26,15 @@ require "stream_weaver/opal/string_bridge"
 module StreamWeaver
   module Opal
     module AppButtonPatch
-      # Opal: source_location is nil — use counter-based IDs.
-      def button(label, id: nil, **options, &block)
+      # Opal: source_location is nil — use counter-based IDs. Counter ids are
+      # already unique per render, so there is nothing to disambiguate here;
+      # id:/key: are still honored (same id: > key: > auto precedence) so a
+      # keyed button keeps its identity across rerenders, and so neither
+      # option leaks into the rendered element's attributes.
+      def button(label, key: nil, id: nil, **options, &block)
         @button_counter += 1
-        stable_id = id ? "opal_#{id}" : "opal_#{@button_counter}"
+        identity = id || key
+        stable_id = identity ? "opal_#{identity}" : "opal_#{@button_counter}"
         options[:modal_context] = @modal_context if @modal_context
         @components << Components::Button.new(label, stable_id, **options, &block)
       end
