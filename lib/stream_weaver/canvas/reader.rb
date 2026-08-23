@@ -685,6 +685,13 @@ module StreamWeaver
       # <head> deliberately does NOT use adapter.cdn_scripts, which would drag
       # in a connect attempt to a /canvas/reader/ws endpoint that doesn't exist.
       #
+      # `inert: true` is the consequence of that omission: without cdn_scripts
+      # there is no `sendEvent`, so buttons and radio groups that would call it
+      # rendered as live controls which self-disabled and then threw a
+      # ReferenceError on click (disc-095). Inert renders them disabled with an
+      # explanatory title -- honest about being a preview -- rather than
+      # defining a no-op `sendEvent` stub, which would preserve the lie.
+      #
       # @param path [String, nil] source file, passed through to instance_eval
       #   so a DSL error names the actual file/line instead of "(eval)".
       #
@@ -718,7 +725,8 @@ module StreamWeaver
         mini_app.instance_eval(dsl, path.to_s, 1)
         adapter = StreamWeaver::Adapter::AlpineJS.new(
           url_prefix: '/canvas/reader',
-          mode: :websocket
+          mode: :websocket,
+          inert: true
         )
         Doc.new(
           html: StreamWeaver::Views::AppContentView.new(mini_app, {}, adapter, false).call,
