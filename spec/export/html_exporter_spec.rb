@@ -302,6 +302,70 @@ RSpec.describe StreamWeaver::Export::HtmlExporter do
       html = described_class.new(app).to_html
       expect(html).not_to match(%r{<script[^>]*alpinejs}i)
     end
+
+    # disc-094: the gate used to key on Components::Chart -- the class the
+    # generic `chart type:` DSL builds. Every shorthand (bar_chart, pie_chart,
+    # ...) builds a ChartBase subclass instead, which is not a Chart, so the
+    # CDN tag was omitted and the adapter's
+    # `if (typeof Chart !== 'undefined')` x-init guard swallowed the failure:
+    # empty box, console-silent. The gate keys on the family now, so a new
+    # ChartBase subclass cannot silently drift out of coverage.
+    #
+    # Every chart DSL method is exercised, not a sample -- an allowlist that
+    # covers "most" charts is the bug this describe block exists to prevent.
+    describe "Chart.js inclusion for every chart DSL method" do
+      chart_calls = {
+        "chart"             => -> { chart type: :bar, data: { labels: %w[A B], datasets: [{ data: [1, 2] }] } },
+        "bar_chart"         => -> { bar_chart labels: %w[A B], values: [1, 2] },
+        "hbar_chart"        => -> { hbar_chart labels: %w[A B], values: [1, 2] },
+        "line_chart"        => -> { line_chart labels: %w[A B], values: [1, 2] },
+        "sparkline"         => -> { sparkline labels: %w[A B], values: [1, 2] },
+        "area_chart"        => -> { area_chart labels: %w[A B], values: [1, 2] },
+        "pie_chart"         => -> { pie_chart labels: %w[A B], values: [1, 2] },
+        "doughnut_chart"    => -> { doughnut_chart labels: %w[A B], values: [1, 2] },
+        "stacked_bar_chart" => -> { stacked_bar_chart data: { "Widgets" => [3, 5], "Gadgets" => [2, 4] } }
+      }
+
+      chart_calls.each do |dsl_method, build|
+        context "#{dsl_method}" do
+          let(:html) do
+            app = StreamWeaver::App.new("Chart Export") { instance_exec(&build) }
+            described_class.new(app).to_html
+          end
+
+          it "includes the Chart.js CDN script" do
+            expect(html).to match(%r{<script[^>]*chart\.js}i)
+          end
+
+          # The CDN tag alone is not enough: the chart only draws if the
+          # emitted init code actually reaches the Chart constructor. Without
+          # this, a doc could load the library and still render an empty box.
+          it "emits init code that constructs a Chart" do
+            expect(html).to include("new Chart(")
+          end
+        end
+      end
+
+      # Charts nested inside a container still need the library -- the gate
+      # walks children, and containers are where real docs put their charts.
+      it "includes the Chart.js CDN for a chart nested in a container" do
+        app = StreamWeaver::App.new("Nested Chart") do
+          card { bar_chart labels: %w[A B], values: [1, 2] }
+        end
+        expect(described_class.new(app).to_html).to match(%r{<script[^>]*chart\.js}i)
+      end
+
+      # A ChartBase subclass defined after this gate was written must be
+      # covered by it. Registering a throwaway subclass proves the check is
+      # on the family, not on a list of names someone has to remember to
+      # extend.
+      it "covers a ChartBase subclass the gate has never heard of" do
+        novel = Class.new(StreamWeaver::Components::BarChart)
+        app = StreamWeaver::App.new("Novel Chart")
+        app.components << novel.new(labels: %w[A B], values: [1, 2])
+        expect(described_class.new(app).to_html).to match(%r{<script[^>]*chart\.js}i)
+      end
+    end
   end
 
   # =========================================

@@ -340,8 +340,15 @@ module StreamWeaver
           scripts << { src: CDN_MERMAID, type: "module" }
         end
 
-        # Chart.js
-        if components_include?(Components::Chart)
+        # Chart.js -- keyed on the whole chart family, not just the one class
+        # the generic `chart type:` DSL builds. Every shorthand (bar_chart,
+        # pie_chart, sparkline, ...) builds a Components::ChartBase subclass,
+        # none of which is a Components::Chart, so gating on Chart alone
+        # shipped exports with no library at all; the adapter's
+        # `if (typeof Chart !== 'undefined')` x-init guard then swallowed it
+        # into an empty box with a silent console (disc-094). Naming the base
+        # class means a new chart type is covered the moment it subclasses.
+        if components_include?(Components::Chart) || components_include?(Components::ChartBase)
           scripts << { src: CDN_CHARTJS }
         end
 
