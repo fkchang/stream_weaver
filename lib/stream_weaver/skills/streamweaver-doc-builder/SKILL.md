@@ -259,6 +259,8 @@ curl -sX POST "http://localhost:<bridge-port>/canvas/my-doc/save-doc" \
 
 Every `canvas-push` is auto-saved to history (`~/.streamweaver/history/<session>/`, 7-day cleanup, not git-tracked) regardless of whether the user ever clicks Save as doc — this is tier 1 of a two-tier persistence system. Nothing is silently lost even before an explicit save; tier 2 (Save as doc) is what makes it permanent and shared.
 
+A saved doc is browsed later via `canvas-read` and can be run through `streamweaver export` — both with no live bridge behind them. Most doc components (`doc_header`, `sidebar_toc`, `callout`, `table`, `mermaid`, `card`) are flat or Alpine-owned and survive that fine, but before adding interactive controls (buttons, forms, chips) to a doc, check the `streamweaver-canvas-safe` skill for what plays well once the bridge is gone.
+
 ## Known Gotchas
 
 - **`text` does not render markdown** — bold, italic, links, and lists all need `md` instead.

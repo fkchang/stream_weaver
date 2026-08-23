@@ -118,6 +118,8 @@ Each canvas page has a floating **💾 Save as doc** button in the bottom-right.
 
 These are the *intentional* keep-forever artifacts that get committed to the repo and shared with teammates. `examples/doc-parity-example.rb` in this skill folder shows what this tier can grow into — a fully polished document, not just a saved sketch.
 
+A doc saved this way gets reopened later with no live bridge behind it — the same file also gets browsed via `canvas-read` and can be run through `streamweaver export`. Not every component behaves the same way once the bridge is gone; see the `streamweaver-canvas-safe` skill before building interactivity into anything you expect to Save-as-doc.
+
 **Important:** Saving is a user action, not yours. Don't try to "save the canvas" yourself unless the user explicitly asks. If the user says "save this as X" and the button isn't easy to reach, you can fall back to:
 
 ```bash

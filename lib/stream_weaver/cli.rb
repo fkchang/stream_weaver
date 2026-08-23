@@ -2030,7 +2030,8 @@ module StreamWeaver
       gem_skills = {
         'streamweaver-visual-companion' => File.join(__dir__, 'skills', 'streamweaver-visual-companion', 'SKILL.md'),
         'streamweaver-doc-builder' => File.join(__dir__, 'skills', 'streamweaver-doc-builder', 'SKILL.md'),
-        'streamweaver-way' => File.join(__dir__, 'skills', 'streamweaver-way', 'SKILL.md')
+        'streamweaver-way' => File.join(__dir__, 'skills', 'streamweaver-way', 'SKILL.md'),
+        'streamweaver-canvas-safe' => File.join(__dir__, 'skills', 'streamweaver-canvas-safe', 'SKILL.md')
       }
 
       [claude_dir, agents_dir].each do |root|
@@ -2048,11 +2049,12 @@ module StreamWeaver
       puts "  streamweaver-visual-companion/ (brainstorming companion, symlinked from gem)"
       puts "  streamweaver-doc-builder/      (editorial doc builder, symlinked from gem)"
       puts "  streamweaver-way/              (interactive app conventions, symlinked from gem)"
+      puts "  streamweaver-canvas-safe/      (backend-less compatibility reference, symlinked from gem)"
       puts ""
       puts "Also installed to #{agents_location} — the cross-tool alias Codex CLI, Gemini CLI,"
       puts "and GitHub Copilot all discover natively (Claude Code uses its own path above instead)."
       puts ""
-      puts "Claude Code will now know how to use StreamWeaver panels, the visual companion, the doc builder, and the interactive-app conventions."
+      puts "Claude Code will now know how to use StreamWeaver panels, the visual companion, the doc builder, the interactive-app conventions, and what plays well in a backend-less canvas doc."
     end
 
     # One-command setup for Claude Code integration
@@ -2094,6 +2096,7 @@ module StreamWeaver
       puts "  visual-companion  → symlink → gem (auto-updates with gem)"
       puts "  doc-builder       → symlink → gem (auto-updates with gem)"
       puts "  streamweaver-way  → symlink → gem (auto-updates with gem)"
+      puts "  canvas-safe       → symlink → gem (auto-updates with gem)"
       puts ""
       puts "Run: streamweaver panel <name>  to start a visual companion session."
     end
