@@ -64,6 +64,12 @@ RSpec.describe 'reader inert controls' do
   # byte-for-byte unchanged. Pinned as exact expected markup rather than a
   # "suite is green" hand-wave -- a golden string is the only thing that
   # actually catches an accidental change to live output.
+  #
+  # The payload values below are JSON-quoted (&quot; in the rendered attribute)
+  # as of canvas-action-parity: every author-supplied string reaching a JS
+  # literal goes through Adapter::AlpineJS#js, because a choice like
+  # "Don't know" would otherwise close the literal early and leave a
+  # live-looking control wired to a syntax error.
   describe 'live canvas rendering is byte-for-byte unchanged' do
     let(:adapter) { StreamWeaver::Adapter::AlpineJS.new(url_prefix: '/canvas/abc', mode: :websocket) }
     let(:html) { render(controls_app, adapter) }
@@ -71,8 +77,8 @@ RSpec.describe 'reader inert controls' do
     it 'emits the unchanged live button markup' do
       expect(html).to include(
         '<button class="sw-button btn btn-primary" ' \
-        "@click=\"$el.disabled=true; sendEvent('action', {button: 'btn_submit_1', state: getFormState()})\">" \
-        'Submit</button>'
+        "@click=\"$el.disabled=true; sendEvent('action', {button: &quot;btn_submit_1&quot;, " \
+        'state: getFormState()})">Submit</button>'
       )
     end
 
@@ -80,7 +86,8 @@ RSpec.describe 'reader inert controls' do
       expect(html).to include(
         '<input type="radio" name="size" value="S" ' \
         'x-model="size" ' \
-        "@change=\"sendEvent('change', {field: 'size', value: 'S', state: getFormState()})\">"
+        "@change=\"sendEvent('change', {field: &quot;size&quot;, value: &quot;S&quot;, " \
+        'state: getFormState()})">'
       )
     end
 

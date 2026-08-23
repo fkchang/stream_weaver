@@ -870,7 +870,7 @@ streamweaver canvas-close "$SESSION"
 |---------|---------|
 | `streamweaver panel SESSION [--layout=LAYOUT] [--theme=THEME] [--fresh]` | Open canvas in iTerm2 split pane |
 | `streamweaver canvas-push SESSION` | Push DSL content (stdin or `<<'RUBY'`) |
-| `streamweaver canvas-wait SESSION` | Wait for button click, return JSON |
+| `streamweaver canvas-wait SESSION [--event TYPE\|--any]` | Wait for a control to dispatch, return JSON (see the control table below) |
 | `streamweaver canvas-close SESSION` | Close the canvas session |
 | `streamweaver canvas-read FILE [FILE\|DIR ...]` | Browse saved canvas DSL files in a local viewer (sidebar + prev/next nav) |
 | `streamweaver export FILE.rb [-o OUT.html] [--inline-images] [--offline]` | Write a canvas DSL doc out as standalone HTML |
@@ -879,9 +879,21 @@ streamweaver canvas-close "$SESSION"
 
 `export` flags: `--inline-images` embeds local images as base64 data URIs so the file is fully portable. `--offline` fetches and inlines mermaid's own library (instead of referencing its CDN) so diagrams render in a viewer whose CSP blocks external scripts entirely — SharePoint's built-in HTML preview is the motivating case; needs network access once, at export time, not at view time. Same capability from `canvas-read`'s nav rail: "⬇ Export HTML" on every file, plus a second "⬇ Export HTML (offline)" link shown only on docs with a mermaid diagram.
 
+### Which canvas controls wake `canvas-wait`
+
+| Control | Canvas event | Payload |
+|---|---|---|
+| `button` | `action` | `button`, `state` |
+| `clickable(action:)` | `action` | `button` (the action token), `state` |
+| `menu_item` with a block | `action` | `button` (the item id), `state` |
+| `form` submit | `action` | `button`, `form`, `values` (the form scope), `state` |
+| `radio_group`, `tag_buttons`, `chip_group` | `change` | `field`, `value`, `state` |
+
+Text, date, select and checkbox fields dispatch no canvas event of their own -- their values ride along in the `state` of whichever `action` follows. `tag_buttons` is the exception among the `change` controls: it has no `x-model`, so its choice reaches the agent in its own `change` event but is *not* in a later `action`'s `state`.
+
 ### Important Behavior
 
-- **canvas-wait returns on button clicks only** - Radio/checkbox changes do NOT trigger return
+- **canvas-wait returns on `action` events by default** - see the control table above; the `change` events from `radio_group`, `tag_buttons` and `chip_group` return only with `--event change` or `--any`
 - **Form state is captured** - JSON includes all checkbox, radio, text field values
 - **Use heredoc for DSL** - `<<'RUBY'` prevents shell interpolation issues
 

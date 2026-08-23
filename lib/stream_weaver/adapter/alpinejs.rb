@@ -2,6 +2,7 @@
 
 require_relative 'base'
 require_relative 'static'
+require 'json'
 require 'kramdown'
 
 module StreamWeaver
@@ -72,6 +73,13 @@ module StreamWeaver
       # @return [Hash]
       def inert_attrs
         { disabled: true, title: INERT_TITLE }
+      end
+
+      # The same, for a control that is not a form element: `disabled` is not a
+      # valid attribute on a div and nothing -- CSS or AT -- would act on it.
+      # @return [Hash]
+      def aria_inert_attrs
+        { "aria-disabled" => "true", "title" => INERT_TITLE }
       end
 
       # Generate URL with prefix
@@ -614,7 +622,7 @@ module StreamWeaver
                   "x-model" => key.to_s,
                   # No bridge to send to -- disabled (so a click can't even
                   # move the selection) instead of an undefined sendEvent.
-                  **(inert? ? inert_attrs : { "@change" => "sendEvent('change', {field: '#{key}', value: '#{choice}', state: getFormState()})" })
+                  **(inert? ? inert_attrs : { "@change" => "sendEvent('change', {field: #{js(key)}, value: #{js(choice)}, state: getFormState()})" })
                 )
                 view.span { choice }
               end
@@ -715,6 +723,28 @@ module StreamWeaver
 
       private
 
+      # A value as a JavaScript string literal, for the canvas dispatch
+      # handlers. Every one of them interpolates author-supplied words -- a tag
+      # label, a radio choice, a state key -- into JS source, where a lone
+      # apostrophe ("Don't like it") would close the literal early and leave a
+      # live-looking control wired to a syntax error. JSON is the quoting rule
+      # the http path already relies on for hx-vals. No author string reaches a
+      # canvas handler without passing through here.
+      #
+      # @param value [#to_s]
+      # @return [String] e.g. %("don't_like_it")
+      def js(value)
+        value.to_s.to_json
+      end
+
+      # Whether this render is the canvas reader's non-interactive one. `inert`
+      # is only meaningful in websocket mode -- there is no reader for the http
+      # build -- so the two always travel together.
+      # @return [Boolean]
+      def inert_canvas?
+        websocket_mode? && inert?
+      end
+
       def button_attrs(view, button_id, options, modal_context)
         action_target = options[:action_token] || button_id
         loading = options.fetch(:submit, true) && options.fetch(:loading, true) && loading_indicators_enabled?(view)
@@ -730,7 +760,7 @@ module StreamWeaver
           return style.merge(type: "button", **inert_attrs) if inert?
 
           # Disable on click; page morph from server response replaces the element, clearing disabled
-          style.merge("@click" => "$el.disabled=true; sendEvent('action', {button: '#{action_target}', state: getFormState()})")
+          style.merge("@click" => "$el.disabled=true; sendEvent('action', {button: #{js(action_target)}, state: getFormState()})")
         elsif modal_context
           # Closing must never happen before HTMX collects hx-include values --
           # doing so on before-request drops every field the modal is meant to
@@ -983,9 +1013,11 @@ module StreamWeaver
                 document.querySelectorAll('[x-model]').forEach(el => {
                   const key = el.getAttribute('x-model');
                   if (el.type === 'checkbox') {
-                    // A checkbox_group binds every item to one array-valued key,
-                    // so reading .checked would leave the last item's boolean.
-                    if (el.closest('.checkbox-group')) {
+                    // A checkbox_group -- and a multi chip_group, which is the
+                    // same shape under a different container class -- binds
+                    // every item to one array-valued key, so reading .checked
+                    // would leave the last item's boolean (disc-098, disc-105).
+                    if (el.closest('.checkbox-group, .sw-chip-group')) {
                       if (!Array.isArray(state[key])) state[key] = [];
                       if (el.checked) state[key].push(el.value);
                     } else {
@@ -2036,10 +2068,38 @@ module StreamWeaver
             view.button(
               type: "button",
               class: "tag-btn #{selected ? 'tag-btn-selected' : ''}",
-              **htmx_attrs(url("/update"), "hx-vals" => JSON.generate({ key.to_s => tag_value }))
+              **tag_button_dispatch_attrs(key, tag_value)
             ) { tag }
           end
         end
+      end
+
+      # How a tag button reaches the server, per context.
+      #
+      # Picking a tag is a state change, not a submission, so canvas sends the
+      # same 'change' event radio_group does rather than waking a canvas-wait
+      # that is filtering for 'action'. Unlike radio_group, a tag button has no
+      # x-model: http mode gets its selected highlight from the re-render
+      # /update triggers, and there is no re-render on canvas -- so the handler
+      # assigns the key itself and :class shows the choice immediately.
+      # $data (not a bare identifier) keeps both expressions from throwing when
+      # the key was never seeded into the container's x-data.
+      #
+      # @param key [Symbol] the state key the group selects into
+      # @param tag_value [String] the slugged tag, e.g. "too_dark"
+      # @return [Hash] attributes for one tag button
+      def tag_button_dispatch_attrs(key, tag_value)
+        unless websocket_mode?
+          return htmx_attrs(url("/update"), "hx-vals" => JSON.generate({ key.to_s => tag_value }))
+        end
+        return inert_attrs if inert?
+
+        field, value = js(key), js(tag_value)
+        {
+          "@click" => "$data[#{field}] = #{value}; " \
+                      "sendEvent('change', {field: #{field}, value: #{value}, state: getFormState()})",
+          ":class" => "{ 'tag-btn-selected': $data[#{field}] === #{value} }"
+        }
       end
 
       # Render a tag/chip multi-select bound to a state array (or a scalar
@@ -2070,12 +2130,12 @@ module StreamWeaver
           current = (state[scope_name] || {})[key]
           model = "#{scope_name}.#{key}"
           name = "#{scope_name}[#{key}]"
-          submit_attrs = chip_group_submit_attrs(view, options)
+          submit_attrs = chip_group_dispatch_attrs(view, options, model)
         else
           current = state[key]
           model = key.to_s
           name = key.to_s
-          submit_attrs = chip_group_submit_attrs(view, options)
+          submit_attrs = chip_group_dispatch_attrs(view, options, model)
         end
         current = multi ? Array(current) : current
 
@@ -2102,10 +2162,24 @@ module StreamWeaver
         end
       end
 
-      def chip_group_submit_attrs(view, options)
+      # How one chip reports its change, per context. Chips carry x-model, so
+      # the canvas payload's `state` already holds the authoritative
+      # post-change selection (the whole array, for a multi group); the event's
+      # own `value` just names the chip that moved, mirroring radio_group.
+      #
+      # @param model [String] the chip's x-model expression -- the same string
+      #   getFormState keys the harvested value by
+      # @return [Hash] attributes for one chip input
+      def chip_group_dispatch_attrs(view, options, model)
         return {} unless options.fetch(:submit, true)
 
-        htmx_attrs(url("/update"), view: view, loading: options.fetch(:loading, true), "hx-trigger" => "change")
+        unless websocket_mode?
+          return htmx_attrs(url("/update"), view: view, loading: options.fetch(:loading, true),
+            "hx-trigger" => "change")
+        end
+        return inert_attrs if inert?
+
+        { "@change" => "sendEvent('change', {field: #{js(model)}, value: $event.target.value, state: getFormState()})" }
       end
 
       # Render a button that opens external URL and optionally submits form
@@ -2229,8 +2303,7 @@ module StreamWeaver
                 type: "button",
                 id: submit_id,
                 class: submit_class.join(" "),
-                **htmx_attrs(url("/form/#{name}"), view: view, loading: loading, indicator: "##{submit_id}",
-                  "hx-include" => "[name^='#{name}[']")
+                **form_submit_dispatch_attrs(view, name, submit_id, loading)
               ) { submit_label }
             end
 
@@ -2243,6 +2316,30 @@ module StreamWeaver
             end
           end
         end
+      end
+
+      # How a form's submit button reaches the server, per context.
+      #
+      # The button sits inside the form wrapper's x-data, so `_form` is in
+      # Alpine scope: the canvas payload carries the form's own values under
+      # `values` rather than leaving the agent to reassemble them out of
+      # getFormState, which keys form fields by their "_form.<field>" x-model
+      # string. `state` still rides along so top-level fields outside the form
+      # arrive too, exactly as they do for a plain button.
+      #
+      # @param name [Symbol] the form name (and its state key)
+      # @param submit_id [String] the submit button's dom id
+      # @param loading [Boolean] whether a loading indicator is wanted
+      # @return [Hash] attributes for the submit button
+      def form_submit_dispatch_attrs(view, name, submit_id, loading)
+        unless websocket_mode?
+          return htmx_attrs(url("/form/#{name}"), view: view, loading: loading, indicator: "##{submit_id}",
+            "hx-include" => "[name^='#{name}[']")
+        end
+        return inert_attrs if inert?
+
+        { "@click" => "$el.disabled=true; sendEvent('action', " \
+                      "{button: #{js(submit_id)}, form: #{js(name)}, values: _form, state: getFormState()})" }
       end
 
       def render_vstack(view, component, state)
@@ -2599,40 +2696,75 @@ module StreamWeaver
         end
 
         wrapper_id = component.id
-        action_target = component.options[:action_token] || wrapper_id
-        loading = loading_indicators_enabled?(view)
 
         css_classes = ["sw-clickable"]
         css_classes << component.options[:class] if component.options[:class]
         attrs = { class: css_classes.join(" ") }
         attrs[:style] = component.options[:style] if component.options[:style]
 
-        # A click (or Enter) that originates inside a nested interactive
-        # element -- e.g. a `button` glued to a board_card for its own
-        # action -- dispatches only that element's own request, not the
-        # wrapper's; otherwise every click on a nested control would also
-        # fire the wrapper's action.
-        not_nested_interactive = "!event.target.closest('a,button,input,select,textarea,label,[data-sw-stop]')"
-        trigger = "click[#{not_nested_interactive}], keydown[event.key=='Enter'&&#{not_nested_interactive}]"
-
-        attrs.merge!(htmx_attrs(
-          url("/action/#{action_target}"), view: view, loading: loading, indicator: "##{wrapper_id}",
-          sw_updates: component.options[:updates], sw_primary: component.options[:primary],
-          "hx-disabled-elt" => "this", "hx-trigger" => trigger
-        ))
+        attrs.merge!(clickable_dispatch_attrs(view, component))
         attrs[:id] = wrapper_id
+        # role stays: it is still presented as a button, and aria-disabled is
+        # only meaningful on something with a control role. tabindex does not --
+        # focusing a div that does nothing is its own small lie.
         attrs[:role] = "button"
-        attrs[:tabindex] = "0"
+        attrs[:tabindex] = "0" unless inert_canvas?
 
         view.div(**attrs) do
           component.children.each { |child| child.render(view, state) }
         end
       end
 
+      # A click (or Enter) that originates inside a nested interactive element
+      # -- e.g. a `button` glued to a board_card for its own action -- must
+      # dispatch only that element's own request, not the wrapper's; otherwise
+      # every click on a nested control fires the wrapper's action too.
+      #
+      # @param target [String] the event-target expression for the context
+      #   ("event.target" for an hx-trigger, "$event.target" for Alpine)
+      # @return [String] a JS boolean expression
+      def outside_nested_interactive(target)
+        "!#{target}.closest('a,button,input,select,textarea,label,[data-sw-stop]')"
+      end
+
+      # How a `clickable action:` reaches the server, per context. The canvas
+      # branch mirrors button_attrs: same 'action' event, same payload keys, so
+      # a waiting agent cannot tell a clickable card from a button. It keeps
+      # the nested-interactive guard but not button's self-disable -- a div
+      # cannot be disabled, and the bridge's own submit feedback covers the
+      # double-click.
+      #
+      # @param component [Components::Clickable]
+      # @return [Hash] attributes to merge into the wrapper
+      def clickable_dispatch_attrs(view, component)
+        wrapper_id = component.id
+        action_target = component.options[:action_token] || wrapper_id
+
+        unless websocket_mode?
+          guard = outside_nested_interactive("event.target")
+          return htmx_attrs(
+            url("/action/#{action_target}"), view: view,
+            loading: loading_indicators_enabled?(view), indicator: "##{wrapper_id}",
+            sw_updates: component.options[:updates], sw_primary: component.options[:primary],
+            "hx-disabled-elt" => "this",
+            "hx-trigger" => "click[#{guard}], keydown[event.key=='Enter'&&#{guard}]"
+          )
+        end
+
+        return aria_inert_attrs if inert?
+
+        dispatch = "if (#{outside_nested_interactive('$event.target')}) " \
+                   "sendEvent('action', {button: #{js(action_target)}, state: getFormState()})"
+        { "@click" => dispatch, "@keydown.enter" => dispatch }
+      end
+
       def clickable_css
         <<~CSS
           .sw-clickable {
             cursor: pointer;
+          }
+          .sw-clickable[aria-disabled="true"] {
+            cursor: default;
           }
           .sw-clickable:focus-visible {
             outline: 2px solid var(--sw-color-primary, #3b82f6);
@@ -7772,6 +7904,21 @@ module StreamWeaver
         [trigger_str, endpoint]
       end
 
+      # How a menu item with an action block reaches the server, per context.
+      # Menu items dispatch by id rather than by signed token, so the canvas
+      # payload is the same 'action' shape a button sends with its id.
+      # An inert item stays in the open menu, disabled and labelled -- the
+      # dropdown's own click-outside still closes it.
+      #
+      # @param item_id [String] the id the server dispatches the item by
+      # @return [Hash] attributes for the menu item button
+      def menu_item_dispatch_attrs(item_id)
+        return htmx_attrs(url("/action/#{item_id}"), "@click" => "open = false") unless websocket_mode?
+        return inert_attrs if inert?
+
+        { "@click" => "open = false; sendEvent('action', {button: #{js(item_id)}, state: getFormState()})" }
+      end
+
       def render_menu_item(view, item, state)
         if item.is_a?(Components::MenuDivider)
           item.render(view, state)
@@ -7780,11 +7927,10 @@ module StreamWeaver
           item_id = item.instance_variable_get(:@id) || "menu_item_#{item.label.downcase.gsub(/\s+/, '_')}"
 
           if item.action
-            # With action: use HTMX to trigger server-side action
             view.button(
               type: "button",
               class: "sw-menu-item #{style_class}",
-              **htmx_attrs(url("/action/#{item_id}"), "@click" => "open = false")
+              **menu_item_dispatch_attrs(item_id)
             ) { item.label }
           else
             # No action: just close the menu

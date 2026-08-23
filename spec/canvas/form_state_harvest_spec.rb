@@ -28,6 +28,15 @@ RSpec.describe 'canvas form state harvest' do
     end.tap { |app| app.rebuild_with_state({ fruits: fruits }) }
   end
 
+  # disc-105: a multi chip_group is the checkbox_group shape under a different
+  # container class -- N checkboxes on one array-valued x-model. A single-select
+  # chip group renders radios instead, so it never reaches the checkbox branch.
+  def chip_app(langs, multi: true)
+    StreamWeaver::App.new('form state harvest spec') do
+      chip_group(:langs, %w[ruby js opal], multi: multi)
+    end.tap { |app| app.rebuild_with_state({ langs: langs }) }
+  end
+
   def checkbox_app(subscribe)
     StreamWeaver::App.new('form state harvest spec') do
       checkbox(:subscribe, 'Subscribe')
@@ -98,7 +107,8 @@ RSpec.describe 'canvas form state harvest' do
         value: d.value,
         checked: d.checked,
         getAttribute: name => (name in d.attrs ? d.attrs[name] : null),
-        closest: selector => d.ancestorClasses.includes(selector.replace(/^\\./, '')) ? {} : null
+        closest: selector => selector.split(',')
+          .some(one => d.ancestorClasses.includes(one.trim().replace(/^\\./, ''))) ? {} : null
       }));
       const window = {};
       const document = {
@@ -135,6 +145,20 @@ RSpec.describe 'canvas form state harvest' do
       expect(html).to include('class="checkbox-wrapper"')
       expect(html).to include('name="subscribe" value="true" checked x-model="subscribe"')
     end
+
+    it 'nests multi chips inside the container the harvest rule also keys off' do
+      group = render_components(chip_app(%w[ruby]))[%r{<div class="sw-chip-group">.*?</div>}m]
+
+      expect(group).not_to be_nil
+      expect(group.scan(/type="checkbox"/).length).to eq(3)
+    end
+
+    it 'renders a single-select chip group as radios, outside the checkbox branch' do
+      html = render_components(chip_app('ruby', multi: false))
+
+      expect(html).to include('<div class="sw-chip-group">')
+      expect(html).not_to include('type="checkbox"')
+    end
   end
 
   describe 'the harvested payload' do
@@ -161,6 +185,24 @@ RSpec.describe 'canvas form state harvest' do
       html = render_components(group_app(%w[apple cherry]), checkbox_app(true))
 
       expect(harvest(html)).to eq('fruits' => %w[apple cherry], 'subscribe' => true)
+    end
+
+    it 'carries a multi chip_group as an array, in rendered order (disc-105)' do
+      expect(harvest(render_components(chip_app(%w[opal ruby])))).to eq('langs' => %w[ruby opal])
+    end
+
+    it 'carries an empty array when no chip is selected' do
+      expect(harvest(render_components(chip_app([])))).to eq('langs' => [])
+    end
+
+    it 'carries a single-select chip group as the selected value' do
+      expect(harvest(render_components(chip_app('js', multi: false)))).to eq('langs' => 'js')
+    end
+
+    it 'keeps a chip group and a lone checkbox apart in one payload' do
+      html = render_components(chip_app(%w[ruby]), checkbox_app(false))
+
+      expect(harvest(html)).to eq('langs' => %w[ruby], 'subscribe' => false)
     end
   end
 end
