@@ -2,6 +2,8 @@
 
 Complete reference for all StreamWeaver components. For quick usage, see the main `llms.txt`.
 
+> Building a doc that also needs to render in `canvas-read` or a `streamweaver export`? Not every component below is fully interactive outside the live canvas — see [`docs/frontend-only.md`](frontend-only.md) for what survives each context and why.
+
 ## Text Display
 
 ```ruby
