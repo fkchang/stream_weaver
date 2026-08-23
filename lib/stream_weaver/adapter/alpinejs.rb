@@ -28,18 +28,50 @@ module StreamWeaver
       HTMX_TARGET = "#app-container"
       HTMX_SWAP   = "morph:innerHTML"
 
+      # Tooltip on controls rendered inert. Says what the control would do and
+      # where, rather than just "disabled" -- the reader is a preview of a
+      # canvas doc, so "not here, but there" is the honest message.
+      INERT_TITLE = "Interactive on live canvas only"
+
       # Initialize with optional URL prefix for service mode
       # @param url_prefix [String] URL prefix for all endpoints (e.g., "/apps/abc123")
       # @param mode [Symbol] :http (default) for HTMX, :websocket for WebSocket canvas mode
-      def initialize(url_prefix: "", mode: :http)
+      # @param inert [Boolean] render websocket-mode controls honestly
+      #   non-interactive -- see #inert?
+      def initialize(url_prefix: "", mode: :http, inert: false)
         @url_prefix = url_prefix
         @mode = mode
+        @inert = inert
       end
 
       # Check if adapter is in WebSocket mode
       # @return [Boolean]
       def websocket_mode?
         @mode == :websocket
+      end
+
+      # Whether websocket-mode controls should render non-interactive.
+      #
+      # The canvas reader renders docs in :websocket mode for component-markup
+      # parity but deliberately omits the bridge's cdn_scripts, so the
+      # `sendEvent` those controls call is never defined (disc-095). An inert
+      # adapter renders such controls disabled with an explanatory title
+      # instead of wiring them to a function that isn't there.
+      #
+      # Deliberately NOT a no-op `sendEvent` stub: a stub keeps the lie --
+      # the control still looks live, still self-disables on click, still does
+      # nothing. Disabled-plus-title is the honest rendering of "this doc has
+      # interactions, but not in this context".
+      #
+      # @return [Boolean]
+      def inert?
+        @inert
+      end
+
+      # Attributes that make a control non-interactive and say why.
+      # @return [Hash]
+      def inert_attrs
+        { disabled: true, title: INERT_TITLE }
       end
 
       # Generate URL with prefix
@@ -580,7 +612,9 @@ module StreamWeaver
                   value: choice,
                   checked: current_value == choice,
                   "x-model" => key.to_s,
-                  "@change" => "sendEvent('change', {field: '#{key}', value: '#{choice}', state: getFormState()})"
+                  # No bridge to send to -- disabled (so a click can't even
+                  # move the selection) instead of an undefined sendEvent.
+                  **(inert? ? inert_attrs : { "@change" => "sendEvent('change', {field: '#{key}', value: '#{choice}', state: getFormState()})" })
                 )
                 view.span { choice }
               end
@@ -691,6 +725,10 @@ module StreamWeaver
         end
 
         if websocket_mode?
+          # No bridge to send to -- render disabled rather than wiring a click
+          # to an undefined sendEvent (see #inert?).
+          return style.merge(type: "button", **inert_attrs) if inert?
+
           # Disable on click; page morph from server response replaces the element, clearing disabled
           style.merge("@click" => "$el.disabled=true; sendEvent('action', {button: '#{action_target}', state: getFormState()})")
         elsif modal_context
