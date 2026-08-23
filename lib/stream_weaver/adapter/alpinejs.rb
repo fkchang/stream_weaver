@@ -621,6 +621,8 @@ module StreamWeaver
         current_values = state[key] || []
         all_values = children.map(&:value)
 
+        # getFormState reads this class to tell an array-valued group item from a
+        # lone boolean checkbox -- renaming it changes the canvas payload shape.
         view.div(class: "checkbox-group") do
           # Render select all/none buttons if options provided
           if options[:select_all] || options[:select_none]
@@ -943,7 +945,14 @@ module StreamWeaver
                 document.querySelectorAll('[x-model]').forEach(el => {
                   const key = el.getAttribute('x-model');
                   if (el.type === 'checkbox') {
-                    state[key] = el.checked;
+                    // A checkbox_group binds every item to one array-valued key,
+                    // so reading .checked would leave the last item's boolean.
+                    if (el.closest('.checkbox-group')) {
+                      if (!Array.isArray(state[key])) state[key] = [];
+                      if (el.checked) state[key].push(el.value);
+                    } else {
+                      state[key] = el.checked;
+                    }
                   } else if (el.type === 'radio') {
                     if (el.checked) state[key] = el.value;
                   } else {

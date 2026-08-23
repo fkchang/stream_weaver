@@ -27,6 +27,14 @@ jobs:
           ruby-version: ${{ matrix.ruby-version }}
           bundler-cache: true
 
+      # spec/canvas/form_state_harvest_spec.rb executes the adapter's emitted JS.
+      # Declared here so those examples run rather than skip on a runner image
+      # that happens not to ship node.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Run RSpec
         run: bundle exec rspec
 
