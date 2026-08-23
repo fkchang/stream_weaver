@@ -76,7 +76,9 @@ module StreamWeaver
         @app = app
         @state = state
         @base_dir = base_dir
-        @adapter = StreamWeaver::Adapter::AlpineJS.new
+        # An exported file has no server behind it at all, so a deck renders
+        # read-only rather than offering /deck/* calls nothing will answer.
+        @adapter = StreamWeaver::Adapter::AlpineJS.new(deck_server: false)
       end
 
       # Build an exporter from a canvas-doc DSL fragment -- the shape a

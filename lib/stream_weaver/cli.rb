@@ -1070,7 +1070,7 @@ module StreamWeaver
 
       # Create adapter with URL prefix for live session submit
       url_prefix = session_name ? "/live/#{session_name}" : "/live"
-      adapter = StreamWeaver::Adapter::AlpineJS.new(url_prefix: url_prefix)
+      adapter = StreamWeaver::Adapter::AlpineJS.new(url_prefix: url_prefix, deck_server: false)
 
       # Render components to HTML using a Phlex view with adapter
       # Wrap in x-data container for Alpine.js binding (required for hx-include="[x-model]")

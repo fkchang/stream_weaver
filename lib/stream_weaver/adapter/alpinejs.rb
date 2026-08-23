@@ -34,15 +34,23 @@ module StreamWeaver
       # canvas doc, so "not here, but there" is the honest message.
       INERT_TITLE = "Interactive on live canvas only"
 
+      # Tooltip on deck controls rendered read-only. The deck's own reason is
+      # narrower than INERT_TITLE's: the live canvas does not serve /deck/*
+      # either, so "on live canvas" would be the wrong promise (disc-096).
+      DECK_READ_ONLY_TITLE = "Read-only: deck selections need the standalone deck server"
+
       # Initialize with optional URL prefix for service mode
       # @param url_prefix [String] URL prefix for all endpoints (e.g., "/apps/abc123")
       # @param mode [Symbol] :http (default) for HTMX, :websocket for WebSocket canvas mode
       # @param inert [Boolean] render websocket-mode controls honestly
       #   non-interactive -- see #inert?
-      def initialize(url_prefix: "", mode: :http, inert: false)
+      # @param deck_server [Boolean] whether /deck/* is served behind this
+      #   render -- see #deck_read_only?
+      def initialize(url_prefix: "", mode: :http, inert: false, deck_server: true)
         @url_prefix = url_prefix
         @mode = mode
         @inert = inert
+        @deck_server = deck_server
       end
 
       # Check if adapter is in WebSocket mode
@@ -743,6 +751,37 @@ module StreamWeaver
       # @return [Boolean]
       def inert_canvas?
         websocket_mode? && inert?
+      end
+
+      # Whether a deck must render read-only because nothing here serves
+      # /deck/*. Only server.rb mounts those routes, and the deck's JS posts to
+      # them by absolute path, so every other render target is a deck control
+      # wired to a 404 (disc-096). Rather than offer a card that cannot record a
+      # choice, the deck renders as what it actually is there: a read-only view
+      # of whatever the deck state already holds.
+      #
+      # Two ways to know. :websocket mode says it structurally -- the canvas
+      # bridge and the reader are the only websocket renders and neither serves
+      # a route. Everything else has to be told, because an export, a service
+      # app and the standalone server are indistinguishable at render time; each
+      # builds its own adapter, so each says so (`deck_server: false` from
+      # HtmlExporter, Service, and the live-push renderer in the CLI).
+      #
+      # @return [Boolean]
+      def deck_read_only?
+        !@deck_server || websocket_mode?
+      end
+
+      # Attributes for a deck control that cannot reach a server. Non-form
+      # elements (the option card, a model row) take the aria spelling.
+      # @return [Hash]
+      def deck_read_only_attrs
+        { disabled: true, title: DECK_READ_ONLY_TITLE }
+      end
+
+      # @return [Hash]
+      def aria_deck_read_only_attrs
+        { "aria-disabled" => "true", "title" => DECK_READ_ONLY_TITLE }
       end
 
       def button_attrs(view, button_id, options, modal_context)
@@ -5286,7 +5325,9 @@ module StreamWeaver
       # @param state [Hash] Current state hash
       def render_deck_option(view, component, state)
         inject_deck_css(view)
-        inject_deck_selection_js(view)
+        # The selection script also binds the number-key quick-select, which
+        # would fire the same dead POST -- so a read-only deck gets neither.
+        inject_deck_selection_js(view) unless deck_read_only?
 
         # Read selection state from DeckState (T8)
         deck_state = state[:_deck_state]
@@ -5297,15 +5338,18 @@ module StreamWeaver
         aria_hash = { checked: is_selected ? "true" : "false" }
         aria_hash[:label] = component.description if component.description
 
+        # A focusable card wired to nothing is the same lie in miniature, so a
+        # read-only card trades its tabindex and handler for the reason it has
+        # neither. Attribute order is otherwise the live one, unchanged.
         attrs = {
           class: component.css_classes(selected: is_selected),
           role: "radio",
           aria: aria_hash,
-          tabindex: "0",
+          **(deck_read_only? ? aria_deck_read_only_attrs : { tabindex: "0" }),
           "data-slide-id" => slide_id,
           "data-option-label" => component.label,
           "data-option-index" => component.option_index.to_s,
-          "@click" => "swDeckSelect($el)"
+          **(deck_read_only? ? {} : { "@click" => "swDeckSelect($el)" })
         }
 
         view.div(**attrs) do
@@ -5342,7 +5386,9 @@ module StreamWeaver
               rows: "2",
               "data-slide-id" => slide_id,
               "data-option-label" => component.label,
-              "@blur" => "swDeckSaveNote($el)"
+              # Taking notes into a box with no /deck/note behind it loses them
+              # on the next render with nothing said.
+              **(deck_read_only? ? deck_read_only_attrs : { "@blur" => "swDeckSaveNote($el)" })
             ) { note_text || "" }
           end
         end
@@ -5356,7 +5402,7 @@ module StreamWeaver
       def render_generate_more_controls(view, component, state)
         inject_deck_css(view)
         inject_generate_more_css(view)
-        inject_generate_more_js(view)
+        inject_generate_more_js(view) unless deck_read_only?
 
         slide_id = component.slide_id
         is_generating = component.generating?
@@ -5376,7 +5422,7 @@ module StreamWeaver
               view.button(
                 type: "button",
                 class: "sw-generate-more__btn sw-generate-more__btn--cancel",
-                "@click" => "swCancelGenerate()"
+                **(deck_read_only? ? deck_read_only_attrs : { "@click" => "swCancelGenerate()" })
               ) { "Cancel" }
             end
           elsif is_timed_out
@@ -5398,12 +5444,14 @@ module StreamWeaver
                 class: "sw-generate-more__prompt",
                 id: "sw-gen-prompt-#{slide_id}",
                 placeholder: "e.g., Focus on event-driven patterns",
-                "aria-label" => "Generation prompt"
+                "aria-label" => "Generation prompt",
+                **(deck_read_only? ? deck_read_only_attrs : {})
               )
               view.select(
                 class: "sw-generate-more__count",
                 id: "sw-gen-count-#{slide_id}",
-                "aria-label" => "Number of options"
+                "aria-label" => "Number of options",
+                **(deck_read_only? ? deck_read_only_attrs : {})
               ) do
                 (1..3).each do |n|
                   attrs = { value: n.to_s }
@@ -5414,7 +5462,7 @@ module StreamWeaver
               view.button(
                 type: "button",
                 class: "sw-generate-more__btn sw-generate-more__btn--generate",
-                "@click" => "swGenerate('#{slide_id}')"
+                **(deck_read_only? ? deck_read_only_attrs : { "@click" => "swGenerate('#{slide_id}')" })
               ) { "Generate More" }
             end
           end
@@ -5453,7 +5501,7 @@ module StreamWeaver
       # @param state [Hash] Current state hash
       def render_deck_summary(view, component, state)
         inject_deck_css(view)
-        inject_deck_summary_js(view)
+        inject_deck_summary_js(view) unless deck_read_only?
 
         deck_state = state[:_deck_state]
         is_complete = component.all_selected?(deck_state)
@@ -5511,8 +5559,8 @@ module StreamWeaver
               class: "sw-deck-summary__final-notes-input",
               placeholder: "Add any overall comments...",
               rows: "3",
-              "@blur" => "swDeckSaveFinalNotes($el)",
-              disabled: is_submitted ? true : nil
+              **(deck_read_only? ? deck_read_only_attrs
+                                 : { "@blur" => "swDeckSaveFinalNotes($el)", disabled: is_submitted || nil })
             ) { final_notes_text }
           end
 
@@ -5525,8 +5573,7 @@ module StreamWeaver
             view.button(
               type: "button",
               class: btn_class,
-              disabled: is_complete ? nil : true,
-              "@click" => "swDeckSubmit()"
+              **(deck_read_only? ? deck_read_only_attrs : { disabled: is_complete ? nil : true, "@click" => "swDeckSubmit()" })
             ) { "Submit" }
           end
         end
@@ -5541,6 +5588,7 @@ module StreamWeaver
         return unless component.visible?
 
         inject_deck_polish_css(view)
+        inject_model_selector_js(view) unless deck_read_only?
 
         deck_state = state[:_deck_state]
         current_model = deck_state&.selected_model || component.default_model
@@ -5570,7 +5618,9 @@ module StreamWeaver
                 class: "sw-model-selector__item",
                 ":class" => "selectedModel === '#{model[:id]}' ? 'sw-model-selector__item sw-model-selector__item--selected' : 'sw-model-selector__item'",
                 "x-show" => item_show,
-                "@click" => "selectedModel = '#{model[:id]}'; fetch('/deck/set_model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model_id: '#{model[:id]}' }) })",
+                # The provider pills above are pure Alpine filtering and work
+                # anywhere; picking a model is the only part that needs a server.
+                **(deck_read_only? ? aria_deck_read_only_attrs : { "@click" => "swDeckSetModel($data, #{js(model[:id])})" }),
                 "data-model-id" => model[:id]
               ) do
                 view.span(class: "sw-model-selector__name") { model[:name] }
@@ -5759,15 +5809,46 @@ module StreamWeaver
         inject_component_css(view, :deck, DECK_CSS)
       end
 
-      # Inject deck selection JS once per render (T8)
-      def inject_deck_selection_js(view)
-        return if view.instance_variable_get(:@_deck_selection_js_injected)
-        view.instance_variable_set(:@_deck_selection_js_injected, true)
-        view.script { view.raw(view.safe(DECK_SELECTION_JS)) }
+      # Inject the shared deck fetch helpers once per render. Every other deck
+      # script depends on them, so each injector calls this first.
+      def inject_deck_fetch_js(view)
+        return if view.instance_variable_get(:@_deck_fetch_js_injected)
+        view.instance_variable_set(:@_deck_fetch_js_injected, true)
+        view.script { view.raw(view.safe(DECK_FETCH_JS)) }
       end
 
-      # JavaScript for deck option selection and note persistence (T8)
-      DECK_SELECTION_JS = <<~JS
+      # Shared /deck/* transport: one place that decides whether a deck call
+      # actually landed, and says so when it did not (disc-096).
+      DECK_FETCH_JS = <<~JS
+        // Report a deck call that did not land. Where the render mode proves
+        // there is no deck server the controls are read-only and never get
+        // here (see AlpineJS#deck_read_only?); this covers what is left --
+        // a real server that refused, went away, or was never reached.
+        function swDeckReport(path, detail) {
+          console.error('StreamWeaver deck: ' + path + ' failed (' + detail + '). ' +
+            'The /deck/* routes exist only when the deck is served by the StreamWeaver server.');
+        }
+
+        // POST to a deck endpoint. Resolves true only if the server accepted the
+        // call, so callers can gate their confirmation on it rather than
+        // painting a choice nobody stored.
+        function swDeckPost(path, payload) {
+          return fetch(path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload || {})
+          }).then(function(resp) {
+            if (!resp.ok) {
+              swDeckReport(path, 'HTTP ' + resp.status);
+              return false;
+            }
+            return true;
+          }).catch(function(err) {
+            swDeckReport(path, err);
+            return false;
+          });
+        }
+
         // Read current slide index from the DOM (set by Alpine :data-current-slide binding)
         function swDeckCurrentSlide() {
           var el = document.querySelector('.sw-slide-container--swap');
@@ -5777,9 +5858,14 @@ module StreamWeaver
         // Fetch fresh HTML from /deck/refresh, replace #app-container innerHTML,
         // and re-initialize Alpine on the new DOM tree.
         function swDeckRefresh() {
-          fetch('/deck/refresh?slide=' + swDeckCurrentSlide()).then(function(resp) {
+          return fetch('/deck/refresh?slide=' + swDeckCurrentSlide()).then(function(resp) {
+            if (!resp.ok) {
+              swDeckReport('/deck/refresh', 'HTTP ' + resp.status);
+              return null;
+            }
             return resp.text();
           }).then(function(html) {
+            if (html === null) return;
             var container = document.getElementById('app-container');
             if (!container) return;
             // Destroy Alpine state on old children
@@ -5787,9 +5873,22 @@ module StreamWeaver
             container.innerHTML = html;
             // Initialize Alpine on the new DOM
             Alpine.initTree(container);
+          }).catch(function(err) {
+            swDeckReport('/deck/refresh', err);
           });
         }
+      JS
 
+      # Inject deck selection JS once per render (T8)
+      def inject_deck_selection_js(view)
+        inject_deck_fetch_js(view)
+        return if view.instance_variable_get(:@_deck_selection_js_injected)
+        view.instance_variable_set(:@_deck_selection_js_injected, true)
+        view.script { view.raw(view.safe(DECK_SELECTION_JS)) }
+      end
+
+      # JavaScript for deck option selection and note persistence (T8)
+      DECK_SELECTION_JS = <<~JS
         // Select a deck option (radio semantics per slide)
         function swDeckSelect(el) {
           // Don't select if clicking on the notes textarea
@@ -5799,23 +5898,27 @@ module StreamWeaver
           var optionLabel = el.dataset.optionLabel;
           if (!slideId || !optionLabel) return;
 
-          // Visual update: deselect all siblings in the same radiogroup
-          var grid = el.closest('[role="radiogroup"]');
-          if (grid) {
-            grid.querySelectorAll('.sw-deck-option').forEach(function(opt) {
-              opt.classList.remove('sw-deck-option--selected');
-              opt.setAttribute('aria-checked', 'false');
-            });
-          }
-          el.classList.add('sw-deck-option--selected');
-          el.setAttribute('aria-checked', 'true');
+          // Persist first, then re-render (StreamWeaver model). The card is
+          // marked only once the server has the choice: painting it first left
+          // a checked radio standing for a selection nobody stored, and moved
+          // the checkmark off whichever sibling really was selected. aria-busy
+          // covers the round trip, because a card that sits there saying
+          // nothing is its own small dishonesty.
+          el.setAttribute('aria-busy', 'true');
+          return swDeckPost('/deck/select', { slide_id: slideId, option_label: optionLabel }).then(function(ok) {
+            el.removeAttribute('aria-busy');
+            if (!ok) return;
 
-          // Persist to server, then re-render (StreamWeaver model)
-          fetch('/deck/select', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ slide_id: slideId, option_label: optionLabel })
-          }).then(function() {
+            var grid = el.closest('[role="radiogroup"]');
+            if (grid) {
+              grid.querySelectorAll('.sw-deck-option').forEach(function(opt) {
+                opt.classList.remove('sw-deck-option--selected');
+                opt.setAttribute('aria-checked', 'false');
+              });
+            }
+            el.classList.add('sw-deck-option--selected');
+            el.setAttribute('aria-checked', 'true');
+
             swDeckRefresh();
           });
         }
@@ -5826,12 +5929,10 @@ module StreamWeaver
           var optionLabel = textarea.dataset.optionLabel;
           if (!slideId || !optionLabel) return;
 
-          fetch('/deck/note', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ slide_id: slideId, option_label: optionLabel, text: textarea.value })
-          }).then(function() {
-            swDeckRefresh();
+          return swDeckPost('/deck/note', {
+            slide_id: slideId, option_label: optionLabel, text: textarea.value
+          }).then(function(ok) {
+            if (ok) swDeckRefresh();
           });
         }
 
@@ -5870,6 +5971,7 @@ module StreamWeaver
 
       # Inject deck summary JS once per render (T9)
       def inject_deck_summary_js(view)
+        inject_deck_fetch_js(view)
         return if view.instance_variable_get(:@_deck_summary_js_injected)
         view.instance_variable_set(:@_deck_summary_js_injected, true)
         view.script { view.raw(view.safe(DECK_SUMMARY_JS)) }
@@ -5879,25 +5981,35 @@ module StreamWeaver
       DECK_SUMMARY_JS = <<~JS
         // Save final notes on blur
         function swDeckSaveFinalNotes(textarea) {
-          fetch('/deck/final_notes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: textarea.value })
-          }).then(function() {
-            swDeckRefresh();
+          return swDeckPost('/deck/final_notes', { text: textarea.value }).then(function(ok) {
+            if (ok) swDeckRefresh();
           });
         }
 
         // Submit the deck (sends selections + notes as _result)
         function swDeckSubmit() {
-          fetch('/deck/submit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          }).then(function(resp) {
-            if (resp.ok) {
-              // Reload to show submitted state
-              window.location.reload();
-            }
+          return swDeckPost('/deck/submit').then(function(ok) {
+            // Reload to show submitted state
+            if (ok) window.location.reload();
+          });
+        }
+      JS
+
+      # Inject model selector JS once per render (T14)
+      def inject_model_selector_js(view)
+        inject_deck_fetch_js(view)
+        return if view.instance_variable_get(:@_model_selector_js_injected)
+        view.instance_variable_set(:@_model_selector_js_injected, true)
+        view.script { view.raw(view.safe(MODEL_SELECTOR_JS)) }
+      end
+
+      # JavaScript for the model selector (T14)
+      MODEL_SELECTOR_JS = <<~JS
+        // Record the model choice. The highlight is bound to selectedModel, so
+        // setting it before the POST landed showed a model the server never got.
+        function swDeckSetModel(scope, modelId) {
+          return swDeckPost('/deck/set_model', { model_id: modelId }).then(function(ok) {
+            if (ok) scope.selectedModel = modelId;
           });
         }
       JS
@@ -5909,6 +6021,7 @@ module StreamWeaver
 
       # Inject generate-more JS once per render (T10)
       def inject_generate_more_js(view)
+        inject_deck_fetch_js(view)
         return if view.instance_variable_get(:@_generate_more_js_injected)
         view.instance_variable_set(:@_generate_more_js_injected, true)
         view.script { view.raw(view.safe(GENERATE_MORE_JS)) }
@@ -5916,40 +6029,22 @@ module StreamWeaver
 
       # JavaScript for generate-more controls (T10)
       GENERATE_MORE_JS = <<~JS
-        // Request more options via the generate endpoint
+        // Request more options via the generate endpoint. Nothing to do on
+        // success -- SSE pushes the re-render with skeletons.
         function swGenerate(slideId) {
           var promptEl = document.getElementById('sw-gen-prompt-' + slideId);
           var countEl = document.getElementById('sw-gen-count-' + slideId);
-          var prompt = promptEl ? promptEl.value : '';
-          var count = countEl ? parseInt(countEl.value) : 2;
 
-          fetch('/deck/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ slide_id: slideId, count: count, prompt: prompt })
-          }).then(function(resp) {
-            if (!resp.ok) {
-              console.error('Generate request failed:', resp.status);
-            }
-            // SSE will push the re-render with skeletons
-          }).catch(function(err) {
-            console.error('Generate request error:', err);
+          return swDeckPost('/deck/generate', {
+            slide_id: slideId,
+            count: countEl ? parseInt(countEl.value) : 2,
+            prompt: promptEl ? promptEl.value : ''
           });
         }
 
         // Cancel a pending generation
         function swCancelGenerate() {
-          fetch('/deck/cancel_generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          }).then(function(resp) {
-            if (!resp.ok) {
-              console.error('Cancel request failed:', resp.status);
-            }
-            // SSE will push the re-render
-          }).catch(function(err) {
-            console.error('Cancel request error:', err);
-          });
+          return swDeckPost('/deck/cancel_generate');
         }
       JS
 
@@ -6483,6 +6578,24 @@ module StreamWeaver
         .sw-deck-option:focus-visible {
           outline: 2px solid var(--sw-accent, #6366f1);
           outline-offset: 2px;
+        }
+
+        /* Waiting on the server. The card is not marked until the selection is
+           recorded, so this is what says the click was heard. */
+        .sw-deck-option[aria-busy="true"] {
+          opacity: 0.6;
+          cursor: progress;
+        }
+
+        /* No deck server behind this render -- the card shows the recorded
+           state and nothing more (disc-096). */
+        .sw-deck-option[aria-disabled="true"] {
+          cursor: default;
+        }
+
+        .sw-deck-option[aria-disabled="true"]:hover {
+          border-color: var(--sw-border, #e0e0e0);
+          box-shadow: none;
         }
 
         .sw-deck-option--recommended {

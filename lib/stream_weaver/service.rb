@@ -863,7 +863,7 @@ module StreamWeaver
     get '/admin' do
       admin_app = Admin.create_app
       state = app_state('admin')
-      adapter = Adapter::AlpineJS.new(url_prefix: "/admin")
+      adapter = Adapter::AlpineJS.new(url_prefix: "/admin", deck_server: false)
 
       admin_app.with_render_lock do
         admin_app.rebuild_with_state(state, generation: action_generation('admin'),
@@ -878,7 +878,7 @@ module StreamWeaver
     post '/admin/update' do
       admin_app = Admin.create_app
       state = app_state('admin')
-      adapter = Adapter::AlpineJS.new(url_prefix: "/admin")
+      adapter = Adapter::AlpineJS.new(url_prefix: "/admin", deck_server: false)
 
       InteractionRunner.new(
         app: admin_app, state: state, params: params,
@@ -893,7 +893,7 @@ module StreamWeaver
       button_id = params[:button_id]
       admin_app = Admin.create_app
       state = app_state('admin')
-      adapter = Adapter::AlpineJS.new(url_prefix: "/admin")
+      adapter = Adapter::AlpineJS.new(url_prefix: "/admin", deck_server: false)
 
       InteractionRunner.new(
         app: admin_app, state: state, params: params,
@@ -975,7 +975,7 @@ module StreamWeaver
 
       streamlit_app = app_entry[:app]
       state = app_state(app_id)
-      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
+      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}", deck_server: false)
 
       # Seed state from URL routing (e.g., `page :home, '/'` registers a parser for
       # '/') -- mirrors the standalone `GET /` seeding so a routed app's default view
@@ -1020,7 +1020,7 @@ module StreamWeaver
       sync_params_to_state(state)
       set_app_state(app_id, state)
 
-      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
+      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}", deck_server: false)
       is_htmx = request.env.key?('HTTP_HX_REQUEST')
       streamlit_app.with_render_lock do
         streamlit_app.rebuild_with_state(state, generation: action_generation(app_id),
@@ -1060,7 +1060,7 @@ module StreamWeaver
 
       streamlit_app = app_entry[:app]
       state = app_state(app_id)
-      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
+      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}", deck_server: false)
 
       InteractionRunner.new(
         app: streamlit_app, state: state, params: params,
@@ -1080,7 +1080,7 @@ module StreamWeaver
 
       streamlit_app = app_entry[:app]
       state = app_state(app_id)
-      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
+      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}", deck_server: false)
 
       InteractionRunner.new(
         app: streamlit_app, state: state, params: params,
@@ -1111,7 +1111,7 @@ module StreamWeaver
 
       streamlit_app = app_entry[:app]
       state = app_state(app_id)
-      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
+      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}", deck_server: false)
 
       InteractionRunner.new(
         app: streamlit_app, state: state, params: params,
@@ -1131,7 +1131,7 @@ module StreamWeaver
 
       streamlit_app = app_entry[:app]
       state = app_state(app_id)
-      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}")
+      adapter = Adapter::AlpineJS.new(url_prefix: "/apps/#{app_id}", deck_server: false)
 
       InteractionRunner.new(
         app: streamlit_app, state: state, params: params,

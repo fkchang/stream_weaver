@@ -2,6 +2,7 @@
 
 require 'json'
 require 'open3'
+require_relative '../support/node_js'
 
 # getFormState is the only channel a canvas control has for reporting page state
 # to a waiting agent, and it reads the DOM rather than Alpine's own store. Two
@@ -10,15 +11,6 @@ require 'open3'
 # checkbox binds one input to a boolean key.
 RSpec.describe 'canvas form state harvest' do
   let(:adapter) { StreamWeaver::Adapter::AlpineJS.new(url_prefix: '/canvas/test', mode: :websocket) }
-
-  # CI declares node (.github/workflows/ci.yml), so the harvest examples always
-  # run where regressions have to be caught. A contributor without node gets a
-  # named skip rather than a failure about something they didn't break.
-  def self.node?
-    return @node unless @node.nil?
-
-    @node = !!system('node', '--version', out: File::NULL, err: File::NULL)
-  end
 
   def group_app(fruits, items: %w[apple banana cherry])
     StreamWeaver::App.new('form state harvest spec') do
@@ -162,7 +154,7 @@ RSpec.describe 'canvas form state harvest' do
   end
 
   describe 'the harvested payload' do
-    before { skip 'node is not installed, so the emitted JS cannot be run' unless self.class.node? }
+    include NodeJS
 
     it 'carries the selected group items as an array, in rendered order' do
       expect(harvest(render_components(group_app(%w[cherry apple])))).to eq('fruits' => %w[apple cherry])
