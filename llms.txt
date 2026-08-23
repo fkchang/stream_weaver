@@ -1054,6 +1054,7 @@ For comprehensive reference, see these docs:
 | Document | Contents |
 |----------|----------|
 | `docs/components_reference.md` | Full component API (all options, variants) |
+| `docs/frontend-only.md` | What survives `canvas-read` and `streamweaver export` (no backend) vs. the live canvas — read before building a doc meant to be exported or browsed read-only |
 | `docs/SERVICE_MODE.md` | Multi-app service mode, CLI commands |
 | `docs/testing.md` | Unit and integration testing |
 | `docs/architecture/how_streamweaver_works.md` | Internal architecture, event flow |
