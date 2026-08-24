@@ -1,1 +1,5 @@
 vendor/
+
+# Packaged upload zip + verification screenshots -- build artifacts,
+# regenerate via bin/build_extension + zip, not committed (mirrors vendor/).
+dist/

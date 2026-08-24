@@ -1,8 +1,14 @@
 {
   "manifest_version": 3,
   "name": "StreamWeaver Doc Viewer",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Renders StreamWeaver docs on GitHub the way they look when run, instead of as Ruby source.",
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
 
   "permissions": ["storage"],
   "host_permissions": [

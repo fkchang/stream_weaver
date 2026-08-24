@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- StreamWeaver Doc Viewer mark: a document page with a woven thread
+       running through it. Flat single background color (no gradient) so it
+       stays legible when scaled down to 16px. -->
+  <rect x="4" y="4" width="120" height="120" rx="26" fill="#4c1d95"/>
+
+  <!-- document page, folded top-right corner -->
+  <path d="M40 26 H74 L88 40 V102 A6 6 0 0 1 82 108 H40 A6 6 0 0 1 34 102 V32 A6 6 0 0 1 40 26 Z"
+        fill="#ffffff"/>
+  <path d="M74 26 L88 40 H78 A4 4 0 0 1 74 36 Z" fill="#c4b5fd"/>
+
+  <!-- woven thread crossing the page: two interlaced strands -->
+  <path d="M38 60 Q50 50 62 60 T86 60" fill="none" stroke="#4c1d95" stroke-width="6"
+        stroke-linecap="round"/>
+  <path d="M38 80 Q50 70 62 80 T86 80" fill="none" stroke="#4c1d95" stroke-width="6"
+        stroke-linecap="round"/>
+</svg>
