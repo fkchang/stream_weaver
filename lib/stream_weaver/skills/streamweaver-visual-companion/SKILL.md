@@ -120,6 +120,8 @@ These are the *intentional* keep-forever artifacts that get committed to the rep
 
 A doc saved this way gets reopened later with no live bridge behind it — the same file also gets browsed via `canvas-read` and can be run through `streamweaver export`. Not every component behaves the same way once the bridge is gone; see the `streamweaver-canvas-safe` skill before building interactivity into anything you expect to Save-as-doc.
 
+When the same material ships to two audiences (a decision memo plus its engineering companion), don't keep two docs that each restate the same tables. Put the shared tables in one `shared/*.rb` fragment and `instance_eval` it from both bodies, so they cannot drift. Push with `cat shared/frag.rb my-doc.rb | streamweaver canvas-push my-doc` — the bridge evaluates pushed text with no filename, so `__dir__` is `nil` there and the doc cannot find the fragment on its own. Pattern, per-mode resolution rules, and org-mode caveats: `docs/shared-dsl-fragments.md` in the stream_weaver repo.
+
 **Important:** Saving is a user action, not yours. Don't try to "save the canvas" yourself unless the user explicitly asks. If the user says "save this as X" and the button isn't easy to reach, you can fall back to:
 
 ```bash

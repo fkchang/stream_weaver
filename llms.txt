@@ -1062,6 +1062,7 @@ For comprehensive reference, see these docs:
 | `docs/crud-patterns.md` | CRUD: create/edit/delete modals, URL-addressable edit pages, store adapters |
 | `docs/streamweaver-frontend-vision.md` | Strategic direction: htmx + Alpine + Idiomorph as a Hotwire-equivalent stack for Ruby devs |
 | `docs/porting-artifacts.md` | Porting a claude.ai Artifact into StreamWeaver at visual parity: dissect, gap-assess, port, verify, promote |
+| `docs/shared-dsl-fragments.md` | Two or more docs for different audiences sharing ONE canonical copy of a table via an `instance_eval`'d fragment file, so they cannot drift — includes the per-mode `__dir__` truth table (export and canvas-read pass a filename to `instance_eval`; org-export and the canvas-push bridge do not) |
 | `docs/tutorials/the-streamweaver-way.md` | **Tutorial** — "Build My Todos: the StreamWeaver Way": the four benchmark features rebuilt step by step, each naming its law, its gotcha, and its measured number. The narrated twin of the `streamweaver-way` skill |
 
 ## Live Streaming with `every` Timers

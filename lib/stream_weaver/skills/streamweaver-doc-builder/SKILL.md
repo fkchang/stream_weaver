@@ -80,6 +80,31 @@ DocApp.run! if __FILE__ == $0
 streamweaver canvas-push my-doc < doc_body.rb
 ```
 
+## Shared DSL Fragments (multi-audience docs)
+
+When two docs for **different audiences** (a decision memo and its engineering companion, say) must quote the same tables, rules, or numbers, put those tables in ONE fragment file and load it from both bodies. Prose stays per-audience; only the facts are shared.
+
+A fragment is a plain `.rb` under `shared/` that defines methods emitting DSL and nothing else: no `app` wrapper, no `doc_header`/`sidebar_toc`, no side effects, no `# streamweaver-doc: v1` marker. Name the methods with a doc-family prefix (`pm_base_rules_table`), because `instance_eval` turns them into singleton methods on the App and they share a namespace with every DSL verb.
+
+Consumer snippet, top of each doc body:
+
+```ruby
+unless respond_to?(:pm_base_rules_table)
+  _root = __dir__ || ENV["SW_DOC_DIR"] || Dir.pwd
+  _frag = File.expand_path("shared/pm_discount_shared.rb", _root)
+  raise "shared DSL fragment not found: #{_frag}" unless File.file?(_frag)
+  instance_eval(File.read(_frag), _frag)
+end
+```
+
+`export` and `canvas-read` pass the doc's path to `instance_eval`, so `__dir__` resolves the fragment there. `org-export` and the canvas-push bridge do not, so `__dir__` is `nil`: run `org-export` from the doc's directory (or set `SW_DOC_DIR`), and for canvas-push concatenate the fragment ahead of the body, which the `respond_to?` guard makes idempotent:
+
+```bash
+cat shared/pm_discount_shared.rb my-doc.rb | streamweaver canvas-push my-doc
+```
+
+Never hardcode an absolute home-directory path as a fallback. Full rationale, the per-mode `__dir__` truth table with code cites, the org-mode answers, and a proposal for a first-class `dsl_fragment` helper: `docs/shared-dsl-fragments.md` in the stream_weaver repo.
+
 ## Component Reference
 
 ### `doc_header` — title block
