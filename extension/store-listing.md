@@ -64,7 +64,48 @@ developer-authored documentation on GitHub/Gist, not a general productivity or
 "docs" viewer for end users; it only activates on `github.com` and
 `gist.github.com` and only for a specific developer-facing content format.
 
-## Privacy practices justification
+## Privacy tab — exact console fields (2026-08-25)
+
+The live console's Privacy tab (`Package` / `Store listing` / `Privacy` /
+`Distribution`) has its own short, hard-capped (1,000 char) fields — not
+the same shape as "Privacy practices justification" below, which is longer
+reference material. Paste these directly instead:
+
+**Single purpose description** (647 chars):
+```
+Renders StreamWeaver documentation files (.rb DSL source or .org export) as the finished, styled page they produce when run, instead of as raw source text -- for viewers on GitHub or GitHub Gist who have neither StreamWeaver nor Ruby installed. Adds a "View rendered" button next to a recognized file's toolbar; clicking it compiles and displays the document entirely inside the browser, with no server round-trip. Also provides a standalone viewer page for opening a local .rb/.org file from disk for the same rendering, independent of GitHub. The extension does nothing else: no other page interaction, no data collection, no unrelated features.
+```
+
+**storage justification** (728 chars):
+```
+Uses chrome.storage.session only, to hand a doc's source text from the GitHub/Gist content script to the extension's own viewer tab and sandboxed render frame. When "View rendered" is clicked, the file's text is stashed under a one-time key in session storage; the viewer tab reads that key once. Session storage fits because the content only needs to survive that one handoff between tabs -- it does not need to persist across browser restarts (local) or sync across devices (sync), and it never leaves the device. No browsing history, credentials, analytics, or user identifiers are ever stored -- only the text of the specific StreamWeaver file the user chose to render, already visible to them on the page they were viewing.
+```
+
+**Host permission justification** (730 chars, one field covering both
+`raw.githubusercontent.com` and `gist.githubusercontent.com` — the console
+doesn't split it per-host the way the reference section below does):
+```
+Fallback fetch path for reading a StreamWeaver doc's source when it isn't already present in the current page. A GitHub blob page normally embeds the whole file inline in the page's own JSON payload (no network request at all); raw.githubusercontent.com is used only when that embedded payload is unavailable. Gist pages never embed file content in the DOM at all, so gist.githubusercontent.com (via the gist's own Raw link, which redirects there) is always used for gist support. In both cases, only the exact file the user is already viewing or clicked "View rendered" on is ever fetched -- never a directory listing, never another file, never anything the user didn't directly trigger by opening or clicking that specific file.
+```
+
+**"Are you using remote code?" → Yes, with justification** (747 chars).
+This one is real, not a formality: `manifest.json`'s sandbox CSP declares
+`'unsafe-eval'`, and `sandbox.js` calls `Opal.eval()` on the compiled Ruby
+output — that's exactly what Google's own tooltip means by "strings
+evaluated through eval()," regardless of the fact that the string being
+evaluated is 100% locally produced, never fetched. Answering "No" here
+would be inaccurate and risks a review bounce when the reviewer reads the
+manifest CSP directly.
+```
+The extension bundles a full Ruby-to-JavaScript compiler (Opal) and the StreamWeaver rendering runtime locally under extension/vendor/, with zero CDN or network dependency -- Manifest V3 forbids remote script outright. Rendering a doc means compiling its Ruby source in-browser and evaluating the compiler's own output, which is why the sandboxed page (sandbox.html, its own CSP in manifest.json) declares 'unsafe-eval'. The string passed to eval() is always the result of compiling the exact StreamWeaver doc the user opened, produced entirely by the bundled compiler -- never fetched from a server. This is flagged only because Manifest V3 gates eval() itself behind 'unsafe-eval', not because any code originates outside the packaged extension.
+```
+
+**Data usage checkboxes:** leave all unchecked — the extension collects
+none of personally identifiable info, health info, financial info, or any
+other listed category. It only ever handles the text of a file the user
+already chose to view, transiently, on-device.
+
+## Privacy practices justification (longer reference — not the console's field shapes)
 
 Permissions actually declared in `manifest.json` (re-read fresh for this draft,
 not from memory):
