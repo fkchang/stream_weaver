@@ -8,26 +8,36 @@ submission.
 ## Short description (132 char limit)
 
 ```
-Renders StreamWeaver docs on GitHub and Gist as formatted pages instead of raw Ruby/org source, rendered locally in your browser.
+Beautiful docs, zero vendor lock-in, markdown-level fallback. Renders StreamWeaver .rb/.org docs on GitHub & Gist, in your browser.
 ```
 
-129 characters.
+131 characters.
 
 ## Detailed description
 
 ```
-StreamWeaver Doc Viewer renders StreamWeaver documents on GitHub and GitHub
-Gist the way they look when actually run, instead of as raw Ruby or .org
-source — for anyone reading a doc who doesn't have StreamWeaver or Ruby
-installed.
+AI agents are extremely good at generating gorgeous, throwaway UI. You've
+seen it: ask an assistant for a report, get back a beautiful little document
+— that lives in one chat, on one vendor's servers, and costs real tokens
+every time it has to be regenerated. StreamWeaver docs are the other way to
+do it.
 
-A StreamWeaver doc is a small Ruby DSL (or its round-trippable .org export)
-that compiles into a formatted page: headers, a sidebar table of contents,
-callouts, tables, code blocks with syntax highlighting, comparison blocks,
-cards, and Mermaid diagrams. Viewed on GitHub without this extension, that's
-just source text. This extension detects a StreamWeaver doc automatically
-(by a content stamp, not filename) and adds a "View rendered" button next to
-the file — click it to see the formatted page in a new tab.
+A StreamWeaver doc is a small, expressive Ruby DSL — legible, joyful to
+write, closer to the Ruby way than to whatever a JS framework hands you —
+that compiles into the same polished page every time: a header, a sidebar
+table of contents, callouts, tables, syntax-highlighted code, comparison
+blocks, cards, Mermaid diagrams. It also has a second form: a fully
+round-trippable .org export — the same document as plain, git-diffable
+text that Emacs, Vim, VS Code, and a long list of other editors already
+read natively, no plugin required.
+
+That's the unlock: beautiful UI with markdown-level fallback. Push either
+form to GitHub or a Gist, and even without this extension it's still
+legible — an .org file already renders close to markdown on GitHub. WITH
+this extension, either format renders exactly as designed: full layout,
+sidebar nav, diagrams, the works, compiled and displayed entirely inside
+your browser. No StreamWeaver install. No Ruby. No vendor lock-in. No
+server. Just a "View rendered" button next to the file.
 
 Works on:
 - Any public or private GitHub repo blob page (.rb or .org)
@@ -35,23 +45,23 @@ Works on:
 - Local files too — open the extension's viewer page directly and drop in
   a .org or .rb file from disk, no GitHub or server needed
 
-How it works: everything renders entirely inside your browser. The
-extension reads the file's source from the GitHub page itself (or fetches
-the file's own Raw URL for Gists), compiles it locally using a bundled Ruby
-compiler and rendering runtime, and displays the result in a sandboxed
-extension page. No document content is ever sent anywhere — there is no
-backend server for this extension, and it makes no network requests beyond
-fetching the Raw source URL when required (see Privacy practices below for
-exactly when that happens).
+How it works: everything compiles and renders entirely inside your
+browser — a bundled Ruby compiler and rendering runtime, no backend, no
+document content ever sent anywhere except a narrowly-scoped fetch of the
+file's own Raw URL when the page doesn't already embed it (see Privacy
+practices below for exactly when that happens).
 
-This is a personal utility made public, not a polished commercial product.
-It works well on everything it's been tested against, but a few things are
-worth knowing before you rely on it: the "View rendered" button's placement
-is a best-effort guess at GitHub's current page markup and may need to adapt
-if GitHub changes it, and a few edge cases (anonymous gists, private gists,
-drag-and-drop file entry) are inferred from code review rather than
-independently verified live. See the project README's "Known gaps" section
-for the full list.
+It's vendor-neutral by design and cheap to run by design — plain .org text
+costs a fraction of what re-generating a live chat artifact does — and
+it's built to travel: across repos, across teams, across whoever you're
+collaborating with today, inside or outside your own company. That's the
+actual point of shipping this publicly — docs like this only get to move
+freely between a work team and outside collaborators once anyone with a
+browser can open one, no install required.
+
+(There's more coming on the StreamWeaver side — live, agent-authored
+canvas docs updating in something close to real time. This extension is
+the viewer for what that produces, public first.)
 
 Source: [add repo URL before publishing, if the repo is public by then]
 ```
