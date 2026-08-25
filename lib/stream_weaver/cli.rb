@@ -680,7 +680,7 @@ module StreamWeaver
     def self.live_session(args)
       session_name = args.first
 
-      unless session_name
+      if session_name.nil? || help_flag?(session_name)
         $stderr.puts "Usage: streamweaver live <session-name>"
         exit 1
       end
@@ -828,7 +828,7 @@ module StreamWeaver
 
     # Close a live session
     def self.close_live_session(session_name)
-      unless session_name
+      if session_name.nil? || help_flag?(session_name)
         $stderr.puts "Usage: streamweaver live-close <session-name>"
         exit 1
       end
@@ -1044,6 +1044,16 @@ module StreamWeaver
       info ? info[:port] : DEFAULT_PORT
     end
 
+    # True when arg looks like a help request rather than a real resource
+    # name. Commands that read a positional name via plain `args.first`
+    # (no OptionParser in front of them) don't get OptionParser's automatic
+    # --help/-h handling for free, so without this check `streamweaver
+    # canvas --help` creates a canvas session literally named "--help"
+    # instead of showing usage (stream_weaver bug report, 2026-08-24).
+    def self.help_flag?(arg)
+      arg == '--help' || arg == '-h'
+    end
+
     def self.open_browser(url)
       case RbConfig::CONFIG['host_os']
       when /darwin|mac os/
@@ -1101,6 +1111,12 @@ module StreamWeaver
 
     # Create or connect to a canvas session
     def self.canvas_session(args)
+      # Required before the guard below, not after -- the method's own
+      # `rescue Canvas::Client::NotRunningError` can't resolve that constant
+      # on an early exit if Canvas hasn't been loaded yet (pre-existing bug,
+      # surfaced by the --help guard now exiting from this same spot).
+      require_relative 'canvas/client'
+
       layout = :fluid
       args = args.dup
       if (i = args.index { |a| a.start_with?('--layout=') })
@@ -1108,12 +1124,10 @@ module StreamWeaver
       end
       session_name = args.first
 
-      unless session_name
+      if session_name.nil? || help_flag?(session_name)
         $stderr.puts "Usage: streamweaver canvas [--layout=fluid|full|wide|default] <session-name>"
         exit 1
       end
-
-      require_relative 'canvas/client'
 
       # Ensure bridge is running
       info = Canvas::Client.ensure_bridge_running
@@ -1351,14 +1365,15 @@ module StreamWeaver
 
     # Close a canvas session
     def self.canvas_close(args)
+      # See canvas_session for why this require comes before the guard.
+      require_relative 'canvas/client'
+
       session_name = args.first
 
-      unless session_name
+      if session_name.nil? || help_flag?(session_name)
         $stderr.puts "Usage: streamweaver canvas-close <session-name>"
         exit 1
       end
-
-      require_relative 'canvas/client'
 
       response = Canvas::Client.send_message(
         Canvas::Protocol::Messages.close(session_name)
@@ -1820,8 +1835,18 @@ module StreamWeaver
     # inline in a split pane. If iTerm2 Web Browser profile isn't available,
     # we just print the URL for the user to open manually.
     def self.panel(args)
+      # See canvas_session for why this require comes before the guard.
       require_relative 'iterm'
       require_relative 'canvas/client'
+
+      # Checked before the '-'-prefixed args get filtered out below --
+      # otherwise --help/-h silently vanish and session_name falls back to
+      # a random "panel-<hex>" name, creating an iTerm split + canvas
+      # session nobody asked for instead of showing usage.
+      if args.any? { |a| help_flag?(a) }
+        $stderr.puts "Usage: streamweaver panel [session-name] [--fresh] [--layout=NAME] [--theme=NAME]"
+        exit 1
+      end
 
       debug = ENV['DEBUG_PANEL']
       fresh = args.include?('--fresh') || args.include?('-f')
