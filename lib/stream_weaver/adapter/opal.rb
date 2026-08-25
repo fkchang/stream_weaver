@@ -289,7 +289,13 @@ module StreamWeaver
       # The remaining Adapter::Static seams. All three are asset/behavior
       # concerns that a rendered document does not need:
       #
-      # - scroll-spy is progressive enhancement; the TOC anchors work without it
+      # - scroll-spy JS is bundled by the host (bin/build_extension), not
+      #   inlined per render -- a host with no <base target> override (e.g.
+      #   opal-build's standalone HTML) still gets working, unhighlighted
+      #   anchors without it; a host that does (the browser extension's
+      #   sandbox, for outbound-doc-link safety) needs its own fragment-link
+      #   click handler regardless, since that override affects every
+      #   `#anchor` link on the page, not just sidebar_toc's
       # - Prism cannot be pulled from a CDN here (a browser-extension host
       #   forbids remote script), so highlighting waits until it is bundled
       # - copy-to-clipboard is Alpine-driven behavior, not document structure

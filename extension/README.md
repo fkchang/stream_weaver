@@ -119,6 +119,33 @@ instead of relying on message-ordering luck.
 the live runtime — there is nothing to interact with in a document, so it skips
 event delegation and the re-render loop.
 
+**`<base target="_blank">` hijacks same-page fragment links too, not just
+outbound ones — fixed at the cause, not just for `sidebar_toc`.** That base
+tag exists so a doc's own outbound links (a markdown link to some other
+site) don't navigate this frame in place. But a `<base target>` applies to
+*every* link on the page without its own `target`, including a bare
+`<a href="#id">` — `sidebar_toc`'s links, or a hand-written
+`[text](#anchor)` inside an `md` block. Without something to intercept the
+click, it inherits `target="_blank"` and tries to pop itself open in a new
+tab instead of scrolling, which then gets blocked — reproduced live as a
+genuine `ERR_BLOCKED_BY_CLIENT` navigation error, not a hypothetical.
+`sandbox.js` now installs one delegated `click` listener for every
+`a[href^="#"]` that scrolls the target into view instead, covering any
+fragment link a doc produces, not only `sidebar_toc`'s.
+
+**`sidebar_toc` additionally gets real scroll-spy highlighting, which the
+delegated handler above doesn't provide on its own.** `Adapter::Opal#
+inject_sidebar_toc_assets` skips loading `sw-sidebar-toc.js` (the
+`IntersectionObserver`-driven active-link tracking) server-side — fine for
+`opal-build`'s standalone HTML output, since a bare anchor still scrolls
+there once the fix above exists everywhere; not fine for actually knowing
+which section is active while scrolling, which needs the real script.
+`bin/build_extension` bundles it the same way it already bundles
+`sw-heredoc-rewrite.js`; the script exports `window.swInitSidebarToc` for
+exactly this case (a host with no htmx to re-trigger it via a real
+`htmx:afterSwap` event), and `sandbox.js` calls that directly right after
+injecting the rendered doc.
+
 ## Local-file preview (no GitHub, no server)
 
 `viewer.html` has a second way in besides the GitHub button: a drop zone /

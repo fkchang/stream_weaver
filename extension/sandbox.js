@@ -80,6 +80,12 @@
     }
     app.innerHTML = html;
     unwrapRegions();
+    // sw-sidebar-toc.js (vendor, stream_weaver-v3ni) only self-initializes
+    // once, at DOMContentLoaded -- before this render() has put any doc
+    // content into #app-container. Every other host re-triggers it via a
+    // real htmx:afterSwap event; this sandbox never uses htmx, so it calls
+    // the script's own exported hook directly instead.
+    self.swInitSidebarToc?.();
 
     enhance();
     parent.postMessage({ type: "sw:rendered", bytes: html.length }, "*");
@@ -104,6 +110,24 @@
       region.remove();
     });
   }
+
+  // sandbox.html's <base target="_blank"> exists so outbound doc links (a
+  // markdown link to some other site, say) don't navigate this frame in
+  // place -- but a <base target> applies to every link on the page, not
+  // just outbound ones. A same-page fragment link (sidebar_toc's, or a
+  // hand-written [text](#anchor) inside an md block) has no business
+  // opening a new tab at all; without something to intercept it, it
+  // inherits target="_blank" too and tries to pop itself open, which then
+  // gets blocked -- reproduced live as a genuine navigation error, not
+  // hypothetical. One delegated handler fixes every such link at the
+  // cause, not just the ones a component happens to ship its own JS for
+  // (stream_weaver-v3ni).
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest('a[href^="#"]');
+    if (!link) return;
+    event.preventDefault();
+    document.getElementById(link.hash.slice(1))?.scrollIntoView({ behavior: "smooth" });
+  });
 
   // Prism and Mermaid decorate markup rather than produce it, so they run
   // after the HTML is in the DOM. Failures here are cosmetic -- the document

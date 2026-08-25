@@ -75,6 +75,10 @@ File.write(File.join(VENDOR, "sw-theme.css"), css)
 # --- 3. Static assets -------------------------------------------------------
 copies = {
   File.join(ASSETS, "sw-heredoc-rewrite.js")  => "sw-heredoc-rewrite.js",
+  # sw-sidebar-toc.js: not inlined per render by the Opal adapter (see
+  # adapter/opal.rb's own comment on why) -- bundled here instead, and
+  # invoked directly by sandbox.js after each render (stream_weaver-v3ni).
+  File.join(ASSETS, "sw-sidebar-toc.js")      => "sw-sidebar-toc.js",
   File.join(STUBS,  "marked.umd.js")          => "marked.umd.js",
   File.join(STUBS,  "morphdom.min.js")        => "morphdom.min.js",
   File.join(STUBS,  "prism.min.js")           => "prism.min.js",
