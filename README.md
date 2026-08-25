@@ -1,5 +1,7 @@
 # StreamWeaver
 
+![HTML/CSS/JS chaos weaving into a clean StreamWeaver doc](assets/streamweaver-hero.jpg)
+
 **Express intention, get interface. The joy of Ruby applied to UI.**
 
 ```ruby
