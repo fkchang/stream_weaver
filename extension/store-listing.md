@@ -7,17 +7,22 @@ submission.
 
 ## Short description (132 char limit)
 
+The dev console's "Store listing" tab only has a Description field, not a
+separate short-description/summary field (confirmed against the live form,
+2026-08-25) — this may live elsewhere (a "Distribution"/search-visibility
+tab) or not be a thing in this console version. Kept here anyway in case it
+turns up.
+
 ```
 StreamWeaver docs, rendered for real on GitHub & Gist. Sidebar nav, diagrams, zero install, zero lock-in.
 ```
 
 105 characters.
 
-Chrome Web Store's detailed-description field is plain text — no inline
-images. "(see screenshot)" below points at the gallery instead: the first
-callout (org rendering natively) is screenshot 0, the second (nav + live
-Mermaid) is screenshots 1 and 3 together — see "Screenshots" further down
-for the full set and why the ordering matters.
+Chrome Web Store's Description field is plain text — no inline images.
+"(see screenshot)" below points at the gallery instead: both callouts are
+covered by screenshot 1, the org-vs-extension comparison — see
+"Screenshots" further down for the full set.
 
 ```
 Love those beautiful Claude artifacts, but want them more portable and
@@ -136,39 +141,62 @@ never a bulk or background fetch.
   `host_permissions` are both scoped exactly that tightly, nothing broader
   like `<all_urls>`.
 
-## Screenshots (~1280x800)
+## Screenshots (1280x800, required — the console rejects anything else)
 
-All captured live against the actual built 1.0.0 extension (with today's
-mermaid fix), genuinely loaded in Chromium (`browse --headed` with
-`BROWSE_EXTENSIONS_DIR`) against the real `streamweaver-doc-demo` repo, not
-staged — see `extension/dist/screenshots/`. Order matches the detailed
-description's two "(see screenshot)" callouts (org-alone, then
-with-extension), so keep this order in the console upload:
+Not plain screenshots — composed, captioned graphics built from real capture
+material (no staged/mocked UI, every pixel inside each frame is an actual
+render) plus text overlays explaining what's shown, since the console gives
+no per-image caption field and the Description text can't embed images.
+Built via local HTML/CSS + `browse`'s offline render mode (`goto file://`,
+`screenshot --selector`), not Codex/generative image tools — this keeps the
+StreamWeaver violet (`#4c1d95`, from `extension/icons/icon.svg`) and the
+serif headline face consistent with the icon and hero image rather than
+introducing a second, AI-imagined visual language. See
+`extension/dist/screenshots/`:
 
-0. **`screenshot-0-org-on-github.png`** — `demo.org` rendering natively on
-   GitHub, no extension involved. Backs the description's "org mode already
-   renders on par with markdown" line. Exactly 1280x800.
-1. **`screenshot-1-rendered-doc.png`** — the same doc, `.rb` this time,
-   through the extension: doc_header, sidebar table of contents, callouts,
-   body content. Backs "a floating, scroll-updating sidebar nav." 1200x948 —
-   see the dimensions note below.
-2. **`screenshot-2-button-in-context.png`** — the "View rendered" button
-   mounted in a real GitHub file toolbar, next to GitHub's own Raw control.
-   Tight crop (920x150), confirmed to actually show the button (an earlier
-   capture at this path was framed too wide to show it at all — caught by
-   re-checking live, not by re-reading the code).
-3. **`screenshot-3-mermaid-controls.png`** — the fullscreen expand overlay on
-   a live Mermaid diagram. Backs "interactive Mermaid diagrams you can zoom,
-   pan, and pop out full-screen" — this is what today's fix restored.
-   1200x948.
+1. **`screenshot-1-comparison.png`** — side-by-side: `demo.org` rendering
+   natively on GitHub (left) vs. the same doc through the extension (right,
+   sidebar nav + full layout visible). Backs both "(see screenshot)" callouts
+   in the description in one image. Exactly 1280x800.
+2. **`screenshot-2-button.png`** — the "View rendered" button in a real
+   GitHub file toolbar, captioned. Exactly 1280x800.
+3. **`screenshot-3-mermaid.png`** — the fullscreen Mermaid expand overlay,
+   captioned. Exactly 1280x800. This is what today's mermaid-controls fix
+   restored.
 
-Dimensions note: screenshot 0 (a plain github.com tab) landed exactly
-1280x800; screenshots 1 and 3 (the extension's own viewer tab, opened via
-`chrome.tabs.create` with no explicit size) came back 1200x948 both times —
-reproducible, tied to how that tab gets created, not a one-off headed-mode
-cap. Screenshot 2 is a deliberate crop, dimensions irrelevant. Close enough
-to upload as-is if the console accepts a range; resize via `sips` first if
-it insists on exact 1280x800.
+All three are exact 1280x800, 24-bit PNG, no alpha — verified with
+`sips -g pixelWidth -g pixelHeight -g hasAlpha`, not assumed.
+
+## Store icon (128x128, required)
+
+Already built, no need to generate anything new: `extension/icons/icon128.png`
+— the same document + woven-thread mark used in `manifest.json`, already
+verified to survive 16px shrinking legibly (the whole reason that icon
+design won out over other concept drafts). 128x128, no alpha.
+
+## Small promo tile (440x280, optional)
+
+`extension/dist/promo/small-tile-440x280.png` — same violet, same icon, same
+serif, name + a short tagline. Appears in Chrome Web Store search/category
+browsing, so worth having even though it's optional. Built the same way as
+the screenshots (HTML/CSS render, not Codex).
+
+## Marquee promo tile (1400x560, optional)
+
+Not built. Only used if Google editorially features the extension — low
+value for a first submission with zero installs and zero reviews. Worth
+revisiting once the extension has some real usage; same technique would
+extend to it cheaply if wanted later.
+
+## Additional fields
+
+- **Homepage URL:** `https://github.com/fkchang/stream_weaver`
+- **Support URL:** `https://github.com/fkchang/stream_weaver/issues`
+  (reasonable default; swap for something else if a dedicated support
+  channel exists by submission time)
+- **Official URL:** leave as "None" unless the repo/site is verified via
+  Google Search Console — that verification is a separate, real step, not
+  a rubber stamp; don't set this without actually doing it.
 
 ## Known gaps worth flagging before submission
 
