@@ -101,6 +101,25 @@ StreamWeaver::App.prepend StreamWeaver::Opal::AppReactivePatch
 # string. `app()` keeps its original signature so existing browser builds and
 # opal-build output are unaffected.
 module StreamWeaver
+  # App#initialize (app.rb) calls StreamWeaver.strict_ids? unconditionally
+  # to seed @strict_ids when the caller doesn't pass strict_ids: explicitly.
+  # The real definition (lib/stream_weaver.rb) checks an ivar + the
+  # SW_STRICT_IDS env var, but that file also requires server/service/cli/
+  # admin/iterm -- none of them Opal-compatible, which is exactly why this
+  # file (opal_entry.rb) requires app.rb directly and never requires
+  # lib/stream_weaver.rb itself. That left StreamWeaver.strict_ids?
+  # undefined in every Opal build (this extension, opal-build's standalone
+  # HTML output) the moment app.rb started calling it -- "undefined method
+  # `strict_ids?' for StreamWeaver", reproduced live against a rebuilt
+  # extension bundle. Always false here, not a stub of the real check: both
+  # Opal hosts only ever render a doc once, non-interactively (SWRuntime.
+  # start() is never called for the extension's static preview; opal-build's
+  # standalone HTML is likewise a one-shot render), so there is no
+  # interactive id-collision risk for strict mode to catch in either one.
+  def self.strict_ids?
+    false
+  end
+
   module Opal
     module Kernel
       def app(title, **_opts, &block)
