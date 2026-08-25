@@ -296,7 +296,7 @@ RSpec.describe "Mermaid Component (T3)" do
   # =========================================
 
   describe "sw- CSS prefix convention" do
-    let(:css) { StreamWeaver::Adapter::AlpineJS::MERMAID_CSS }
+    let(:css) { StreamWeaver::Adapter::AlpineJS.new.mermaid_css }
 
     it "all CSS class selectors use sw- prefix" do
       # Extract class names from selector lines

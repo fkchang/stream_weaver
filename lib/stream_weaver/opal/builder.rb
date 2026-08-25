@@ -39,12 +39,22 @@ module StreamWeaver
       # Anything missing falls back to its CDN in OpalShell, which keeps builds
       # working for web deployment; only offline and browser-extension hosts
       # actually require the local copies.
+      #
+      # sw-mermaid-zoom.js is different from the rest: it is StreamWeaver's own
+      # code, not a third-party library, so it has no CDN to fall back to and
+      # is always committed (unlike mermaid.min.js itself). It is copied
+      # unconditionally -- since Adapter::Static#render_mermaid (shared by both
+      # adapters) always writes the mermaid source into a data attribute rather
+      # than element text, this engine is the only thing that can read it. A
+      # build missing it would render an empty box, not a diagram
+      # (stream_weaver-mermaid-extension).
       def copy_browser_assets
         {
           "prism.min.js"           => File.join(@stubs_root, "prism.min.js"),
           "prism-tomorrow.min.css" => File.join(@stubs_root, "prism-tomorrow.min.css"),
           "diff.min.js"            => File.join(@stubs_root, "diff.min.js"),
-          "mermaid.min.js"         => mermaid_source_path
+          "mermaid.min.js"         => mermaid_source_path,
+          "sw-mermaid-zoom.js"     => File.join(@lib_root, "stream_weaver", "assets", "js", "sw-mermaid-zoom.js")
         }.each do |name, src|
           next unless src && File.exist?(src)
 
@@ -105,6 +115,7 @@ module StreamWeaver
             prism_css: local_asset("prism-tomorrow.min.css"),
             diff_js: local_asset("diff.min.js"),
             mermaid_js: local_asset("mermaid.min.js"),
+            mermaid_zoom_js: local_asset("sw-mermaid-zoom.js"),
             theme_css: File.exist?(output_path("sw-theme.css")) ? "sw-theme.css" : nil,
             google_fonts_url: google_fonts_url_for_build,
             body_theme: @theme ? "sw-theme-default sw-theme-#{@theme}" : "sw-theme-default",

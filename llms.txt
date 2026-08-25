@@ -1243,7 +1243,7 @@ Produces `dist/index.html` + `dist/app.js` + `dist/morphdom.min.js`. Deploy `dis
 
 - `feed`, `streamer`, `service_client` — require a server by definition
 - `form_block` — deferred
-- `mermaid`, `chartjs`, `tabs`, `table` — not yet implemented in Adapter::Opal
+- `chartjs`, `tabs`, `table` — not yet implemented in Adapter::Opal
 
 ### Key files
 

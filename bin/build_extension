@@ -79,6 +79,12 @@ copies = {
   # adapter/opal.rb's own comment on why) -- bundled here instead, and
   # invoked directly by sandbox.js after each render (stream_weaver-v3ni).
   File.join(ASSETS, "sw-sidebar-toc.js")      => "sw-sidebar-toc.js",
+  # sw-mermaid-zoom.js: same reasoning as sw-sidebar-toc.js above -- the
+  # Opal adapter can only inject the mermaid CSS (adapter/opal.rb), not
+  # File.read a JS file at browser-runtime, so the zoom/pan/expand engine
+  # is bundled here and invoked directly by sandbox.js (stream_weaver-
+  # mermaid-extension).
+  File.join(ASSETS, "sw-mermaid-zoom.js")     => "sw-mermaid-zoom.js",
   File.join(STUBS,  "marked.umd.js")          => "marked.umd.js",
   File.join(STUBS,  "morphdom.min.js")        => "morphdom.min.js",
   File.join(STUBS,  "prism.min.js")           => "prism.min.js",

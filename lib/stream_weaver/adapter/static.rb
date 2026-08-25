@@ -29,10 +29,19 @@ module StreamWeaver
     #     one. That is behavior rather than document structure, so it is a hook
     #     instead of shared markup.
     #
-    # The last three are asset/behavior seams: the *markup* is identical across
-    # adapters but what backs it is not. An adapter rendering a read-only
-    # document can legitimately no-op all three -- the document still renders,
-    # it just won't highlight, scroll-spy, or copy.
+    #   #inject_mermaid_assets(view)
+    #     Emit the mermaid stylesheet plus whatever powers rendering/zoom/pan.
+    #
+    # These are asset/behavior seams: the *markup* is identical across
+    # adapters but what backs it is not. Highlighting, scroll-spy, and copy
+    # decorate markup that is already complete without them, so an adapter
+    # can legitimately no-op those three -- the document still renders, it
+    # just won't highlight, scroll-spy, or copy. Mermaid is not like the
+    # other three: the JS *is* the renderer (the diagram source lives in a
+    # data attribute, not visible text), so a no-op #inject_mermaid_assets
+    # leaves an empty box, not a degraded-but-readable diagram. A host that
+    # renders mermaid at all must actually bundle the engine -- see
+    # OpalBuilder#copy_browser_assets, which does this unconditionally.
     #
     # The view object must respond to the tag methods used below plus #plain
     # and #raw. Phlex satisfies this server-side; StreamWeaver::Opal::OpalRenderer
@@ -150,6 +159,229 @@ module StreamWeaver
           border-bottom: none;
         }
       CSS
+
+      # Moved here from adapter/alpinejs.rb verbatim (stream_weaver-mermaid-
+      # extension) -- this styling has no Alpine dependency and now backs
+      # #render_mermaid for both adapters.
+      def mermaid_css
+        <<~CSS
+          /* ===========================================
+             Mermaid Component Styles (sw- prefix)
+             =========================================== */
+          .sw-mermaid {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--sw-border, #e0e0e0);
+            border-radius: var(--sw-radius-md, 6px);
+            background: var(--sw-surface, #ffffff);
+            padding: 1rem;
+            margin: 0.5rem 0;
+          }
+
+          .sw-mermaid--compact {
+            padding: 0.25rem;
+            margin: 0;
+            border: none;
+            background: transparent;
+          }
+
+          .sw-mermaid--zoom {
+            cursor: grab;
+            min-height: 200px;
+          }
+
+          .sw-mermaid--zoom:active {
+            cursor: grabbing;
+          }
+
+          .sw-mermaid__diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 60px;
+          }
+
+          .sw-mermaid__diagram svg {
+            max-width: 100%;
+            height: auto;
+          }
+
+          /* views.rb's global `p { color: var(--sw-color-text-muted) }` typography rule
+             is unscoped and beats Mermaid's own inline node-label color (mermaid renders
+             HTML labels as <p> inside a foreignObject) -- inheritance loses to any rule
+             that targets the element directly, even one set via a colored `style X
+             color:#fff` directive on an ancestor. Net effect: every mermaid node label
+             renders the same muted gray regardless of the diagram author's color choice,
+             unreadable on a dark-filled node. Force these <p> tags back to inheriting
+             from Mermaid's own label wrapper. */
+          .sw-mermaid__diagram svg foreignObject p {
+            color: inherit !important;
+          }
+
+          .sw-mermaid--compact .sw-mermaid__diagram svg {
+            max-height: 150px;
+          }
+
+          .sw-mermaid__controls {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            display: flex;
+            gap: 0.25rem;
+            z-index: 10;
+          }
+
+          .sw-mermaid__btn {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--sw-surface-elevated, #f3f3f3);
+            border: 1px solid var(--sw-border, #e0e0e0);
+            border-radius: var(--sw-radius-sm, 4px);
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            color: var(--sw-text, #111);
+            transition: background 150ms ease-out;
+          }
+
+          .sw-mermaid__btn:hover {
+            background: var(--sw-accent, #0d9488);
+            color: #fff;
+            border-color: var(--sw-accent, #0d9488);
+          }
+
+          .sw-mermaid__error {
+            color: var(--sw-error, #dc2626);
+            font-family: var(--sw-font-mono, monospace);
+            font-size: 0.85rem;
+            padding: 1rem;
+          }
+
+          /* Fullscreen expand overlay (stream_weaver-yjv) -- the doc column's
+             max-width shrinks a wide diagram's fixed-px labels proportionally
+             no matter how the layout is tuned; the overlay removes that
+             constraint entirely instead of trying to out-negotiate it.
+             A <dialog> via showModal(), not a hand-rolled div: the browser's
+             top layer means no z-index arms race with this file's own
+             toasts/nav (see page_shell.rb, alpinejs.rb elsewhere), plus
+             Escape-to-close, focus management, and an inert background for
+             free -- overriding only the UA default box (border/padding/
+             background/position) that a plain <dialog> ships with. */
+          dialog.sw-mermaid-fullscreen-overlay {
+            max-width: none;
+            max-height: none;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            border: 0;
+            padding: 4rem 2rem 2rem;
+            background: transparent;
+            /* The dialog itself does NOT scroll -- .content does (below).
+               A first version had overflow: auto here, which made the
+               dialog the scroll container; close/hint are positioned
+               against the dialog, so they scrolled away with the diagram
+               instead of staying pinned to the viewport. Caught live: opened
+               a tall diagram and scrolled down past the hint text. */
+            overflow: hidden;
+          }
+
+          dialog.sw-mermaid-fullscreen-overlay[open] {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+          }
+
+          dialog.sw-mermaid-fullscreen-overlay::backdrop {
+            background: rgba(0, 0, 0, 0.75);
+          }
+
+          .sw-mermaid-fullscreen-overlay__content {
+            position: relative;
+            background: var(--sw-surface, #fff);
+            border-radius: var(--sw-radius-md, 6px);
+            padding: 1.5rem;
+            cursor: grab;
+            /* No max-width: the whole point is to render the diagram at
+               natural (or zoomed) size rather than shrink the SVG to fit.
+               max-height IS bounded, to the space the dialog's own padding
+               leaves -- that's what makes this the scroll container instead
+               of the dialog (see the dialog rule above). */
+            max-height: 100%;
+            overflow: auto;
+            overscroll-behavior: contain;
+          }
+
+          .sw-mermaid-fullscreen-overlay__svg-wrapper svg {
+            display: block;
+            height: auto; /* fallback only -- see cloneSvgWrapper for the real fix */
+            /* The real sizing (concrete px width/height from the SVG's own
+               viewBox) is set inline via JS (cloneSvgWrapper) -- mermaid's
+               width="100%" has nothing solid to resolve against inside
+               .content's flex layout otherwise, and no stylesheet rule can
+               outrank an inline style regardless. max-width: none here is
+               belt-and-suspenders for the same reason. */
+            max-width: none;
+          }
+
+          /* Positioned against the dialog itself (its nearest positioned
+             ancestor once it's the top-layer element), not the viewport --
+             no z-index needed inside a top-layer dialog. */
+          .sw-mermaid-fullscreen-overlay__close {
+            position: absolute;
+            top: 1rem;
+            right: 1.5rem;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--sw-surface-elevated, #f3f3f3);
+            border: 1px solid var(--sw-border, #e0e0e0);
+            border-radius: var(--sw-radius-sm, 4px);
+            cursor: pointer;
+            font-size: 1.25rem;
+            line-height: 1;
+            color: var(--sw-text, #111);
+          }
+
+          .sw-mermaid-fullscreen-overlay__close:hover {
+            background: var(--sw-accent, #0d9488);
+            color: #fff;
+            border-color: var(--sw-accent, #0d9488);
+          }
+
+          .sw-mermaid-fullscreen-overlay__hint {
+            position: absolute;
+            bottom: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--sw-surface-elevated, #f3f3f3);
+            border: 1px solid var(--sw-border, #e0e0e0);
+            border-radius: var(--sw-radius-sm, 4px);
+            padding: 0.35rem 0.75rem;
+            font-size: 0.8rem;
+            color: var(--sw-text-dim, #6b6860);
+            white-space: nowrap;
+          }
+
+          /* views.rb sets `html { overflow-x: auto }` on every StreamWeaver
+             page, which makes <html> its own scroll container and stops
+             <body>'s overflow from propagating to the viewport -- so the
+             scroll lock has to sit on <html>, or it locks an element that
+             was never the one scrolling in the first place. */
+          html.sw-mermaid-fullscreen-open,
+          html.sw-mermaid-fullscreen-open body {
+            overflow: hidden;
+          }
+
+          @media print {
+            .sw-mermaid__controls { display: none; }
+          }
+        CSS
+      end
 
       def render_text(view, content, tone = nil, options = {})
         if tone
@@ -453,6 +685,81 @@ module StreamWeaver
               ) { section[:label] }
             end
           end
+        end
+      end
+
+      # Markup shape sw-mermaid-zoom.js expects, shared by both adapters
+      # (stream_weaver-mermaid-extension): a `.sw-mermaid__controls` button
+      # bar (unicode glyphs, not inline SVG -- SharePoint's HTML-preview
+      # sanitizer was found to strip an <svg> button silently while three
+      # plain-text-node buttons next to it survived, see the expand button
+      # below), plus a `.sw-mermaid__diagram` div carrying the code via a
+      # data attribute rather than text content, so the JS can re-render
+      # into it without re-parsing displayed text.
+      #
+      # This used to be AlpineJS-only, on the theory that mermaid was
+      # "behavior" (Alpine's x-data/x-init) rather than structure. It never
+      # was -- sw-mermaid-zoom.js self-inits on DOMContentLoaded the same
+      # way sw-sidebar-toc.js does, with no Alpine dependency at all. The
+      # Opal adapter's separate, simpler version (bare code as text content,
+      # no controls) just never grew the zoom/expand markup AlpineJS did,
+      # which meant every Opal-rendered host -- opal-build's standalone
+      # HTML and the browser extension -- silently lost zoom/pan/expand.
+      def render_mermaid(view, component, state)
+        inject_mermaid_assets(view)
+
+        attrs = { id: component.diagram_id, class: component.css_classes }
+        attrs["data-sw-mermaid-elk"] = "true" if component.elk?
+        attrs["data-sw-mermaid-vars"] = component.theme_vars_json if component.theme_vars
+
+        view.div(**attrs) do
+          # Controls: expand is always available (stream_weaver-yjv) --
+          # the in-place zoom mechanism (zoom: true) helps but doesn't fix
+          # the actual problem, which is the container itself: a wide
+          # diagram's fixed-px labels shrink proportionally to fit an
+          # 800-1400px doc column regardless of pan/zoom. Expand opens the
+          # diagram in a full-viewport overlay instead, with no container
+          # width to shrink against. +/-/reset stay opt-in via zoom: true;
+          # expand needs no opt-in since it has no in-place layout cost.
+          view.div(class: "sw-mermaid__controls") do
+            if component.zoom
+              view.button(
+                type: "button",
+                class: "sw-mermaid__btn",
+                "data-sw-zoom" => "in",
+                "aria-label" => "Zoom in",
+                title: "Zoom in"
+              ) { "+" }
+              view.button(
+                type: "button",
+                class: "sw-mermaid__btn",
+                "data-sw-zoom" => "out",
+                "aria-label" => "Zoom out",
+                title: "Zoom out"
+              ) { "−" }
+              view.button(
+                type: "button",
+                class: "sw-mermaid__btn",
+                "data-sw-zoom" => "reset",
+                "aria-label" => "Reset zoom",
+                title: "Reset"
+              ) { "↺" }
+            end
+            view.button(
+              type: "button",
+              class: "sw-mermaid__btn",
+              "data-sw-zoom" => "expand",
+              "aria-label" => "Expand to full screen",
+              title: "Expand to full screen"
+            ) { "⛶" }
+          end
+
+          # The diagram rendering area.
+          # Mermaid code stored as data attribute; JS reads it to render.
+          view.div(
+            class: "sw-mermaid__diagram",
+            "data-sw-mermaid-code" => component.code
+          )
         end
       end
 

@@ -21,6 +21,7 @@ RSpec.describe StreamWeaver::Adapter::Static do
     render_sidebar_toc
     render_code_block
     render_diff_block
+    render_mermaid
   ].freeze
 
   # Seams the module deliberately leaves to the including adapter.
@@ -29,6 +30,7 @@ RSpec.describe StreamWeaver::Adapter::Static do
     inject_sidebar_toc_assets
     inject_code_highlighting
     render_code_block_copy_button
+    inject_mermaid_assets
   ].freeze
 
   describe "module composition" do
@@ -79,10 +81,17 @@ RSpec.describe StreamWeaver::Adapter::Static do
       view.to_html
     end
 
+    # Some components (mermaid) inline their JS engine as a literal <script>
+    # ahead of their own markup, and that JS source can itself contain class
+    # name substrings (sw-mermaid-zoom.js's own error-fallback markup
+    # mentions "sw-mermaid__error") that satisfy component_markup's naive
+    # scan before the real element ever appears. Stripped here once, for
+    # every caller, rather than worked around per-test.
     def render_via_alpine(component)
-      StreamWeaver::ComponentRenderer.render_html(
+      html = StreamWeaver::ComponentRenderer.render_html(
         StreamWeaver::Adapter::AlpineJS.new, [component], state
       )
+      html.gsub(%r{<script\b.*?</script>}m, "").gsub(%r{<style\b.*?</style>}m, "")
     end
 
     # Alpine wraps components in the page shell and injects <style>/<script>
@@ -169,6 +178,25 @@ RSpec.describe StreamWeaver::Adapter::Static do
       build = -> { StreamWeaver::Components::CodeBlock.new("puts 'hi'", lang: "ruby", copy: true) }
       expect(render_via_alpine(build.call)).to include("sw-code-block__copy")
       expect(render_via_opal(build.call)).not_to include("sw-code-block__copy")
+    end
+
+    # One component instance, not build.call twice: diagram_id embeds
+    # object_id (memoized on first call), so two separate instances would
+    # legitimately render different ids and fail this comparison for a
+    # reason that has nothing to do with adapter drift.
+    it "renders a mermaid diagram identically, controls included" do
+      component = StreamWeaver::Components::Mermaid.new("graph LR; A-->B", zoom: true)
+      opal_markup = component_markup(render_via_opal(component), "sw-mermaid")
+      alpine_markup = component_markup(render_via_alpine(component), "sw-mermaid")
+
+      # Phlex (AlpineJS) and OpalRenderer (Opal) HTML-escape attribute
+      # values differently -- Opal escapes ">" in the mermaid code to
+      # "&gt;", Phlex leaves it literal -- a pre-existing quirk unrelated
+      # to this markup itself (mermaid_spec.rb's own data-attribute spec
+      # already accounts for it). Normalize before comparing so this test
+      # pins down structure, not that one escaper's incidental choice.
+      normalize = ->(html) { html.gsub("&gt;", ">").gsub("&lt;", "<") }
+      expect(normalize.call(opal_markup)).to eq(normalize.call(alpine_markup))
     end
   end
 end

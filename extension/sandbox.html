@@ -41,6 +41,11 @@
   <!-- Scroll-spy highlighting for sidebar_toc; sandbox.js invokes its
        exported init hook after each render (stream_weaver-v3ni). -->
   <script src="vendor/sw-sidebar-toc.js"></script>
+  <!-- Mermaid rendering + zoom/pan/expand; sandbox.js invokes its exported
+       init hook after each render, replacing the old mermaid.run() call
+       (stream_weaver-mermaid-extension). Loaded after mermaid.min.js above
+       so globalThis.mermaid is already set when this self-inits. -->
+  <script src="vendor/sw-mermaid-zoom.js"></script>
 
   <style>
     html, body { margin: 0; padding: 0; }

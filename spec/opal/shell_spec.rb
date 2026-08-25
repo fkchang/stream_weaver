@@ -146,4 +146,32 @@ RSpec.describe StreamWeaver::Opal::OpalShell do
       expect(described_class.render(title: "Doc")).not_to include("<style>")
     end
   end
+
+  # Adapter::Static#render_mermaid (shared by both adapters,
+  # stream_weaver-mermaid-extension) writes the mermaid source into a data
+  # attribute rather than element text -- mermaid.run()'s own auto-detect
+  # can no longer read it. Only sw-mermaid-zoom.js (swMermaidInit) can, so
+  # ENHANCE_JS has to call that and nothing here may reintroduce the old
+  # mermaid.run() pipeline, which a mermaid-shaped diagram would silently
+  # fail against.
+  describe "mermaid contract" do
+    it "ENHANCE_JS calls swMermaidInit, not mermaid.run" do
+      expect(described_class::ENHANCE_JS).to include("swMermaidInit")
+      expect(described_class::ENHANCE_JS).not_to include("mermaid.run")
+    end
+
+    it "includes the mermaid_zoom_js script tag when provided" do
+      html = described_class.render(mermaid_zoom_js: "sw-mermaid-zoom.js")
+      expect(html).to include('<script src="sw-mermaid-zoom.js"></script>')
+    end
+
+    it "places mermaid_zoom_js after mermaid_js, so globalThis.mermaid is set first" do
+      html = described_class.render(mermaid_js: "mermaid.min.js", mermaid_zoom_js: "sw-mermaid-zoom.js")
+      expect(html.index('src="mermaid.min.js"')).to be < html.index('src="sw-mermaid-zoom.js"')
+    end
+
+    it "omits the mermaid_zoom_js script tag when not provided" do
+      expect(described_class.render).not_to include("sw-mermaid-zoom.js")
+    end
+  end
 end

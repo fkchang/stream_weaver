@@ -267,26 +267,14 @@ module StreamWeaver
         nil
       end
 
-      # Mermaid is the one document component that is NOT shared with the
-      # AlpineJS adapter: that version drives initialization through x-data /
-      # x-init and layers on zoom controls, both of which are behavior.
-      #
-      # Here we emit only what mermaid.js needs to find and typeset the diagram
-      # -- the source text inside a container with the conventional class. The
-      # host page owns the mermaid library and decides when to run it, which is
-      # what lets a browser-extension viewer bundle mermaid locally instead of
-      # pulling it from a CDN.
-      def render_mermaid(view, component, state)
-        attrs = { id: component.diagram_id, class: component.css_classes }
-        attrs["data-sw-mermaid-elk"] = "true" if component.elk?
-        attrs["data-sw-mermaid-vars"] = component.theme_vars_json if component.theme_vars
+      # #render_mermaid now lives in Static, shared with AlpineJS
+      # (stream_weaver-mermaid-extension) -- it used to be adapter-specific
+      # here on the theory that mermaid was behavior (Alpine's x-data/
+      # x-init), but sw-mermaid-zoom.js self-inits on DOMContentLoaded with
+      # no Alpine dependency at all, so the markup itself was never
+      # adapter-specific. What stayed here is only the JS gap below.
 
-        view.div(**attrs) do
-          view.plain(component.code)
-        end
-      end
-
-      # The remaining Adapter::Static seams. All three are asset/behavior
+      # The remaining Adapter::Static seams. All four are asset/behavior
       # concerns that a rendered document does not need:
       #
       # - scroll-spy JS is bundled by the host (bin/build_extension), not
@@ -299,9 +287,20 @@ module StreamWeaver
       # - Prism cannot be pulled from a CDN here (a browser-extension host
       #   forbids remote script), so highlighting waits until it is bundled
       # - copy-to-clipboard is Alpine-driven behavior, not document structure
+      # - sw-mermaid-zoom.js is bundled by the host the same way
+      #   sw-sidebar-toc.js is, not inlined per render -- Opal-compiled code
+      #   runs in the browser, where File.read (how AlpineJS inlines it) does
+      #   not exist. Only the CSS is injectable here. Unlike the other three,
+      #   this one is not optional: mermaid's source lives in a data
+      #   attribute the shared markup writes, not visible text, so a host
+      #   that skips bundling the engine gets an empty box per diagram, not
+      #   a degraded-but-working render. Both real Opal hosts bundle it
+      #   unconditionally (bin/build_extension, OpalBuilder#copy_browser_
+      #   assets) -- this hook staying CSS-only is about *where* the JS gets
+      #   loaded from, not whether it does.
       #
-      # Each is a deliberate no-op rather than a missing method, so the document
-      # renders instead of raising NotImplementedError.
+      # Each is a deliberate no-op (or partial no-op) rather than a missing
+      # method, so the document renders instead of raising NotImplementedError.
       def inject_sidebar_toc_assets(view)
         inject_component_css(view, :sidebar_toc, sidebar_toc_css)
       end
@@ -312,6 +311,10 @@ module StreamWeaver
 
       def render_code_block_copy_button(view, component)
         nil
+      end
+
+      def inject_mermaid_assets(view)
+        inject_component_css(view, :mermaid, mermaid_css)
       end
 
       private

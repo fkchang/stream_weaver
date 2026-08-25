@@ -12,36 +12,28 @@ module StreamWeaver
 
       # Typesets diagrams and highlights code once the runtime has painted.
       #
-      # Both libraries scan the DOM for their own markup, so they have to run
-      # after SWRuntime.start() rather than on DOMContentLoaded. Mermaid is
-      # pinned to startOnLoad:false for the same reason -- letting it autorun
-      # races the first render and finds nothing.
+      # Prism scans the DOM for its own markup, so it has to run after
+      # SWRuntime.start() rather than on DOMContentLoaded.
       #
-      # Re-renders replace region innerHTML, which resurrects unprocessed
-      # nodes, so this re-runs on sw:render. Mermaid rewrites its source node
-      # into an <svg>, and running it twice over the same node throws, so
-      # already-processed nodes are filtered out by mermaid's own marker
-      # attribute.
+      # Diagrams are handled by sw-mermaid-zoom.js (swMermaidInit), not
+      # mermaid.run() directly: Adapter::Static#render_mermaid (shared by
+      # both adapters, stream_weaver-mermaid-extension) writes the mermaid
+      # source into a data attribute rather than element text, and only
+      # sw-mermaid-zoom.js reads that shape. It owns mermaid.initialize(),
+      # theme variables, and its own data-sw-mermaid-done idempotency guard,
+      # so nothing else here needs to re-init mermaid or track processed
+      # nodes. If a build omits it (see OpalBuilder#copy_browser_assets --
+      # currently unconditional, so this is a defensive check, not an
+      # expected path), diagrams render as empty boxes rather than raising.
       ENHANCE_JS = <<~JS.freeze
         (function() {
           function highlight() {
             if (typeof Prism !== "undefined") Prism.highlightAll();
           }
           function diagrams() {
-            if (typeof mermaid === "undefined") return;
-            var nodes = document.querySelectorAll(".sw-mermaid:not([data-processed])");
-            if (!nodes.length) return;
-            mermaid.run({ nodes: nodes }).catch(function(e) {
-              console.error("[StreamWeaver] mermaid failed:", e);
-            });
+            if (typeof swMermaidInit === "function") swMermaidInit();
           }
           function enhance() { highlight(); diagrams(); }
-          if (typeof mermaid !== "undefined") {
-            mermaid.initialize({
-              startOnLoad: false,
-              theme: document.documentElement.dataset.swTheme === "dark" ? "dark" : "default"
-            });
-          }
           document.addEventListener("sw:render", enhance);
           window.swEnhance = enhance;
         })();
@@ -54,6 +46,10 @@ module StreamWeaver
       # mermaid_js:        local Mermaid bundle, else CDN.
       # diff_js:           local jsdiff bundle, else CDN. Powers DiffBlock in
       #                    the browser, where diff(1) does not exist.
+      # mermaid_zoom_js:   local path to sw-mermaid-zoom.js. No CDN fallback --
+      #                    it is StreamWeaver's own code, not a third-party
+      #                    library. Omitting it leaves diagrams unrendered
+      #                    (see ENHANCE_JS's comment).
       # theme_css:         path/URL to a CSS file injected as a stylesheet link.
       # google_fonts_url:  full Google Fonts CSS URL; emits preconnect + stylesheet tags.
       # dark_mode_script:  inline JS string placed first in <head> to prevent FOUC.
@@ -77,6 +73,7 @@ module StreamWeaver
         prism_css: nil,
         diff_js: nil,
         mermaid_js: nil,
+        mermaid_zoom_js: nil,
         theme_css: nil,
         google_fonts_url: nil,
         dark_mode_script: nil,
@@ -114,6 +111,10 @@ module StreamWeaver
         app_script = app_js ? "  <script src=\"#{app_js}\"></script>\n" : ""
         boot_call  = app_js ? "SWRuntime.start();" : "if (typeof swEnhance === \"function\") swEnhance();"
 
+        # After mermaid_src, not before: swMermaidInit's globalThis.mermaid
+        # fast path (sw-mermaid-zoom.js) needs mermaid already loaded.
+        mermaid_zoom_tag = mermaid_zoom_js ? "    <script src=\"#{mermaid_zoom_js}\"></script>\n" : ""
+
         <<~HTML
           <!DOCTYPE html>
           <html lang="en">
@@ -125,7 +126,7 @@ module StreamWeaver
             <script src="#{morphdom_src}"></script>
             <script src="#{prism_src}"></script>
             <script src="#{mermaid_src}"></script>
-            <script src="#{diff_src}"></script>
+          #{mermaid_zoom_tag}    <script src="#{diff_src}"></script>
           </head>
           <body class="#{body_theme}">
             <div id="sw-app">#{body_html}</div>

@@ -124,5 +124,21 @@ RSpec.describe StreamWeaver::Opal::OpalBuilder do
       # dark mode inline script contains a unique identifier
       expect(html).to include("sw-theme-preference")
     end
+
+    # Adapter::Static#render_mermaid writes the mermaid source into a data
+    # attribute rather than element text (stream_weaver-mermaid-extension) --
+    # sw-mermaid-zoom.js is the only thing that reads that shape, so an
+    # opal-build output missing it would silently render every mermaid
+    # diagram as an empty box. Bundled unconditionally, unlike mermaid.min.js
+    # itself, since it is StreamWeaver's own code and has no CDN fallback.
+    it "bundles sw-mermaid-zoom.js and wires it into index.html" do
+      app_file = File.join(@tmpdir, "app.rb")
+      File.write(app_file, app_content)
+      out = File.join(@tmpdir, "dist")
+      described_class.build(app_file, output_dir: out)
+      expect(File.exist?(File.join(out, "sw-mermaid-zoom.js"))).to be true
+      html = File.read(File.join(out, "index.html"))
+      expect(html).to include('src="sw-mermaid-zoom.js"')
+    end
   end
 end

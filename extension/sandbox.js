@@ -156,16 +156,19 @@
   // of a race: it always means "the browser has completed at least one real
   // layout+paint pass since now," regardless of how postMessage IPC timing
   // varies between a local test and a real extension.
+  //
+  // sw-mermaid-zoom.js (vendor, stream_weaver-mermaid-extension) is the same
+  // engine canvas/reader use -- it owns mermaid.initialize(), diagram
+  // rendering, and the zoom/pan/expand controls Adapter::Static now emits
+  // markup for. It self-inits on DOMContentLoaded, which fires before this
+  // render() has put any doc content into #app-container, so it has to be
+  // invoked directly here too, same as swInitSidebarToc above; the paint
+  // guard this function existed for stays wrapped around that call.
   function runMermaidWhenPainted() {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         try {
-          if (typeof mermaid === "undefined") return;
-          mermaid.initialize({ startOnLoad: false, theme: "default" });
-          const nodes = document.querySelectorAll(".sw-mermaid:not([data-processed])");
-          if (nodes.length) {
-            mermaid.run({ nodes }).catch((e) => console.error("[StreamWeaver] mermaid failed:", e));
-          }
+          self.swMermaidInit?.();
         } catch (e) {
           console.error("[StreamWeaver] mermaid failed:", e);
         }

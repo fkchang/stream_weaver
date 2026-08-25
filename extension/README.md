@@ -146,6 +146,22 @@ exactly this case (a host with no htmx to re-trigger it via a real
 `htmx:afterSwap` event), and `sandbox.js` calls that directly right after
 injecting the rendered doc.
 
+**Mermaid diagrams are not the same story — bundling `sw-mermaid-zoom.js` is
+not optional the way `sw-sidebar-toc.js` is.** `Adapter::Static#render_mermaid`
+(shared by both adapters) writes each diagram's source into a
+`data-sw-mermaid-code` attribute rather than element text, and only
+`sw-mermaid-zoom.js` reads that shape — there is no bare-markup fallback the
+way a plain `<a href="#anchor">` still scrolls without scroll-spy. A host
+that skipped bundling it would render an empty box per diagram, not a
+degraded-but-working one. `bin/build_extension` bundles it unconditionally,
+the same way it bundles `sw-sidebar-toc.js`, and `sandbox.js`'s
+`runMermaidWhenPainted()` calls `window.swMermaidInit()` after each render
+(wrapped in the same double-`requestAnimationFrame` paint guard the old
+direct `mermaid.run()` call needed, for the same hidden-iframe layout
+reason described above). `lib/stream_weaver/opal/builder.rb` bundles it the
+same way for `opal-build`'s standalone HTML output, which hits the same
+shared markup and would otherwise regress identically.
+
 ## Local-file preview (no GitHub, no server)
 
 `viewer.html` has a second way in besides the GitHub button: a drop zone /
