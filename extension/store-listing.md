@@ -13,25 +13,27 @@ StreamWeaver docs, rendered for real on GitHub & Gist. Sidebar nav, diagrams, ze
 
 105 characters.
 
-## Detailed description
+Chrome Web Store's detailed-description field is plain text — no inline
+images. "(see screenshot)" below points at the gallery instead: the first
+callout (org rendering natively) is screenshot 0, the second (nav + live
+Mermaid) is screenshots 1 and 3 together — see "Screenshots" further down
+for the full set and why the ordering matters.
 
 ```
-You've seen the AI demo: ask an assistant for a report, get back a
-gorgeous little document — that lives in one chat, on one vendor's
-servers, and costs real tokens every time it has to regenerate.
-StreamWeaver docs are the other way to do it.
+Love those beautiful Claude artifacts, but want them more portable and
+less token-hungry? This might be your fix.
 
-A StreamWeaver doc is a small, expressive Ruby DSL that compiles into the
-same polished page every time: sidebar nav, callouts, tables,
-syntax-highlighted code, Mermaid diagrams. It also exports to plain,
-git-diffable .org text — the same document, readable natively in GitHub,
-Emacs, Vim, VS Code, no plugin required.
+StreamWeaver (github.com/fkchang/stream_weaver) is one of the ways to
+build docs interactively with an agent like Claude Code or Codex — saved
+as either a token-cheap Ruby DSL or a plain .org file, both of which
+GitHub already knows how to render. Beyond text and headers, StreamWeaver
+docs support callouts, cards, tables, syntax-highlighted code, and Mermaid
+diagrams — real structure, not just prose.
 
-This extension is the "beautiful" half of that deal. Push a .rb or .org
-doc to GitHub or a Gist, click "View rendered," and it renders exactly as
-designed — full layout, sidebar nav, live diagrams — compiled entirely
-inside your browser. No StreamWeaver install. No Ruby. No server. No
-vendor lock-in.
+Org mode already renders on par with markdown on GitHub (see screenshot).
+With this extension, the same file gets the real thing: a floating,
+scroll-updating sidebar nav, and interactive Mermaid diagrams you can
+zoom, pan, and pop out full-screen (see screenshot).
 
 Works on:
 • Any GitHub repo blob page, public or private (.rb or .org)
@@ -44,13 +46,10 @@ runtime, zero backend, zero telemetry. The only network activity is a
 narrowly-scoped fetch of the file's own Raw URL when the page doesn't
 already embed it — see Privacy practices below for exactly when.
 
-Built vendor-neutral on purpose: a doc like this is meant to travel —
+Built vendor-neutral on purpose: StreamWeaver docs are meant to travel —
 across repos, across teams, to whoever you're collaborating with, on your
-team or off it. That only works if anyone with a browser can open one, no
-install required.
-
-StreamWeaver itself, the Ruby framework this renders:
-https://github.com/fkchang/stream_weaver
+team or off it. All they need is a Chrome-compatible browser and this
+extension.
 ```
 
 ## Category
@@ -139,31 +138,37 @@ never a bulk or background fetch.
 
 ## Screenshots (~1280x800)
 
-Both captured live against the actual built 1.0.0 extension, genuinely loaded
-in Chromium (`browse --headed` with `BROWSE_EXTENSIONS_DIR`), not staged —
-see `extension/dist/screenshots/`:
+All captured live against the actual built 1.0.0 extension (with today's
+mermaid fix), genuinely loaded in Chromium (`browse --headed` with
+`BROWSE_EXTENSIONS_DIR`) against the real `streamweaver-doc-demo` repo, not
+staged — see `extension/dist/screenshots/`. Order matches the detailed
+description's two "(see screenshot)" callouts (org-alone, then
+with-extension), so keep this order in the console upload:
 
-1. **`screenshot-1-rendered-doc.png`** — a real rendered StreamWeaver doc (the
-   `.rb` incident-report demo from `github.com/fkchang/streamweaver-doc-demo`):
-   doc_header, sidebar table of contents, callouts, and body content, shown
-   inside the extension's viewer page.
+0. **`screenshot-0-org-on-github.png`** — `demo.org` rendering natively on
+   GitHub, no extension involved. Backs the description's "org mode already
+   renders on par with markdown" line. Exactly 1280x800.
+1. **`screenshot-1-rendered-doc.png`** — the same doc, `.rb` this time,
+   through the extension: doc_header, sidebar table of contents, callouts,
+   body content. Backs "a floating, scroll-updating sidebar nav." 1200x948 —
+   see the dimensions note below.
 2. **`screenshot-2-button-in-context.png`** — the "View rendered" button
-   mounted in a real GitHub file toolbar (the same repo's `demo.rb` blob
-   page), next to GitHub's own Raw control. Replaced post-review: the
-   original capture at this path was framed too wide to actually show the
-   button (a real gap caught by re-checking live, not by re-reading the
-   code — the button is small enough that a full-page shot at normal zoom
-   makes it easy to miss even though it's genuinely there). This one is a
-   tight crop (450x80) confirmed to show the button text clearly, at the
-   cost of losing most of the surrounding page context.
+   mounted in a real GitHub file toolbar, next to GitHub's own Raw control.
+   Tight crop (920x150), confirmed to actually show the button (an earlier
+   capture at this path was framed too wide to show it at all — caught by
+   re-checking live, not by re-reading the code).
+3. **`screenshot-3-mermaid-controls.png`** — the fullscreen expand overlay on
+   a live Mermaid diagram. Backs "interactive Mermaid diagrams you can zoom,
+   pan, and pop out full-screen" — this is what today's fix restored.
+   1200x948.
 
-Neither is at the store's ~1280x800 target: screenshot 1 was captured at
-1200x948 (a headed-mode display cap in the verification environment, not a
-deliberate choice), and screenshot 2 is a deliberately tight 450x80 crop
-traded off against actually showing the button. Both need a proper
-recapture at the exact console-preferred dimensions before upload — treat
-this pair as "proves the feature and the copy are real," not "ready to
-paste into the console."
+Dimensions note: screenshot 0 (a plain github.com tab) landed exactly
+1280x800; screenshots 1 and 3 (the extension's own viewer tab, opened via
+`chrome.tabs.create` with no explicit size) came back 1200x948 both times —
+reproducible, tied to how that tab gets created, not a one-off headed-mode
+cap. Screenshot 2 is a deliberate crop, dimensions irrelevant. Close enough
+to upload as-is if the console accepts a range; resize via `sips` first if
+it insists on exact 1280x800.
 
 ## Known gaps worth flagging before submission
 
