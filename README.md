@@ -273,11 +273,19 @@ streamweaver template table mysession '{"headers": ["File", "Size"], "rows": [..
 
 ## Browser Extension
 
-A Chrome extension renders StreamWeaver `.rb`/`.org` docs on GitHub with full
-styling — sidebar nav, callouts, cards, tables, mermaid — for viewers who have
-neither StreamWeaver nor Ruby installed. Rendering happens entirely
-client-side (Opal compiles the Ruby in the browser); no server, no CI step,
-no network requests.
+Push a `.rb` or `.org` doc to GitHub or a Gist, and even without this
+extension it's still legible — `.org` already reads close to markdown there.
+With this extension, either format renders exactly as designed: sidebar nav,
+callouts, cards, tables, live Mermaid diagrams, all compiled and displayed
+entirely inside the browser. No StreamWeaver install, no Ruby, no server, no
+vendor lock-in — just a "View rendered" button next to the file. Works on
+public and private repo blob pages, GitHub Gists (including multi-file
+gists), and local files dropped straight into the viewer with no GitHub at
+all.
+
+That's the actual point of shipping this publicly: docs like this only get to
+move freely between a work team and outside collaborators once anyone with a
+browser can open one.
 
 ```bash
 bin/vendor_browser_assets   # once
@@ -286,7 +294,7 @@ bin/build_extension
 
 Then `chrome://extensions` → Developer mode → Load unpacked → select
 `extension/`. See [`extension/README.md`](extension/README.md) for how it
-works and current known gaps.
+works, the full architecture, and current known gaps.
 
 ---
 

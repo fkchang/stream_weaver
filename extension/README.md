@@ -7,6 +7,14 @@ raw source — for viewers who have neither StreamWeaver nor Ruby installed.
 gist.github.com. Renders both `.rb` (DSL source) and `.org` (the
 roundtrippable export) docs, on either host.
 
+This is the viewer half of [StreamWeaver](../README.md), a small Ruby DSL
+that compiles to full-styled docs (sidebar nav, callouts, tables, Mermaid
+diagrams) instead of raw HTML/JS. A doc pushed to GitHub or a Gist without
+this extension still degrades gracefully — `.org` already renders close to
+markdown there — but this extension is what makes either format render
+exactly as designed, entirely client-side, no StreamWeaver or Ruby install
+required to view.
+
 ## Build and load
 
 ```bash
