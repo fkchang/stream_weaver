@@ -219,6 +219,39 @@ What it would take (proposal only, not implemented):
 Given that org files are generated snapshots today, the honest recommendation
 is: author in Ruby, share fragments in Ruby, and let org be an export format.
 
+**Why does a hand-typed `#+begin_quote` card/callout marker raise "malformed
+card header"?** The marker line must contain ONLY the bolded title (`*title*`,
+or `*[badge] title*`, plus an optional trailing `/(meta)/`) -- nothing else on
+that line. Both `callout_marker_match` (`lib/stream_weaver/org/reader.rb:504-509`)
+and `emit_card`'s own regex (`lib/stream_weaver/org/reader.rb:417-423`) are
+fully line-anchored (`\A...\z`), so a natural "bolded lead-in phrase, then
+continue the sentence" instinct --
+
+```org
+#+begin_quote
+*ℹ️ Append-only.* This doc isn't version-tracked, so this is the history
+mechanism...
+#+end_quote
+```
+
+-- fails BOTH the callout match and the card fallback (even for a marker that
+starts with a reserved callout emoji), so you get the generic "malformed card
+header" error rather than anything pointing at the real cause. Body prose has
+to start on the next line instead:
+
+```org
+#+begin_quote
+*ℹ️ Append-only*
+This doc isn't version-tracked, so this is the history mechanism...
+#+end_quote
+```
+
+Same class of bug as the numbered-list-across-separate-`md()`-calls gotcha in
+the visual-companion skill: looks fine to a human, breaks a strict line-based
+parser. Confirmed live 2026-08-27 against a hand-typed org doc outside this
+repo -- hand-typing `.org` at all runs against the "author in Ruby" advice
+just above, but the parser should fail with a clearer message regardless.
+
 ## Caveat: the org writer's verbatim passthrough degrades
 
 `Org::Writer` has an escape hatch for components it does not know how to
