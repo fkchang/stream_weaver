@@ -122,6 +122,70 @@ RSpec.describe StreamWeaver::Org::Reader do
     expect(dsl.scan(/md <<~MD/).length).to eq(0)
   end
 
+  # PREAMBLE_RE used to whitelist exactly STREAMWEAVER_DSL and TITLE, so any
+  # other org keyword fell through to the paragraph branch and derailed the
+  # doc_header quote block that followed it. UKF membership needs #+TYPE: in
+  # that same leading block, and plain org files routinely carry
+  # #+AUTHOR:/#+DATE:/#+FILETAGS:.
+  it "skips unknown org keywords in the preamble instead of rendering them as prose" do
+    org = <<~ORG
+      #+STREAMWEAVER_DSL: 1
+      #+TITLE: My Report
+      #+TYPE: source
+      #+AUTHOR: Someone
+      #+FILETAGS: :bjj:clinch:
+
+      #+begin_quote
+      /Team · Project/
+      *[warn] Draft* · 2026-08-13
+      #+end_quote
+
+      * 00 Summary
+      :PROPERTIES:
+      :CUSTOM_ID: summary
+      :END:
+    ORG
+    dsl = described_class.to_dsl(org)
+    expect(dsl).to include('title: "My Report"')
+    expect(dsl).to include('eyebrow: "Team · Project"')
+    expect(dsl.scan(/doc_header\(/).length).to eq(1)
+    # The keyword lines themselves must not leak into the body as prose.
+    expect(dsl).not_to include("TYPE: source")
+    expect(dsl).not_to include("AUTHOR: Someone")
+    expect(dsl).not_to include("FILETAGS")
+    expect(dsl.scan(/md <<~MD/).length).to eq(0)
+  end
+
+  # Guard for the widened PREAMBLE_RE: it is consulted (reader.rb:178) BEFORE
+  # the ATTR_STREAMWEAVER branch, so a pattern matching every #+KEY: would
+  # swallow attribute lines and silently drop markdown: false from the table.
+  it "still honors #+ATTR_STREAMWEAVER: after the preamble pattern widens" do
+    org = <<~ORG
+      #+STREAMWEAVER_DSL: 1
+      #+TITLE: My Report
+      #+TYPE: source
+
+      * 00 Data
+      :PROPERTIES:
+      :CUSTOM_ID: data
+      :END:
+
+      #+ATTR_STREAMWEAVER: :markdown nil
+      | A | B |
+      |---+---|
+      | x | 2 |
+    ORG
+    dsl = described_class.to_dsl(org)
+    # emit_table omits the key entirely for a markdown:false table (it only
+    # ever writes "markdown: true"), so the attribute being honored shows up
+    # as the ABSENCE of that line -- not as a "markdown: false" literal.
+    expect(dsl).not_to include("markdown: true")
+    expect(dsl).not_to include("ATTR_STREAMWEAVER")
+    # The strongest form of the guard: an unknown keyword must be inert, so
+    # the same doc without it produces byte-identical DSL.
+    expect(dsl).to eq(described_class.to_dsl(org.sub("#+TYPE: source\n", "")))
+  end
+
   it "synthesizes a title-only doc_header when the preamble has no quote block at all (no eyebrow, no pills)" do
     org = <<~ORG
       #+STREAMWEAVER_DSL: 1

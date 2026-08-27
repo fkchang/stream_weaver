@@ -34,7 +34,17 @@ module StreamWeaver
 
       HEADLINE_RE = /\A(\*+)\s+(\d+(?:\.\d+)*)\s+(.+)\z/
       SRC_BEGIN_RE = /\A#\+begin_src(?:\s+(.*))?\z/i
-      PREAMBLE_RE = /\A#\+(?:STREAMWEAVER_DSL|TITLE):/i
+      # Any "#+KEY: value" org keyword line, not just the two StreamWeaver reads
+      # itself: an unrecognized keyword used to fall through to the generic
+      # paragraph branch and derail whatever followed it, so a doc carrying a
+      # plain #+AUTHOR:/#+DATE:/#+FILETAGS: -- or the #+TYPE: a UKF wiki member
+      # needs to be indexed -- failed to parse at all. Two exclusions: block
+      # directives (#+begin_src/#+begin_quote and their #+end_ partners, which
+      # carry no colon anyway, kept explicit for the reader) and
+      # #+ATTR_STREAMWEAVER:, which is consulted a few lines LATER (see #chunks)
+      # -- matching it here would consume it as preamble and silently drop the
+      # attribute from the table it belongs to.
+      PREAMBLE_RE = /\A#\+(?!begin_|end_|ATTR_STREAMWEAVER:)\w+:/i
       ATTR_RE = /\A#\+ATTR_STREAMWEAVER:\s*(.*)\z/i
 
       def self.to_dsl(org_text)
