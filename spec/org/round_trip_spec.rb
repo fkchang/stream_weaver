@@ -73,6 +73,36 @@ RSpec.describe "org round trip" do
     expect(org_twice).to eq(org_once)
   end
 
+  it "renders a standard external org link inside a table cell as a real link, not literal brackets" do
+    # stream_weaver-043f: reported live in a table cell specifically --
+    # emit_table calls Inline.org_to_md per cell by default, and the old
+    # #anchor-only LINK_ORG regex left an external link like this as
+    # literal, unclickable brackets in the rendered output.
+    hand_typed = <<~ORG
+      * 00 Notes
+      :PROPERTIES:
+      :CUSTOM_ID: notes
+      :END:
+
+      | Concept | Detail | Watch |
+      |---|---|---|
+      | Grip break | Rotate wrist | [[https://example.com/watch?v=X&t=354s][5:54]] |
+    ORG
+
+    dsl = StreamWeaver::Org::Reader.to_dsl(hand_typed)
+    expect { RubyVM::InstructionSequence.compile(dsl) }.not_to raise_error
+
+    html = StreamWeaver::Canvas::Reader.render_dsl(dsl)
+    expect(html).not_to include("[[https://example.com")
+    expect(html).to match(%r{href=['"]https://example\.com/watch\?v=X&(?:amp;)?t=354s['"]})
+
+    # And it's stable under a second round trip, same as the plain-table case above.
+    org_once = StreamWeaver::Org::Writer.from_dsl(dsl)
+    dsl_again = StreamWeaver::Org::Reader.to_dsl(org_once)
+    org_twice = StreamWeaver::Org::Writer.from_dsl(dsl_again)
+    expect(org_twice).to eq(org_once)
+  end
+
   it "round-trips a doc_header with no eyebrow, only plain pills, without crashing or losing data" do
     # Regression: the final full-branch review found this crashed with
     # "ArgumentError: malformed card header" -- a doc_header without an

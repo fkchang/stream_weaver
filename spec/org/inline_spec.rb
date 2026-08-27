@@ -20,6 +20,21 @@ RSpec.describe StreamWeaver::Org::Inline do
       expect(described_class.md_to_org("see [Evidence](#evidence)")).to eq("see [[#evidence][Evidence]]")
     end
 
+    it "converts external markdown links to org links" do
+      # stream_weaver-043f: link conversion used to be scoped to internal
+      # #anchor targets only. Org's own [[target][text]] syntax is generic
+      # across target shapes (confirmed against the real org-ruby parser --
+      # see the org-ruby generic-renderer smoke spec), so md_to_org/org_to_md
+      # should be too, not special-cased to one target shape.
+      expect(described_class.md_to_org("watch [5:54](https://example.com/watch?v=X&t=354s)"))
+        .to eq("watch [[https://example.com/watch?v=X&t=354s][5:54]]")
+    end
+
+    it "converts relative-path markdown links to org links" do
+      expect(described_class.md_to_org("see [the other doc](../other-doc.md)"))
+        .to eq("see [[../other-doc.md][the other doc]]")
+    end
+
     it "normalizes approximation tildes to the unicode approx sign" do
       expect(described_class.md_to_org("~4,600 recipients")).to eq("≈4,600 recipients")
     end
@@ -81,6 +96,20 @@ RSpec.describe StreamWeaver::Org::Inline do
 
     it "converts org links to internal markdown links" do
       expect(described_class.org_to_md("see [[#evidence][Evidence]]")).to eq("see [Evidence](#evidence)")
+    end
+
+    it "converts external org links to markdown links" do
+      # stream_weaver-043f: this used to fail the match entirely (LINK_ORG
+      # required a literal "#" right after "[["), so an external link like
+      # this passed through org_to_md unconverted and rendered as literal
+      # bracket text instead of a clickable link.
+      expect(described_class.org_to_md("watch [[https://example.com/watch?v=X&t=354s][5:54]]"))
+        .to eq("watch [5:54](https://example.com/watch?v=X&t=354s)")
+    end
+
+    it "converts relative-path org links to markdown links" do
+      expect(described_class.org_to_md("see [[../other-doc.md][the other doc]]"))
+        .to eq("see [the other doc](../other-doc.md)")
     end
 
     it "does not treat slashes inside a file path as italic markers" do

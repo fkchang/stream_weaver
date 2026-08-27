@@ -43,19 +43,24 @@ module StreamWeaver
       BOLD_MD   = span("**")
       ITALIC_MD = span("*")
       CODE_MD   = code_span("`")
-      LINK_MD   = /\[([^\]]+)\]\(#([^\)]+)\)/
+      # Org's own [[target][text]] link is generic across target shapes --
+      # an internal #anchor, a relative path, an external URL, all render
+      # identically as a plain <a href> in a real org viewer (verified
+      # against org-ruby, the gem GitHub/markymark also use: stream_weaver-043f).
+      # No "#" requirement, so neither should this converter's match.
+      LINK_MD   = /\[([^\]]+)\]\(([^\)]+)\)/
 
       BOLD_ORG   = span("*")
       ITALIC_ORG = span("/")
       CODE_ORG   = code_span("=")
-      LINK_ORG   = /\[\[#([^\]]+)\]\[([^\]]+)\]\]/
+      LINK_ORG   = /\[\[([^\]]+)\]\[([^\]]+)\]\]/
 
       PLACEHOLDER = "\x00CODE%d\x00"
       PLACEHOLDER_RE = /\x00CODE(\d+)\x00/
 
       def self.md_to_org(text)
         text, protected_spans = extract(text, CODE_MD)
-        text = text.gsub(LINK_MD) { "[[##{$2}][#{$1}]]" }
+        text = text.gsub(LINK_MD) { "[[#{$2}][#{$1}]]" }
         text = text.gsub(ITALIC_MD) { "/#{$1}/" }
         text = text.gsub(BOLD_MD) { "*#{$1}*" }
         text = text.gsub(/~(?=\d)/, "≈")
@@ -64,7 +69,7 @@ module StreamWeaver
 
       def self.org_to_md(text)
         text, protected_spans = extract(text, CODE_ORG)
-        text = text.gsub(LINK_ORG) { "[#{$2}](##{$1})" }
+        text = text.gsub(LINK_ORG) { "[#{$2}](#{$1})" }
         text = text.gsub(BOLD_ORG) { "**#{$1}**" }
         text = text.gsub(ITALIC_ORG) { "*#{$1}*" }
         restore(text, protected_spans) { |content| "`#{content}`" }
