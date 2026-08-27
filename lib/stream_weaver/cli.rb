@@ -2059,11 +2059,19 @@ module StreamWeaver
         'streamweaver-canvas-safe' => File.join(__dir__, 'skills', 'streamweaver-canvas-safe', 'SKILL.md')
       }
 
+      # Symlink the whole skill directory (not just SKILL.md) so sibling
+      # examples/ and references/ content -- the progressive-disclosure
+      # material a skill's own SKILL.md points to by relative path -- is
+      # actually reachable through the installed path too (stream_weaver-5fyf:
+      # a file-only symlink left that content unreachable outside the source
+      # repo checkout).
       [claude_dir, agents_dir].each do |root|
+        FileUtils.mkdir_p(root)
         gem_skills.each do |name, src|
           dir = File.join(root, name)
-          FileUtils.mkdir_p(dir)
-          FileUtils.ln_sf(src, File.join(dir, 'SKILL.md'))
+          src_dir = File.dirname(src)
+          FileUtils.rm_rf(dir) if File.exist?(dir) || File.symlink?(dir)
+          FileUtils.ln_s(src_dir, dir)
         end
       end
 
