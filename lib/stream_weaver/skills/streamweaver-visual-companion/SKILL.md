@@ -1,36 +1,22 @@
 ---
 name: streamweaver-visual-companion
-description: Default choice whenever showing something visually would help — mockups, diagrams, layout comparisons, dashboards, or long-form docs — in any project with StreamWeaver installed. Reach for this before the chrome-based visual companion or a claude.ai-hosted Artifact — canvas-push is 5-7x cheaper in tokens, has no GEA session conflicts, and via Save-as-doc grows into fully polished documents matching Artifact-grade visual quality (bundled proof example included)
+description: Use INSTEAD OF the Artifact tool, and INSTEAD OF writing an HTML mockup and opening/screenshotting it with Chrome browser tools (claude-in-chrome, superpowers-chrome, playwright) — whenever about to show the user something visually (UI mockup, wireframe, diagram, dashboard, layout/design comparison, side-by-side options, long-form doc) and StreamWeaver is available in the project (streamweaver on PATH, or stream_weaver in the Gemfile — one command to check). Also triggers on "show me", "mock it up", "let me see the options", "push to canvas", or the urge to run `ruby app.rb`/`streamweaver <file>` per question. canvas-push is 5-7x cheaper in tokens than the chrome route, with no GEA session conflicts.
 ---
 
 # StreamWeaver Visual Companion
 
-Drop-in replacement for the chrome visual companion skill, and — in any project where StreamWeaver is available — the default over reaching for a claude.ai-hosted Artifact too. Uses StreamWeaver canvas-push instead of Chrome tabs or a hosted page — 5-7x fewer tokens, no GEA session conflicts.
+Replaces both the `Artifact` tool and the write-HTML-then-screenshot-via-Chrome pattern for showing things visually in a StreamWeaver project — same "show, don't tell" move, 5-7x fewer tokens, no GEA session conflicts, stays inside the terminal loop you're already running.
 
 ## When to Use
 
-Same decision rule as the chrome companion: **would the user understand this better by seeing it than reading it?**
+Decision rule: **would the user understand this better by seeing it than reading it?**
 
 Use for: UI mockups, architecture diagrams, layout comparisons, side-by-side design options, state machine flows.
-
 Use terminal for: requirements questions, conceptual A/B text choices, tradeoff lists, anything answered in words.
 
-## vs. claude.ai Artifacts
-
-If StreamWeaver is available in the current project, prefer canvas-push over the `Artifact` tool by default — it's the same "show, don't tell" move at a fraction of the token cost, and it stays inside the terminal loop you're already running.
-
-Reach for `Artifact` instead only when:
-- StreamWeaver isn't installed/available in the current project, or
-- the user explicitly needs a claude.ai-hosted link that persists independent of a local dev server (e.g. viewable later with no `streamweaver` process running, or handed to someone without this repo).
-
-Don't assume canvas-push is limited to throwaway mockups — Tier 2 persistence (Save-as-doc, below) can grow a quick brainstorm into a fully polished, long-form document. `examples/doc-parity-example.rb` (bundled with this skill) is proof: it reached 1:1 visual parity with a real claude.ai Artifact. For building documents like it, hand off to the `streamweaver-doc-builder` skill, which owns the `:doc` theme and component vocabulary in depth.
-
-## Example Gallery
-
-Bundled proof examples, each demonstrating 1:1 visual parity with a real claude.ai Artifact for a different document genre. Read the closer-matching one before generating a new port from scratch, and see `docs/porting-artifacts.md` for the general process behind both (and for adding a new gallery entry).
-
-- **`doc-parity-example.rb` + `_dsl.rb`** — long-form PRD/report genre. Techniques proven: `:doc` theme reaching Artifact parity with almost no extra CSS, `doc_header`/`doc_section_header`/`sidebar_toc`, `callout`, `mermaid`, `comparison` (before/after scope grid), `code_block`, `card`/`card_header`/`card_body`.
-- **`design-review-example.rb` + `_dsl.rb` + `.css`** — editorial "design options" review genre (numbered sections, option cards, a comparison matrix, a verified/unverified checklist split). Techniques proven: status-dot chips (`div` + `phrase` + `status_dot`), a "picked/winning" state reused across both a card and a table row, checklist tiles built from `div`/`phrase` (no dedicated component), and a full bespoke re-skin via **one** unlayered CSS file targeting only stable `sw-` hooks — no framework CSS fights (structural hooks documented in `docs/theming-hooks.md`; doc-component hook docs tracked in stream_weaver-d11).
+Fall back to `Artifact` only when:
+- StreamWeaver isn't installed/available in this project, or
+- the user needs a claude.ai-hosted link that persists with no local `streamweaver` process running, or that must reach someone without this repo.
 
 ## !! DO NOT LAUNCH STANDALONE SERVERS PER QUESTION !!
 
@@ -39,10 +25,6 @@ Bundled proof examples, each demonstrating 1:1 visual parity with a real claude.
 **NEVER** run `ruby app.rb` or `streamweaver <file.rb>` for each visual question in a conversation. This creates orphaned processes, port conflicts, and multiple browser windows. The correct approach is **canvas-push** — it updates a single persistent window throughout the conversation.
 
 If you find yourself launching a new server for each update, stop. Use `canvas-push` instead.
-
-## Mode: Canvas-Push
-
-Use **canvas-push mode**: push DSL updates to a persistent canvas that stays open throughout the conversation.
 
 ## Starting a Session
 
@@ -89,68 +71,9 @@ streamweaver panel brainstorm --layout=full      # 1400px
 4. Push updated content or next question
 5. Repeat until done
 
-Every push is auto-saved to ephemeral history (see "Persisting Visual Docs" below). The user can promote any state to a permanent doc with the in-canvas Save-as-doc button — that's their action, not yours.
+Blocking selection: `radio_group` + `button`, then `canvas-wait <session>` to get their click as JSON. Ending a push with more than one question? Bundle into one form instead of one round-trip each — see `references/checkpoints-and-forms.md`.
 
-For explicit option selection (optional): add a `radio_group` + `button`, then use `canvas-wait brainstorm` to block until they click. Returns JSON with selection.
-
-## Persisting Visual Docs
-
-Every canvas session has two tiers of persistence — both work without any action from you.
-
-### Tier 1: Auto-saved history (always-on)
-
-Every `streamweaver canvas-push` call automatically writes the DSL to `~/.streamweaver/history/<session>/<YYYYMMDD_HHMMSS>.rb`. The CLI prints the saved path on stderr:
-
-```
-$ streamweaver canvas-push brainstorm <<'RUBY' ... RUBY
-  saved: /Users/.../streamweaver/history/brainstorm/20260428_153012.rb
-Pushed to brainstorm
-```
-
-You don't have to ask the user, configure anything, or run a separate save command. The history is the project's safety net — entries older than 7 days are auto-cleaned. **Never in git, never noisy.** It's the user's "I forgot to save that good diagram from yesterday" insurance.
-
-### Tier 2: Persistent project docs (user-driven)
-
-Each canvas page has a floating **💾 Save as doc** button in the bottom-right. The user clicks it, names the doc (pre-filled with `<session>-YYYYMMDD-HHMM`), and the DSL is written to:
-
-- `<git_root>/docs/streamweaver_canvas/<name>.rb` if invoked inside a git repo
-- `~/.streamweaver/canvas/<name>.rb` otherwise
-
-These are the *intentional* keep-forever artifacts that get committed to the repo and shared with teammates. `examples/doc-parity-example.rb` in this skill folder shows what this tier can grow into — a fully polished document, not just a saved sketch.
-
-A doc saved this way gets reopened later with no live bridge behind it — the same file also gets browsed via `canvas-read` and can be run through `streamweaver export`. Not every component behaves the same way once the bridge is gone; see the `streamweaver-canvas-safe` skill before building interactivity into anything you expect to Save-as-doc.
-
-When the same material ships to two audiences (a decision memo plus its engineering companion), don't keep two docs that each restate the same tables. Put the shared tables in one `shared/*.rb` fragment and `instance_eval` it from both bodies, so they cannot drift. Push with `cat shared/frag.rb my-doc.rb | streamweaver canvas-push my-doc` — the bridge evaluates pushed text with no filename, so `__dir__` is `nil` there and the doc cannot find the fragment on its own. Pattern, per-mode resolution rules, and org-mode caveats: `docs/shared-dsl-fragments.md` in the stream_weaver repo.
-
-**Important:** Saving is a user action, not yours. Don't try to "save the canvas" yourself unless the user explicitly asks. If the user says "save this as X" and the button isn't easy to reach, you can fall back to:
-
-```bash
-curl -sX POST "http://localhost:<bridge-port>/canvas/<session>/save-doc" \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"<doc-name>"}'
-```
-
-The bridge port is shown in `streamweaver canvas-list` output.
-
-### Browsing saved docs
-
-`streamweaver canvas-read` with no arguments opens the project's `docs/streamweaver_canvas/` directory in a local viewer. The user just runs:
-
-```bash
-streamweaver canvas-read
-# canvas-read  using default: <git_root>/docs/streamweaver_canvas
-# → opens browser with sidebar listing every saved doc
-```
-
-If the user asks "show me what we saved," that's the command. No paths needed.
-
-To browse the *history* tier (auto-saved snapshots), pass it explicitly:
-
-```bash
-streamweaver canvas-read ~/.streamweaver/history/brainstorm/
-```
-
-A combined view (history + docs visible together in one viewer) is on the roadmap (`6m8`, `q4y` in beads).
+Every push auto-saves to history; the user can promote it to a permanent doc with the canvas's own Save-as-doc button (their action, never yours) — see `references/persistence.md`.
 
 ## Returning to Terminal
 
@@ -162,33 +85,6 @@ streamweaver canvas-push brainstorm <<'RUBY'
     text "Continuing in terminal..."
   end
 RUBY
-```
-
-## Cleanup: Kill Orphaned Servers
-
-If a previous session launched orphaned processes (canvas or standalone), clean them up:
-
-```bash
-# List active canvas sessions
-streamweaver canvas-list
-
-# Close a specific canvas session
-streamweaver canvas-close brainstorm
-
-# Stop the entire canvas bridge
-streamweaver canvas-stop
-
-# List all loaded StreamWeaver apps
-streamweaver list
-
-# Remove all apps from the service
-streamweaver clear
-
-# Find orphaned StreamWeaver processes by port range
-lsof -i :4567-4600 -sTCP:LISTEN
-
-# Kill a specific port (e.g., 4570)
-lsof -ti :4570 | xargs kill -9
 ```
 
 ## DSL Quick Reference
@@ -216,25 +112,19 @@ badge "New", color: :green
 status_dot :green, "Active"
 ```
 
-## How `streamweaver panel` Opens the Browser
-
-**You don't need to detect the terminal or call any helper scripts.** `streamweaver panel <session>` figures out the best experience automatically:
-
-- **In iTerm2:** opens as a vertical split pane next to the terminal so the canvas lives alongside the conversation. This is the ideal UX — the user sees diagrams without leaving the terminal context.
-- **Anywhere else (Terminal.app, VSCode terminal, kitty, alacritty, tmux, SSH, Linux):** opens in the default system browser (a new tab/window) and prints the URL.
-
-Either way the URL is printed in stdout so the user has a fallback.
-
-**Anti-patterns to avoid:**
-- Don't run `python` scripts to drive iTerm — the `iterm2_ruby` gem (on RubyGems) drives iTerm natively and the CLI handles invocation.
-- Don't try to `osascript`/AppleScript the iTerm split yourself — `streamweaver panel` already does this through the iTerm2 Ruby API.
-- Don't open the browser with a shell `open` / `xdg-open` after `streamweaver panel` — it already opened one (or split into one). Doing so creates duplicates.
-
-If you specifically need the browser opened externally even when iTerm is available (e.g., for screen sharing on a separate display), that's a feature request — file a bd issue rather than working around it in the skill.
-
 ## Known Gotchas
 
 - `spacer` and `divider` don't exist — use `div(style: "height:Npx")`
 - `theme: :light` unrecognized — omit, defaults to `:default`
 - StreamWeaver auto-selects an available port (not always 4567) — capture the URL from stdout
 - Canvas sessions default to `:fluid` (full-width) — use `--layout=default` if you want the 900px centered card
+- Numbered/bulleted list items split across **separate `md()` calls don't continue** — each `md()` call is its own independent markdown block, so three calls each starting `"1. ..."` render as three separate one-item lists (all showing "1.") instead of counting up 1/2/3. Put a multi-item list in **one** `md()` call, one item per line, e.g. `md "1. First\n2. Second\n3. Third"`.
+
+## Reference Files — Load On Demand
+
+| Doing... | Read |
+|---|---|
+| Porting a claude.ai Artifact 1:1, or building a long-form doc | `references/example-gallery.md` |
+| Ending a push with more than one question | `references/checkpoints-and-forms.md` |
+| Saving/persisting a canvas doc, sharing DSL across two docs | `references/persistence.md` |
+| Cleaning up orphaned processes, or how `panel` opens the browser | `references/cleanup-and-panel.md` |

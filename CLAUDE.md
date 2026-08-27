@@ -64,6 +64,10 @@ _Add your build and test commands here_
 
 _Add a brief overview of your project architecture_
 
+## Visual Output
+
+Whenever about to show something visually — a UI mockup, diagram, dashboard, layout/design comparison, or long-form doc — use the `streamweaver-visual-companion` skill. Do NOT use the `Artifact` tool, and do NOT write a local HTML file and open/screenshot it via Chrome browser tools (claude-in-chrome, superpowers-chrome, playwright) for this purpose. StreamWeaver's canvas-push is 5-7x cheaper in tokens than the chrome route and avoids GEA session conflicts. The skill's own "Fall back to Artifact only when..." section covers the rare exceptions (StreamWeaver unavailable, or a claude.ai-hosted link that must persist/reach someone outside this repo).
+
 ## Conventions & Patterns
 
 ### Git Hygiene Policy
