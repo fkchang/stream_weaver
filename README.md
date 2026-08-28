@@ -310,8 +310,12 @@ Two ways to hand someone a doc, depending on how much staying power it needs:
 
 - **Quick collab** — push the doc to a Gist, then send the Gist link plus
   the [extension link](https://chromewebstore.google.com/detail/streamweaver-doc-viewer/odjjednfpfiagefgpcfdlelldphmpcgj).
-  No install for you, one click for them. Good for a one-off review or
-  looping in someone outside the team.
+  No install for you, one click for them: after installing, they open the
+  Gist link and a **View rendered** button appears in that file's header
+  bar, next to its Raw/Copy buttons — click it. (If the Gist tab was
+  already open before installing, refresh the page first; a newly
+  installed extension only runs in tabs loaded after install.) Good for a
+  one-off review or looping in someone outside the team.
 - **Level up** — commit the same `.org` file to the team repo. It renders
   identically in the repo's own file view, no format change required. The
   doc graduates from shared-once to living with the code it documents.
