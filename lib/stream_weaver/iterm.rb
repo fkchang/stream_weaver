@@ -71,6 +71,35 @@ module StreamWeaver
         false
       end
 
+      # Attempts an actual connection to iTerm2's Python API server (osascript
+      # auth handshake + websocket upgrade) -- distinct from `available?`,
+      # which only confirms the gem itself is installed/loadable. The one
+      # case this tells apart: gem installed, but iTerm2's own
+      # Preferences > General > Magic > Enable Python API toggle is off.
+      def python_api_reachable?
+        return false unless available?
+        with_timeout(5, default: false) { connect { true } }
+      rescue StandardError
+        false
+      end
+
+      # Create a new iTerm2 tab and run `command` in it (e.g. the `claude` or
+      # `codex` CLI). Returns the new tab's primary session_id, or nil if
+      # unavailable or the RPC failed.
+      def open_worker_tab(command)
+        return nil unless available?
+        with_timeout(8, default: nil) do
+          connect do |c|
+            result = c.create_tab
+            session_id = result && result[:session_id]
+            c.send_text(session_id, "#{command}\n") if session_id
+            session_id
+          end
+        end
+      rescue StandardError
+        nil
+      end
+
       private
 
       APP_NAME = "StreamWeaver"

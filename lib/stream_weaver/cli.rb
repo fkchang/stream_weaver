@@ -94,6 +94,8 @@ module StreamWeaver
         install_skill(args)
       when 'setup'
         setup
+      when 'get-started'
+        get_started(args)
       when '--help', '-h', 'help'
         help
       when '--version', '-v'
@@ -669,6 +671,12 @@ module StreamWeaver
             header1 "Meeting Notes"
             md "## Discussion Points\\n- Item 1\\n- Item 2"
           RUBY
+
+        Getting Started (one-command door):
+          streamweaver get-started                Setup + dependency check + open StreamWeaver University
+                       [--degraded]                Skip the iTerm2 premier check, use the browser fallback
+                       [--yes]                     Skip the interactive confirm on the premier path
+                       [--agent claude|codex]       Worker CLI to launch in the new tab (default: claude)
       HELP
     end
 
@@ -2134,8 +2142,320 @@ module StreamWeaver
       puts "  doc-builder       → symlink → gem (auto-updates with gem)"
       puts "  streamweaver-way  → symlink → gem (auto-updates with gem)"
       puts "  canvas-safe       → symlink → gem (auto-updates with gem)"
+      puts "  visual-plan       → symlink → gem (auto-updates with gem)"
+      puts "  visual-recap      → symlink → gem (auto-updates with gem)"
       puts ""
       puts "Run: streamweaver panel <name>  to start a visual companion session."
+    end
+
+    # =========================================
+    # Get Started (one-command door)
+    # =========================================
+
+    UNIVERSITY_SESSION = 'university'
+    # Keep in sync with stream_weaver.gemspec's required_ruby_version.
+    GET_STARTED_MIN_RUBY = '3.0.0'
+
+    # One command: wraps `setup`, reports on dependencies across three tiers
+    # (core / agent skills / premier iTerm2 surface), then opens the
+    # StreamWeaver University canvas either via a real iTerm2 split pane +
+    # worker tab (premier) or a browser tab with side-by-side instructions
+    # (degraded). iTerm2 is opt-OUT, not optional: this nags hard on a
+    # missing premier dependency and only degrades on --degraded or an
+    # explicit interactive "continue anyway".
+    def self.get_started(args)
+      degraded_flag = false
+      yes_flag = false
+      agent = 'claude'
+
+      parser = OptionParser.new do |opts|
+        opts.banner = "Usage: streamweaver get-started [--degraded] [--yes] [--agent claude|codex]"
+        opts.on('--degraded', 'Skip the iTerm2 premier check, use the browser fallback') { degraded_flag = true }
+        opts.on('-y', '--yes', 'Skip the interactive confirm on the premier path') { yes_flag = true }
+        opts.on('--agent AGENT', 'Worker CLI to launch: claude (default) or codex') { |a| agent = a }
+      end
+
+      if args.any? { |a| help_flag?(a) }
+        $stderr.puts parser
+        exit 1
+      end
+
+      parser.parse!(args)
+
+      unless %w[claude codex].include?(agent)
+        $stderr.puts "Unknown --agent: #{agent.inspect} (expected 'claude' or 'codex')"
+        exit 1
+      end
+
+      require_relative 'iterm'
+      require_relative 'canvas/client'
+
+      puts "=== StreamWeaver University: get-started ==="
+      puts ""
+      setup
+      puts ""
+
+      # An explicit --degraded means the premier probes' answer can't change
+      # the outcome -- skip them rather than burning the Python API handshake
+      # timeout and the bridge boot just to discard the result.
+      report = get_started_dependency_report(check_premier: !degraded_flag)
+      print_get_started_report(report)
+      puts ""
+
+      if degraded_flag
+        puts "(premier iTerm2 checks skipped — degraded mode requested)"
+        puts ""
+        return get_started_degraded
+      end
+
+      if get_started_premier_ok?(report)
+        proceed = yes_flag || get_started_confirm?(
+          "iTerm2 premier experience is ready. Open split pane + worker tab now?", default: true
+        )
+        unless proceed
+          puts "Skipped. Re-run `streamweaver get-started` when ready, or pass --degraded for the browser fallback."
+          exit 1
+        end
+        get_started_premier(agent)
+      else
+        print_get_started_remediation(report)
+        puts ""
+
+        unless $stdin.tty?
+          $stderr.puts "Not running interactively and premier dependencies are missing."
+          $stderr.puts "Pass --degraded to continue anyway."
+          exit 1
+        end
+
+        unless get_started_confirm?("Continue in degraded (browser tab) mode?", default: false)
+          puts "Aborting. Install the missing pieces above, then re-run: streamweaver get-started"
+          exit 1
+        end
+
+        get_started_degraded
+      end
+    end
+
+    # Interactive y/n prompt with a default for a bare Enter. Non-tty
+    # (piped/dark-factory) always returns the default rather than blocking.
+    def self.get_started_confirm?(question, default:)
+      return default unless $stdin.tty?
+
+      print "#{question} #{default ? '[Y/n]' : '[y/N]'} "
+      answer = $stdin.gets
+      return false if answer.nil? # EOF (Ctrl-D) means "get me out", not "yes"
+
+      answer = answer.strip.downcase
+      answer.empty? ? default : answer.start_with?('y')
+    end
+
+    # --- Dependency probes (each stubbable independently in specs) ---
+
+    def self.get_started_ruby_ok?
+      Gem::Version.new(RUBY_VERSION) >= Gem::Version.new(GET_STARTED_MIN_RUBY)
+    end
+
+    def self.get_started_bridge_ok?
+      require_relative 'canvas/client'
+      !!Canvas::Client.ensure_bridge_running
+    rescue StandardError
+      false
+    end
+
+    def self.get_started_claude_skills_root?
+      Dir.exist?(File.expand_path('~/.claude/skills'))
+    end
+
+    def self.get_started_agents_skills_root?
+      Dir.exist?(File.expand_path('~/.agents/skills'))
+    end
+
+    def self.get_started_agent_cli_present?
+      %w[claude codex].any? { |cmd| command_on_path?(cmd) }
+    end
+
+    def self.command_on_path?(cmd)
+      ENV['PATH'].to_s.split(File::PATH_SEPARATOR).any? do |dir|
+        path = File.join(dir, cmd)
+        File.file?(path) && File.executable?(path)
+      end
+    end
+
+    def self.get_started_premier_darwin?
+      RbConfig::CONFIG['host_os'].match?(/darwin/)
+    end
+
+    def self.get_started_premier_in_iterm?
+      !ENV['ITERM_SESSION_ID'].to_s.empty?
+    end
+
+    # Checks the gem itself, independent of darwin/in_iterm -- ITerm.available?
+    # (used by every other consumer in this file) conflates all three, which
+    # would tell a macOS iTerm2 user who already has the gem installed to
+    # `gem install iterm2_ruby` for the wrong reason (not being in iTerm2).
+    def self.get_started_premier_gem_loadable?
+      require 'iterm2'
+      true
+    rescue LoadError
+      false
+    end
+
+    def self.get_started_premier_python_api?
+      require_relative 'iterm'
+      ITerm.python_api_reachable?
+    end
+
+    # check_premier: false skips the 4 premier probes (and their real cost --
+    # a Python API handshake timeout, a bridge boot) entirely, leaving them
+    # nil. Used when --degraded is explicit: the answer can't change the
+    # already-decided outcome, so there's nothing to spend the probes on.
+    def self.get_started_dependency_report(check_premier: true)
+      {
+        core: {
+          ruby_ok: get_started_ruby_ok?,
+          ruby_version: RUBY_VERSION,
+          bridge_ok: get_started_bridge_ok?
+        },
+        skills: {
+          claude_root: get_started_claude_skills_root?,
+          agents_root: get_started_agents_skills_root?,
+          agent_cli: get_started_agent_cli_present?
+        },
+        premier: if check_premier
+          {
+            darwin: get_started_premier_darwin?,
+            in_iterm: get_started_premier_in_iterm?,
+            gem_loadable: get_started_premier_gem_loadable?,
+            python_api: get_started_premier_python_api?
+          }
+        else
+          { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil }
+        end
+      }
+    end
+
+    def self.get_started_premier_ok?(report)
+      report[:premier].values.all?
+    end
+
+    # --- Reporting ---
+
+    # nil means "not checked" (premier tier when --degraded skipped it) --
+    # distinct from a checked-and-failing false.
+    def self.get_started_check_mark(ok)
+      return "⏭ " if ok.nil?
+      ok ? "✅" : "❌"
+    end
+
+    def self.print_get_started_report(report)
+      puts "Dependency check:"
+      puts "  core"
+      puts "    #{get_started_check_mark(report[:core][:ruby_ok])} Ruby #{report[:core][:ruby_version]} (>= #{GET_STARTED_MIN_RUBY})"
+      puts "    #{get_started_check_mark(report[:core][:bridge_ok])} canvas bridge can start"
+      puts "  agent skills"
+      puts "    #{get_started_check_mark(report[:skills][:claude_root])} Claude skills root (~/.claude/skills)"
+      puts "    #{get_started_check_mark(report[:skills][:agents_root])} cross-tool skills root (~/.agents/skills)"
+      if report[:skills][:agent_cli]
+        puts "    ✅ agent CLI on PATH (claude or codex)"
+      else
+        puts "    ⚠️  no agent CLI (`claude` or `codex`) found on PATH"
+      end
+      puts "  premier surface (iTerm2 split pane)"
+      puts "    #{get_started_check_mark(report[:premier][:darwin])} macOS"
+      puts "    #{get_started_check_mark(report[:premier][:in_iterm])} running inside iTerm2"
+      puts "    #{get_started_check_mark(report[:premier][:gem_loadable])} iterm2_ruby gem installed"
+      puts "    #{get_started_check_mark(report[:premier][:python_api])} iTerm2 Python API reachable"
+    end
+
+    def self.print_get_started_remediation(report)
+      premier = report[:premier]
+      puts "⚠️  The full split-pane experience needs iTerm2 — some checks above failed."
+      puts ""
+      unless premier[:darwin]
+        puts "  - Premier mode is macOS + iTerm2 only. On this platform, use --degraded."
+      end
+      if premier[:darwin] && !premier[:in_iterm]
+        puts "  - Run this from inside iTerm2 (not another terminal app)."
+      end
+      if premier[:darwin] && !premier[:gem_loadable]
+        puts "  - gem install iterm2_ruby"
+      end
+      if premier[:darwin] && premier[:in_iterm] && premier[:gem_loadable] && !premier[:python_api]
+        puts "  - iTerm2 → Settings → General → Magic → Enable Python API"
+      end
+    end
+
+    # --- Premier / degraded paths ---
+
+    def self.get_started_premier(agent)
+      puts "=== Opening premier experience ==="
+      panel([UNIVERSITY_SESSION, '--theme=doc'])
+
+      unless command_on_path?(agent)
+        $stderr.puts "`#{agent}` is not on PATH — install it, or re-run with --agent claude|codex for the one you have."
+      else
+        worker_session_id = ITerm.open_worker_tab(agent)
+        if worker_session_id
+          path = write_get_started_worker_json(worker_session_id, agent)
+          puts "Worker tab started running `#{agent}` (iTerm session #{worker_session_id})"
+          puts "Recorded: #{path}"
+        else
+          $stderr.puts "Could not open a worker tab automatically — open one manually and run `#{agent}`."
+        end
+      end
+
+      push_get_started_placeholder_canvas
+    end
+
+    def self.get_started_degraded
+      puts "=== Opening degraded (browser) experience ==="
+      Canvas::Client.ensure_bridge_running
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.create(UNIVERSITY_SESSION, layout: :fluid, theme: :doc)
+      )
+      url = response && response[:type] == 'ready' ? response[:url] : nil
+
+      unless url
+        $stderr.puts "Error: failed to create the canvas session (#{response.inspect})"
+        exit 1
+      end
+
+      puts "Canvas URL: #{url}"
+      open_browser(url) unless ENV['SW_NO_OPEN']
+
+      puts ""
+      puts "Arrange your terminal and the browser tab side by side:"
+      puts "  1. Keep this terminal window open."
+      puts "  2. Open a second terminal window/pane next to the browser tab above."
+      puts "  3. Run your agent CLI (claude or codex) in that second terminal."
+      puts "  4. Copy prompts from the canvas into the agent as you go."
+
+      push_get_started_placeholder_canvas
+    end
+
+    # Minimal course canvas — the real course-list app lands in course-list-canvas.
+    # Pushed last on both paths (criterion 10).
+    def self.push_get_started_placeholder_canvas
+      Canvas::Client.ensure_bridge_running
+      dsl = <<~RUBY
+        doc_header(title: "StreamWeaver University", pills: [{ text: "Getting Started" }])
+        md "Welcome! The full course list lands here in a later story."
+      RUBY
+      Canvas::Client.send_message(
+        Canvas::Protocol::Messages.push(UNIVERSITY_SESSION, dsl, source_dir: nil)
+      )
+    end
+
+    def self.write_get_started_worker_json(session_id, agent)
+      dir = File.expand_path('~/.streamweaver/university')
+      FileUtils.mkdir_p(dir)
+      path = File.join(dir, 'worker.json')
+      File.write(path, JSON.pretty_generate({
+        session_id: session_id,
+        agent: agent,
+        created_at: Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
+      }))
+      path
     end
 
     # Bring terminal back to front after browser auto-closes
