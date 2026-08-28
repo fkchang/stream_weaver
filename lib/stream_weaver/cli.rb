@@ -2481,14 +2481,15 @@ module StreamWeaver
       pane_id
     end
 
-    # Minimal course canvas — the real course-list app lands in course-list-canvas.
-    # Pushed last on both paths (criterion 10).
+    # The course-list app (lib/stream_weaver/university/canvas.rb) -- name
+    # kept as-is (course-list-canvas / progress-ledger) since callers and
+    # their specs already stub this method by name. Pushed last on both
+    # paths (criterion 10). Pushes the app file's own source text verbatim,
+    # same contract `canvas-push <name> < file.rb` uses for stdin -- see the
+    # header comment in canvas.rb for why it's a raw string, not an object.
     def self.push_get_started_placeholder_canvas
       Canvas::Client.ensure_bridge_running
-      dsl = <<~RUBY
-        doc_header(title: "StreamWeaver University", pills: [{ text: "Getting Started" }])
-        md "Welcome! The full course list lands here in a later story."
-      RUBY
+      dsl = File.read(File.expand_path('university/canvas.rb', __dir__))
       Canvas::Client.send_message(
         Canvas::Protocol::Messages.push(UNIVERSITY_SESSION, dsl, source_dir: nil)
       )
