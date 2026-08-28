@@ -80,7 +80,7 @@ module StreamWeaver
       when 'canvas-restore'
         canvas_restore(args)
       when 'canvas-restart'
-        canvas_restart
+        canvas_restart(args)
       when 'canvas-read'
         canvas_read(args)
       when 'export'
@@ -639,7 +639,8 @@ module StreamWeaver
                                                      (default: ~/.streamweaver/snapshots/<timestamp>/)
           streamweaver canvas-restore <dir>       Recreate sessions from a canvas-snapshot dir
                        [--force]                    Overwrite sessions that already have content
-          streamweaver canvas-restart             snapshot + stop + start + restore, one command
+          streamweaver canvas-restart              snapshot + stop + start + restore, one command
+                       [--yes]                       Skip the confirm prompt for unconfirmed sessions
           streamweaver canvas-read <file|dir> [...]  Browse canvas DSL docs in a local viewer
                        [--theme=NAME] [--layout=NAME]  Fallback for docs with no use_theme/use_layout
           streamweaver export <file.rb>           Write a canvas DSL doc out as standalone HTML
@@ -1492,11 +1493,12 @@ module StreamWeaver
       do_canvas_snapshot(dir)
     end
 
-    # Does the actual capture and printing; returns the dir. Never exits --
-    # shared with canvas-restart, which must keep going regardless.
+    # Does the actual capture and printing; returns { dir:, sessions:,
+    # unconfirmed: }. Never exits -- shared with canvas-restart, which must
+    # keep going regardless.
     def self.do_canvas_snapshot(dir)
       require_relative 'canvas/client'
-      require_relative 'canvas/history' # for the session-name filesystem-safety regex
+      require_relative 'canvas/history' # for the session-name filesystem-safety regex + fallback root
 
       FileUtils.mkdir_p(dir)
       manifest_sessions = []
@@ -1505,7 +1507,7 @@ module StreamWeaver
         puts "Canvas bridge is not running -- nothing to snapshot"
         write_snapshot_manifest(dir, manifest_sessions)
         puts "Snapshot dir: #{dir}"
-        return dir
+        return { dir: dir, sessions: manifest_sessions, unconfirmed: [] }
       end
 
       response = Canvas::Client.send_message({ type: 'list' })
@@ -1520,31 +1522,43 @@ module StreamWeaver
         unless name.match?(Canvas::History::VALID_NAME)
           puts "skip  #{name.inspect}  (unsafe session name, not snapshotted)"
           manifest_sessions << { 'name' => name, 'theme' => theme, 'layout' => layout,
-                                  'captured_at' => captured_at, 'has_content' => false }
+                                  'captured_at' => captured_at, 'has_content' => false, 'unconfirmed' => false }
           next
         end
 
-        dsl = fetch_session_dsl(name)
+        dsl, source, unconfirmed = fetch_session_dsl(name)
         has_content = !(dsl.nil? || dsl.strip.empty?)
         manifest_sessions << { 'name' => name, 'theme' => theme, 'layout' => layout,
-                                'captured_at' => captured_at, 'has_content' => has_content }
+                                'captured_at' => captured_at, 'has_content' => has_content,
+                                'source' => (has_content ? source.to_s : nil), 'unconfirmed' => unconfirmed }
 
         if has_content
           File.write(File.join(dir, "#{name}.rb"), dsl)
-          puts "snap  #{name}  (theme=#{theme}, layout=#{layout}, #{dsl.bytesize} bytes)"
+          puts "snap  #{name}  (theme=#{theme}, layout=#{layout}, source=#{source}, #{dsl.bytesize} bytes)"
+        elsif unconfirmed
+          puts "skip  #{name}  (UNCONFIRMED -- bridge predates get_dsl, no history/ fallback found; may still hold live content)"
         else
           puts "skip  #{name}  (no content)"
         end
       end
 
       write_snapshot_manifest(dir, manifest_sessions)
+
+      not_preserved = manifest_sessions.reject { |s| s['has_content'] }.map { |s| s['name'] }
+      unconfirmed_names = manifest_sessions.select { |s| s['unconfirmed'] }.map { |s| s['name'] }
+      unless not_preserved.empty?
+        puts ""
+        puts "NOT preserved: #{not_preserved.join(', ')}"
+        puts "UNCONFIRMED (may still hold live content on the bridge): #{unconfirmed_names.join(', ')}" unless unconfirmed_names.empty?
+      end
+
       puts "Snapshot dir: #{dir}"
-      dir
+      { dir: dir, sessions: manifest_sessions, unconfirmed: unconfirmed_names }
     rescue Canvas::Client::NotRunningError, Canvas::Client::ConnectionError => e
       $stderr.puts "Warning: canvas bridge stopped mid-snapshot (#{e.message})"
       write_snapshot_manifest(dir, manifest_sessions || [])
       puts "Snapshot dir: #{dir}"
-      dir
+      { dir: dir, sessions: manifest_sessions || [], unconfirmed: [] }
     end
 
     def self.write_snapshot_manifest(dir, sessions)
@@ -1552,27 +1566,59 @@ module StreamWeaver
       File.write(File.join(dir, 'manifest.yml'), YAML.dump(manifest))
     end
 
-    # Fetches a session's live DSL via the bridge (nil if the session
-    # doesn't exist, or has never had a successful push). Shared by
-    # canvas-snapshot and canvas-restore's "already has content" check --
-    # the bridge protocol, not the ephemeral ~/.streamweaver/history/ trail,
-    # is the source of truth for what a live session currently holds.
+    # Fetches a session's live DSL via the bridge. Returns [dsl, source,
+    # unconfirmed]:
+    #   - bridge understands get_dsl, session has content -> [dsl, :bridge, false]
+    #   - bridge understands get_dsl, session confirmed empty -> [nil, nil, false]
+    #   - bridge predates get_dsl (pre-ps84 code) -- falls back to the
+    #     newest ~/.streamweaver/history/<name>/*.rb snapshot:
+    #       history had something -> [dsl, :history, false]
+    #       history had nothing   -> [nil, nil, true]  # genuinely unknown
+    # `unconfirmed` means we could neither ask the live bridge nor find a
+    # history trail -- the session may still hold real content we simply
+    # couldn't reach (the chicken-and-egg this fix cycle exists to flag,
+    # stream_weaver-ps84).
     def self.fetch_session_dsl(name)
       response = Canvas::Client.send_message(Canvas::Protocol::Messages.get_dsl(name))
-      return nil unless response && response[:type] == 'dsl'
 
-      response[:dsl]
+      if response && response[:type] == 'dsl'
+        dsl = response[:dsl]
+        [dsl, (dsl.nil? ? nil : :bridge), false]
+      elsif response && response[:type] == 'error' && response[:message].to_s.start_with?('Unknown message type:')
+        dsl = history_fallback_dsl(name)
+        [dsl, (dsl.nil? ? nil : :history), dsl.nil?]
+      else
+        [nil, nil, false] # protocol understood; session just doesn't exist
+      end
+    end
+
+    # Newest ~/.streamweaver/history/<name>/*.rb, or nil. Only consulted
+    # when the live bridge can't answer get_dsl at all (old code) --
+    # History.root already respects STREAMWEAVER_HISTORY_ROOT for specs.
+    def self.history_fallback_dsl(name)
+      require_relative 'canvas/history'
+      dir = File.join(Canvas::History.root, name)
+      return nil unless Dir.exist?(dir)
+
+      latest = Dir.glob(File.join(dir, '*.rb')).max_by { |f| File.mtime(f) }
+      latest && File.read(latest)
+    rescue StandardError
+      nil
     end
 
     # name => true/false (has content), for every currently-live session.
-    # Empty hash if the bridge isn't running.
+    # Empty hash if the bridge isn't running. Used only for canvas-restore's
+    # "already exists with content" guard -- deliberately does not consult
+    # the history/ fallback (an already-running bridge that can't answer
+    # get_dsl is a pre-ps84 process, and restore always talks to a bridge it
+    # just ensure_bridge_running'd, so this path is effectively new-code-only).
     def self.existing_sessions_with_content
       return {} unless Canvas::Client.bridge_running?
 
       response = Canvas::Client.send_message({ type: 'list' })
       names = ((response && response[:sessions]) || []).map { |s| s[:name].to_s }
       names.each_with_object({}) do |name, h|
-        dsl = fetch_session_dsl(name)
+        dsl, = fetch_session_dsl(name)
         h[name] = !(dsl.nil? || dsl.strip.empty?)
       end
     end
@@ -1675,16 +1721,32 @@ module StreamWeaver
     # snapshot -> stop -> ensure bridge running (on the currently installed
     # gem code) -> restore, one command. Warns loudly if the restarted
     # bridge lands on a different port -- any browser tab pointing at the
-    # old port is stale (port-squat gotcha, stream_weaver-ps84).
-    def self.canvas_restart
+    # old port is stale (port-squat gotcha, stream_weaver-ps84). If the
+    # snapshot step leaves any session UNCONFIRMED (old-code bridge, no
+    # history/ fallback -- it may still be holding live content we're about
+    # to blow away), asks for confirmation before stopping unless --yes.
+    def self.canvas_restart(args = [])
       require_relative 'canvas/client'
+
+      auto_yes = args.include?('--yes') || args.include?('-y')
 
       old_info = Canvas::Client.bridge_running? ? Canvas::Client.read_bridge_info : nil
       old_port = old_info && old_info[:port]
 
       puts "== Snapshotting live sessions =="
       dir = default_snapshot_dir
-      do_canvas_snapshot(dir)
+      snapshot = do_canvas_snapshot(dir)
+      unconfirmed = snapshot[:unconfirmed] || []
+
+      if !unconfirmed.empty? && !auto_yes
+        puts ""
+        print "#{unconfirmed.size} session(s) UNCONFIRMED and may hold live content that stopping the bridge will lose. Continue anyway? [y/N] "
+        answer = $stdin.gets.to_s.strip.downcase
+        unless %w[y yes].include?(answer)
+          puts "Aborted -- canvas bridge left running. Snapshot saved at #{dir} for inspection."
+          exit 1
+        end
+      end
 
       puts ""
       puts "== Stopping canvas bridge =="

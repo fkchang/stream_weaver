@@ -150,6 +150,77 @@ RSpec.describe StreamWeaver::CLI do
     end
   end
 
+  # --- canvas-snapshot: history/ fallback for a pre-ps84 bridge ---
+  # (fix cycle: the live bridge at the time of the original smoke test
+  # predated get_dsl entirely, so every session snapshotted as empty)
+
+  describe '.do_canvas_snapshot (history fallback when the bridge predates get_dsl)' do
+    around do |ex|
+      prev = ENV['STREAMWEAVER_HISTORY_ROOT']
+      Dir.mktmpdir do |d|
+        ENV['STREAMWEAVER_HISTORY_ROOT'] = d
+        @history_root = d
+        ex.run
+      end
+    ensure
+      ENV['STREAMWEAVER_HISTORY_ROOT'] = prev
+    end
+
+    def stub_unknown_get_dsl(session_name)
+      allow(StreamWeaver::Canvas::Client).to receive(:bridge_running?).and_return(true)
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+        case msg[:type]
+        when 'list'
+          { type: 'list', sessions: [{ name: session_name, theme: 'default', layout: 'fluid', websocket_count: 0 }] }
+        when 'get_dsl'
+          { type: 'error', message: 'Unknown message type: get_dsl' }
+        end
+      end
+    end
+
+    it 'falls back to the newest ~/.streamweaver/history/<name>/*.rb and records source: history' do
+      hist_dir = File.join(@history_root, 'oldbridge')
+      FileUtils.mkdir_p(hist_dir)
+      older = File.join(hist_dir, '20260101_000000.rb')
+      newer = File.join(hist_dir, '20260102_000000.rb')
+      File.write(older, "header1 'Old'")
+      File.write(newer, "header1 'Newer'")
+      File.utime(Time.now - 100, Time.now - 100, older)
+      File.utime(Time.now, Time.now, newer)
+
+      stub_unknown_get_dsl('oldbridge')
+
+      Dir.mktmpdir do |dir|
+        snap_dir = File.join(dir, 'snap')
+        stdout, = capture_io { described_class.canvas_snapshot([snap_dir]) }
+
+        manifest = YAML.safe_load(File.read(File.join(snap_dir, 'manifest.yml')))
+        entry = manifest['sessions'].first
+        expect(entry['has_content']).to eq(true)
+        expect(entry['source']).to eq('history')
+        expect(entry['unconfirmed']).to eq(false)
+        expect(File.read(File.join(snap_dir, 'oldbridge.rb'))).to eq("header1 'Newer'")
+        expect(stdout).to include('source=history')
+      end
+    end
+
+    it 'marks a session UNCONFIRMED when the bridge predates get_dsl and history/ has nothing' do
+      stub_unknown_get_dsl('oldbridge')
+
+      Dir.mktmpdir do |dir|
+        snap_dir = File.join(dir, 'snap')
+        stdout, = capture_io { described_class.canvas_snapshot([snap_dir]) }
+
+        manifest = YAML.safe_load(File.read(File.join(snap_dir, 'manifest.yml')))
+        entry = manifest['sessions'].first
+        expect(entry['has_content']).to eq(false)
+        expect(entry['unconfirmed']).to eq(true)
+        expect(stdout).to include('UNCONFIRMED')
+        expect(stdout).to include('NOT preserved: oldbridge')
+      end
+    end
+  end
+
   # --- canvas-restore ---
 
   describe '.canvas_restore / .do_canvas_restore' do
@@ -310,6 +381,78 @@ RSpec.describe StreamWeaver::CLI do
 
       _stdout, stderr = capture_io { described_class.canvas_restart }
       expect(stderr).not_to include('WARNING')
+    end
+  end
+
+  # --- canvas-restart: y/N gate on unconfirmed content (fix cycle) ---
+
+  describe '.canvas_restart (unconfirmed-content confirm gate)' do
+    around do |ex|
+      prev_snap = ENV['STREAMWEAVER_SNAPSHOT_ROOT']
+      prev_hist = ENV['STREAMWEAVER_HISTORY_ROOT']
+      Dir.mktmpdir do |snap_root|
+        Dir.mktmpdir do |hist_root|
+          ENV['STREAMWEAVER_SNAPSHOT_ROOT'] = snap_root
+          ENV['STREAMWEAVER_HISTORY_ROOT'] = hist_root
+          ex.run
+        end
+      end
+    ensure
+      ENV['STREAMWEAVER_SNAPSHOT_ROOT'] = prev_snap
+      ENV['STREAMWEAVER_HISTORY_ROOT'] = prev_hist
+    end
+
+    def stub_old_bridge_with_one_unconfirmed_session
+      allow(StreamWeaver::Canvas::Client).to receive(:bridge_running?).and_return(true)
+      allow(StreamWeaver::Canvas::Client).to receive(:read_bridge_info).and_return(pid: 1, port: 4700)
+      allow(StreamWeaver::Canvas::Client).to receive(:stop_bridge).and_return(true)
+      allow(StreamWeaver::Canvas::Client).to receive(:ensure_bridge_running).and_return(pid: 2, port: 4700)
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+        case msg[:type]
+        when 'list'
+          { type: 'list', sessions: [{ name: 'oldbridge', theme: 'default', layout: 'fluid', websocket_count: 0 }] }
+        when 'get_dsl'
+          { type: 'error', message: 'Unknown message type: get_dsl' }
+        end
+      end
+    end
+
+    it 'aborts without stopping the bridge when the user declines the prompt' do
+      stub_old_bridge_with_one_unconfirmed_session
+      allow($stdin).to receive(:gets).and_return("n\n")
+
+      expect { capture_io { described_class.canvas_restart([]) } }.to raise_error(SystemExit)
+      expect(StreamWeaver::Canvas::Client).not_to have_received(:stop_bridge)
+    end
+
+    it 'continues (stops + restarts) when the user confirms the prompt' do
+      stub_old_bridge_with_one_unconfirmed_session
+      allow($stdin).to receive(:gets).and_return("y\n")
+
+      capture_io { described_class.canvas_restart([]) }
+      expect(StreamWeaver::Canvas::Client).to have_received(:stop_bridge)
+    end
+
+    it 'skips the prompt entirely with --yes' do
+      stub_old_bridge_with_one_unconfirmed_session
+      expect($stdin).not_to receive(:gets)
+
+      capture_io { described_class.canvas_restart(['--yes']) }
+      expect(StreamWeaver::Canvas::Client).to have_received(:stop_bridge)
+    end
+
+    it 'does not prompt when there is nothing unconfirmed' do
+      allow(StreamWeaver::Canvas::Client).to receive(:bridge_running?).and_return(true)
+      allow(StreamWeaver::Canvas::Client).to receive(:read_bridge_info).and_return(pid: 1, port: 4700)
+      allow(StreamWeaver::Canvas::Client).to receive(:stop_bridge).and_return(true)
+      allow(StreamWeaver::Canvas::Client).to receive(:ensure_bridge_running).and_return(pid: 2, port: 4700)
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+        { type: 'list', sessions: [] } if msg[:type] == 'list'
+      end
+      expect($stdin).not_to receive(:gets)
+
+      capture_io { described_class.canvas_restart([]) }
+      expect(StreamWeaver::Canvas::Client).to have_received(:stop_bridge)
     end
   end
 end
