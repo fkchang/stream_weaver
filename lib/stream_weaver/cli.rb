@@ -1062,7 +1062,13 @@ module StreamWeaver
       arg == '--help' || arg == '-h'
     end
 
+    # The one place that actually shells out to open a URL. Guarded here,
+    # at the root, rather than trusting every call site to remember
+    # `unless ENV['SW_NO_OPEN']` -- several didn't (stream_weaver bug
+    # report: specs popping real browser tabs on the developer's desktop).
     def self.open_browser(url)
+      return if ENV['SW_NO_OPEN']
+
       case RbConfig::CONFIG['host_os']
       when /darwin|mac os/
         system('open', url)

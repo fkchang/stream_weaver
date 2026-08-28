@@ -1056,7 +1056,13 @@ module StreamWeaver
     # Open browser to the given URL (cross-platform)
     #
     # @param url [String] The URL to open
+    # Guarded here, at the root, rather than trusting every call site to
+    # remember `if auto_open` computed the SW_NO_OPEN default correctly --
+    # an explicit options[:open_browser] override from a caller (or a test)
+    # would otherwise bypass it entirely.
     def self.open_browser(url)
+      return if ENV['SW_NO_OPEN']
+
       Thread.new do
         sleep 1  # Wait for server to start
         case RbConfig::CONFIG['host_os']

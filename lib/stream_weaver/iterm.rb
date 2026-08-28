@@ -40,7 +40,7 @@ module StreamWeaver
 
         if pane_id
           { type: :browser, pane_id: pane_id }
-        elsif open_browser
+        elsif open_browser && !ENV['SW_NO_OPEN']
           system("open", url)
           { type: :external, pane_id: nil }
         else

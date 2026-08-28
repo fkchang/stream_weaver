@@ -1,5 +1,14 @@
 # frozen_string_literal: true
 
+# Guarantee the ENTIRE suite is browser-free, unconditionally, before any
+# other code loads. Individual specs may still scope-and-restore this
+# locally (save prev, mutate, `ensure` restore) to exercise the "SW_NO_OPEN
+# unset" code path deliberately -- that's safe because they always restore
+# to this default, never to a truly-unset state. No spec run should ever
+# pop a real browser tab on the developer's desktop; this line is the one
+# guarantee that holds even for a spec nobody thought to check.
+ENV['SW_NO_OPEN'] = '1'
+
 # Set RACK_ENV to test to disable Sinatra protection middleware
 ENV['RACK_ENV'] = 'test'
 

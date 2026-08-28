@@ -29,7 +29,12 @@ module StreamWeaver
     # Open a URL in the default browser (OS-aware)
     #
     # @param url [String] The URL to open
+    # Guarded here, at the root -- see StreamWeaver::CLI.open_browser and
+    # SinatraApp.open_browser for the same guard on the other two
+    # independent browser-open implementations in this codebase.
     def open_in_browser(url)
+      return if ENV['SW_NO_OPEN']
+
       case RbConfig::CONFIG['host_os']
       when /darwin|mac os/
         system('open', url)
