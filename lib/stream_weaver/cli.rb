@@ -5,6 +5,8 @@ require 'net/http'
 require 'json'
 require 'uri'
 require 'fileutils'
+require 'yaml'
+require 'time'
 require_relative 'opal/builder'
 
 module StreamWeaver
@@ -73,6 +75,12 @@ module StreamWeaver
         canvas_reset(args)
       when 'canvas-stop'
         canvas_stop
+      when 'canvas-snapshot'
+        canvas_snapshot(args)
+      when 'canvas-restore'
+        canvas_restore(args)
+      when 'canvas-restart'
+        canvas_restart
       when 'canvas-read'
         canvas_read(args)
       when 'export'
@@ -627,6 +635,11 @@ module StreamWeaver
           streamweaver canvas-reset --all         Reset all sessions
           streamweaver canvas-list                List canvas sessions
           streamweaver canvas-stop                Stop the canvas bridge
+          streamweaver canvas-snapshot [dir]      Capture every live session's DSL + theme/layout to dir
+                                                     (default: ~/.streamweaver/snapshots/<timestamp>/)
+          streamweaver canvas-restore <dir>       Recreate sessions from a canvas-snapshot dir
+                       [--force]                    Overwrite sessions that already have content
+          streamweaver canvas-restart             snapshot + stop + start + restore, one command
           streamweaver canvas-read <file|dir> [...]  Browse canvas DSL docs in a local viewer
                        [--theme=NAME] [--layout=NAME]  Fallback for docs with no use_theme/use_layout
           streamweaver export <file.rb>           Write a canvas DSL doc out as standalone HTML
@@ -1442,6 +1455,261 @@ module StreamWeaver
       else
         puts "Canvas bridge is not running"
       end
+    end
+
+    # =========================================
+    # Canvas Snapshot / Restore / Restart
+    # (stream_weaver-ps84 -- a bridge restart blanks in-memory sessions;
+    # this trio makes "capture, restart, put it all back" one door)
+    # =========================================
+
+    DEFAULT_SNAPSHOT_ROOT = File.expand_path('~/.streamweaver/snapshots')
+
+    # STREAMWEAVER_SNAPSHOT_ROOT overrides the root -- same pattern as
+    # Canvas::History's STREAMWEAVER_HISTORY_ROOT, so specs (and ad-hoc
+    # tooling) can redirect snapshot writes away from the developer's real
+    # home directory.
+    def self.snapshot_root
+      env = ENV['STREAMWEAVER_SNAPSHOT_ROOT']
+      env && !env.empty? ? env : DEFAULT_SNAPSHOT_ROOT
+    end
+
+    def self.default_snapshot_dir
+      File.join(snapshot_root, Time.now.utc.strftime('%Y%m%dT%H%M%SZ'))
+    end
+
+    # Capture every live canvas session's DSL + theme/layout to DIR
+    # (default: ~/.streamweaver/snapshots/<UTC timestamp>/).
+    def self.canvas_snapshot(args)
+      require_relative 'canvas/client'
+
+      if args.any? { |a| help_flag?(a) }
+        $stderr.puts "Usage: streamweaver canvas-snapshot [dir]"
+        exit 1
+      end
+
+      dir = File.expand_path(args.first || default_snapshot_dir)
+      do_canvas_snapshot(dir)
+    end
+
+    # Does the actual capture and printing; returns the dir. Never exits --
+    # shared with canvas-restart, which must keep going regardless.
+    def self.do_canvas_snapshot(dir)
+      require_relative 'canvas/client'
+      require_relative 'canvas/history' # for the session-name filesystem-safety regex
+
+      FileUtils.mkdir_p(dir)
+      manifest_sessions = []
+
+      unless Canvas::Client.bridge_running?
+        puts "Canvas bridge is not running -- nothing to snapshot"
+        write_snapshot_manifest(dir, manifest_sessions)
+        puts "Snapshot dir: #{dir}"
+        return dir
+      end
+
+      response = Canvas::Client.send_message({ type: 'list' })
+      sessions = (response && response[:sessions]) || []
+
+      sessions.each do |s|
+        name = s[:name].to_s
+        theme = (s[:theme] || 'default').to_s
+        layout = (s[:layout] || 'fluid').to_s
+        captured_at = Time.now.utc.iso8601
+
+        unless name.match?(Canvas::History::VALID_NAME)
+          puts "skip  #{name.inspect}  (unsafe session name, not snapshotted)"
+          manifest_sessions << { 'name' => name, 'theme' => theme, 'layout' => layout,
+                                  'captured_at' => captured_at, 'has_content' => false }
+          next
+        end
+
+        dsl = fetch_session_dsl(name)
+        has_content = !(dsl.nil? || dsl.strip.empty?)
+        manifest_sessions << { 'name' => name, 'theme' => theme, 'layout' => layout,
+                                'captured_at' => captured_at, 'has_content' => has_content }
+
+        if has_content
+          File.write(File.join(dir, "#{name}.rb"), dsl)
+          puts "snap  #{name}  (theme=#{theme}, layout=#{layout}, #{dsl.bytesize} bytes)"
+        else
+          puts "skip  #{name}  (no content)"
+        end
+      end
+
+      write_snapshot_manifest(dir, manifest_sessions)
+      puts "Snapshot dir: #{dir}"
+      dir
+    rescue Canvas::Client::NotRunningError, Canvas::Client::ConnectionError => e
+      $stderr.puts "Warning: canvas bridge stopped mid-snapshot (#{e.message})"
+      write_snapshot_manifest(dir, manifest_sessions || [])
+      puts "Snapshot dir: #{dir}"
+      dir
+    end
+
+    def self.write_snapshot_manifest(dir, sessions)
+      manifest = { 'captured_at' => Time.now.utc.iso8601, 'sessions' => sessions }
+      File.write(File.join(dir, 'manifest.yml'), YAML.dump(manifest))
+    end
+
+    # Fetches a session's live DSL via the bridge (nil if the session
+    # doesn't exist, or has never had a successful push). Shared by
+    # canvas-snapshot and canvas-restore's "already has content" check --
+    # the bridge protocol, not the ephemeral ~/.streamweaver/history/ trail,
+    # is the source of truth for what a live session currently holds.
+    def self.fetch_session_dsl(name)
+      response = Canvas::Client.send_message(Canvas::Protocol::Messages.get_dsl(name))
+      return nil unless response && response[:type] == 'dsl'
+
+      response[:dsl]
+    end
+
+    # name => true/false (has content), for every currently-live session.
+    # Empty hash if the bridge isn't running.
+    def self.existing_sessions_with_content
+      return {} unless Canvas::Client.bridge_running?
+
+      response = Canvas::Client.send_message({ type: 'list' })
+      names = ((response && response[:sessions]) || []).map { |s| s[:name].to_s }
+      names.each_with_object({}) do |name, h|
+        dsl = fetch_session_dsl(name)
+        h[name] = !(dsl.nil? || dsl.strip.empty?)
+      end
+    end
+
+    # Recreate each session recorded in DIR/manifest.yml with its original
+    # theme/layout, then push its body.
+    def self.canvas_restore(args)
+      require_relative 'canvas/client'
+
+      if args.any? { |a| help_flag?(a) }
+        $stderr.puts "Usage: streamweaver canvas-restore <dir> [--force]"
+        exit 1
+      end
+
+      force = args.include?('--force')
+      dir = args.reject { |a| a == '--force' }.first
+
+      unless dir
+        $stderr.puts "Usage: streamweaver canvas-restore <dir> [--force]"
+        exit 1
+      end
+
+      ok = do_canvas_restore(File.expand_path(dir), force: force)
+      exit 1 unless ok
+    end
+
+    # Does the actual restore and printing; returns true iff every session
+    # that needed restoring succeeded (skips don't count as failures).
+    # Never exits -- shared with canvas-restart.
+    def self.do_canvas_restore(dir, force: false)
+      require_relative 'canvas/client'
+
+      manifest_path = File.join(dir, 'manifest.yml')
+      unless File.exist?(manifest_path)
+        $stderr.puts "Error: no manifest.yml found in #{dir}"
+        return false
+      end
+
+      manifest = YAML.safe_load(File.read(manifest_path)) || {}
+      sessions = manifest['sessions'] || []
+
+      if sessions.empty?
+        puts "No sessions recorded in #{dir}"
+        return true
+      end
+
+      Canvas::Client.ensure_bridge_running
+      existing = existing_sessions_with_content
+      ok = true
+
+      sessions.each do |entry|
+        name = entry['name']
+
+        unless entry['has_content']
+          puts "skip  #{name}  (empty snapshot)"
+          next
+        end
+
+        if existing[name] && !force
+          puts "skip  #{name}  (already exists with content; use --force to overwrite)"
+          next
+        end
+
+        body_path = File.join(dir, "#{name}.rb")
+        unless File.exist?(body_path)
+          puts "FAIL  #{name}  (missing #{name}.rb)"
+          ok = false
+          next
+        end
+
+        dsl = File.read(body_path)
+        theme = (entry['theme'] || 'default').to_sym
+        layout = (entry['layout'] || 'fluid').to_sym
+
+        create_resp = Canvas::Client.send_message(
+          Canvas::Protocol::Messages.create(name, layout: layout, theme: theme)
+        )
+        unless create_resp && create_resp[:type] == 'ready'
+          puts "FAIL  #{name}  (create failed)"
+          ok = false
+          next
+        end
+
+        push_resp = Canvas::Client.send_message(Canvas::Protocol::Messages.push(name, dsl))
+        if push_resp && push_resp[:type] == 'push_ok'
+          puts "OK    #{name}"
+        else
+          detail = push_resp && push_resp[:message] ? " (#{push_resp[:message]})" : ''
+          puts "FAIL  #{name}#{detail}"
+          ok = false
+        end
+      end
+
+      ok
+    rescue Canvas::Client::NotRunningError, Canvas::Client::ConnectionError => e
+      $stderr.puts "Error: #{e.message}"
+      false
+    end
+
+    # snapshot -> stop -> ensure bridge running (on the currently installed
+    # gem code) -> restore, one command. Warns loudly if the restarted
+    # bridge lands on a different port -- any browser tab pointing at the
+    # old port is stale (port-squat gotcha, stream_weaver-ps84).
+    def self.canvas_restart
+      require_relative 'canvas/client'
+
+      old_info = Canvas::Client.bridge_running? ? Canvas::Client.read_bridge_info : nil
+      old_port = old_info && old_info[:port]
+
+      puts "== Snapshotting live sessions =="
+      dir = default_snapshot_dir
+      do_canvas_snapshot(dir)
+
+      puts ""
+      puts "== Stopping canvas bridge =="
+      puts(Canvas::Client.stop_bridge ? "Canvas bridge stopped" : "Canvas bridge was not running")
+
+      puts ""
+      puts "== Starting canvas bridge =="
+      new_info = Canvas::Client.ensure_bridge_running
+      new_port = new_info[:port]
+      puts "Canvas bridge running on port #{new_port} (pid #{new_info[:pid]})"
+
+      puts ""
+      puts "== Restoring sessions =="
+      ok = do_canvas_restore(dir, force: false)
+
+      puts ""
+      puts "canvas-restart summary: snapshot=#{dir}  port=#{new_port}  restore=#{ok ? 'OK' : 'FAILED'}"
+
+      if old_port && new_port && old_port != new_port
+        $stderr.puts ""
+        $stderr.puts "*** WARNING: canvas bridge moved from port #{old_port} to #{new_port}. ***"
+        $stderr.puts "*** Any browser tab still pointing at port #{old_port} is stale -- reload it at the new session URLs. ***"
+      end
+
+      exit 1 unless ok
     end
 
     def self.canvas_read(args)

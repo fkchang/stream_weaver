@@ -57,6 +57,15 @@ module StreamWeaver
           { type: 'close', name: name }
         end
 
+        # Claude → Bridge: Fetch a session's current raw DSL + theme/layout
+        # (canvas-snapshot, stream_weaver-ps84) -- the live in-memory source
+        # of truth, not the ephemeral ~/.streamweaver/history/ trail, which
+        # expires after 7 days and isn't written by every code path that can
+        # populate a session's DSL.
+        def self.get_dsl(name)
+          { type: 'get_dsl', name: name }
+        end
+
         # Claude → Bridge: Set iTerm pane ID for a session
         def self.set_pane_id(name, pane_id)
           { type: 'set_pane_id', name: name, pane_id: pane_id }

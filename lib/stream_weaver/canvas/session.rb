@@ -123,7 +123,8 @@ module StreamWeaver
           websocket_count: @websockets.size,
           created_at: @created_at,
           pane_id: @pane_id,
-          theme: @theme
+          theme: @theme,
+          layout: @layout
         }
       end
     end

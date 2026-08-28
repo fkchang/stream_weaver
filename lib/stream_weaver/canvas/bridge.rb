@@ -60,6 +60,8 @@ module StreamWeaver
           handle_toast(message[:name], message[:message], message[:variant], message[:duration])
         when 'close'
           handle_close(message[:name])
+        when 'get_dsl'
+          handle_get_dsl(message[:name])
         when 'set_pane_id'
           handle_set_pane_id(message[:name], message[:pane_id])
         when 'reset'
@@ -157,6 +159,17 @@ module StreamWeaver
         session&.broadcast(type: 'closed')
         close_session(name)
         { type: 'closed', name: name, pane_id: pane_id }
+      end
+
+      # canvas-snapshot's DSL/body source (stream_weaver-ps84): returns the
+      # session's current in-memory dsl plus the theme/layout it was created
+      # with, since the bridge only sets those at Session.new and neither
+      # can drift afterward (Session has no theme=/layout= setter).
+      def handle_get_dsl(name)
+        session = get_session(name)
+        return { type: 'error', message: "Session not found: #{name}" } unless session
+
+        { type: 'dsl', name: name, dsl: session.dsl, theme: session.theme, layout: session.layout }
       end
 
       def handle_set_pane_id(name, pane_id)
