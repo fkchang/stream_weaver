@@ -277,19 +277,37 @@ RSpec.describe StreamWeaver::CLI do
   end
 
   describe '.write_get_started_worker_json' do
-    it 'writes session id, agent, cwd, and an ISO8601 timestamp under ~/.streamweaver/university/worker.json' do
+    it 'writes both session ids (agent + canvas pane), agent, cwd, and an ISO8601 timestamp under ~/.streamweaver/university/worker.json' do
       Dir.mktmpdir do |home|
         prev_home = ENV['HOME']
         ENV['HOME'] = home
         begin
-          path = described_class.write_get_started_worker_json('w-session-1', 'claude', '/some/project/dir')
+          path = described_class.write_get_started_worker_json(
+            'w-session-1', 'claude', '/some/project/dir', canvas_session_id: 'canvas-pane-1'
+          )
 
           expect(path).to eq(File.join(home, '.streamweaver', 'university', 'worker.json'))
           data = JSON.parse(File.read(path))
           expect(data['session_id']).to eq('w-session-1')
           expect(data['agent']).to eq('claude')
           expect(data['cwd']).to eq('/some/project/dir')
+          expect(data['canvas_session_id']).to eq('canvas-pane-1')
           expect(data['created_at']).to match(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\z/)
+        ensure
+          ENV['HOME'] = prev_home
+        end
+      end
+    end
+
+    it 'defaults canvas_session_id to nil when the split failed or was not attempted' do
+      Dir.mktmpdir do |home|
+        prev_home = ENV['HOME']
+        ENV['HOME'] = home
+        begin
+          path = described_class.write_get_started_worker_json('w-session-1', 'claude', '/some/project/dir')
+
+          data = JSON.parse(File.read(path))
+          expect(data['canvas_session_id']).to be_nil
         ensure
           ENV['HOME'] = prev_home
         end
@@ -298,29 +316,48 @@ RSpec.describe StreamWeaver::CLI do
   end
 
   describe '.get_started_premier' do
-    it 'opens the panel, starts the worker tab in the invoking directory, records worker.json, then pushes the canvas last' do
+    # Product design: the calling terminal is left untouched. One new tab
+    # holds the worker (agent) with the canvas split into THAT session, not
+    # panel's old behavior of splitting the calling terminal.
+    let(:canvas_url) { 'http://127.0.0.1:59321/canvas/university' }
+
+    it 'never calls panel (which would split the calling terminal)' do
+      allow(described_class).to receive(:get_started_create_university_canvas).and_return(canvas_url)
+      allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return('w-session-1')
+      allow(described_class).to receive(:get_started_split_canvas_into).and_return('canvas-pane-1')
+      allow(described_class).to receive(:write_get_started_worker_json)
+      allow(described_class).to receive(:push_get_started_placeholder_canvas)
+      expect(described_class).not_to receive(:panel)
+
+      capture_io { described_class.get_started_premier('claude') }
+    end
+
+    it 'creates the canvas, opens the worker tab in the invoking directory, splits the canvas INTO the worker session, records worker.json (both session ids), then pushes the canvas last' do
       order = []
-      allow(described_class).to receive(:panel) { order << :panel }
+      allow(described_class).to receive(:get_started_create_university_canvas) { order << :create_canvas; canvas_url }
       allow(Dir).to receive(:pwd).and_return('/invoking/dir')
       allow(StreamWeaver::ITerm).to receive(:open_worker_tab).with('claude', dir: '/invoking/dir') { order << :worker; 'w-session-1' }
-      allow(described_class).to receive(:write_get_started_worker_json).with('w-session-1', 'claude', '/invoking/dir') { order << :record; '/fake/worker.json' }
+      allow(described_class).to receive(:get_started_split_canvas_into).with('w-session-1', canvas_url) { order << :split; 'canvas-pane-1' }
+      allow(described_class).to receive(:write_get_started_worker_json)
+        .with('w-session-1', 'claude', '/invoking/dir', canvas_session_id: 'canvas-pane-1') { order << :record; '/fake/worker.json' }
       allow(described_class).to receive(:push_get_started_placeholder_canvas) { order << :push }
 
       capture_io { described_class.get_started_premier('claude') }
 
-      expect(order).to eq(%i[panel worker record push])
+      expect(order).to eq(%i[create_canvas worker split record push])
     end
 
-    it 'still pushes the canvas even when no worker tab could be opened' do
-      allow(described_class).to receive(:panel)
+    it 'still pushes the canvas even when no worker tab could be opened, and never attempts the split' do
+      allow(described_class).to receive(:get_started_create_university_canvas).and_return(canvas_url)
       allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return(nil)
+      expect(described_class).not_to receive(:get_started_split_canvas_into)
       expect(described_class).to receive(:push_get_started_placeholder_canvas)
 
       capture_io { described_class.get_started_premier('claude') }
     end
 
     it 'does not attempt to open a worker tab (or write worker.json) for an agent not on PATH, but still pushes the canvas' do
-      allow(described_class).to receive(:panel)
+      allow(described_class).to receive(:get_started_create_university_canvas).and_return(canvas_url)
       allow(described_class).to receive(:command_on_path?).with('codex').and_return(false)
       expect(StreamWeaver::ITerm).not_to receive(:open_worker_tab)
       expect(described_class).not_to receive(:write_get_started_worker_json)
@@ -328,6 +365,46 @@ RSpec.describe StreamWeaver::CLI do
 
       _out, err = capture_io { described_class.get_started_premier('codex') }
       expect(err).to include('not on PATH')
+    end
+  end
+
+  describe '.get_started_split_canvas_into' do
+    it 'splits the URL into the given worker session (not the calling session) and records the resulting pane id on the canvas session' do
+      allow(StreamWeaver::ITerm).to receive(:split_vertical_with_url)
+        .with('http://example/canvas', open_browser: false, target_session: 'w-session-1')
+        .and_return(type: :browser, pane_id: 'canvas-pane-1')
+      expect(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+        expect(msg).to include(type: 'set_pane_id', name: 'university', pane_id: 'canvas-pane-1')
+      end
+
+      result = described_class.get_started_split_canvas_into('w-session-1', 'http://example/canvas')
+
+      expect(result).to eq('canvas-pane-1')
+    end
+
+    it 'returns nil and records nothing when the split fails' do
+      allow(StreamWeaver::ITerm).to receive(:split_vertical_with_url).and_return(type: nil, pane_id: nil)
+      expect(StreamWeaver::Canvas::Client).not_to receive(:send_message)
+
+      expect(described_class.get_started_split_canvas_into('w-session-1', 'http://example/canvas')).to be_nil
+    end
+  end
+
+  describe '.get_started_create_university_canvas' do
+    it 'returns the URL from a successful create response' do
+      allow(StreamWeaver::Canvas::Client).to receive(:ensure_bridge_running)
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message).and_return(
+        { type: 'ready', name: 'university', url: 'http://127.0.0.1:59321/canvas/university' }
+      )
+
+      expect(described_class.get_started_create_university_canvas).to eq('http://127.0.0.1:59321/canvas/university')
+    end
+
+    it 'aborts loudly when session creation fails' do
+      allow(StreamWeaver::Canvas::Client).to receive(:ensure_bridge_running)
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message).and_return({ type: 'error', message: 'boom' })
+
+      expect { capture_io { described_class.get_started_create_university_canvas } }.to raise_error(SystemExit)
     end
   end
 

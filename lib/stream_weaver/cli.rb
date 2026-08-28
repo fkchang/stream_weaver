@@ -2387,41 +2387,46 @@ module StreamWeaver
 
     # --- Premier / degraded paths ---
 
+    # Product design (not optional): the calling terminal is left untouched.
+    # One new tab holds the whole premier experience -- the worker session
+    # (agent, left) with the canvas split into it (right), not a split on
+    # the terminal get-started was invoked from.
     def self.get_started_premier(agent)
       puts "=== Opening premier experience ==="
-      panel([UNIVERSITY_SESSION, '--theme=doc'])
+      canvas_url = get_started_create_university_canvas
 
       unless command_on_path?(agent)
         $stderr.puts "`#{agent}` is not on PATH — install it, or re-run with --agent claude|codex for the one you have."
-      else
-        # A new iTerm2 tab starts in $HOME, not here -- pass the invoking
-        # directory through so the worker lands in the project, not ~.
-        invoking_dir = Dir.pwd
-        worker_session_id = ITerm.open_worker_tab(agent, dir: invoking_dir)
-        if worker_session_id
-          path = write_get_started_worker_json(worker_session_id, agent, invoking_dir)
-          puts "Worker tab started running `#{agent}` in #{invoking_dir} (iTerm session #{worker_session_id})"
-          puts "Recorded: #{path}"
-        else
-          $stderr.puts "Could not open a worker tab automatically — open one manually, cd #{invoking_dir}, and run `#{agent}`."
-        end
+        return push_get_started_placeholder_canvas
       end
+
+      # A new iTerm2 tab starts in $HOME, not here -- pass the invoking
+      # directory through so the worker lands in the project, not ~.
+      invoking_dir = Dir.pwd
+      worker_session_id = ITerm.open_worker_tab(agent, dir: invoking_dir)
+
+      unless worker_session_id
+        $stderr.puts "Could not open a worker tab automatically — open one manually, cd #{invoking_dir}, and run `#{agent}`."
+        return push_get_started_placeholder_canvas
+      end
+
+      canvas_pane_id = get_started_split_canvas_into(worker_session_id, canvas_url)
+      path = write_get_started_worker_json(worker_session_id, agent, invoking_dir, canvas_session_id: canvas_pane_id)
+
+      puts "Worker tab started running `#{agent}` in #{invoking_dir} (iTerm session #{worker_session_id})"
+      if canvas_pane_id
+        puts "Canvas split into that tab, right pane (iTerm session #{canvas_pane_id})"
+      else
+        $stderr.puts "Could not split the canvas into the worker tab — open it manually: #{canvas_url}"
+      end
+      puts "Recorded: #{path}"
 
       push_get_started_placeholder_canvas
     end
 
     def self.get_started_degraded
       puts "=== Opening degraded (browser) experience ==="
-      Canvas::Client.ensure_bridge_running
-      response = Canvas::Client.send_message(
-        Canvas::Protocol::Messages.create(UNIVERSITY_SESSION, layout: :fluid, theme: :doc)
-      )
-      url = response && response[:type] == 'ready' ? response[:url] : nil
-
-      unless url
-        $stderr.puts "Error: failed to create the canvas session (#{response.inspect})"
-        exit 1
-      end
+      url = get_started_create_university_canvas
 
       puts "Canvas URL: #{url}"
       open_browser(url) unless ENV['SW_NO_OPEN']
@@ -2434,6 +2439,40 @@ module StreamWeaver
       puts "  4. Copy prompts from the canvas into the agent as you go."
 
       push_get_started_placeholder_canvas
+    end
+
+    # Creates (get-or-create; idempotent) the university canvas session with
+    # the :doc theme and returns its URL. Aborts loudly rather than letting
+    # a caller push into or split onto a session that doesn't exist.
+    def self.get_started_create_university_canvas
+      Canvas::Client.ensure_bridge_running
+      response = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.create(UNIVERSITY_SESSION, layout: :fluid, theme: :doc)
+      )
+      url = response && response[:type] == 'ready' ? response[:url] : nil
+
+      unless url
+        $stderr.puts "Error: failed to create the canvas session (#{response.inspect})"
+        exit 1
+      end
+
+      url
+    end
+
+    # Splits the canvas (browser pane, URL) into `worker_session_id` --
+    # NOT the calling terminal -- so agent and canvas share one tab.
+    # Records the resulting pane as the canvas session's pane_id (same
+    # bookkeeping `panel` does) for later cleanup. Returns the new pane's
+    # session id, or nil if the split failed/was unavailable.
+    def self.get_started_split_canvas_into(worker_session_id, url)
+      result = ITerm.split_vertical_with_url(url, open_browser: false, target_session: worker_session_id)
+      pane_id = result[:pane_id]
+      if pane_id
+        Canvas::Client.send_message(
+          Canvas::Protocol::Messages.set_pane_id(UNIVERSITY_SESSION, pane_id)
+        )
+      end
+      pane_id
     end
 
     # Minimal course canvas — the real course-list app lands in course-list-canvas.
@@ -2449,7 +2488,7 @@ module StreamWeaver
       )
     end
 
-    def self.write_get_started_worker_json(session_id, agent, cwd)
+    def self.write_get_started_worker_json(session_id, agent, cwd, canvas_session_id: nil)
       out_dir = File.expand_path('~/.streamweaver/university')
       FileUtils.mkdir_p(out_dir)
       path = File.join(out_dir, 'worker.json')
@@ -2457,6 +2496,7 @@ module StreamWeaver
         session_id: session_id,
         agent: agent,
         cwd: cwd,
+        canvas_session_id: canvas_session_id,
         created_at: Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
       }))
       path

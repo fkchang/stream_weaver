@@ -27,12 +27,16 @@ module StreamWeaver
           !ENV["ITERM_SESSION_ID"].to_s.empty?
       end
 
-      # Split the calling iTerm2 pane and open a browser pane with the URL.
-      # Returns Hash with :type (:browser, :external, or nil) and :pane_id
-      def split_vertical_with_url(url, open_browser: true, horizontal: false)
+      # Split a browser pane with the URL into `target_session` (any session
+      # id, e.g. a just-created worker tab's session -- not necessarily the
+      # calling pane). Defaults to the calling session (current_session_guid)
+      # when target_session is nil, matching the original single-pane
+      # `panel` behavior. Returns Hash with :type (:browser, :external, or
+      # nil) and :pane_id.
+      def split_vertical_with_url(url, open_browser: true, horizontal: false, target_session: nil)
         return { type: nil, pane_id: nil } unless available?
 
-        pane_id = split_browser_pane(url, horizontal: horizontal)
+        pane_id = split_browser_pane(url, horizontal: horizontal, target_session: target_session)
 
         if pane_id
           { type: :browser, pane_id: pane_id }
@@ -123,8 +127,8 @@ module StreamWeaver
 
       def connect(&) = ITerm2.connect(app_name: APP_NAME, &)
 
-      def split_browser_pane(url, horizontal: false)
-        guid = current_session_guid or return nil
+      def split_browser_pane(url, horizontal: false, target_session: nil)
+        guid = target_session || current_session_guid or return nil
         with_timeout(8, default: nil) do
           connect do |c|
             c.split_pane(

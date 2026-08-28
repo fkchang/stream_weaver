@@ -82,4 +82,44 @@ RSpec.describe StreamWeaver::ITerm do
       expect(ITerm2).not_to have_received(:connect)
     end
   end
+
+  describe '.split_vertical_with_url (target_session)' do
+    # Product design: get-started's premier path splits the canvas into the
+    # NEW worker tab's session, not the calling terminal's session -- so
+    # split_pane must be able to target an arbitrary session id, not just
+    # current_session_guid.
+    let(:client) { instance_double(ITerm2::Client) }
+
+    before do
+      allow(described_class).to receive(:available?).and_return(true)
+      allow(ITerm2).to receive(:connect).and_yield(client)
+    end
+
+    it 'splits the given target_session, not the calling session, when target_session is passed' do
+      allow(described_class).to receive(:current_session_guid).and_return('calling-session-guid')
+      allow(client).to receive(:split_pane).and_return('canvas-pane-1')
+
+      result = described_class.split_vertical_with_url(
+        'http://example/canvas', open_browser: false, target_session: 'worker-session-guid'
+      )
+
+      expect(client).to have_received(:split_pane).with(
+        'worker-session-guid', vertical: true, profile_name: 'Web Browser',
+        profile_customizations: { 'Initial URL' => 'http://example/canvas' }
+      )
+      expect(result).to eq(type: :browser, pane_id: 'canvas-pane-1')
+    end
+
+    it 'falls back to current_session_guid when target_session is not given (original panel behavior)' do
+      allow(described_class).to receive(:current_session_guid).and_return('calling-session-guid')
+      allow(client).to receive(:split_pane).and_return('some-pane')
+
+      described_class.split_vertical_with_url('http://example/canvas', open_browser: false)
+
+      expect(client).to have_received(:split_pane).with(
+        'calling-session-guid', vertical: true, profile_name: 'Web Browser',
+        profile_customizations: { 'Initial URL' => 'http://example/canvas' }
+      )
+    end
+  end
 end
