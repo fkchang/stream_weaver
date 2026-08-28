@@ -2056,7 +2056,9 @@ module StreamWeaver
         'streamweaver-visual-companion' => File.join(__dir__, 'skills', 'streamweaver-visual-companion', 'SKILL.md'),
         'streamweaver-doc-builder' => File.join(__dir__, 'skills', 'streamweaver-doc-builder', 'SKILL.md'),
         'streamweaver-way' => File.join(__dir__, 'skills', 'streamweaver-way', 'SKILL.md'),
-        'streamweaver-canvas-safe' => File.join(__dir__, 'skills', 'streamweaver-canvas-safe', 'SKILL.md')
+        'streamweaver-canvas-safe' => File.join(__dir__, 'skills', 'streamweaver-canvas-safe', 'SKILL.md'),
+        'visual-plan' => File.join(__dir__, 'skills', 'visual-plan', 'SKILL.md'),
+        'visual-recap' => File.join(__dir__, 'skills', 'visual-recap', 'SKILL.md')
       }
 
       # Symlink the whole skill directory (not just SKILL.md) so sibling
@@ -2083,11 +2085,13 @@ module StreamWeaver
       puts "  streamweaver-doc-builder/      (editorial doc builder, symlinked from gem)"
       puts "  streamweaver-way/              (interactive app conventions, symlinked from gem)"
       puts "  streamweaver-canvas-safe/      (backend-less compatibility reference, symlinked from gem)"
+      puts "  visual-plan/                   (pre-implementation planning canvas, symlinked from gem)"
+      puts "  visual-recap/                  (post-implementation recap canvas, symlinked from gem)"
       puts ""
       puts "Also installed to #{agents_location} — the cross-tool alias Codex CLI, Gemini CLI,"
       puts "and GitHub Copilot all discover natively (Claude Code uses its own path above instead)."
       puts ""
-      puts "Claude Code will now know how to use StreamWeaver panels, the visual companion, the doc builder, the interactive-app conventions, and what plays well in a backend-less canvas doc."
+      puts "Claude Code will now know how to use StreamWeaver panels, the visual companion, the doc builder, the interactive-app conventions, what plays well in a backend-less canvas doc, and how to plan/recap work visually on canvas."
     end
 
     # One-command setup for Claude Code integration

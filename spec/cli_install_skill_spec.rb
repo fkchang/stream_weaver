@@ -26,7 +26,7 @@ RSpec.describe StreamWeaver::CLI do
     before { described_class.install_skill([]) }
 
     it "symlinks every gem-sourced skill's whole directory into .claude/skills, not just SKILL.md" do
-      %w[streamweaver-visual-companion streamweaver-doc-builder streamweaver-way streamweaver-canvas-safe].each do |name|
+      %w[streamweaver-visual-companion streamweaver-doc-builder streamweaver-way streamweaver-canvas-safe visual-plan visual-recap].each do |name|
         dir_link = File.join(Dir.pwd, ".claude", "skills", name)
 
         expect(File.symlink?(dir_link)).to be(true), "#{dir_link} was not created as a symlink"
@@ -39,6 +39,15 @@ RSpec.describe StreamWeaver::CLI do
       dir_link = File.join(Dir.pwd, ".agents", "skills", "streamweaver-canvas-safe")
 
       expect(File.symlink?(dir_link)).to be(true)
+    end
+
+    it "also symlinks visual-plan and visual-recap into the cross-tool .agents/skills alias" do
+      %w[visual-plan visual-recap].each do |name|
+        dir_link = File.join(Dir.pwd, ".agents", "skills", name)
+
+        expect(File.symlink?(dir_link)).to be(true), "#{dir_link} was not created as a symlink"
+        expect(File.readlink(dir_link)).to end_with(File.join("skills", name))
+      end
     end
 
     it "points canvas-safe at a real SKILL.md with the expected frontmatter name" do
