@@ -15,6 +15,13 @@ markdown there — but this extension is what makes either format render
 exactly as designed, entirely client-side, no StreamWeaver or Ruby install
 required to view.
 
+## Install
+
+Most people just want to view docs: install from the
+**[Chrome Web Store](https://chromewebstore.google.com/detail/streamweaver-doc-viewer/odjjednfpfiagefgpcfdlelldphmpcgj)**
+— one click, no build step. The steps below are the dev path, for
+contributors building the extension from source.
+
 ## Build and load
 
 ```bash

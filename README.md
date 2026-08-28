@@ -287,6 +287,14 @@ That's the actual point of shipping this publicly: docs like this only get to
 move freely between a work team and outside collaborators once anyone with a
 browser can open one.
 
+### Install
+
+**[Chrome Web Store](https://chromewebstore.google.com/detail/streamweaver-doc-viewer/odjjednfpfiagefgpcfdlelldphmpcgj)**
+— the primary path. One click, no build step, works right away.
+
+**Dev path** — building from source, for contributors working on the
+extension itself:
+
 ```bash
 bin/vendor_browser_assets   # once
 bin/build_extension
@@ -295,6 +303,18 @@ bin/build_extension
 Then `chrome://extensions` → Developer mode → Load unpacked → select
 `extension/`. See [`extension/README.md`](extension/README.md) for how it
 works, the full architecture, and current known gaps.
+
+### Share a doc
+
+Two ways to hand someone a doc, depending on how much staying power it needs:
+
+- **Quick collab** — push the doc to a Gist, then send the Gist link plus
+  the [extension link](https://chromewebstore.google.com/detail/streamweaver-doc-viewer/odjjednfpfiagefgpcfdlelldphmpcgj).
+  No install for you, one click for them. Good for a one-off review or
+  looping in someone outside the team.
+- **Level up** — commit the same `.org` file to the team repo. It renders
+  identically in the repo's own file view, no format change required. The
+  doc graduates from shared-once to living with the code it documents.
 
 ---
 
