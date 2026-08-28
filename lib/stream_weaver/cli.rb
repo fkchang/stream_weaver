@@ -2394,13 +2394,16 @@ module StreamWeaver
       unless command_on_path?(agent)
         $stderr.puts "`#{agent}` is not on PATH — install it, or re-run with --agent claude|codex for the one you have."
       else
-        worker_session_id = ITerm.open_worker_tab(agent)
+        # A new iTerm2 tab starts in $HOME, not here -- pass the invoking
+        # directory through so the worker lands in the project, not ~.
+        invoking_dir = Dir.pwd
+        worker_session_id = ITerm.open_worker_tab(agent, dir: invoking_dir)
         if worker_session_id
-          path = write_get_started_worker_json(worker_session_id, agent)
-          puts "Worker tab started running `#{agent}` (iTerm session #{worker_session_id})"
+          path = write_get_started_worker_json(worker_session_id, agent, invoking_dir)
+          puts "Worker tab started running `#{agent}` in #{invoking_dir} (iTerm session #{worker_session_id})"
           puts "Recorded: #{path}"
         else
-          $stderr.puts "Could not open a worker tab automatically — open one manually and run `#{agent}`."
+          $stderr.puts "Could not open a worker tab automatically — open one manually, cd #{invoking_dir}, and run `#{agent}`."
         end
       end
 
@@ -2446,13 +2449,14 @@ module StreamWeaver
       )
     end
 
-    def self.write_get_started_worker_json(session_id, agent)
-      dir = File.expand_path('~/.streamweaver/university')
-      FileUtils.mkdir_p(dir)
-      path = File.join(dir, 'worker.json')
+    def self.write_get_started_worker_json(session_id, agent, cwd)
+      out_dir = File.expand_path('~/.streamweaver/university')
+      FileUtils.mkdir_p(out_dir)
+      path = File.join(out_dir, 'worker.json')
       File.write(path, JSON.pretty_generate({
         session_id: session_id,
         agent: agent,
+        cwd: cwd,
         created_at: Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
       }))
       path

@@ -277,17 +277,18 @@ RSpec.describe StreamWeaver::CLI do
   end
 
   describe '.write_get_started_worker_json' do
-    it 'writes session id, agent, and an ISO8601 timestamp under ~/.streamweaver/university/worker.json' do
+    it 'writes session id, agent, cwd, and an ISO8601 timestamp under ~/.streamweaver/university/worker.json' do
       Dir.mktmpdir do |home|
         prev_home = ENV['HOME']
         ENV['HOME'] = home
         begin
-          path = described_class.write_get_started_worker_json('w-session-1', 'claude')
+          path = described_class.write_get_started_worker_json('w-session-1', 'claude', '/some/project/dir')
 
           expect(path).to eq(File.join(home, '.streamweaver', 'university', 'worker.json'))
           data = JSON.parse(File.read(path))
           expect(data['session_id']).to eq('w-session-1')
           expect(data['agent']).to eq('claude')
+          expect(data['cwd']).to eq('/some/project/dir')
           expect(data['created_at']).to match(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\z/)
         ensure
           ENV['HOME'] = prev_home
@@ -297,11 +298,12 @@ RSpec.describe StreamWeaver::CLI do
   end
 
   describe '.get_started_premier' do
-    it 'opens the panel, starts the worker tab, records worker.json, then pushes the canvas last' do
+    it 'opens the panel, starts the worker tab in the invoking directory, records worker.json, then pushes the canvas last' do
       order = []
       allow(described_class).to receive(:panel) { order << :panel }
-      allow(StreamWeaver::ITerm).to receive(:open_worker_tab).with('claude') { order << :worker; 'w-session-1' }
-      allow(described_class).to receive(:write_get_started_worker_json).with('w-session-1', 'claude') { order << :record; '/fake/worker.json' }
+      allow(Dir).to receive(:pwd).and_return('/invoking/dir')
+      allow(StreamWeaver::ITerm).to receive(:open_worker_tab).with('claude', dir: '/invoking/dir') { order << :worker; 'w-session-1' }
+      allow(described_class).to receive(:write_get_started_worker_json).with('w-session-1', 'claude', '/invoking/dir') { order << :record; '/fake/worker.json' }
       allow(described_class).to receive(:push_get_started_placeholder_canvas) { order << :push }
 
       capture_io { described_class.get_started_premier('claude') }

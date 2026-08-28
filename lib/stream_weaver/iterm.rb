@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'timeout'
+require 'shellwords'
 
 module StreamWeaver
   # iTerm2 integration for panel workflow via the optional iterm2_ruby gem
@@ -83,16 +84,19 @@ module StreamWeaver
         false
       end
 
-      # Create a new iTerm2 tab and run `command` in it (e.g. the `claude` or
-      # `codex` CLI). Returns the new tab's primary session_id, or nil if
+      # Create a new iTerm2 tab, cd into `dir` (defaults to the caller's cwd),
+      # then run `command` in it (e.g. the `claude` or `codex` CLI). A new
+      # iTerm2 tab starts in the user's home directory, not the caller's --
+      # without the cd, the agent launches at ~ instead of the project it was
+      # invoked from. Returns the new tab's primary session_id, or nil if
       # unavailable or the RPC failed.
-      def open_worker_tab(command)
+      def open_worker_tab(command, dir: Dir.pwd)
         return nil unless available?
         with_timeout(8, default: nil) do
           connect do |c|
             result = c.create_tab
             session_id = result && result[:session_id]
-            c.send_text(session_id, "#{command}\n") if session_id
+            c.send_text(session_id, "cd #{Shellwords.escape(dir)} && #{command}\n") if session_id
             session_id
           end
         end
