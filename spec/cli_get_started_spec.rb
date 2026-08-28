@@ -333,7 +333,7 @@ RSpec.describe StreamWeaver::CLI do
     before do
       allow(StreamWeaver::Canvas::Client).to receive(:ensure_bridge_running)
       allow(StreamWeaver::Canvas::Client).to receive(:send_message).and_return(
-        { type: 'ready', name: 'university', url: 'http://127.0.0.1:4567/canvas/university' }
+        { type: 'ready', name: 'university', url: 'http://127.0.0.1:59321/canvas/university' }
       )
       allow(described_class).to receive(:push_get_started_placeholder_canvas)
     end
@@ -353,7 +353,7 @@ RSpec.describe StreamWeaver::CLI do
       prev = ENV['SW_NO_OPEN']
       ENV.delete('SW_NO_OPEN')
       begin
-        expect(described_class).to receive(:open_browser).with('http://127.0.0.1:4567/canvas/university')
+        expect(described_class).to receive(:open_browser).with('http://127.0.0.1:59321/canvas/university')
         capture_io { described_class.get_started_degraded }
       ensure
         ENV['SW_NO_OPEN'] = prev
@@ -363,6 +363,20 @@ RSpec.describe StreamWeaver::CLI do
     it 'pushes the placeholder canvas' do
       expect(described_class).to receive(:push_get_started_placeholder_canvas)
       capture_io { described_class.get_started_degraded }
+    end
+
+    it 'prints the exact URL the live bridge returned, never a locally-assumed default port' do
+      # 59321 is a deliberately arbitrary fixture port -- neither
+      # Service::DEFAULT_PORT (4567, the standalone app server, a different
+      # subsystem entirely) nor Canvas::BridgeServer::DEFAULT_PORT (4700).
+      # If this passes, the printed/opened URL came straight from
+      # Canvas::Client.send_message's response (itself sourced from the
+      # bridge's real port in ~/.streamweaver/canvas.pid), not a constant.
+      out, _err = capture_io { described_class.get_started_degraded }
+
+      expect(out).to include('http://127.0.0.1:59321/canvas/university')
+      expect(out).not_to include('4567')
+      expect(out).not_to include('4700')
     end
 
     it 'aborts loudly rather than pushing into a nonexistent session when creation fails' do

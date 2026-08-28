@@ -1921,7 +1921,7 @@ module StreamWeaver
             # Split pane unavailable or failed — open external browser (Forrest's Law)
             puts "Canvas '#{session_name}' ready at #{url}"
             puts "(Opening browser...)"
-            open_browser(url)
+            open_browser(url) unless ENV['SW_NO_OPEN']
           end
         else
           # iTerm2 not available — open external browser (Forrest's Law)
@@ -1930,7 +1930,7 @@ module StreamWeaver
             puts "(Tip: `gem install iterm2_ruby` to open canvases in an iTerm split pane)"
           end
           puts "(iTerm2 not available — opening browser...)"
-          open_browser(url)
+          open_browser(url) unless ENV['SW_NO_OPEN']
         end
 
         puts ""
