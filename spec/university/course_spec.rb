@@ -56,6 +56,12 @@ RSpec.describe StreamWeaver::University::Course do
         end
       end
     end
+
+    it 'has step 5 export the step 4 doc with org-export and push it to a gist' do
+      step5 = described_class::GETTING_STARTED_STEPS.find { |s| s[:number] == 5 }
+      expect(step5[:prompt]).to include('org-export')
+      expect(step5[:prompt]).to include('gh gist create')
+    end
   end
 
   describe 'FUTURE_COURSES' do
