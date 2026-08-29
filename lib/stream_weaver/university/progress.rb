@@ -97,6 +97,31 @@ module StreamWeaver
         @data['last_run']
       end
 
+      # Which step's detail screen is showing, or nil for the course list.
+      # canvas-push instance_evals canvas.rb fresh on every render (no
+      # in-memory app state survives between pushes -- see canvas.rb's file
+      # header), so which of the app's two screens to render has to live
+      # somewhere that does survive: this ledger, same as done/last_run.
+      def viewing_step
+        @data['viewing']
+      end
+
+      # Opens step `step_number`'s detail screen on the next render --
+      # "Details" on a step row, or "Next: step N" on the step screen's own
+      # footer.
+      def view_step!(step_number)
+        @data['viewing'] = step_number.to_i
+        write
+        self
+      end
+
+      # Returns to the course list on the next render -- "All steps".
+      def clear_view!
+        @data['viewing'] = nil
+        write
+        self
+      end
+
       private
 
       def read
@@ -106,14 +131,15 @@ module StreamWeaver
         {
           'done' => loaded['done'] || {},
           'requested' => loaded['requested'] || {},
-          'last_run' => loaded['last_run']
+          'last_run' => loaded['last_run'],
+          'viewing' => loaded['viewing']
         }
       rescue Psych::SyntaxError
         blank_data
       end
 
       def blank_data
-        { 'done' => {}, 'requested' => {}, 'last_run' => nil }
+        { 'done' => {}, 'requested' => {}, 'last_run' => nil, 'viewing' => nil }
       end
 
       def write

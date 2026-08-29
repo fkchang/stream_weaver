@@ -285,6 +285,7 @@ _css = <<~CSS
     padding: 22px 22px 20px;
   }
   .uni-resume__lead {
+    display: block;
     font-family: var(--sw-font-display);
     font-size: clamp(1.35rem, 3.4vw, 1.55rem);
     font-weight: 600; line-height: 1.16; letter-spacing: -0.016em;
@@ -435,6 +436,99 @@ _css = <<~CSS
     border-radius: 4px; padding: 2px 6px; color: var(--uni-ink);
   }
 
+  /* ---- Step screen ------------------------------------------------------- */
+  .uni-context {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  body .sw-button.uni-back {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 14px; font-weight: 600; color: var(--uni-muted);
+    background: var(--uni-panel); border: 1px solid var(--uni-line);
+    border-radius: 7px; padding: 8px 13px;
+    transition: color var(--uni-step), border-color var(--uni-step);
+  }
+  body .sw-button.uni-back:hover { color: var(--uni-now); border-color: var(--uni-now); }
+  .uni-context__spacer { flex: 1 1 auto; }
+  .uni-count {
+    font-size: 13px; font-weight: 600; color: var(--uni-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  body .sw-card-header.uni-step__bar { gap: 14px; align-items: center; }
+  .uni-step__mark--hero {
+    background: var(--uni-now); color: var(--uni-on-solid);
+    width: 34px; height: 34px; font-size: 15px;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--uni-now) 18%, transparent);
+  }
+  body.sw-theme-doc h1.uni-title {
+    font-family: var(--sw-font-display);
+    font-size: clamp(1.6rem, 4vw, 1.95rem);
+    font-weight: 600; line-height: 1.15; letter-spacing: -0.018em;
+    text-wrap: balance; color: var(--uni-ink);
+    margin: 0; padding: 0; border-bottom: none; flex: 1 1 auto;
+  }
+
+  .uni-section { padding: 0 22px; }
+  .uni-section:first-child { padding-top: 24px; }
+  .uni-section:last-of-type { padding-bottom: 8px; }
+  .uni-label {
+    display: block;
+    font-size: 15px; font-weight: 650; color: var(--uni-ink);
+    letter-spacing: -0.005em; margin: 32px 0 11px;
+  }
+  .uni-section:first-child > .uni-label { margin-top: 0; }
+  .uni-prose { max-width: 66ch; font-size: 16px; line-height: 1.6; color: var(--uni-ink); }
+  .uni-prose p { margin: 0 0 0.8em; }
+  .uni-prose p:last-child { margin-bottom: 0; }
+
+  .uni-promptbox {
+    border: 1px solid var(--uni-line); border-radius: 9px;
+    background: var(--uni-sunk); overflow: hidden; margin: 30px 0 18px;
+  }
+  .uni-promptbox__bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--uni-bar); border-bottom: 1px solid var(--uni-line);
+    padding: 9px 15px;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--uni-muted);
+  }
+  .uni-prompt {
+    display: block;
+    font-family: var(--sw-font-mono);
+    font-size: 13px; line-height: 1.65;
+    white-space: pre-wrap; color: var(--uni-ink);
+    padding: 16px 17px; overflow-x: auto;
+  }
+
+  .uni-payoff ul { list-style: none; padding: 0; margin: 0; max-width: 64ch; }
+  .uni-payoff li {
+    display: grid; grid-template-columns: 20px 1fr; gap: 11px;
+    font-size: 15px; line-height: 1.5; color: var(--uni-ink);
+    padding: 7px 0;
+  }
+  .uni-payoff li::before {
+    content: ""; margin-top: 4px;
+    width: 15px; height: 15px;
+    background-color: var(--uni-done);
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.2 8.4l3.1 3.1 6.5-7'/%3E%3C/svg%3E");
+            mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.2 8.4l3.1 3.1 6.5-7'/%3E%3C/svg%3E");
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-size: contain; mask-size: contain;
+  }
+
+  .uni-foot {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--uni-sunk); border-top: 1px solid var(--uni-line);
+    padding: 16px 22px; margin-top: 22px;
+  }
+  .uni-foot__hint { font-size: 14px; color: var(--uni-muted); }
+  .uni-foot__spacer { flex: 1 1 auto; }
+  @media (max-width: 620px) {
+    .uni-foot { flex-wrap: wrap; }
+    .uni-foot__spacer { display: none; }
+  }
+
   @media (max-width: 700px) {
     body[class*="sw-layout-"] { padding-bottom: 150px; }
   }
@@ -461,15 +555,104 @@ _body = proc do
   done_count = progress.done_steps.count { |n| n <= total }
   current_number = steps.find { |s| states[s[:number]] == :current }&.dig(:number)
   all_done = done_count == total
+  viewing_step = StreamWeaver::University::Course.step(progress.viewing_step)
 
-  topbar(wordmark: "StreamWeaver University") do
-    theme_toggle mode: :auto
-  end
-  phrase "Learn StreamWeaver by running it. Every step is a real app that appears " \
-         "in this pane while you stay in your terminal.",
-         class: "uni-tagline"
+  if viewing_step
+    # =========================================================================
+    # Step screen -- a second view of this same app, reached from a step row's
+    # Details button (id "view-N") and left via "All steps" or "Next: step
+    # N+1". Chosen by progress.viewing_step (nil = course list) rather than
+    # in-memory app state, because canvas-push instance_evals this whole file
+    # fresh on every render -- see the file header. design-spec section 2,
+    # "Step screen".
+    number = viewing_step[:number]
 
-  # ---- Getting Started: open, and holding its own state --------------------
+    topbar(wordmark: "StreamWeaver University",
+           breadcrumbs: ["Getting Started", "Step #{number}"]) do
+      theme_toggle mode: :auto
+    end
+    phrase "Learn StreamWeaver by running it. Every step is a real app that appears " \
+           "in this pane while you stay in your terminal.",
+           class: "uni-tagline"
+
+    div(class: "uni-context") do
+      button "All steps", id: "back-to-list", class: "uni-back"
+      div(class: "uni-rail") do
+        div(class: "uni-rail__track") do
+          steps.each do |step|
+            seg_class = case states[step[:number]]
+                        when :done then "uni-rail__seg uni-rail__seg--done"
+                        when :current then "uni-rail__seg uni-rail__seg--current"
+                        else "uni-rail__seg"
+                        end
+            div(class: seg_class) {}
+          end
+        end
+        phrase "#{done_count} of #{total} done", class: "uni-rail__label"
+      end
+      div(class: "uni-context__spacer") {}
+      phrase "Step #{number} of #{total}", class: "uni-count"
+    end
+
+    card(depth: :elevated, class: "uni-course") do
+      card_header(class: "uni-course__bar uni-step__bar") do
+        div(class: "uni-step__mark uni-step__mark--hero") { phrase number.to_s }
+        header1 viewing_step[:title], class: "uni-title"
+      end
+
+      card_body(class: "uni-course__body") do
+        div(class: "uni-section") do
+          phrase "Why this matters", class: "uni-label"
+          md viewing_step[:why_it_matters], class: "uni-prose"
+        end
+
+        div(class: "uni-section") do
+          div(class: "uni-promptbox") do
+            div(class: "uni-promptbox__bar") do
+              phrase "The prompt your worker session receives"
+            end
+            phrase viewing_step[:prompt], class: "uni-prompt"
+          end
+
+          div(class: "uni-actions") do
+            button "Run in worker session", id: "run-#{number}", class: "uni-btn uni-btn--run"
+            copy_button "Copy prompt", text: viewing_step[:prompt],
+                        copied_label: "Copied", class: "uni-btn uni-btn--outline"
+          end
+        end
+
+        div(class: "uni-section") do
+          phrase "What you should see", class: "uni-label"
+          md viewing_step[:what_you_should_see].map { |line| "- #{line}" }.join("\n"),
+             class: "uni-payoff"
+        end
+
+        # Two exits, deliberately unequal: Mark done writes the ledger and
+        # returns to the list (where the updated rail is visible); Next is
+        # a quiet way to keep moving without leaving this screen.
+        div(class: "uni-foot") do
+          button "Mark step #{number} done", id: "mark-done-#{number}", class: "uni-btn uni-btn--outline"
+          if number < total
+            phrase "Unlocks step #{number + 1}.", class: "uni-foot__hint"
+          else
+            phrase "That is the whole course.", class: "uni-foot__hint"
+          end
+          div(class: "uni-foot__spacer") {}
+          if number < total
+            button "Next: step #{number + 1}", id: "next-#{number + 1}", class: "uni-btn uni-btn--quiet"
+          end
+        end
+      end
+    end
+  else
+    topbar(wordmark: "StreamWeaver University") do
+      theme_toggle mode: :auto
+    end
+    phrase "Learn StreamWeaver by running it. Every step is a real app that appears " \
+           "in this pane while you stay in your terminal.",
+           class: "uni-tagline"
+
+    # ---- Getting Started: open, and holding its own state --------------------
   card(depth: :elevated, class: "uni-course") do
     card_header(class: "uni-course__bar") do
       div(class: "uni-course__dot") {}
@@ -565,7 +748,8 @@ _body = proc do
               phrase "Step #{number}, done", class: "uni-sr"
             else
               phrase number.to_s
-              phrase(state == :current ? ", current step" : ", not started", class: "uni-sr")
+              phrase(state == :current ? "Step #{number}, current step" : "Step #{number}, not started",
+                     class: "uni-sr")
             end
           end
           div do
@@ -582,6 +766,7 @@ _body = proc do
             else
               button "Run", id: "run-#{number}", class: "uni-btn uni-btn--quiet"
             end
+            button "Details", id: "view-#{number}", class: "uni-btn uni-btn--quiet"
           end
         end
       end
@@ -611,6 +796,7 @@ _body = proc do
   md "Looking for the old component tour? Run `streamweaver tutorial` -- the classic " \
      "walkthrough of every component. Older than these courses, and being refreshed.",
      class: "uni-note"
+  end
 end
 
 if respond_to?(:use_theme)

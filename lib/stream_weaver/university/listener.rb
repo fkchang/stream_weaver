@@ -13,14 +13,18 @@ module StreamWeaver
     #
     # Button ids come from lib/stream_weaver/university/canvas.rb's `id:`
     # scheme: "mark-done-N", "run-N" / "repeat-N", "hero-run-N" /
-    # "hero-repeat-N". The rendered `id:` (e.g. "mark-done-3") becomes a
-    # `btn_<label-slug>_<id>` DOM/dispatch id (app.rb `button`), so every
-    # pattern below is anchored to the string's end, not its start.
+    # "hero-repeat-N" on the course list; "view-N" (a row's Details button),
+    # "back-to-list" (the step screen's "All steps"), and "next-N" (the step
+    # screen's "Next: step N") navigate between the app's two screens. The
+    # rendered `id:` (e.g. "mark-done-3") becomes a `btn_<label-slug>_<id>`
+    # DOM/dispatch id (app.rb `button`), so every pattern below is anchored
+    # to the string's end, not its start.
     module Listener
       SESSION = 'university'
 
       # Applies one dispatched button token to the ledger. Returns the step
-      # number acted on, or nil if the token didn't match a known action.
+      # number acted on, true for a navigation action with no step of its
+      # own (back-to-list), or nil if the token didn't match a known action.
       def self.handle_token(token, progress)
         case token.to_s
         when /mark-done-(\d+)\z/
@@ -34,6 +38,13 @@ module StreamWeaver
           # then renders whatever it wrote.
           Runner.run_step!(step, progress: progress)
           step
+        when /view-(\d+)\z/, /next-(\d+)\z/
+          step = Regexp.last_match(1).to_i
+          progress.view_step!(step)
+          step
+        when /back-to-list\z/
+          progress.clear_view!
+          true
         end
       end
 

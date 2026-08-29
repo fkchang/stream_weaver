@@ -92,7 +92,7 @@ RSpec.describe StreamWeaver::University::Runner do
       sent = nil
       expect(StreamWeaver::ITerm).to have_received(:send_to_session) { |_id, text| sent = text }
       expect(sent).not_to include("\n")
-      expect(sent).to include('increments a counter held in state')
+      expect(sent).to include('increments a counter held in `state`')
     end
 
     it 'leaves pressing Return to the adapter rather than appending its own newline' do
