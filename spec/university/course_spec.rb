@@ -27,6 +27,14 @@ RSpec.describe StreamWeaver::University::Course do
       expect(step1[:prompt]).to include('streamweaver panel hello')
       expect(step1[:prompt]).to include('streamweaver canvas-push hello')
     end
+
+    it 'has step 2 run the minimal counter app with `ruby app.rb`, standalone (no canvas)' do
+      step2 = described_class::GETTING_STARTED_STEPS.find { |s| s[:number] == 2 }
+      expect(step2[:prompt]).to include('ruby app.rb')
+      expect(step2[:prompt]).to include('increments a')
+      expect(step2[:prompt]).to include('counter held in `state`')
+      expect(step2[:prompt]).not_to include('canvas-push')
+    end
   end
 
   describe 'FUTURE_COURSES' do
