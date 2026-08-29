@@ -203,4 +203,69 @@ RSpec.describe StreamWeaver::University::Canvas do
       expect(html).not_to include('sw-copy-button')
     end
   end
+
+  # --- step-1-canvas-push: the step screen, a second view of this same app,
+  # reached from a row's Details button and left via "All steps" or "Next".
+
+  def view_step(number)
+    StreamWeaver::University::Progress.new(@progress_path).view_step!(number)
+  end
+
+  describe 'course list rows' do
+    it 'offers a Details button on every step row, reachable into the step screen' do
+      html = render
+      expect(html.scan('id="btn_details_view-').size).to eq(5)
+    end
+  end
+
+  describe 'rendered step screen' do
+    it 'is not shown until a step is being viewed' do
+      html = render
+      expect(html).not_to include('uni-promptbox')
+    end
+
+    it 'renders the step title, why-it-matters, prompt, and what-you-should-see' do
+      view_step(3)
+      html = render
+      step3 = StreamWeaver::University::Course.step(3)
+
+      expect(html).to include(step3[:title])
+      expect(html).to include('Why this matters')
+      expect(html).to include('The prompt your worker session receives')
+      expect(html).to include(step3[:prompt])
+      expect(html).to include('What you should see')
+      step3[:what_you_should_see].each { |line| expect(html).to include(line) }
+    end
+
+    it 'offers Run in worker session (routed through the same run-N id Runner handles) and Copy prompt' do
+      view_step(3)
+      html = render
+
+      expect(html).to include('id="btn_run_in_worker_session_run-3"')
+      expect(html).to include('sw-copy-button')
+    end
+
+    it 'offers Mark step N done and a back to the list' do
+      view_step(3)
+      html = render
+
+      expect(html).to include('id="btn_mark_step_3_done_mark-done-3"')
+      expect(html).to include('id="btn_all_steps_back-to-list"')
+    end
+
+    it 'offers a Next: step N+1 link for steps before the last' do
+      view_step(3)
+      html = render
+
+      expect(html).to include('id="btn_next_step_4_next-4"')
+    end
+
+    it 'has no Next link on the last step' do
+      view_step(5)
+      html = render
+
+      expect(html).not_to include('btn_next_step')
+      expect(html).to include('That is the whole course.')
+    end
+  end
 end

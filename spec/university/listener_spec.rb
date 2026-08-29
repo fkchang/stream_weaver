@@ -89,5 +89,25 @@ RSpec.describe StreamWeaver::University::Listener do
       expect(described_class.handle_token('btn_theme_toggle_x', p)).to be_nil
       expect(p.done_steps).to eq([])
     end
+
+    it 'opens the step screen for a view-N button id (a row\'s Details button)' do
+      p = progress
+      expect(described_class.handle_token('btn_details_view-2', p)).to eq(2)
+      expect(p.viewing_step).to eq(2)
+    end
+
+    it 'opens the step screen for a next-N button id (the step screen\'s Next link)' do
+      p = progress
+      expect(described_class.handle_token('btn_next_step_4_next-4', p)).to eq(4)
+      expect(p.viewing_step).to eq(4)
+    end
+
+    it 'returns to the course list for a back-to-list button id' do
+      p = progress
+      p.view_step!(2)
+
+      expect(described_class.handle_token('btn_all_steps_back-to-list', p)).to be(true)
+      expect(p.viewing_step).to be_nil
+    end
   end
 end

@@ -126,6 +126,26 @@ RSpec.describe StreamWeaver::University::Progress do
     end
   end
 
+  describe '#view_step! / #clear_view! (step screen navigation)' do
+    it 'is nil before any step screen has been opened' do
+      expect(new_progress.viewing_step).to be_nil
+    end
+
+    it 'persists which step is showing, across instances' do
+      new_progress.view_step!(3)
+
+      expect(new_progress.viewing_step).to eq(3)
+    end
+
+    it 'returns to the course list on clear_view!' do
+      progress = new_progress
+      progress.view_step!(3)
+      progress.clear_view!
+
+      expect(new_progress.viewing_step).to be_nil
+    end
+  end
+
   describe 'a corrupt or partial file on disk' do
     it 'treats invalid YAML as the zero-state rather than raising' do
       FileUtils.mkdir_p(File.dirname(@path))

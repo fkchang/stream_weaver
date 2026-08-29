@@ -10,18 +10,22 @@ RSpec.describe StreamWeaver::University::Course do
       expect(numbers).to eq([1, 2, 3, 4, 5])
     end
 
-    it 'gives every step a title, payoff, and non-blank prompt' do
+    it 'gives every step a title, payoff, why_it_matters, prompt, and what_you_should_see' do
       described_class::GETTING_STARTED_STEPS.each do |step|
         expect(step[:title].to_s.strip).not_to be_empty
         expect(step[:payoff].to_s.strip).not_to be_empty
+        expect(step[:why_it_matters].to_s.strip).not_to be_empty
         expect(step[:prompt].to_s.strip).not_to be_empty
+        expect(step[:what_you_should_see]).to be_an(Array)
+        expect(step[:what_you_should_see]).not_to be_empty
+        step[:what_you_should_see].each { |line| expect(line.to_s.strip).not_to be_empty }
       end
     end
 
-    it 'keeps the step 3 prompt matching the approved mockup verbatim' do
-      step3 = described_class::GETTING_STARTED_STEPS.find { |s| s[:number] == 3 }
-      expect(step3[:prompt]).to include('radio_group and a button')
-      expect(step3[:prompt]).to include('canvas-wait')
+    it 'has step 1 open a canvas session before pushing the card into it' do
+      step1 = described_class::GETTING_STARTED_STEPS.find { |s| s[:number] == 1 }
+      expect(step1[:prompt]).to include('streamweaver panel hello')
+      expect(step1[:prompt]).to include('streamweaver canvas-push hello')
     end
   end
 
