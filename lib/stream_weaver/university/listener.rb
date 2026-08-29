@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'fileutils'
+require 'rbconfig'
+require 'stream_weaver/canvas/client'
 require 'stream_weaver/university/progress'
 require 'stream_weaver/university/runner'
 
@@ -21,6 +24,9 @@ module StreamWeaver
     # to the string's end, not its start.
     module Listener
       SESSION = 'university'
+
+      # How long run! waits before reconnecting to a bridge that went away.
+      RECONNECT_DELAY = 1
 
       # Applies one dispatched button token to the ledger. Returns the step
       # number acted on, true for a navigation action with no step of its
@@ -48,38 +54,201 @@ module StreamWeaver
         end
       end
 
-      # Blocks for exactly one canvas event (mirrors `canvas-wait`'s
-      # subscribe/timeout shape), applies it, and re-pushes the app so the
-      # rendered page reflects the ledger's new state. Returns the button
-      # token handled, or nil on timeout / no session.
-      def self.step!(session_name: SESSION, timeout: 300)
-        require 'stream_weaver/canvas/client'
+      # Applies one event to the ledger and re-pushes the app so the
+      # rendered page reflects the new state. The re-push is not optional
+      # bookkeeping: a click swaps the page for the canvas_continue spinner
+      # (see canvas.rb), and this push is what puts the real page back.
+      # Returns the button token handled, or nil if the event carried none.
+      def self.handle_event(event, session_name: SESSION)
+        token = event.dig(:data, :button)
+        return nil unless token
 
-        result = Canvas::Client.send_and_wait(
+        handle_token(token, Progress.load)
+        repush(session_name: session_name)
+        token
+      end
+
+      def self.repush(session_name: SESSION)
+        canvas_path = File.expand_path('canvas.rb', __dir__)
+        ::StreamWeaver::Canvas::Client.send_message(
+          ::StreamWeaver::Canvas::Protocol::Messages.push(session_name, File.read(canvas_path), source_dir: nil)
+        )
+      end
+
+      # Blocks for exactly one canvas event, applies it, and re-pushes.
+      # Returns the button token handled, or nil on timeout / no bridge.
+      # Kept as the single-shot form for manual verification; `run!` uses
+      # the persistent stream instead.
+      def self.step!(session_name: SESSION, timeout: 300)
+        result = ::StreamWeaver::Canvas::Client.send_and_wait(
           { type: 'subscribe', name: session_name },
           event_type: 'event',
           timeout: timeout
         )
         return nil unless result
 
-        token = result.dig(:data, :button)
-        progress = Progress.load
-        handle_token(token, progress) if token
-
-        canvas_path = File.expand_path('canvas.rb', __dir__)
-        Canvas::Client.send_message(
-          Canvas::Protocol::Messages.push(session_name, File.read(canvas_path), source_dir: nil)
-        )
-        token
-      rescue Canvas::Client::NotRunningError, Canvas::Client::ConnectionError
+        handle_event(result, session_name: session_name)
+      rescue ::StreamWeaver::Canvas::Client::NotRunningError, ::StreamWeaver::Canvas::Client::ConnectionError
         nil
       end
 
-      # Runs until killed. Not started automatically by `get-started` --
-      # see docs/university/design-spec.md and the progress-ledger UAT
-      # handoff note for how to run this by hand during verification.
+      # Runs until killed, over ONE held-open connection at a time. Not a
+      # loop of `step!`: that reconnects after every event, and the gap
+      # lands exactly where the user is most likely to click again -- while
+      # the re-push is in flight.
+      #
+      # The outer loop is not optional robustness. `each_event` returns when
+      # the bridge closes the socket, which a `canvas-restart` does
+      # routinely; without reconnecting, the listener would exit and the
+      # canvas would go permanently dead -- and worse than before this
+      # story, because the canvas_continue marker means a click with no
+      # re-push leaves "Working..." on screen forever and sets
+      # _swFeedbackActive, which makes the adapter swallow every later
+      # click. Same reason a not-yet-running bridge waits rather than
+      # exiting: `university-listener start` must not report a pid for a
+      # process that is already gone.
       def self.run!(session_name: SESSION)
-        loop { step!(session_name: session_name) }
+        complained = false
+
+        loop do
+          begin
+            ::StreamWeaver::Canvas::Client.each_event(session_name) do |event|
+              handle_event(event, session_name: session_name)
+            rescue StandardError => e
+              # One bad click must not take down a listener nobody can see.
+              warn "university-listener: #{e.class}: #{e.message}"
+            end
+            complained = false
+          rescue StandardError => e
+            # Deliberately every StandardError, not just the two bridge
+            # errors: this process must not die anywhere the user can't see
+            # it, and RECONNECT_DELAY below already rules out a hot spin, so
+            # there is no failure here from which exiting beats retrying.
+            #
+            # Logged once per outage, not once per second: the log is
+            # append-only with nothing rotating it, and a bridge left down
+            # overnight would otherwise put ~86k lines in a file the user
+            # doesn't know exists.
+            unless complained
+              warn "university-listener: waiting for the canvas bridge (#{e.class}: #{e.message})"
+              complained = true
+            end
+          end
+
+          sleep RECONNECT_DELAY
+        end
+      end
+
+      # --- Process lifecycle ------------------------------------------------
+      # `get-started` starts this in the background; without it every button
+      # on the canvas does nothing at all (UAT 2026-08-29). The env
+      # overrides mirror Progress/Runner so specs never touch the real files.
+
+      def self.pid_path
+        ENV['STREAMWEAVER_UNIVERSITY_LISTENER_PID'] ||
+          File.expand_path('~/.streamweaver/university/listener.pid')
+      end
+
+      def self.log_path
+        ENV['STREAMWEAVER_UNIVERSITY_LISTENER_LOG'] ||
+          File.expand_path('~/.streamweaver/university/listener.log')
+      end
+
+      # The pid recorded by `start!`, or nil if there isn't a usable one.
+      def self.recorded_pid
+        pid = File.read(pid_path).to_i
+        pid.positive? ? pid : nil
+      rescue SystemCallError, IOError
+        nil
+      end
+
+      def self.running?
+        pid = recorded_pid or return false
+        ours?(pid)
+      end
+
+      # Alive AND plausibly the listener we spawned. `start!` uses
+      # `pgroup: true`, so our listener is its own process-group leader;
+      # a pid recycled onto some unrelated process almost never is. Without
+      # this check, a crash plus enough pid churn has `get-started` sending
+      # TERM to whatever the user happens to be running.
+      def self.ours?(pid)
+        Process.kill(0, pid)
+        Process.getpgid(pid) == pid
+      rescue Errno::ESRCH, Errno::EPERM
+        false
+      end
+      private_class_method :ours?
+
+      # How long start! waits for the listener it just TERMed to actually go.
+      EXIT_POLL = 0.05
+      EXIT_WAIT = 40 # * EXIT_POLL = 2s
+
+      # Stops any listener already recorded, waits for it to actually exit,
+      # then spawns a fresh detached one. Stopping first is what keeps a
+      # second `get-started` (or a canvas-restart) from leaving two
+      # listeners racing to re-push -- whichever push lands second wins, so
+      # the loser shows stale state. Returns the new pid.
+      def self.start!(session_name: SESSION)
+        previous = recorded_pid
+        stop!
+        await_exit(previous)
+
+        FileUtils.mkdir_p(File.dirname(log_path))
+        FileUtils.mkdir_p(File.dirname(pid_path))
+
+        pid = Process.spawn(
+          RbConfig.ruby,
+          "-I#{File.expand_path('../..', __dir__)}",
+          '-r', 'stream_weaver/university/listener',
+          '-e', "StreamWeaver::University::Listener.run!(session_name: #{session_name.inspect})",
+          out: [log_path, 'a'], err: %i[child out], pgroup: true
+        )
+        Process.detach(pid)
+        File.write(pid_path, "#{pid}\n")
+        pid
+      end
+
+      # TERM is asynchronous, so "stopped" is a request, not a fact. Spawning
+      # the replacement while the old one still holds its connection gives
+      # two listeners racing to re-push, and whichever push lands second
+      # wins -- so the canvas can settle on state the user did not ask for.
+      def self.await_exit(pid)
+        return unless pid
+
+        EXIT_WAIT.times do
+          return unless ours?(pid)
+
+          sleep EXIT_POLL
+        end
+
+        # Falling through here is the very race this method exists to
+        # prevent, so escalate rather than spawn a rival quietly.
+        warn "university-listener: pid #{pid} ignored TERM, sending KILL"
+        Process.kill('KILL', pid)
+      rescue Errno::ESRCH, Errno::EPERM
+        nil
+      end
+      private_class_method :await_exit
+
+      # Terminates the recorded listener. Always clears the pid file, even
+      # when the process was already gone -- a stale pid file left by a
+      # crash must not look like a running listener forever.
+      def self.stop!
+        pid = recorded_pid
+        return false unless pid && ours?(pid)
+
+        Process.kill('TERM', pid)
+        true
+      rescue Errno::ESRCH, Errno::EPERM
+        false
+      ensure
+        FileUtils.rm_f(pid_path)
+      end
+
+      def self.status
+        alive = running?
+        { running: alive, pid: alive ? recorded_pid : nil, log: log_path }
       end
     end
   end

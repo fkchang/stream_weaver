@@ -38,12 +38,15 @@ module StreamWeaver
       class << self
         attr_accessor :bridge, :unix_server, :claude_connections, :port
 
+        # Must resolve identically to Canvas::Client's -- a redirected
+        # client talking to a server that bound the default socket is a
+        # silent no-op. See the comment there for why the override exists.
         def socket_path
-          SOCKET_PATH
+          ENV['STREAMWEAVER_CANVAS_SOCKET'] || SOCKET_PATH
         end
 
         def pid_file_path
-          PID_FILE_PATH
+          ENV['STREAMWEAVER_CANVAS_PID'] || PID_FILE_PATH
         end
 
         def default_port
@@ -490,12 +493,12 @@ module StreamWeaver
       # Start the Unix socket server in a background thread
       def self.start_unix_socket_server
         # Ensure directory exists
-        FileUtils.mkdir_p(File.dirname(SOCKET_PATH))
+        FileUtils.mkdir_p(File.dirname(socket_path))
 
         # Remove stale socket
-        File.delete(SOCKET_PATH) if File.exist?(SOCKET_PATH)
+        File.delete(socket_path) if File.exist?(socket_path)
 
-        @unix_server = UNIXServer.new(SOCKET_PATH)
+        @unix_server = UNIXServer.new(socket_path)
 
         Thread.new do
           loop do
@@ -556,14 +559,14 @@ module StreamWeaver
 
       # Write PID file
       def self.write_pid_file
-        FileUtils.mkdir_p(File.dirname(PID_FILE_PATH))
-        File.write(PID_FILE_PATH, "pid=#{Process.pid}\nport=#{@port || DEFAULT_PORT}\n")
+        FileUtils.mkdir_p(File.dirname(pid_file_path))
+        File.write(pid_file_path, "pid=#{Process.pid}\nport=#{@port || DEFAULT_PORT}\n")
       end
 
       # Cleanup on shutdown
       def self.cleanup
-        File.delete(SOCKET_PATH) if File.exist?(SOCKET_PATH)
-        File.delete(PID_FILE_PATH) if File.exist?(PID_FILE_PATH)
+        File.delete(socket_path) if File.exist?(socket_path)
+        File.delete(pid_file_path) if File.exist?(pid_file_path)
         @unix_server&.close
       end
 

@@ -39,9 +39,9 @@ module StreamWeaver
 
         def self.run!(session_name: ARGV.first || 'doc-demo',
                        pause: Float(ENV.fetch('STREAMWEAVER_GROWING_DOC_PAUSE', 2)))
-          Canvas::Client.ensure_bridge_running
-          Canvas::Client.send_message(
-            Canvas::Protocol::Messages.create(session_name, layout: :fluid, theme: :doc)
+          ::StreamWeaver::Canvas::Client.ensure_bridge_running
+          ::StreamWeaver::Canvas::Client.send_message(
+            ::StreamWeaver::Canvas::Protocol::Messages.create(session_name, layout: :fluid, theme: :doc)
           )
 
           sections = []
@@ -51,12 +51,12 @@ module StreamWeaver
               header1 "A doc that writes itself"
               md #{sections.join("\n\n").inspect}
             RUBY
-            Canvas::Client.send_message(
-              Canvas::Protocol::Messages.push(session_name, dsl, source_dir: nil)
+            ::StreamWeaver::Canvas::Client.send_message(
+              ::StreamWeaver::Canvas::Protocol::Messages.push(session_name, dsl, source_dir: nil)
             )
             sleep(pause) unless i == NEW_SECTIONS.length - 1
           end
-        rescue Canvas::Client::NotRunningError, Canvas::Client::ConnectionError => e
+        rescue ::StreamWeaver::Canvas::Client::NotRunningError, ::StreamWeaver::Canvas::Client::ConnectionError => e
           warn "growing_doc: could not reach the canvas bridge (#{e.message}) -- " \
                "run `streamweaver panel #{session_name}` first"
         end

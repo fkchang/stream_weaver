@@ -162,6 +162,21 @@ RSpec.describe StreamWeaver::University::Canvas do
     StreamWeaver::University::Course.prompt_for(number)
   end
 
+  # UAT 2026-08-29: every button blanked the canvas to "✓ Submitted -- You
+  # can close this window". The buttons were already dispatching non-terminal
+  # `action` events; the blanking is adapter/alpinejs.rb's showFeedback(),
+  # which falls back to that terminal screen when the pushed DSL carries no
+  # #sw-canvas-continue marker. A long-lived control panel must carry one, so
+  # a click shows a brief spinner that the listener's re-push then replaces.
+  describe 'click feedback' do
+    it 'emits the canvas continue marker so a click never renders the terminal Submitted screen' do
+      html = render
+
+      expect(html).to include('id="sw-canvas-continue"')
+      expect(html).to include('data-continue-message')
+    end
+  end
+
   describe 'rendered run notice' do
     it 'shows nothing when no Run has been clicked yet' do
       expect(render).not_to include('uni-run-notice')

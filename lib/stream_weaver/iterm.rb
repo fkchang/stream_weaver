@@ -98,7 +98,15 @@ module StreamWeaver
         return nil unless available?
         with_timeout(8, default: nil) do
           connect do |c|
-            result = c.create_tab
+            # In the caller's own window when we can find it. A brand new
+            # iTerm2 window opens at the profile's default size, which UAT
+            # found unusably small twice over; the window the user is
+            # already sitting in is by definition the size they chose. The
+            # gem exposes no set_property, so inheriting is the only way to
+            # get a sane frame -- and the calling PANE is still untouched
+            # either way, which is the actual product promise.
+            window_id = calling_window_id(c)
+            result = window_id ? c.create_tab(window_id: window_id) : c.create_tab
             session_id = result && result[:session_id]
             c.send_text(session_id, "cd #{Shellwords.escape(dir)} && #{command}\n") if session_id
             session_id
@@ -155,6 +163,16 @@ module StreamWeaver
       private
 
       APP_NAME = "StreamWeaver"
+
+      # The window holding the session this process is running in, or nil if
+      # it can't be determined (not in iTerm2, or the lookup failed). Callers
+      # treat nil as "open a new window".
+      def calling_window_id(client)
+        guid = current_session_guid or return nil
+        client.topology.find { |s| s[:session_id] == guid }&.dig(:window_id)
+      rescue StandardError
+        nil
+      end
 
       def check_availability
         return false unless RbConfig::CONFIG["host_os"].match?(/darwin/)

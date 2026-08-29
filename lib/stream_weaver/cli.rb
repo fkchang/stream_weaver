@@ -9,6 +9,7 @@ require 'yaml'
 require 'time'
 require_relative 'opal/builder'
 require_relative 'university/runner'
+require_relative 'university/listener'
 
 module StreamWeaver
   # Command-line interface for StreamWeaver service
@@ -103,6 +104,8 @@ module StreamWeaver
         install_skill(args)
       when 'setup'
         setup
+      when 'university-listener'
+        university_listener(args)
       when 'get-started'
         get_started(args)
       when '--help', '-h', 'help'
@@ -692,6 +695,8 @@ module StreamWeaver
                        [--degraded]                Skip the iTerm2 premier check, use the browser fallback
                        [--yes]                     Skip the interactive confirm on the premier path
                        [--agent claude|codex]       Worker CLI to launch in the new tab (default: claude)
+          streamweaver university-listener        Background process that makes the University
+                       [start|stop|status]           canvas buttons work (get-started starts it)
       HELP
     end
 
@@ -2489,7 +2494,12 @@ module StreamWeaver
     # Get Started (one-command door)
     # =========================================
 
-    UNIVERSITY_SESSION = 'university'
+    # One name, defined once. The CLI pushes to this session and the
+    # listener filters events on it -- two literals here would mean a
+    # single-character edit could kill every button on the canvas while
+    # both sides' specs stayed green, which is precisely the class of seam
+    # failure the 2026-08-29 UAT was.
+    UNIVERSITY_SESSION = University::Listener::SESSION
     # Keep in sync with stream_weaver.gemspec's required_ruby_version.
     GET_STARTED_MIN_RUBY = '3.0.0'
 
@@ -2722,6 +2732,35 @@ module StreamWeaver
       end
     end
 
+    # Manual control over the background process that makes the University
+    # canvas's buttons do anything. `get-started` starts it for you; this is
+    # for restarting it after a crash, or seeing where its log is.
+    def self.university_listener(args)
+      case (args.first || 'status')
+      when 'start'
+        pid = University::Listener.start!
+        puts "University listener started (pid #{pid})"
+        puts "Log: #{University::Listener.log_path}"
+      when 'stop'
+        if University::Listener.stop!
+          puts "University listener stopped."
+        else
+          puts "University listener was not running."
+        end
+      when 'status'
+        state = University::Listener.status
+        if state[:running]
+          puts "University listener is running (pid #{state[:pid]})"
+        else
+          puts "University listener is not running."
+        end
+        puts "Log: #{state[:log]}"
+      else
+        $stderr.puts "Usage: streamweaver university-listener [start|stop|status]"
+        exit 1
+      end
+    end
+
     # --- Premier / degraded paths ---
 
     # Product design (not optional): the calling terminal is left untouched.
@@ -2734,7 +2773,7 @@ module StreamWeaver
 
       unless command_on_path?(agent)
         $stderr.puts "`#{agent}` is not on PATH — install it, or re-run with --agent claude|codex for the one you have."
-        return push_get_started_placeholder_canvas
+        return get_started_push_and_listen
       end
 
       # A new iTerm2 tab starts in $HOME, not here -- pass the invoking
@@ -2744,7 +2783,7 @@ module StreamWeaver
 
       unless worker_session_id
         $stderr.puts "Could not open a worker tab automatically — open one manually, cd #{invoking_dir}, and run `#{agent}`."
-        return push_get_started_placeholder_canvas
+        return get_started_push_and_listen
       end
 
       canvas_pane_id = get_started_split_canvas_into(worker_session_id, canvas_url)
@@ -2758,7 +2797,7 @@ module StreamWeaver
       end
       puts "Recorded: #{path}"
 
-      push_get_started_placeholder_canvas
+      get_started_push_and_listen
     end
 
     def self.get_started_degraded
@@ -2775,7 +2814,20 @@ module StreamWeaver
       puts "  3. Run your agent CLI (claude or codex) in that second terminal."
       puts "  4. Copy prompts from the canvas into the agent as you go."
 
-      push_get_started_placeholder_canvas
+      get_started_push_and_listen
+    end
+
+    # Push the canvas, then start the process that makes its buttons work.
+    # Order matters and is asserted: the listener re-pushes on every click,
+    # so it must not be racing the initial push. Every exit from the premier
+    # and degraded paths goes through here -- a canvas without a listener is
+    # a screen of buttons that silently do nothing, which is exactly what
+    # UAT found on 2026-08-29.
+    def self.get_started_push_and_listen
+      result = push_get_started_placeholder_canvas
+      pid = University::Listener.start!
+      puts "University listener running (pid #{pid}) — log: #{University::Listener.log_path}"
+      result
     end
 
     # Creates (get-or-create; idempotent) the university canvas session with

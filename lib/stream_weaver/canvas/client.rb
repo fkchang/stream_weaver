@@ -18,12 +18,18 @@ module StreamWeaver
       DEFAULT_TIMEOUT = 300 # 5 minutes
 
       class << self
+        # STREAMWEAVER_CANVAS_SOCKET / _PID redirect the whole bridge --
+        # socket, pid file, and (because the bridge is spawned with the
+        # environment it inherits) the server half too. This exists so a
+        # test, or a deliberately separate instance, can run its own bridge
+        # without stopping the one the developer has open in a browser and
+        # taking every live canvas session with it.
         def socket_path
-          SOCKET_PATH
+          ENV['STREAMWEAVER_CANVAS_SOCKET'] || SOCKET_PATH
         end
 
         def pid_file_path
-          PID_FILE_PATH
+          ENV['STREAMWEAVER_CANVAS_PID'] || PID_FILE_PATH
         end
 
         # Check if the bridge process is running
@@ -112,6 +118,49 @@ module StreamWeaver
           end
 
           nil
+        rescue Errno::ECONNREFUSED, Errno::ENOENT => e
+          raise ConnectionError, "Cannot connect to canvas bridge: #{e.message}"
+        ensure
+          socket&.close
+        end
+
+        # Hold ONE connection open and yield every event for `name` until the
+        # bridge closes it or the block breaks. This is what a long-lived
+        # listener wants: `send_and_wait` takes a single event and closes the
+        # socket, so a loop built on it is deaf for the whole gap between
+        # handling one click and reopening -- which is exactly when the
+        # re-push is happening and the user is most likely to click again.
+        #
+        # Events are filtered by session name because the bridge forwards
+        # every session's events to every connected client
+        # (docs/bug-2026-08-24-canvas-bridge-broadcasts-no-session-filtering.md).
+        #
+        # @param name [String, nil] session to filter on; nil yields all
+        # @yield [Hash] each event message
+        def each_event(name = nil)
+          raise NotRunningError, "Canvas bridge is not running" unless bridge_running?
+
+          socket = UNIXSocket.new(socket_path)
+          buffer = ''
+
+          loop do
+            # readpartial blocks until there are bytes and raises at EOF --
+            # no poll interval to burn, and no third spelling of "closed".
+            # A peer reset is the same event as a clean close as far as this
+            # loop is concerned: the bridge is gone, so return and let the
+            # caller decide whether to reconnect.
+            buffer += socket.readpartial(4096)
+
+            messages, buffer = Protocol.parse_buffer(buffer)
+            messages.each do |msg|
+              next unless msg[:type] == 'event'
+              next if name && msg[:name] != name
+
+              yield msg
+            end
+          rescue EOFError, Errno::ECONNRESET
+            break
+          end
         rescue Errno::ECONNREFUSED, Errno::ENOENT => e
           raise ConnectionError, "Cannot connect to canvas bridge: #{e.message}"
         ensure

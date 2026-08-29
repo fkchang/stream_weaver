@@ -13,6 +13,7 @@ ENV['SW_NO_OPEN'] = '1'
 ENV['RACK_ENV'] = 'test'
 
 require "stream_weaver"
+require "stream_weaver/university/listener"
 
 # Canvas::Reader's `before` filter (stream_weaver-rdh) checks request.host
 # against 127.0.0.1/localhost -- a real security boundary for /open, which
@@ -46,8 +47,10 @@ ENV['STREAMWEAVER_DOCS_SCAN_ROOTS'] = ''
 # green. Specs that need their own tmpdir copy still set these in an around
 # block; this is the default that catches the ones nobody thought to check.
 SPEC_UNIVERSITY_DIR = File.join(Dir.tmpdir, "streamweaver-spec-university-#{Process.pid}")
-ENV['STREAMWEAVER_UNIVERSITY_WORKER']   = File.join(SPEC_UNIVERSITY_DIR, 'worker.json')
-ENV['STREAMWEAVER_UNIVERSITY_PROGRESS'] = File.join(SPEC_UNIVERSITY_DIR, 'progress.yml')
+ENV['STREAMWEAVER_UNIVERSITY_WORKER']       = File.join(SPEC_UNIVERSITY_DIR, 'worker.json')
+ENV['STREAMWEAVER_UNIVERSITY_PROGRESS']     = File.join(SPEC_UNIVERSITY_DIR, 'progress.yml')
+ENV['STREAMWEAVER_UNIVERSITY_LISTENER_PID'] = File.join(SPEC_UNIVERSITY_DIR, 'listener.pid')
+ENV['STREAMWEAVER_UNIVERSITY_LISTENER_LOG'] = File.join(SPEC_UNIVERSITY_DIR, 'listener.log')
 
 # Single definition of the state key alias for all resource specs
 SK = StreamWeaver::Resource::StateKeys
@@ -61,6 +64,19 @@ RSpec.configure do |config|
 
   config.expect_with :rspec do |c|
     c.syntax = :expect
+  end
+
+  # `get-started` now starts the University listener as a detached background
+  # process, so any spec that exercises either get-started path spawns a real,
+  # long-lived ruby on the developer's machine and leaves it there -- silently,
+  # while staying green. Stubbed by default for the same reason the docs
+  # registry is redirected above: the leak is invisible, so it has to be off
+  # unless a spec explicitly asks for the real thing with `:unstubbed_listener_start`
+  # (spec/university/listener_daemon_spec.rb and listener_e2e_spec.rb do).
+  config.before do |example|
+    next if example.metadata[:unstubbed_listener_start]
+
+    allow(StreamWeaver::University::Listener).to receive(:start!).and_return(0)
   end
 
   config.after(:suite) do

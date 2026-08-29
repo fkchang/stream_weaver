@@ -55,6 +55,10 @@ RSpec.describe StreamWeaver::ITerm do
       allow(ITerm2).to receive(:connect).and_yield(client)
       allow(client).to receive(:create_tab).and_return(session_id: 'w-1', window_id: 'win-1', tab_id: 'tab-1')
       allow(client).to receive(:send_text)
+      # Default: the calling window can't be resolved, so these examples
+      # exercise the new-window path. The window-inheritance examples below
+      # override this.
+      allow(client).to receive(:topology).and_return([])
     end
 
     it 'sends a single line that cds (shell-escaped) into the given directory before launching the command' do
@@ -69,6 +73,38 @@ RSpec.describe StreamWeaver::ITerm do
       described_class.open_worker_tab('claude')
 
       expect(client).to have_received(:send_text).with('w-1', "cd /tmp/fake-project && claude\n")
+    end
+
+    # UAT 2026-08-29: the worker tab opened as its own new window, sized so
+    # small it needed manual resizing twice before it was usable. The gem
+    # exposes no set_property, so a frame cannot be set -- the real fix is to
+    # put the tab in the window the user is already in, which is already the
+    # size they chose.
+    it 'creates the tab in the calling session\'s own window so it inherits that window size' do
+      allow(described_class).to receive(:current_session_guid).and_return('calling-session')
+      allow(client).to receive(:topology).and_return(
+        [{ window_id: 'callers-window', tab_id: 'tab-0', session_id: 'calling-session' }]
+      )
+
+      described_class.open_worker_tab('claude', dir: '/tmp')
+
+      expect(client).to have_received(:create_tab).with(window_id: 'callers-window')
+    end
+
+    it 'falls back to a new window when the calling window cannot be resolved' do
+      allow(described_class).to receive(:current_session_guid).and_return(nil)
+      allow(client).to receive(:topology).and_return([])
+
+      expect(described_class.open_worker_tab('claude', dir: '/tmp')).to eq('w-1')
+      expect(client).to have_received(:create_tab).with(no_args)
+    end
+
+    it 'falls back to a new window rather than failing when the topology lookup raises' do
+      allow(described_class).to receive(:current_session_guid).and_return('calling-session')
+      allow(client).to receive(:topology).and_raise(ITerm2::Error, 'boom')
+
+      expect(described_class.open_worker_tab('claude', dir: '/tmp')).to eq('w-1')
+      expect(client).to have_received(:create_tab).with(no_args)
     end
 
     it 'returns the new tab session id' do

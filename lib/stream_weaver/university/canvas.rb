@@ -548,6 +548,16 @@ _body = proc do
   use_layout :default
   use_stylesheet _css
 
+  # Without this marker, the adapter's showFeedback() replaces the whole
+  # page with "✓ Submitted -- You can close this window" on the first click
+  # of ANY button (adapter/alpinejs.rb, the else branch of the
+  # #sw-canvas-continue lookup). That terminal screen is right for a
+  # one-shot form and catastrophic for a control panel meant to be clicked
+  # all session: it took out the entire course list on the first Run.
+  # With the marker, a click shows this brief message instead, and the
+  # listener's re-push swaps the real page back in.
+  canvas_continue message: "Working..."
+
   steps = StreamWeaver::University::Course::GETTING_STARTED_STEPS
   total = steps.size
   progress = StreamWeaver::University::Progress.load
