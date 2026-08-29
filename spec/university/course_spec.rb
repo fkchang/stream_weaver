@@ -35,6 +35,13 @@ RSpec.describe StreamWeaver::University::Course do
       expect(step2[:prompt]).to include('counter held in `state`')
       expect(step2[:prompt]).not_to include('canvas-push')
     end
+
+    it 'keeps the step 3 prompt to radio_group/select/text_field only (disc-098, disc-105)' do
+      step3 = described_class::GETTING_STARTED_STEPS.find { |s| s[:number] == 3 }
+      expect(step3[:prompt]).to include('radio_group and a button')
+      expect(step3[:prompt]).to include('canvas-wait')
+      expect(step3[:prompt]).not_to match(/checkbox_group|chip_group/)
+    end
   end
 
   describe 'FUTURE_COURSES' do
