@@ -8,6 +8,7 @@ require 'fileutils'
 require 'yaml'
 require 'time'
 require_relative 'opal/builder'
+require_relative 'university/runner'
 
 module StreamWeaver
   # Command-line interface for StreamWeaver service
@@ -2825,10 +2826,13 @@ module StreamWeaver
       )
     end
 
+    # University::Runner is the reader of this file and owns its path --
+    # including the STREAMWEAVER_UNIVERSITY_WORKER override, which the
+    # writer must honor too or a spec exercising this path would overwrite
+    # the developer's real recorded worker session.
     def self.write_get_started_worker_json(session_id, agent, cwd, canvas_session_id: nil)
-      out_dir = File.expand_path('~/.streamweaver/university')
-      FileUtils.mkdir_p(out_dir)
-      path = File.join(out_dir, 'worker.json')
+      path = University::Runner.worker_path
+      FileUtils.mkdir_p(File.dirname(path))
       File.write(path, JSON.pretty_generate({
         session_id: session_id,
         agent: agent,

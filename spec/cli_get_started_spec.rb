@@ -7,6 +7,7 @@ require 'json'
 require 'stream_weaver/cli'
 require 'stream_weaver/canvas/client'
 require 'stream_weaver/iterm'
+require_relative 'support/env_helper'
 
 # Covers `streamweaver get-started` (lib/stream_weaver/cli.rb): the
 # dependency report across its three tiers (core / agent skills / premier
@@ -16,6 +17,8 @@ require 'stream_weaver/iterm'
 # class method (get_started_*_ok?/present?) so these specs never touch a
 # real bridge, iTerm2, or the developer's actual $HOME.
 RSpec.describe StreamWeaver::CLI do
+  include EnvHelper
+
   def capture_io
     old_stdout = $stdout
     old_stderr = $stderr
@@ -277,11 +280,12 @@ RSpec.describe StreamWeaver::CLI do
   end
 
   describe '.write_get_started_worker_json' do
+    # Unsets the override explicitly: this example is about the default
+    # location, and spec_helper sets STREAMWEAVER_UNIVERSITY_WORKER
+    # suite-wide, which resolves first.
     it 'writes both session ids (agent + canvas pane), agent, cwd, and an ISO8601 timestamp under ~/.streamweaver/university/worker.json' do
       Dir.mktmpdir do |home|
-        prev_home = ENV['HOME']
-        ENV['HOME'] = home
-        begin
+        with_env('STREAMWEAVER_UNIVERSITY_WORKER' => nil, 'HOME' => home) do
           path = described_class.write_get_started_worker_json(
             'w-session-1', 'claude', '/some/project/dir', canvas_session_id: 'canvas-pane-1'
           )
@@ -293,23 +297,34 @@ RSpec.describe StreamWeaver::CLI do
           expect(data['cwd']).to eq('/some/project/dir')
           expect(data['canvas_session_id']).to eq('canvas-pane-1')
           expect(data['created_at']).to match(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\z/)
-        ensure
-          ENV['HOME'] = prev_home
+        end
+      end
+    end
+
+    # The writer and University::Runner (the reader) must resolve the same
+    # path, override included -- otherwise a spec that exercises the
+    # premier path overwrites the developer's real recorded worker session
+    # no matter what the env says.
+    it 'writes to the path University::Runner reads, honoring STREAMWEAVER_UNIVERSITY_WORKER' do
+      Dir.mktmpdir do |dir|
+        redirected = File.join(dir, 'elsewhere', 'worker.json')
+        with_env('STREAMWEAVER_UNIVERSITY_WORKER' => redirected) do
+          path = described_class.write_get_started_worker_json('w-session-9', 'codex', '/proj')
+
+          expect(path).to eq(redirected)
+          expect(path).to eq(StreamWeaver::University::Runner.worker_path)
+          expect(StreamWeaver::University::Runner.worker['session_id']).to eq('w-session-9')
         end
       end
     end
 
     it 'defaults canvas_session_id to nil when the split failed or was not attempted' do
       Dir.mktmpdir do |home|
-        prev_home = ENV['HOME']
-        ENV['HOME'] = home
-        begin
+        with_env('STREAMWEAVER_UNIVERSITY_WORKER' => nil, 'HOME' => home) do
           path = described_class.write_get_started_worker_json('w-session-1', 'claude', '/some/project/dir')
 
           data = JSON.parse(File.read(path))
           expect(data['canvas_session_id']).to be_nil
-        ensure
-          ENV['HOME'] = prev_home
         end
       end
     end

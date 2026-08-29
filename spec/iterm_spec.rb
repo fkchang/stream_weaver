@@ -83,6 +83,117 @@ RSpec.describe StreamWeaver::ITerm do
     end
   end
 
+  # --- Driver adapter (driver-worker-runner) --------------------------------
+  # The University canvas drives a worker tab through these two methods.
+  # `send_to_session` must hit exactly the session id it is handed -- the
+  # whole point of the story is that a mistargeted send lands a prompt in
+  # somebody else's pane -- and `session_alive?` is the check that stops a
+  # send to a tab the user already closed.
+
+  describe '.send_to_session' do
+    let(:client) { instance_double(ITerm2::Client) }
+
+    before do
+      allow(described_class).to receive(:available?).and_return(true)
+      allow(ITerm2).to receive(:connect).and_yield(client)
+      allow(client).to receive(:send_text).and_return(true)
+    end
+
+    it 'sends to exactly the session id given, never the calling session' do
+      allow(described_class).to receive(:current_session_guid).and_return('calling-session')
+
+      described_class.send_to_session('worker-session', 'do the thing')
+
+      expect(client).to have_received(:send_text).with('worker-session', "do the thing\r").once
+      expect(client).not_to have_received(:send_text).with('calling-session', anything)
+    end
+
+    # Pressing Return is a carriage return, not a line feed -- an LF typed
+    # at a raw-mode TUI is not Enter. Owning that here (rather than letting
+    # callers append their own newline) is what keeps terminal semantics
+    # out of the University side.
+    it 'submits by pressing Return (CR), not by appending a line feed' do
+      described_class.send_to_session('worker-session', 'do the thing')
+
+      expect(client).to have_received(:send_text).with('worker-session', "do the thing\r")
+    end
+
+    it 'sends the text with no submit keystroke when submit: false' do
+      described_class.send_to_session('worker-session', 'half a thought', submit: false)
+
+      expect(client).to have_received(:send_text).with('worker-session', 'half a thought')
+    end
+
+    it 'returns true when the RPC reports success' do
+      expect(described_class.send_to_session('worker-session', "hi\n")).to be true
+    end
+
+    it 'returns false when the RPC reports failure' do
+      allow(client).to receive(:send_text).and_return(false)
+
+      expect(described_class.send_to_session('worker-session', "hi\n")).to be false
+    end
+
+    it 'returns false without connecting when no session id is given' do
+      expect(described_class.send_to_session(nil, "hi\n")).to be false
+      expect(ITerm2).not_to have_received(:connect)
+    end
+
+    it 'returns false without connecting when the gem is unavailable' do
+      allow(described_class).to receive(:available?).and_return(false)
+
+      expect(described_class.send_to_session('worker-session', "hi\n")).to be false
+      expect(ITerm2).not_to have_received(:connect)
+    end
+
+    it 'returns false rather than raising when the RPC blows up' do
+      allow(client).to receive(:send_text).and_raise(ITerm2::Error, 'boom')
+
+      expect(described_class.send_to_session('worker-session', "hi\n")).to be false
+    end
+  end
+
+  describe '.session_alive?' do
+    let(:client) { instance_double(ITerm2::Client) }
+
+    before do
+      allow(described_class).to receive(:available?).and_return(true)
+      allow(ITerm2).to receive(:connect).and_yield(client)
+      allow(client).to receive(:topology).and_return(
+        [
+          { window_id: 'win-1', tab_id: 'tab-1', session_id: 'worker-session', title: 'claude' },
+          { window_id: 'win-1', tab_id: 'tab-1', session_id: 'canvas-pane', title: 'Web Browser' }
+        ]
+      )
+    end
+
+    it 'is true when the session id is in the live topology' do
+      expect(described_class.session_alive?('worker-session')).to be true
+    end
+
+    it 'is false when the session id is absent (the tab was closed)' do
+      expect(described_class.session_alive?('gone-session')).to be false
+    end
+
+    it 'is false without connecting when no session id is given' do
+      expect(described_class.session_alive?(nil)).to be false
+      expect(ITerm2).not_to have_received(:connect)
+    end
+
+    it 'is false without connecting when the gem is unavailable' do
+      allow(described_class).to receive(:available?).and_return(false)
+
+      expect(described_class.session_alive?('worker-session')).to be false
+      expect(ITerm2).not_to have_received(:connect)
+    end
+
+    it 'is false rather than raising when the lookup blows up' do
+      allow(client).to receive(:topology).and_raise(ITerm2::Error, 'boom')
+
+      expect(described_class.session_alive?('worker-session')).to be false
+    end
+  end
+
   describe '.split_vertical_with_url (target_session)' do
     # Product design: get-started's premier path splits the canvas into the
     # NEW worker tab's session, not the calling terminal's session -- so

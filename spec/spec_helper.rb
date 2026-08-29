@@ -38,6 +38,17 @@ SPEC_DOCS_REGISTRY = File.join(Dir.tmpdir, "streamweaver-spec-docs-roots-#{Proce
 ENV['STREAMWEAVER_DOCS_REGISTRY']   = SPEC_DOCS_REGISTRY
 ENV['STREAMWEAVER_DOCS_SCAN_ROOTS'] = ''
 
+# Same hazard, same remedy, for StreamWeaver University's two per-user state
+# files: the progress ledger (University::Progress) and the recorded worker
+# session (University::Runner, written by CLI.write_get_started_worker_json).
+# A spec that exercises the premier path and forgets to redirect would
+# overwrite the developer's real recorded worker session -- and still be
+# green. Specs that need their own tmpdir copy still set these in an around
+# block; this is the default that catches the ones nobody thought to check.
+SPEC_UNIVERSITY_DIR = File.join(Dir.tmpdir, "streamweaver-spec-university-#{Process.pid}")
+ENV['STREAMWEAVER_UNIVERSITY_WORKER']   = File.join(SPEC_UNIVERSITY_DIR, 'worker.json')
+ENV['STREAMWEAVER_UNIVERSITY_PROGRESS'] = File.join(SPEC_UNIVERSITY_DIR, 'progress.yml')
+
 # Single definition of the state key alias for all resource specs
 SK = StreamWeaver::Resource::StateKeys
 
@@ -52,5 +63,8 @@ RSpec.configure do |config|
     c.syntax = :expect
   end
 
-  config.after(:suite) { FileUtils.rm_f(SPEC_DOCS_REGISTRY) }
+  config.after(:suite) do
+    FileUtils.rm_f(SPEC_DOCS_REGISTRY)
+    FileUtils.rm_rf(SPEC_UNIVERSITY_DIR)
+  end
 end

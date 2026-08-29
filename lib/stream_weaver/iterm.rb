@@ -108,6 +108,50 @@ module StreamWeaver
         nil
       end
 
+      # --- Driver adapter -------------------------------------------------
+      # The surface adapter above puts a canvas beside a terminal; these two
+      # put text *into* one specific terminal. StreamWeaver University's
+      # runner uses them to send a step's prompt to the worker session
+      # `get-started` recorded, and only that one -- see
+      # lib/stream_weaver/university/runner.rb.
+
+      # Types `text` into exactly `session_id`, then presses Return unless
+      # `submit: false`. Never falls back to the calling session: a
+      # mistargeted send drops a prompt into whatever pane the user happens
+      # to be looking at, which is the failure this whole path exists to
+      # prevent.
+      #
+      # Return is a carriage return, not a line feed -- that is what a
+      # terminal actually sends when a human presses the key, and a raw-mode
+      # TUI (the `claude` / `codex` CLIs) does not read an LF as submit.
+      # Owning the keystroke here is what lets callers hand over prompt text
+      # and nothing terminal-shaped; a later herdr/cmux driver makes the
+      # same promise its own way.
+      def send_to_session(session_id, text, submit: true)
+        return false unless available? && session_id
+
+        keys = submit ? "#{text}\r" : text
+        with_timeout(8, default: false) do
+          connect { |c| !!c.send_text(session_id, keys) }
+        end
+      rescue StandardError
+        false
+      end
+
+      # True only when `session_id` is still in iTerm2's live topology --
+      # the check that distinguishes "the worker tab is there" from "the
+      # user closed it an hour ago". False on any doubt (gem missing, API
+      # unreachable, RPC error), so callers degrade rather than guess.
+      def session_alive?(session_id)
+        return false unless available? && session_id
+
+        with_timeout(5, default: false) do
+          connect { |c| c.topology.any? { |s| s[:session_id] == session_id } }
+        end
+      rescue StandardError
+        false
+      end
+
       private
 
       APP_NAME = "StreamWeaver"

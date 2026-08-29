@@ -75,6 +75,19 @@ module StreamWeaver
         }
       ].freeze
 
+      def self.step(number)
+        GETTING_STARTED_STEPS.find { |s| s[:number] == number.to_i }
+      end
+
+      # What the runner sends to the worker session, and what the canvas
+      # offers for copying when it can't send. nil for a step number the
+      # course doesn't have (the runner reports that as :unknown_step);
+      # `fetch` rather than `dig` so a curriculum entry written without a
+      # `prompt:` raises for its author instead of masquerading as one.
+      def self.prompt_for(number)
+        step(number)&.fetch(:prompt)
+      end
+
       # Rendered dormant on the course-list shelf, no controls -- names and
       # blurbs only, per docs/university/design-spec.md section 2.
       FUTURE_COURSES = [

@@ -3,12 +3,15 @@
 require 'spec_helper'
 require 'tmpdir'
 require 'stream_weaver/university/progress'
+require_relative '../support/env_helper'
 
 # Covers read/write/resume, the zero-state, and the "survives a bridge
 # restart" criterion (progress-ledger #1, #3, #5): a bridge restart only
 # ever loses in-memory session state, never this file, so a fresh
 # Progress instance pointed at the same path must see prior writes.
 RSpec.describe StreamWeaver::University::Progress do
+  include EnvHelper
+
   around do |example|
     Dir.mktmpdir('university-progress-spec') do |dir|
       @path = File.join(dir, 'progress.yml')
@@ -81,9 +84,9 @@ RSpec.describe StreamWeaver::University::Progress do
     end
   end
 
-  describe '#record_run_requested! (driver-worker-runner hook)' do
-    it 'records a timestamp for the requested step, persisted across instances' do
-      new_progress.record_run_requested!(4)
+  describe '#record_run! (driver-worker-runner outcome)' do
+    it 'records a timestamp for a step whose prompt was actually sent' do
+      new_progress.record_run!(4, status: :sent)
 
       reloaded = new_progress
       expect(reloaded.requested_at(4)).to be_a(String)
@@ -92,6 +95,34 @@ RSpec.describe StreamWeaver::University::Progress do
 
     it 'is nil for a step that was never requested' do
       expect(new_progress.requested_at(5)).to be_nil
+    end
+
+    # A click that found no worker, or a closed tab, is not a send -- a
+    # requested_at for it would be a lie the ledger tells forever.
+    it 'records no timestamp when the prompt never went out' do
+      new_progress.record_run!(4, status: :session_missing)
+
+      expect(new_progress.requested_at(4)).to be_nil
+    end
+
+    it 'records the outcome as last_run for every status, persisted across instances' do
+      new_progress.record_run!(2, status: :no_worker)
+
+      expect(new_progress.last_run).to include('step' => 2, 'status' => 'no_worker')
+      expect(new_progress.last_run['at']).to be_a(String)
+    end
+
+    it 'is nil before any Run click' do
+      expect(new_progress.last_run).to be_nil
+    end
+
+    # The notice reports the last click; marking a step done IS a later
+    # click, so it must not leave a stale run notice pinned to the canvas.
+    it 'is cleared by a subsequent mark_done!' do
+      new_progress.record_run!(1, status: :no_worker)
+      new_progress.mark_done!(1)
+
+      expect(new_progress.last_run).to be_nil
     end
   end
 
@@ -105,12 +136,4 @@ RSpec.describe StreamWeaver::University::Progress do
     end
   end
 
-  def with_env(vars)
-    old = {}
-    vars.each_key { |k| old[k] = ENV[k] }
-    vars.each { |k, v| ENV[k] = v }
-    yield
-  ensure
-    old.each { |k, v| ENV[k] = v }
-  end
 end

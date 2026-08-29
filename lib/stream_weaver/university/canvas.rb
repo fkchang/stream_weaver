@@ -42,6 +42,7 @@
 
 require 'stream_weaver/university/course'
 require 'stream_weaver/university/progress'
+require 'stream_weaver/university/runner'
 
 # Compact `A::B::C` form, not nested `module A; module B; module C`
 # blocks -- deliberately. When this whole file's text is instance_eval'd as
@@ -382,6 +383,34 @@ _css = <<~CSS
   }
   .uni-step__actions { display: flex; align-items: center; gap: 4px; }
 
+  /* Report band for the last Run/Repeat click -- what the driver did, or
+     why it refused to send. Sits between the resume band and the step
+     rows so it's directly under the button that produced it. */
+  .uni-run-notice {
+    background: var(--uni-now-bg);
+    border-bottom: 1px solid var(--uni-line);
+    border-left: 3px solid var(--uni-now);
+    padding: 15px 22px 16px;
+  }
+  /* Only one distinction matters visually -- it went out, or it didn't --
+     so a status added later styles itself correctly by construction. */
+  .uni-run-notice--degraded {
+    background: var(--uni-next-bg);
+    border-left-color: var(--uni-next);
+  }
+  .uni-run-notice--sent { border-left-color: var(--uni-done); background: var(--uni-done-bg); }
+  .uni-run-notice__msg {
+    display: block; max-width: 66ch;
+    font-size: 14.5px; line-height: 1.5; font-weight: 600;
+    color: var(--uni-ink); margin: 0;
+  }
+  .uni-run-notice__hint {
+    display: block; max-width: 66ch;
+    font-size: 13.5px; line-height: 1.5; color: var(--uni-muted);
+    margin-top: 10px;
+  }
+  .uni-run-notice .sw-code-block { margin: 12px 0 0; }
+
   .uni-divider {
     display: flex; align-items: center; gap: 14px;
     margin: 38px 0 16px;
@@ -495,6 +524,34 @@ _body = proc do
             end
           end
           phrase "#{done_count} of #{total} done", class: "uni-rail__label"
+        end
+      end
+
+      # What the last Run/Repeat click actually did. On anything but a
+      # clean send the prompt itself is offered here with a copy button --
+      # the degraded path's whole experience, and the fallback whenever the
+      # recorded worker session has gone away (driver-worker-runner
+      # criteria 4 and 5). The canvas never talks to iTerm; it reports what
+      # the driver wrote to the ledger.
+      last_run = progress.last_run
+      if last_run
+        status = last_run['status'].to_s
+        run_step = last_run['step'].to_i
+        run_sent = StreamWeaver::University::Runner.sent?(status)
+        run_prompt = StreamWeaver::University::Course.prompt_for(run_step)
+
+        div(class: "uni-run-notice uni-run-notice--#{run_sent ? 'sent' : 'degraded'}") do
+          phrase StreamWeaver::University::Runner.message_for(status, run_step),
+                 class: "uni-run-notice__msg"
+          if !run_sent && run_prompt
+            # The human gets the prompt as written -- line breaks and all.
+            # Only the wire gets Runner.one_line's collapsed form, because
+            # a clipboard paste has no keystroke-per-newline problem.
+            code_block run_prompt, lang: "text", copy: true
+            phrase "Copy it, then paste it into the terminal where your agent is " \
+                   "running and press Enter.",
+                   class: "uni-run-notice__hint"
+          end
         end
       end
 

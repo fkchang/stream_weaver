@@ -52,6 +52,7 @@ Because the same three colours drive the mark, the rail, and the checks, the rai
 | App band | `StreamWeaver University` (serif, 27px), one-line tagline, theme toggle | Says what this is in under a second — the fix for "I thought it was a document" |
 | Course panel — title bar | status dot, `Getting Started` (20px/700), `IN PROGRESS` chip | The course names itself at a size nobody scrolls past |
 | Course panel — resume band | "Pick up at step N." + step title + `Run step N` (primary) + `Repeat step N-1` (quiet) + 5-segment rail + "N of 5 done" | The single answer to "what do I do now" — scoped to this course |
+| Course panel — run report band | Only after a Run/Repeat click: one line saying what the driver did. On a clean send, green and nothing else. On a refusal (worker session closed, none recorded) or in degraded mode, stone, plus the step's prompt in a code block with a Copy button and a paste instruction | The click has to say what it did — a silent Run is indistinguishable from a broken one, and a refusal must hand back the prompt rather than strand the user (`driver-worker-runner` criteria 4-5). Superseded by the next click and cleared by Mark done, so it never goes stale |
 | Course panel — step rows | 5 rows: state mark, title, one-line payoff, Run/Repeat | The map; every step re-runnable |
 | Divider | `In the works` (15px/650) + rule to the right edge | A section label at reading size, not a micro-label |
 | Dormant panels | 3 closed cards: hollow dot, name, blurb, `Soon` chip. **No controls.** | Promise, not denial |

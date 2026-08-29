@@ -6,6 +6,7 @@ require 'stream_weaver/cli'
 require 'stream_weaver/university/canvas'
 require 'stream_weaver/university/course'
 require 'stream_weaver/university/progress'
+require_relative '../support/env_helper'
 
 # Covers course-list-canvas (criteria 2-4: Getting Started's five steps +
 # progress, dormant future courses with blurbs, the tutorial pointer) and
@@ -17,6 +18,8 @@ require 'stream_weaver/university/progress'
 # because it's the one that keeps button `id:` attributes in the markup,
 # which these specs assert on directly.
 RSpec.describe StreamWeaver::University::Canvas do
+  include EnvHelper
+
   around do |example|
     Dir.mktmpdir('university-canvas-spec') do |dir|
       @progress_path = File.join(dir, 'progress.yml')
@@ -145,12 +148,59 @@ RSpec.describe StreamWeaver::University::Canvas do
     end
   end
 
-  def with_env(vars)
-    old = {}
-    vars.each_key { |k| old[k] = ENV[k] }
-    vars.each { |k, v| ENV[k] = v }
-    yield
-  ensure
-    old.each { |k, v| ENV[k] = v }
+  # --- driver-worker-runner: the on-canvas report of the last Run click ----
+  # Criterion 4 (a wrong/closed target is reported on the canvas, never sent
+  # elsewhere) and criterion 5 (degraded mode shows the prompt with a copy
+  # button and paste instructions) are both rendered from `last_run` in the
+  # ledger -- the canvas never talks to iTerm itself.
+
+  def record_run(step, status)
+    StreamWeaver::University::Progress.new(@progress_path).record_run!(step, status: status)
+  end
+
+  def step_prompt(number)
+    StreamWeaver::University::Course.prompt_for(number)
+  end
+
+  describe 'rendered run notice' do
+    it 'shows nothing when no Run has been clicked yet' do
+      expect(render).not_to include('uni-run-notice')
+    end
+
+    it 'reports a closed/missing worker session and never claims it was sent' do
+      record_run(1, :session_missing)
+      html = render
+
+      expect(html).to include('uni-run-notice')
+      expect(html).to include('streamweaver get-started')
+      expect(html).not_to include('Sent step 1')
+    end
+
+    it 'offers the prompt with a copy affordance when the worker session is missing' do
+      record_run(1, :session_missing)
+      html = render
+
+      expect(html).to include('sw-copy-button')
+      expect(html).to include(step_prompt(1).lines.first.strip)
+    end
+
+    it 'shows the prompt, a copy button, and paste instructions in degraded mode' do
+      record_run(2, :no_worker)
+      html = render
+
+      expect(html).to include('uni-run-notice')
+      expect(html).to include('sw-copy-button')
+      expect(html).to include('paste')
+      expect(html).to include(step_prompt(2).lines.first.strip)
+    end
+
+    it 'confirms a successful send without repeating the prompt' do
+      record_run(3, :sent)
+      html = render
+
+      expect(html).to include('uni-run-notice')
+      expect(html).to include('Sent step 3')
+      expect(html).not_to include('sw-copy-button')
+    end
   end
 end

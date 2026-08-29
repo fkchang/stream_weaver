@@ -1,15 +1,15 @@
 # frozen_string_literal: true
 
 require 'stream_weaver/university/progress'
+require 'stream_weaver/university/runner'
 
 module StreamWeaver
   module University
-    # Turns one canvas click event into a ledger write plus a re-push. This
-    # is the manual/UAT driver for course-list-canvas + progress-ledger --
-    # `driver-worker-runner` (the next story) replaces `handle_token`'s
-    # run/repeat branch with an actual send-to-worker dispatch and is
-    # expected to own the persistent run loop; `step!` below exists so this
-    # story's wiring is real and testable without waiting on that story.
+    # Turns one canvas click event into a ledger write plus a re-push.
+    # Mark-done writes the ledger directly; Run/Repeat hands off to
+    # Runner, which sends the step's prompt to the recorded worker session
+    # (or records why it wouldn't) and leaves the outcome in the ledger for
+    # the re-push to render.
     #
     # Button ids come from lib/stream_weaver/university/canvas.rb's `id:`
     # scheme: "mark-done-N", "run-N" / "repeat-N", "hero-run-N" /
@@ -27,9 +27,12 @@ module StreamWeaver
           step = Regexp.last_match(1).to_i
           progress.mark_done!(step)
           step
-        when /(?:hero-run|hero-repeat|run|repeat)-(\d+)\z/
+        when /(?:run|repeat)-(\d+)\z/ # also catches hero-run-N / hero-repeat-N
           step = Regexp.last_match(1).to_i
-          progress.record_run_requested!(step)
+          # Dispatches to the worker session and records the outcome
+          # (including the refusals) in the ledger; the re-push in `step!`
+          # then renders whatever it wrote.
+          Runner.run_step!(step, progress: progress)
           step
         end
       end
