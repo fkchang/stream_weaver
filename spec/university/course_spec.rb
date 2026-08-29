@@ -42,6 +42,20 @@ RSpec.describe StreamWeaver::University::Course do
       expect(step3[:prompt]).to include('canvas-wait')
       expect(step3[:prompt]).not_to match(/checkbox_group|chip_group/)
     end
+
+    it 'has step 4 invoke the growing-doc script by a gem-relative require, not a home path' do
+      step4 = described_class::GETTING_STARTED_STEPS.find { |s| s[:number] == 4 }
+      expect(step4[:prompt]).to include("require 'stream_weaver/university/scripts/growing_doc'")
+      expect(step4[:prompt]).not_to match(%r{/Users/|~/})
+    end
+
+    it 'keeps step 4 and 5 doc content free of chart shorthands (disc-094)' do
+      %w[bar_chart line_chart pie_chart].each do |shorthand|
+        described_class::GETTING_STARTED_STEPS.each do |step|
+          expect(step[:prompt]).not_to include(shorthand)
+        end
+      end
+    end
   end
 
   describe 'FUTURE_COURSES' do
