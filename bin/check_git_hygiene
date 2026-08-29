@@ -3,7 +3,7 @@
 
 # Git hygiene gate for StreamWeaver (intended for open source release).
 # Scans STAGED content for personal info, secrets, and oversized files.
-# Wired into pre-commit via .beads/hooks/pre-commit (after the beads block).
+# Wired into pre-commit via .githooks/pre-commit.
 # Bypass a false positive with: SW_HYGIENE_SKIP=1 git commit ...
 # Policy: see "Git Hygiene Policy" in CLAUDE.md.
 

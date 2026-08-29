@@ -2,52 +2,16 @@
 
 This file provides instructions and context for AI coding agents working on this project.
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
-## Beads Issue Tracker
+## Work tracking authority
 
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+Tyrion is authoritative for all new StreamWeaver work. Run `tyrion prime` and
+`tyrion status` at session start, and use the Tyrion skills for shaping, importing,
+claiming, implementing, gating, checkpointing, and completing stories.
 
-### Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
-```
-
-### Rules
-
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-
-## Session Completion
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd dolt push
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-<!-- END BEADS INTEGRATION -->
+Beads remains readable only as a legacy backlog. Existing Beads IDs may be searched,
+updated, and closed, but never use `bd create`, `bd ready`, `bd update --claim`, or
+`bv` to create or select new work. Re-home still-relevant legacy work in Tyrion and
+record the Beads ID in the Tyrion note/evidence trail.
 
 
 ## Build & Test
@@ -82,11 +46,22 @@ This repo is destined for **open source release**. Every commit is a candidate f
 
 **Enforcement:**
 
-- `bin/check_git_hygiene` runs automatically at pre-commit (chained after the beads block in `.beads/hooks/pre-commit`). It BLOCKS on home paths, personal email, personal-system references, secret-shaped strings, and staged files over 500KB; it WARNS on employer/tester-name references (full pattern list lives in the script itself, which is exempt from its own scan).
+- `bin/check_git_hygiene` runs automatically from `.githooks/pre-commit`. It BLOCKS on home paths, personal email, personal-system references, secret-shaped strings, and staged files over 500KB; it WARNS on employer/tester-name references (full pattern list lives in the script itself, which is exempt from its own scan).
 - False positive? Bypass once with `SW_HYGIENE_SKIP=1 git commit ...` — never disable the hook itself.
-- Note: `bd dolt push` in the beads section above is a no-op here — no Dolt remote is configured and Dolt is intentionally not used; beads syncs via `.beads/issues.jsonl` locally.
 
 **Before the public flip (tracked in epic stream_weaver-b9g):**
 
 - Full-history scan for the block patterns (e.g. `gitleaks` or `git log -S`), docs/ cleanup (stream_weaver-wh2), and repo hygiene sweep (stream_weaver-kj0).
 - Decide the public committer identity — history currently uses a work email.
+
+<!-- BEGIN TYRION-MANAGED-BLOCK v1 sha256:bc9a54f4421ec81e87306bdadc00e7524d992aaa63e04ed655f8670b5cd1bc0f -->
+## Tyrion
+
+This repo is tracked by Tyrion, a resumability ledger for coding agents.
+
+Rules:
+- claim before code (tyrion claim-next)
+- evidence via tyrion note/check, not ad hoc
+
+Run `tyrion prime` for the live session briefing — active epic/story, next action, unmet criteria.
+<!-- END TYRION-MANAGED-BLOCK -->

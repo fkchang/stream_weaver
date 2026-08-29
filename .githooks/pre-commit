@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+set -eu
+
+# StreamWeaver's repository-owned pre-commit gate. Work tracking lives in
+# Tyrion's session/tool hooks; Git's only responsibility here is public-repo
+# hygiene. Historical Beads data remains readable but has no Git lifecycle hook.
+repo_root=$(git rev-parse --show-toplevel)
+if [ -x "$repo_root/bin/check_git_hygiene" ]; then
+  "$repo_root/bin/check_git_hygiene"
+fi

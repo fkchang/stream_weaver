@@ -5,4 +5,22 @@ set -vx
 
 bundle install
 
-# Do any other automated setup that you need to do here
+# Keep the repository's Git gate independent from any work tracker. Tyrion owns
+# agent/session workflow; this hook path only enforces public-repo hygiene.
+git config core.hooksPath .githooks
+
+# Tyrion is the authoritative work ledger when installed. Keep setup usable for
+# contributors who only want the gem: say what is missing rather than fetching
+# or installing unrelated tooling behind their back.
+if command -v tyrion >/dev/null 2>&1; then
+  if tyrion help 2>&1 | grep -q "tyrion setup claude"; then
+    LC_ALL=en_US.UTF-8 tyrion init
+    LC_ALL=en_US.UTF-8 tyrion setup claude
+  else
+    echo "Installed Tyrion is too old to configure agent hooks."
+    echo "Upgrade Tyrion, then run: tyrion init && tyrion setup claude"
+  fi
+else
+  echo "Tyrion not found; StreamWeaver installed, but agent workflow hooks were not configured."
+  echo "Install Tyrion, then run: tyrion init && tyrion setup claude"
+fi
