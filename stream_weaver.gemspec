@@ -27,7 +27,9 @@ Gem::Specification.new do |spec|
         # extension/ is a browser extension built from this source, not part of
         # the gem -- its build output is gitignored, but the sources would
         # otherwise ship to every `gem install`.
-        f.start_with?(*%w[test/ spec/ features/ .git appveyor Gemfile bin/ extension/])
+        f.start_with?(*%w[test/ spec/ features/ .git appveyor Gemfile bin/ extension/]) ||
+        # Tracked-but-deleted paths (e.g. retired hook scripts) make `gem build` abort.
+        !File.file?(File.expand_path(f, __dir__))
     end
   end
   spec.bindir = "exe"
