@@ -45,28 +45,38 @@ module StreamWeaver
       # than a process kill.
       TIMEOUT_SECONDS = 20
 
-      # Gist ids are hex strings. Anything else in `existing_id` would be
-      # interpolated into the API path (`/gists/<id>`), where a `..` segment
-      # would silently retarget the request at a different endpoint. argv is
-      # already shell-safe, so this is not about shell injection -- it is
-      # about not letting a corrupted store entry aim a PATCH somewhere
-      # unintended.
+      # `existing_id` reaches us from the gist store and is interpolated into
+      # the API path (`/gists/<id>`), where a `..` segment would silently
+      # retarget the request at a different endpoint. argv is already
+      # shell-safe, so this is not about shell injection -- it is about not
+      # letting a corrupted store entry aim a PATCH somewhere unintended.
+      #
+      # Alphanumeric rather than strictly hex: today's gist ids are hex, but
+      # the id is GitHub's to define and the only property this actually needs
+      # is "contains no path syntax".
       VALID_GIST_ID = /\A[A-Za-z0-9]+\z/
 
       # Stderr shapes that mean "your credentials are the problem", as
       # opposed to any other API failure. gh's own wording here is
       # famously unhelpful out of context ("Bad credentials (HTTP 401)"
       # tells a canvas user nothing), so these get rewritten into copy that
-      # names the actual fix. Deliberately does NOT match a bare HTTP 403 --
-      # that is also what rate limiting and org policy return, and mislabeling
-      # those as an auth problem sends the user down the wrong path.
+      # names the actual fix.
+      #
+      # Every alternative is a specific known gh/GitHub phrase, never a bare
+      # keyword. That is deliberate: rewriting an unrelated failure into
+      # "run `gh auth login`" would hand the user a confident wrong diagnosis,
+      # which is worse than passing gh's own message through untouched. Two
+      # consequences of that rule worth naming: a bare HTTP 403 is NOT matched
+      # (rate limiting and org policy return it too), and the word "scope"
+      # only counts next to language about it being missing or required.
       AUTH_FAILURE_RE = /
         HTTP\s+401
         | bad\s+credentials
         | gh\s+auth\s+login
         | GH_TOKEN
         | not\s+accessible\s+by\s+personal\s+access\s+token
-        | \bscope[s]?\b
+        | (?:required|missing|insufficient|granted|needs)[^\n]{0,60}\bscopes?\b
+        | \bscopes?\b[^\n]{0,60}(?:required|missing|insufficient)
         | SAML
       /xi
 

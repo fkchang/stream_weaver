@@ -155,6 +155,7 @@ RSpec.describe StreamWeaver::Canvas::GistPublisher do
         result = described_class.publish(name: 'auth-flow', dsl: dsl, existing_id: 'abc/../../x')
 
         expect(result[:ok]).to be false
+        expect(result[:error]).to include('invalid gist id', 'abc/../../x')
         expect(calls).to be_empty
       end
     end
@@ -243,13 +244,48 @@ RSpec.describe StreamWeaver::Canvas::GistPublisher do
         expect(result[:error]).to include('gist')
       end
 
+      it "maps GitHub's own insufficient-scopes wording to the same actionable copy" do
+        stub_capture3(
+          ['', "gh: Your token has not been granted the required scopes to execute this query. " \
+                "The 'gists' field requires one of the following scopes: ['gist']", fail_status(1)]
+        )
+
+        result = described_class.publish(name: 'auth-flow', dsl: dsl)
+
+        expect(result[:error]).to include('gh auth login')
+      end
+
+      # The auth rewrite replaces gh's message with a confident instruction to
+      # re-authenticate. Firing it on a failure that has nothing to do with
+      # credentials would send the user to the wrong fix, so an unrelated error
+      # that merely contains the word "scope" must pass through untouched.
+      it 'does not rewrite an unrelated failure that happens to mention a scope' do
+        stub_capture3(
+          ['', 'gh: Validation Failed: the scope of this change is too large (HTTP 422)', fail_status(1)]
+        )
+
+        result = described_class.publish(name: 'auth-flow', dsl: dsl)
+
+        expect(result[:error]).not_to include('gh auth login')
+        expect(result[:error]).to include('Validation Failed')
+      end
+
+      it 'passes a rate-limit 403 through rather than blaming authentication' do
+        stub_capture3(['', 'gh: API rate limit exceeded (HTTP 403)', fail_status(1)])
+
+        result = described_class.publish(name: 'auth-flow', dsl: dsl)
+
+        expect(result[:error]).not_to include('gh auth login')
+        expect(result[:error]).to include('rate limit')
+      end
+
       it 'falls back to a generic message when gh says nothing on stderr' do
         stub_capture3(['', '', fail_status(7)])
 
         result = described_class.publish(name: 'auth-flow', dsl: dsl)
 
         expect(result[:ok]).to be false
-        expect(result[:error]).to include('7')
+        expect(result[:error]).to eq('gh exited 7 with no output')
       end
     end
 
