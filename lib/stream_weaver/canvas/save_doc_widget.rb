@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'erb'
+require 'json'
 
 module StreamWeaver
   module Canvas
@@ -27,7 +28,10 @@ module StreamWeaver
       #   JSON literal (see reader_layout.erb's `name:` line for why both
       #   `.to_json` and `ERB::Util.h` are required together).
       # reset_name_js - statement(s) run at the top of openDialog() to (re)compute
-      #   `name`; empty when the initial value never needs refreshing.
+      #   `name`; empty when the initial value never needs refreshing. Skipped
+      #   entirely when `gist[:prefill_name]` is present (see `gist` below) --
+      #   an already-shared canvas prefills its shared name instead of a fresh
+      #   timestamp, so the next save updates the same gist.
       # extra_alpine_data - extra x-data keys inserted verbatim after `name:`
       #   (canvas: the `defaultName()` method; reader: the `file:` index the
       #   snapshot lives at). JS object literals don't care about key order, so
@@ -52,6 +56,55 @@ module StreamWeaver
       #   repo"; when nil the toggle is omitted entirely and the save is
       #   always Global -- a manual choice, never a silent auto-resolution
       #   (canvas-doc-location-and-discovery.md).
+      # gist - kwarg for the third "Gist" destination radio (share-to-gist
+      #   epic), or nil when the caller has no gist capability to offer at
+      #   all -- in which case the radio is omitted entirely, same as
+      #   source_dir: nil for the repo radio. The scope row now renders when
+      #   EITHER source_dir OR gist is present (a canvas pushed from outside
+      #   a git repo can still be shared). Shape:
+      #     {
+      #       available: true/false,      # GistPublisher.gh_available? -- a
+      #                                    # cheap presence check, NOT an auth
+      #                                    # check. A missing token surfaces
+      #                                    # as a save-time error, not a
+      #                                    # hidden option (Gloria's Law: show
+      #                                    # the capability and the one thing
+      #                                    # that unblocks it).
+      #       unavailable_reason: "...",  # helper text shown next to the
+      #                                    # radio -- rendered disabled --
+      #                                    # when available is false; unused
+      #                                    # when true.
+      #       known: {"doc-name" => {url:, revisions:}, ...},
+      #                                    # the gist(s) relevant to THIS
+      #                                    # dialog -- the caller scopes this
+      #                                    # down (e.g. via GistStore
+      #                                    # #latest_for_prefix for the
+      #                                    # current canvas), not the whole
+      #                                    # install's history, since it's
+      #                                    # embedded into every page render.
+      #                                    # Keyed by the doc's base name (no
+      #                                    # extension). Embedded as a JSON
+      #                                    # literal and looked up live, as
+      #                                    # the name field
+      #                                    # is edited, via the Alpine
+      #                                    # currentGist() helper -- drives
+      #                                    # the "already shared · N
+      #                                    # revisions" hint, the URL preview
+      #                                    # line, and the action button's
+      #                                    # Update-gist/Create-gist label.
+      #       prefill_name: "already-shared-name" or nil,
+      #                                    # when a gist is already known for
+      #                                    # the canvas this dialog belongs
+      #                                    # to, openDialog() uses this as the
+      #                                    # initial `name` INSTEAD OF the
+      #                                    # caller's reset_name_js timestamp
+      #                                    # logic, so the very next save
+      #                                    # updates that gist rather than
+      #                                    # minting a second one.
+      #     }
+      #   Gist is never the default scope -- This-repo/Global remain the only
+      #   defaults (`scope: '#{source_dir ? 'repo' : 'global'}'` below is
+      #   unchanged); gist is only ever chosen by an explicit user click.
       def render(
         endpoint:,
         button_title:,
@@ -64,13 +117,27 @@ module StreamWeaver
         extra_body_fields: '',
         host_class: nil,
         css_layer: nil,
-        dialog_css_extra: ''
+        dialog_css_extra: '',
+        gist: nil
       )
         style_open  = css_layer ? "<style>@layer #{css_layer} {" : '<style>'
         style_close = css_layer ? '}</style>' : '</style>'
         host_css    = host_class ? "\n            .#{host_class} { display: contents; }" : ''
         host_attr   = host_class ? %( class="#{host_class}") : ''
-        scope_html  = scope_toggle_html(source_dir)
+        scope_html  = scope_toggle_html(source_dir, gist)
+
+        # Embedded verbatim into the `x-data="{ ... }"` HTML attribute below,
+        # so any quotes the JSON produces must be HTML-escaped the same way
+        # reader_layout.erb's `name_init` already is (see its doc comment
+        # above) or they'd terminate the attribute early. gistKnown must
+        # always serialize to a JS object literal (never `null`) since it's
+        # indexed by name below -- `gist[:known]` defaults to `{}` whether
+        # `gist` itself, or just its `known:` key, is missing.
+        gist_known = (gist && gist[:known]) || {}
+        gist_known_json = ERB::Util.h(gist_known.to_json)
+
+        gist_prefill = gist && gist[:prefill_name]
+        gist_prefill_json = ERB::Util.h(gist_prefill.to_json)
 
         <<~HTML
           #{style_open}
@@ -100,14 +167,21 @@ module StreamWeaver
             }
             .sw-save-doc-scope {
               display: flex; gap: 1rem; margin: 0 0 0.5rem 0;
-              font-size: 0.85rem;
+              font-size: 0.85rem; flex-wrap: wrap;
             }
             .sw-save-doc-scope label {
               display: flex; align-items: center; gap: 0.35rem; cursor: pointer;
             }
+            .sw-save-doc-scope label:has(input:disabled) { cursor: not-allowed; opacity: 0.6; }
             .sw-save-doc-scope-path {
               margin: 0 0 0.75rem 0; color: #6b7280; font-size: 0.78rem;
               font-family: ui-monospace, monospace; word-break: break-all;
+            }
+            .sw-save-doc-scope-hint {
+              color: #6b7280; font-size: 0.78rem;
+            }
+            .sw-save-doc-scope-reason {
+              margin: 0 0 0.75rem 0; color: #b45309; font-size: 0.78rem;
             }
             .sw-save-doc-dialog input[type=text] {
               width: 100%; padding: 0.55rem 0.75rem;
@@ -129,6 +203,7 @@ module StreamWeaver
               background: #dcfce7; color: #166534; border-radius: 4px;
               font-size: 0.85rem; word-break: break-all;
             }
+            .sw-save-doc-success a { color: #166534; }
             .sw-save-doc-notice {
               margin-top: 0.5rem; padding: 0.5rem 0.75rem;
               background: #fef9c3; color: #854d0e; border-radius: 4px;
@@ -154,6 +229,10 @@ module StreamWeaver
               border-color: var(--sw-color-primary, #1f6feb);
             }
             .sw-save-doc-save-org:hover:not(:disabled) { background: #eff6ff; }
+            .sw-save-doc-save-gist {
+              background: #fff; color: #166534; border-color: #166534;
+            }
+            .sw-save-doc-save-gist:hover:not(:disabled) { background: #f0fdf4; }
           #{style_close}
           <div x-data="{
             open: false,
@@ -165,12 +244,38 @@ module StreamWeaver
             error: null,
             coverage: null,
             notice: null,
+            gistKnown: #{gist_known_json},
+            gistPrefill: #{gist_prefill_json},
+            gistResult: null,
             openDialog() {
-              this.error = null; this.savedPath = null; this.coverage = null; this.notice = null;
-              #{reset_name_js}
+              this.error = null; this.savedPath = null; this.coverage = null; this.notice = null; this.gistResult = null;
+              if (this.gistPrefill) {
+                this.name = this.gistPrefill;
+              } else {
+                #{reset_name_js}
+              }
               this.format = 'rb';
               this.open = true;
               this.$nextTick(() => this.$refs.input && this.$refs.input.select());
+            },
+            // The single definition of "what key does this name map to in
+            // gistKnown" -- shared by currentGist() (read) and save()'s
+            // record-the-new-gist step (write) so the two can never drift.
+            // A drift would mean a just-saved gist gets recorded under a key
+            // currentGist() can't find, the button would stay on "Create
+            // gist", and the next save would mint a second gist -- exactly
+            // what prefill_name exists to prevent. Strips a .rb/.org
+            // extension in case the field ever carries one.
+            gistKey(name) {
+              return (name || '').replace(/\\.(rb|org)$/, '');
+            },
+            // Looks up the typed name in gistKnown -- live, as the name
+            // field is edited -- so the scope hint, URL preview, and the
+            // gist action button's label all stay in sync with what's
+            // actually already shared under that name. Returns null when
+            // nothing is known for the current name.
+            currentGist() {
+              return this.gistKnown[this.gistKey(this.name)] || null;
             },
             // Tiered copy for the org-coverage notice (Phase 2 design spec's
             // Save-as-Org UX section, including its 2026-08-14 copy-accuracy
@@ -198,7 +303,7 @@ module StreamWeaver
             },
             async save() {
               if (this.saving) return;
-              this.saving = true; this.error = null; this.coverage = null; this.notice = null;
+              this.saving = true; this.error = null; this.coverage = null; this.notice = null; this.gistResult = null;
               try {
                 const res = await fetch('#{endpoint}', {
                   method: 'POST',
@@ -210,10 +315,29 @@ module StreamWeaver
                   this.savedPath = data.path;
                   this.coverage = data.coverage || null;
                   this.notice = this.orgNotice();
-                  // A tiered notice can be a full sentence or two -- the
-                  // default 1.8s auto-close (tuned for a one-line success
-                  // confirmation) isn't enough time to read it.
-                  setTimeout(() => { this.open = false; }, this.notice ? 6000 : 1800);
+                  if (data.gist_url) {
+                    // A gist save's payload IS the URL, not a path -- keep
+                    // the dialog open until the user dismisses it (no
+                    // auto-close below) and remember it under this name so
+                    // the button/hint flip to "Update gist" immediately.
+                    this.gistResult = { url: data.gist_url, revisions: data.revisions };
+                    this.gistKnown[this.gistKey(this.name)] = { url: data.gist_url, revisions: data.revisions };
+                    // Auto-copy for zero-friction hand-off to a coworker.
+                    // Clipboard access can fail (permissions, insecure
+                    // context) -- that must never hide the URL, which stays
+                    // visible and manually selectable in gistResult below
+                    // regardless of whether the copy itself succeeded.
+                    try {
+                      await navigator.clipboard.writeText(data.gist_url);
+                    } catch (e) {
+                      // ignored -- URL is still shown and selectable below
+                    }
+                  } else {
+                    // A tiered notice can be a full sentence or two -- the
+                    // default 1.8s auto-close (tuned for a one-line success
+                    // confirmation) isn't enough time to read it.
+                    setTimeout(() => { this.open = false; }, this.notice ? 6000 : 1800);
+                  }
                 } else {
                   this.error = data.error || ('HTTP ' + res.status);
                 }
@@ -239,19 +363,34 @@ module StreamWeaver
                        :disabled="saving"
                        placeholder="my-canvas-doc">
                 <div x-show="error" x-text="error" class="sw-save-doc-error"></div>
-                <div x-show="savedPath" class="sw-save-doc-success">
+                <div x-show="savedPath && !gistResult" class="sw-save-doc-success">
                   ✓ Saved to <code x-text="savedPath"></code>
+                </div>
+                <div x-show="gistResult" class="sw-save-doc-success">
+                  ✓ Gist saved · <span x-text="gistResult ? gistResult.revisions : ''"></span> revision(s)<br>
+                  <code x-text="gistResult ? gistResult.url : ''"></code><br>
+                  <a :href="gistResult ? gistResult.url : '#'" target="_blank">Open gist</a>
+                  &middot;
+                  <a :href="gistResult ? (gistResult.url + '/revisions') : '#'" target="_blank">Revisions</a>
                 </div>
                 <div x-show="notice" x-text="notice" class="sw-save-doc-notice"></div>
                 <div class="sw-save-doc-actions">
                   <button class="sw-save-doc-cancel" @click="open = false" :disabled="saving">Cancel</button>
-                  <button class="sw-save-doc-save-org" @click="format = 'org'; save()" :disabled="saving" title="Save as a plain-text .org sibling file">
+                  <button class="sw-save-doc-save-org" @click="format = 'org'; save()" :disabled="saving" x-show="scope !== 'gist'" title="Save as a plain-text .org sibling file">
                     <span x-show="!(saving && format === 'org')">Save as Org</span>
                     <span x-show="saving && format === 'org'">Saving...</span>
                   </button>
-                  <button class="sw-save-doc-save" @click="format = 'rb'; save()" :disabled="saving">
+                  <button class="sw-save-doc-save" @click="format = 'rb'; save()" :disabled="saving" x-show="scope !== 'gist'">
                     <span x-show="!(saving && format === 'rb')">Save</span>
                     <span x-show="saving && format === 'rb'">Saving...</span>
+                  </button>
+                  <!-- No format= assignment here on purpose: scope picks the destination,
+                       format picks the serialization. A gist save always sends both files
+                       regardless of format, so pinning format to a third value here would
+                       only risk a future 422 against a server whitelist of ['rb', 'org']. -->
+                  <button class="sw-save-doc-save-gist" @click="save()" :disabled="saving" x-show="scope === 'gist'">
+                    <span x-show="!saving" x-text="currentGist() ? 'Update gist' : 'Create gist'"></span>
+                    <span x-show="saving">Saving...</span>
                   </button>
                 </div>
               </div>
@@ -260,19 +399,46 @@ module StreamWeaver
         HTML
       end
 
-      # Builds the "This repo (<basename>)" vs. "Global" radio toggle, or ''
-      # when there's no repo to offer -- the caller-visible contract is
-      # `render`'s `source_dir:` kwarg (see its doc comment above).
-      def scope_toggle_html(source_dir)
-        return '' unless source_dir
+      # Builds the "This repo (<basename>)" / "Global" / "Gist" radio toggle,
+      # or '' when there's nothing to offer at all -- the caller-visible
+      # contract is `render`'s `source_dir:`/`gist:` kwargs (see `render`'s
+      # doc comment above). Renders when EITHER source_dir OR gist is
+      # present; each radio is independently optional (a canvas pushed from
+      # outside a git repo has no repo radio but can still offer Gist).
+      def scope_toggle_html(source_dir, gist)
+        return '' unless source_dir || gist
 
-        repo_label = "This repo (#{ERB::Util.h(File.basename(source_dir))})"
+        repo_radio = if source_dir
+                       repo_label = "This repo (#{ERB::Util.h(File.basename(source_dir))})"
+                       %(<label><input type="radio" x-model="scope" value="repo"> #{repo_label}</label>)
+                     else
+                       ''
+                     end
+
+        gist_radio  = gist ? gist_radio_html(gist) : ''
+        gist_reason = gist && !gist[:available] ? %(<p class="sw-save-doc-scope-reason">#{ERB::Util.h(gist[:unavailable_reason])}</p>) : ''
+
         <<~HTML
           <div class="sw-save-doc-scope">
-            <label><input type="radio" x-model="scope" value="repo"> #{repo_label}</label>
+            #{repo_radio}
             <label><input type="radio" x-model="scope" value="global"> Global</label>
+            #{gist_radio}
           </div>
-          <p class="sw-save-doc-scope-path" x-show="scope === 'repo'">#{ERB::Util.h(source_dir)}</p>
+          #{source_dir ? %(<p class="sw-save-doc-scope-path" x-show="scope === 'repo'">#{ERB::Util.h(source_dir)}</p>) : ''}
+          #{gist_reason}
+        HTML
+      end
+
+      # The Gist `<label>` itself. Rendered disabled (never hidden -- Gloria's
+      # Law: show the capability and the one thing that unblocks it) when
+      # `gist[:available]` is false; its `unavailable_reason` is rendered as
+      # helper text by the caller (`scope_toggle_html`, above), not here.
+      def gist_radio_html(gist)
+        disabled_attr = gist[:available] ? '' : ' disabled'
+        <<~HTML.strip
+          <label><input type="radio" x-model="scope" value="gist"#{disabled_attr}> Gist
+            <span class="sw-save-doc-scope-hint" x-show="currentGist()">(already shared &middot; <span x-text="currentGist() ? currentGist().revisions : ''"></span> revision(s))</span>
+          </label>
         HTML
       end
     end
