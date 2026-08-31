@@ -1,6 +1,14 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'tmpdir'
+require 'json'
+require 'open3'
+require 'rack/test'
+require 'stream_weaver/canvas/bridge_server'
+require 'stream_weaver/canvas/reader'
+require 'stream_weaver/canvas/gist_store'
+require 'stream_weaver/canvas/gist_publisher'
 
 # disc-097: button and radio_group were ported to the canvas bridge's sendEvent,
 # but five other controls kept emitting hx-post at routes the bridge does not
@@ -326,5 +334,113 @@ RSpec.describe 'canvas action parity' do
         'hx-indicator="#app-container" hx-trigger="change">'
       )
     end
+  end
+end
+
+# share-to-gist epic, reader-gist-parity story: bridge_server.rb's and
+# reader.rb's scope == 'gist' branches are two independent implementations
+# of the same contract (hand-mirrored, not shared code -- see reader.rb's
+# handle_gist_save doc comment), which is exactly the kind of drift this
+# file exists to catch -- extended here from rendered-control drift to
+# POST-route drift, for the same DSL input. No real gh call, ever.
+RSpec.describe 'canvas/reader gist save-doc parity' do
+  def shared_dsl = "header1 'Shared Doc'"
+
+  def gh_response(id: 'parity1', revisions: 1)
+    {
+      'id' => id,
+      'html_url' => "https://gist.github.com/someone/#{id}",
+      'history' => Array.new(revisions) { |i| { 'version' => format('%040d', i) } }
+    }.to_json
+  end
+
+  def ok_status
+    instance_double(Process::Status, success?: true, exitstatus: 0)
+  end
+
+  def stub_capture3(result)
+    allow(Open3).to receive(:capture3).and_return(result)
+  end
+
+  def bridge_post(name, scope: 'gist')
+    prev_bridge = StreamWeaver::Canvas::BridgeServer.bridge
+    StreamWeaver::Canvas::BridgeServer.bridge = StreamWeaver::Canvas::Bridge.new(port: 0)
+    session = StreamWeaver::Canvas::BridgeServer.bridge.create_session('parity-session')
+    session.set_dsl(shared_dsl)
+
+    rack = Rack::Test::Session.new(Rack::MockSession.new(StreamWeaver::Canvas::BridgeServer))
+    rack.post '/canvas/parity-session/save-doc', { name: name, scope: scope }.to_json,
+              'CONTENT_TYPE' => 'application/json'
+    rack.last_response
+  ensure
+    StreamWeaver::Canvas::BridgeServer.bridge = prev_bridge
+  end
+
+  def reader_post(name, scope: 'gist')
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, 'snapshot.rb'), shared_dsl)
+      prev_list = StreamWeaver::Canvas::Reader.file_list
+      StreamWeaver::Canvas::Reader.configure_files!(StreamWeaver::Canvas::Reader::FileList.build([dir]))
+
+      rack = Rack::Test::Session.new(Rack::MockSession.new(StreamWeaver::Canvas::Reader))
+      rack.post '/save-doc', { file: 0, name: name, scope: scope }.to_json,
+                'CONTENT_TYPE' => 'application/json'
+      rack.last_response
+    ensure
+      StreamWeaver::Canvas::Reader.configure_files!(prev_list)
+    end
+  end
+
+  around do |ex|
+    prev_gist_store = ENV['STREAMWEAVER_GIST_STORE']
+    Dir.mktmpdir do |d|
+      ENV['STREAMWEAVER_GIST_STORE'] = File.join(d, 'gists.json')
+      ex.run
+    end
+  ensure
+    ENV['STREAMWEAVER_GIST_STORE'] = prev_gist_store
+  end
+
+  it 'returns the identical status and response body for a successful publish of the same DSL' do
+    stub_capture3([gh_response, '', ok_status])
+    bridge_response = bridge_post('bridge-parity-doc')
+
+    stub_capture3([gh_response, '', ok_status])
+    reader_response = reader_post('reader-parity-doc')
+
+    expect(reader_response.status).to eq(bridge_response.status)
+    expect(JSON.parse(reader_response.body)).to eq(JSON.parse(bridge_response.body))
+  end
+
+  it 'maps an invalid doc name to the identical 422 shape in both' do
+    bridge_response = bridge_post('../evil')
+    reader_response = reader_post('../evil')
+
+    expect(bridge_response.status).to eq(422)
+    expect(reader_response.status).to eq(422)
+    expect(JSON.parse(reader_response.body)).to eq(JSON.parse(bridge_response.body))
+  end
+
+  it 'maps a publisher failure to the identical 502 shape in both' do
+    allow(StreamWeaver::Canvas::GistPublisher)
+      .to receive(:publish).and_return({ ok: false, error: 'gh timed out after 20s talking to GitHub' })
+
+    bridge_response = bridge_post('bridge-parity-doc')
+    reader_response = reader_post('reader-parity-doc')
+
+    expect(bridge_response.status).to eq(502)
+    expect(reader_response.status).to eq(502)
+    expect(JSON.parse(reader_response.body)).to eq(JSON.parse(bridge_response.body))
+  end
+
+  it 'maps an unexpected publisher error to the identical 500 shape in both' do
+    allow(StreamWeaver::Canvas::GistPublisher).to receive(:publish).and_raise(StandardError, 'boom')
+
+    bridge_response = bridge_post('bridge-parity-doc')
+    reader_response = reader_post('reader-parity-doc')
+
+    expect(bridge_response.status).to eq(500)
+    expect(reader_response.status).to eq(500)
+    expect(JSON.parse(reader_response.body)).to eq(JSON.parse(bridge_response.body))
   end
 end

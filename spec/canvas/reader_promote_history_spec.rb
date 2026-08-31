@@ -4,9 +4,12 @@ require 'spec_helper'
 require 'tmpdir'
 require 'fileutils'
 require 'json'
+require 'open3'
 require 'rack/test'
 require 'stream_weaver/canvas/reader'
 require 'stream_weaver/canvas/doc_store'
+require 'stream_weaver/canvas/gist_store'
+require 'stream_weaver/canvas/gist_publisher'
 
 RSpec.describe StreamWeaver::Canvas::Reader, 'promote-from-history' do
   include Rack::Test::Methods
@@ -15,10 +18,12 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'promote-from-history' do
   end
 
   around do |ex|
-    prev_doc = ENV['STREAMWEAVER_DOC_ROOT']
+    prev_doc        = ENV['STREAMWEAVER_DOC_ROOT']
+    prev_gist_store = ENV['STREAMWEAVER_GIST_STORE']
     Dir.mktmpdir do |outer|
       Dir.mktmpdir do |doc_root|
-        ENV['STREAMWEAVER_DOC_ROOT'] = doc_root
+        ENV['STREAMWEAVER_DOC_ROOT']   = doc_root
+        ENV['STREAMWEAVER_GIST_STORE'] = File.join(doc_root, 'gists.json')
         @doc_root = doc_root
 
         @docs_dir     = File.join(outer, 'docs')
@@ -38,7 +43,37 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'promote-from-history' do
       end
     end
   ensure
-    ENV['STREAMWEAVER_DOC_ROOT'] = prev_doc
+    ENV['STREAMWEAVER_DOC_ROOT']   = prev_doc
+    ENV['STREAMWEAVER_GIST_STORE'] = prev_gist_store
+  end
+
+  # Shared with the 'scope: gist' describe block below -- mirrors
+  # bridge_save_doc_gist_spec.rb's own copies of the same helpers.
+  def gh_response(id: 'abc123', revisions: 1)
+    {
+      'id' => id,
+      'html_url' => "https://gist.github.com/someone/#{id}",
+      'history' => Array.new(revisions) { |i| { 'version' => format('%040d', i) } }
+    }.to_json
+  end
+
+  def ok_status
+    instance_double(Process::Status, success?: true, exitstatus: 0)
+  end
+
+  def fail_status(code = 1)
+    instance_double(Process::Status, success?: false, exitstatus: code)
+  end
+
+  # Records every capture3 invocation so examples can assert on exact argv.
+  def stub_capture3(*results)
+    calls = []
+    queue = results.dup
+    allow(Open3).to receive(:capture3) do |*argv, **opts|
+      calls << { argv: argv, stdin: opts[:stdin_data] }
+      queue.shift || raise('unexpected extra Open3.capture3 call')
+    end
+    calls
   end
 
   describe 'POST /save-doc' do
@@ -225,6 +260,132 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'promote-from-history' do
     end
   end
 
+  # scope == 'gist' branch of POST /save-doc (share-to-gist epic,
+  # reader-gist-parity story). Mirrors bridge_save_doc_gist_spec.rb's
+  # coverage of BridgeServer's equivalent branch -- no real gh call, ever.
+  describe "POST /save-doc with scope: 'gist'" do
+    it 'returns 200 with gist_url/gist_id/revisions/action on a successful publish' do
+      calls = stub_capture3([gh_response(id: 'abc123', revisions: 1), '', ok_status])
+
+      post '/save-doc',
+           { file: 1, name: 'shared-snapshot', scope: 'gist' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(200)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to eq(true)
+      expect(body['gist_url']).to eq('https://gist.github.com/someone/abc123')
+      expect(body['gist_id']).to eq('abc123')
+      expect(body['revisions']).to eq(1)
+      expect(body['action']).to eq('create')
+      expect(calls.length).to eq(1)
+      expect(calls[0][:argv]).to eq(['gh', 'api', '-X', 'POST', '/gists', '--input', '-'])
+
+      # Recorded so the next save updates the same gist instead of minting one.
+      expect(StreamWeaver::Canvas::GistStore.lookup('shared-snapshot')['id']).to eq('abc123')
+    end
+
+    it 'returns 422 on an invalid doc name via the propagated ArgumentError (unaffected by the gist branch)' do
+      post '/save-doc',
+           { file: 1, name: '../evil', scope: 'gist' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(422)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to eq(false)
+      expect(body['error']).to match(/invalid doc name/)
+    end
+
+    it 'returns 422 when file index is out of range (unaffected by the gist branch)' do
+      post '/save-doc',
+           { file: 999, name: 'shared-snapshot', scope: 'gist' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(422)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to eq(false)
+      expect(body['error']).to match(/index/i)
+    end
+
+    it 'returns 502 with the error surfaced when GistPublisher.publish reports failure' do
+      allow(StreamWeaver::Canvas::GistPublisher)
+        .to receive(:publish).and_return({ ok: false, error: 'gh timed out after 20s talking to GitHub' })
+
+      post '/save-doc',
+           { file: 1, name: 'shared-snapshot', scope: 'gist' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(502)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to eq(false)
+      expect(body['error']).to eq('gh timed out after 20s talking to GitHub')
+    end
+
+    it 'returns 500 on an unexpected StandardError from the publisher' do
+      allow(StreamWeaver::Canvas::GistPublisher)
+        .to receive(:publish).and_raise(StandardError, 'boom')
+
+      post '/save-doc',
+           { file: 1, name: 'shared-snapshot', scope: 'gist' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(500)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to eq(false)
+      expect(body['error']).to include('boom')
+    end
+
+    it 'does not fail the response when GistStore.record raises -- returns ok:true with a warning instead' do
+      calls = stub_capture3([gh_response, '', ok_status])
+      allow(StreamWeaver::Canvas::GistStore).to receive(:record).and_raise(StandardError, 'disk full')
+
+      post '/save-doc',
+           { file: 1, name: 'shared-snapshot', scope: 'gist' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(200)
+      body = JSON.parse(last_response.body)
+      expect(body['ok']).to eq(true)
+      expect(body['warning']).to match(/disk full/)
+      expect(calls.length).to eq(1)
+    end
+
+    it 'passes the existing gist id to GistPublisher.publish on a second save for the same doc name' do
+      StreamWeaver::Canvas::GistStore.record('shared-snapshot', id: 'oldid1', url: 'https://gist.github.com/someone/oldid1', revisions: 1)
+      calls = stub_capture3([gh_response(id: 'oldid1', revisions: 2), '', ok_status])
+
+      post '/save-doc',
+           { file: 1, name: 'shared-snapshot', scope: 'gist' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(200)
+      expect(calls[0][:argv]).to eq(['gh', 'api', '-X', 'PATCH', '/gists/oldid1', '--input', '-'])
+      body = JSON.parse(last_response.body)
+      expect(body['action']).to eq('update')
+      expect(body['revisions']).to eq(2)
+    end
+
+    it 'falls back to creating a fresh gist when the recorded gist was deleted upstream (404 on PATCH)' do
+      StreamWeaver::Canvas::GistStore.record('shared-snapshot', id: 'oldid1', url: 'https://gist.github.com/someone/oldid1', revisions: 1)
+      calls = stub_capture3(
+        [nil, 'HTTP 404: Not Found', fail_status(404)],
+        [gh_response(id: 'newid2', revisions: 1), '', ok_status]
+      )
+
+      post '/save-doc',
+           { file: 1, name: 'shared-snapshot', scope: 'gist' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(200)
+      body = JSON.parse(last_response.body)
+      expect(body['action']).to eq('create')
+      expect(body['gist_id']).to eq('newid2')
+      expect(calls.map { |c| c[:argv][3] }).to eq(%w[PATCH POST])
+      expect(StreamWeaver::Canvas::GistStore.all.keys).to eq(['shared-snapshot'])
+      expect(StreamWeaver::Canvas::GistStore.lookup('shared-snapshot')['id']).to eq('newid2')
+    end
+  end
+
   describe 'GET / for a history file' do
     let(:html) do
       get '/?file=1'
@@ -276,6 +437,37 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'promote-from-history' do
 
       expect(html).to include('x-model="scope"')
       expect(html).to include("This repo (#{File.basename(source_dir)})")
+    end
+
+    # gist: kwarg (share-to-gist epic, reader-gist-parity story) -- keyed
+    # to the snapshot's own default_name, not a session prefix (see
+    # reader_layout.erb's comment on why the reader needs no prefix search).
+    it 'renders a disabled Gist radio with the unavailable reason when gh is not on PATH' do
+      allow(StreamWeaver::Canvas::GistPublisher).to receive(:gh_available?).and_return(false)
+
+      get '/?file=1'
+
+      expect(last_response.body).to match(/value="gist" disabled/)
+      expect(last_response.body).to include('gh CLI not found on PATH')
+    end
+
+    it "renders an enabled Gist radio prefilled with the snapshot's own name when a gist is already recorded for it" do
+      allow(StreamWeaver::Canvas::GistPublisher).to receive(:gh_available?).and_return(true)
+      StreamWeaver::Canvas::GistStore.record(
+        'brainstorm-20260427_143012', id: 'abc123', url: 'https://gist.github.com/someone/abc123', revisions: 3
+      )
+
+      get '/?file=1'
+
+      expect(last_response.body).to include('value="gist"')
+      expect(last_response.body).not_to match(/value="gist" disabled/)
+      expect(last_response.body).to include('gistKnown')
+      expect(last_response.body).to include('gistPrefill')
+      # Both fields are HTML-escaped JSON literals (see the widget's own
+      # doc comment on gist_known_json/gist_prefill_json) -- the recorded
+      # name/url round-trip through that escaping intact.
+      expect(last_response.body).to include(ERB::Util.h('brainstorm-20260427_143012'.to_json))
+      expect(last_response.body).to include(ERB::Util.h('https://gist.github.com/someone/abc123'.to_json))
     end
   end
 

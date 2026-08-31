@@ -9,6 +9,9 @@ require 'stream_weaver/views'
 require 'stream_weaver/adapter/alpinejs'
 require 'stream_weaver/canvas/doc_store'
 require 'stream_weaver/canvas/doc_roots'
+require 'stream_weaver/canvas/gist_store'
+require 'stream_weaver/canvas/gist_publisher'
+require 'stream_weaver/canvas/gist_save_handler'
 require 'stream_weaver/canvas/save_doc_widget'
 require 'stream_weaver/page_shell'
 require 'stream_weaver/export/html_exporter'
@@ -18,6 +21,8 @@ require 'stream_weaver/org/reader'
 module StreamWeaver
   module Canvas
     class Reader < Sinatra::Base
+      include GistSaveHandler
+
       class NoFilesError < StandardError; end
 
       class FileList
@@ -590,12 +595,6 @@ module StreamWeaver
         name   = body[:name]
         format = body[:format] || 'rb'
         halt 422, { ok: false, error: "unrecognized format: #{format.inspect}" }.to_json unless %w[rb org].include?(format)
-        # The Save-as-doc toggle (stream_weaver-j3b3). No source_dir is passed
-        # to DocStore.save below -- unlike BridgeServer, the reader has no
-        # live session to carry one, so "This repo" keeps resolving the same
-        # way it always has: DocStore's own auto-detection off the reader
-        # process's cwd (see reader_layout.erb's SaveDocWidget.render call).
-        scope = body[:scope] == 'global' ? :global : :repo
 
         # FileList#at already refuses non-Integer/negative indices; File.exist?
         # covers the case an in-range index still points at a file that's
@@ -612,7 +611,24 @@ module StreamWeaver
         # Snapshots whose DSL doesn't declare `use_theme` itself keep rendering
         # with canvas-read's default -- accepted limitation (stream_weaver-csf).
         dsl = File.read(file_path)
-        begin
+
+        # Gist is a third destination, not a third format (mirrors
+        # bridge_server.rb's equivalent guard). No theme/layout to carry
+        # into the gist's .rb file either, for the same reason the org/rb
+        # branches above carry none: the reader has no live session.
+        return handle_gist_save(dsl, name) if body[:scope] == 'gist'
+
+        # The Save-as-doc toggle (stream_weaver-j3b3). No source_dir is passed
+        # to DocStore.save below -- unlike BridgeServer, the reader has no
+        # live session to carry one, so "This repo" keeps resolving the same
+        # way it always has: DocStore's own auto-detection off the reader
+        # process's cwd (see reader_layout.erb's SaveDocWidget.render call).
+        # Computed here, after the gist escape hatch above, rather than
+        # collapsed earlier -- unused on the gist path, so there's nothing
+        # to compute early for it.
+        scope = body[:scope] == 'global' ? :global : :repo
+
+        rescue_save_errors do
           if format == 'org'
             writer   = StreamWeaver::Org::Writer.new(dsl)
             org_text = writer.call
@@ -631,10 +647,6 @@ module StreamWeaver
             saved_path = StreamWeaver::Canvas::DocStore.save(name, dsl, scope: scope)
             { ok: true, path: saved_path }.to_json
           end
-        rescue ArgumentError => e
-          halt 422, { ok: false, error: e.message }.to_json
-        rescue StandardError => e
-          halt 500, { ok: false, error: e.message }.to_json
         end
       end
 
@@ -768,6 +780,31 @@ module StreamWeaver
       private_class_method :not_a_streamweaver_doc_html
 
       private
+
+      # Builds SaveDocWidget's `gist:` kwarg (share-to-gist epic,
+      # reader-gist-parity story) for the is_history Save-as-doc call site in
+      # reader_layout.erb. Kept out of the ERB itself -- reading the local
+      # GistStore file and shelling out to check `gh`'s presence are
+      # controller work, not view formatting (same rationale as
+      # #set_browse_ivars below).
+      #
+      # `name` is `default_name` (computed in the ERB from the archived
+      # snapshot's own filename) -- unlike BridgeServer#gist_widget_data,
+      # which does a `latest_for_prefix` search because a live canvas
+      # session's default name is a fresh timestamp on every dialog open, the
+      # reader's default_name is fixed per snapshot, so it's already the
+      # exact name a direct GistStore.lookup wants.
+      def gist_widget_data(name)
+        available = StreamWeaver::Canvas::GistPublisher.gh_available?
+        entry = StreamWeaver::Canvas::GistStore.lookup(name)
+
+        {
+          available: available,
+          unavailable_reason: available ? nil : 'gh CLI not found on PATH',
+          known: entry ? { name => { url: entry['url'], revisions: entry['revisions'] } } : {},
+          prefill_name: entry ? name : nil
+        }
+      end
 
       # Every Browse-related link carries this instead of the chrome's
       # narrower default (hx-select-oob="#sw-reader-nav" alone) -- Browse

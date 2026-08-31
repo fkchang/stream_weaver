@@ -10,6 +10,7 @@ require_relative 'bridge'
 require_relative 'doc_store'
 require_relative 'gist_store'
 require_relative 'gist_publisher'
+require_relative 'gist_save_handler'
 require_relative 'save_doc_widget'
 require_relative '../org/writer'
 
@@ -33,6 +34,8 @@ module StreamWeaver
     #   4. Routes messages between Claude and browsers
     #
     class BridgeServer < Sinatra::Base
+      include GistSaveHandler
+
       SOCKET_PATH = File.expand_path('~/.streamweaver/canvas.sock')
       PID_FILE_PATH = File.expand_path('~/.streamweaver/canvas.pid')
       DEFAULT_PORT = 4700
@@ -160,7 +163,9 @@ module StreamWeaver
         # the raw scope value before it collapses to :repo/:global below (that
         # ternary treats anything other than 'global' as :repo, which would
         # silently misroute a gist save into a file write).
-        return handle_gist_save(session, doc_name) if body[:scope] == 'gist'
+        if body[:scope] == 'gist'
+          return handle_gist_save(session.dsl, doc_name, theme: session.theme, layout: session.layout)
+        end
 
         # The Save-as-doc toggle (stream_weaver-j3b3): 'global' always means
         # DEFAULT_ROOT; anything else (including a missing/malformed value)
@@ -224,80 +229,6 @@ module StreamWeaver
       end
 
       private
-
-      # scope == 'gist' branch of POST /canvas/:name/save-doc (share-to-gist
-      # epic). Publishes both the .org and .rb renderings of the session's
-      # DSL to one secret gist via GistPublisher, keyed to the doc name by
-      # GistStore so a second save from the same canvas updates the same
-      # gist instead of minting a duplicate.
-      #
-      # base_name mirrors GistPublisher's own (private) base_name derivation
-      # for a valid name: DocStore.normalize_name never rewrites characters,
-      # it only validates and forces/strips the .rb/.org extension, so
-      # stripping the extension here -- same regex the existing org branch
-      # above uses -- lands on the identical string GistPublisher records
-      # under. A non-String doc_name is passed through as-is (GistStore.lookup
-      # coerces via #to_s, so this can only ever miss, not raise) so
-      # GistPublisher.publish's own DocStore.normalize_name call is what
-      # raises the ArgumentError, exactly like the rb/org branches above.
-      def handle_gist_save(session, doc_name)
-        rescue_save_errors do
-          base_name = doc_name.is_a?(String) ? doc_name.sub(/\.(rb|org)\z/, '') : doc_name
-          existing_id = StreamWeaver::Canvas::GistStore.lookup(base_name)&.dig('id')
-
-          result = StreamWeaver::Canvas::GistPublisher.publish(
-            name: doc_name,
-            dsl: session.dsl,
-            theme: session.theme,
-            layout: session.layout,
-            existing_id: existing_id
-          )
-
-          halt 502, { ok: false, error: result[:error] }.to_json unless result[:ok]
-
-          response = {
-            ok: true,
-            gist_url: result[:url],
-            gist_id: result[:id],
-            revisions: result[:revisions],
-            action: result[:action],
-            coverage: result[:coverage]
-          }
-
-          # A GistStore.record failure must never fail an otherwise-successful
-          # publish -- the gist is already live at result[:url] regardless of
-          # whether we can remember it locally. Mirrors how DocStore.save
-          # swallows a DocRoots.record failure (doc_store.rb:151) rather than
-          # raising it back at the caller.
-          begin
-            StreamWeaver::Canvas::GistStore.record(
-              base_name, id: result[:id], url: result[:url], revisions: result[:revisions]
-            )
-          rescue StandardError => e
-            response[:warning] = "gist saved, but recording it locally failed: #{e.message}"
-          end
-
-          # Stale-id recovery (see GistPublisher#publish): result[:forget_stale_id],
-          # when present, is the OLD gist id that 404'd on PATCH -- there is
-          # nothing further to clean up for it. GistStore is keyed by doc NAME,
-          # not gist id, and GistStore.record above already overwrote this
-          # doc's one entry with the freshly-minted id, so the stale id was
-          # never left behind under any key to forget.
-          response.to_json
-        end
-      end
-
-      # Shared ArgumentError->422 / StandardError->500 mapping for the three
-      # save-doc branches above (org, rb, gist) -- the same 4-line rescue
-      # pattern each already needed on its own; factored out once a third
-      # copy (the gist branch) would have made it a triplicate.
-      def rescue_save_errors
-        yield
-      rescue ArgumentError => e
-        halt 422, { ok: false, error: e.message }.to_json
-      rescue StandardError => e
-        halt 500, { ok: false, error: e.message }.to_json
-      end
 
       def render_canvas_page(session_name, session)
         # Create adapter in websocket mode
