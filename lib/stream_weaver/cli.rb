@@ -1764,6 +1764,10 @@ module StreamWeaver
       new_port = new_info[:port]
       puts "Canvas bridge running on port #{new_port} (pid #{new_info[:pid]})"
 
+      unless wait_for_bridge_ready
+        $stderr.puts "Warning: canvas bridge liveness probe did not stabilize within 5s of starting -- attempting restore anyway"
+      end
+
       puts ""
       puts "== Restoring sessions =="
       ok = do_canvas_restore(dir, force: false)
@@ -1778,6 +1782,32 @@ module StreamWeaver
       end
 
       exit 1 unless ok
+    end
+
+    # Bounded-wait retry on the bridge's liveness, called right after
+    # ensure_bridge_running in canvas-restart before handing off to
+    # do_canvas_restore (stream_weaver-f568, a canvas-restart fix cycle
+    # follow-up to ps84): a single Canvas::Client.bridge_running? read
+    # immediately after a fresh start was observed to occasionally read as
+    # false on Forrest's machine even though the bridge really was up
+    # (a manual canvas-restore moments later worked fine) -- Client itself
+    # has no cached state to explain that, so this treats it as a transient
+    # race and re-probes with an actual round trip (bridge_running? plus a
+    # live send_message) rather than trusting a single reading.
+    def self.wait_for_bridge_ready(timeout: 5, interval: 0.2)
+      deadline = Time.now + timeout
+
+      loop do
+        begin
+          return true if Canvas::Client.bridge_running? && Canvas::Client.send_message({ type: 'list' })
+        rescue Canvas::Client::NotRunningError, Canvas::Client::ConnectionError
+          # not ready yet -- fall through to retry
+        end
+
+        return false if Time.now >= deadline
+
+        sleep interval
+      end
     end
 
     def self.canvas_read(args)

@@ -455,4 +455,77 @@ RSpec.describe StreamWeaver::CLI do
       expect(StreamWeaver::Canvas::Client).to have_received(:stop_bridge)
     end
   end
+
+  # --- canvas-restart: bounded liveness retry after start (stream_weaver-f568,
+  # a ps84 fix cycle -- restore leg saw a spurious "Canvas bridge is not
+  # running" immediately after ensure_bridge_running reported success) ---
+
+  describe '.wait_for_bridge_ready' do
+    it 'retries until bridge_running? and a live round trip both succeed' do
+      allow(StreamWeaver::Canvas::Client).to receive(:bridge_running?).and_return(false, true)
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message)
+        .with({ type: 'list' }).and_return(type: 'list', sessions: [])
+
+      expect(described_class.wait_for_bridge_ready(timeout: 2, interval: 0.01)).to eq(true)
+      expect(StreamWeaver::Canvas::Client).to have_received(:bridge_running?).twice
+    end
+
+    it 'gives up and returns false once the timeout elapses' do
+      allow(StreamWeaver::Canvas::Client).to receive(:bridge_running?).and_return(false)
+
+      expect(described_class.wait_for_bridge_ready(timeout: 0.05, interval: 0.01)).to eq(false)
+    end
+
+    it 'treats a NotRunningError from the round trip as not-ready-yet rather than raising' do
+      allow(StreamWeaver::Canvas::Client).to receive(:bridge_running?).and_return(true)
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message)
+        .and_raise(StreamWeaver::Canvas::Client::NotRunningError, 'not up yet')
+        .once
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message)
+        .and_return(type: 'list', sessions: [])
+
+      expect(described_class.wait_for_bridge_ready(timeout: 2, interval: 0.01)).to eq(true)
+    end
+  end
+
+  describe '.canvas_restart (liveness retry integration)' do
+    around do |ex|
+      prev_snap = ENV['STREAMWEAVER_SNAPSHOT_ROOT']
+      Dir.mktmpdir do |d|
+        ENV['STREAMWEAVER_SNAPSHOT_ROOT'] = d
+        ex.run
+      end
+    ensure
+      ENV['STREAMWEAVER_SNAPSHOT_ROOT'] = prev_snap
+    end
+
+    it 'restores successfully when bridge_running? is stubbed to fail once right after start, then succeed' do
+      bridge_started = false
+      failed_once = false
+
+      allow(StreamWeaver::Canvas::Client).to receive(:bridge_running?) do
+        if bridge_started && !failed_once
+          failed_once = true
+          false
+        else
+          true
+        end
+      end
+      allow(StreamWeaver::Canvas::Client).to receive(:read_bridge_info).and_return(pid: 1, port: 4700)
+      allow(StreamWeaver::Canvas::Client).to receive(:stop_bridge).and_return(true)
+      allow(StreamWeaver::Canvas::Client).to receive(:ensure_bridge_running) do
+        bridge_started = true
+        { pid: 2, port: 4700 }
+      end
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+        { type: 'list', sessions: [] } if msg[:type] == 'list'
+      end
+
+      stdout, stderr = capture_io { described_class.canvas_restart([]) }
+
+      expect(failed_once).to eq(true) # the retry path was actually exercised
+      expect(stdout).to include('restore=OK')
+      expect(stderr).not_to include('did not stabilize')
+    end
+  end
 end
