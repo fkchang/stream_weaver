@@ -113,7 +113,7 @@ RSpec.describe StreamWeaver::CLI do
       allow(listener).to receive(:start!) { order << :listener; 9001 }
       allow(described_class).to receive(:command_on_path?).and_return(true)
       allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return('w-1')
-      allow(described_class).to receive(:get_started_split_canvas_into).and_return('pane-1')
+      allow(described_class).to receive(:get_started_open_controller_window).and_return('ctrl-1')
       allow(described_class).to receive(:write_get_started_worker_json).and_return('/tmp/worker.json')
 
       capture_io { described_class.get_started_premier('claude') }

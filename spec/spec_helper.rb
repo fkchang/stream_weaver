@@ -66,6 +66,15 @@ RSpec.configure do |config|
     c.syntax = :expect
   end
 
+  # A stub for a method that does not exist is not a harmless typo here:
+  # spec/cli_university_listener_spec.rb kept stubbing a CLI method after
+  # it was renamed, and the REAL one then ran during the suite -- opening a
+  # genuine iTerm2 window and talking to a live bridge on any machine where
+  # those were available. Verified doubles turn that into a failure.
+  config.mock_with :rspec do |mocks|
+    mocks.verify_partial_doubles = true
+  end
+
   # `get-started` now starts the University listener as a detached background
   # process, so any spec that exercises either get-started path spawns a real,
   # long-lived ruby on the developer's machine and leaves it there -- silently,

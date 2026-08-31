@@ -8,6 +8,9 @@ module StreamWeaver
   # (`gem install iterm2_ruby` — https://rubygems.org/gems/iterm2_ruby).
   # Falls back to system browser when iTerm2 API is unavailable.
   class ITerm
+    # iTerm2's built-in profile that renders a web view instead of a shell.
+    BROWSER_PROFILE = "Web Browser"
+
     class << self
       def available?
         return @available if defined?(@available)
@@ -46,6 +49,51 @@ module StreamWeaver
         else
           { type: nil, pane_id: nil }
         end
+      end
+
+      # Opens `url` in an iTerm2 browser pane that owns a WHOLE WINDOW, and
+      # returns that browser session's id (nil if it could not be opened) --
+      # same shape as open_worker_tab.
+      #
+      # StreamWeaver University's canvas is a controller, not a sidecar: it
+      # gets its own window so the worker tab stays free for the agent and
+      # the demo canvas panes the course steps have it create. iTerm2's API
+      # has no "new browser window" call, so this composes three primitives
+      # that already work elsewhere in this file -- create_tab with no
+      # window_id makes a new window, split_pane with the Web Browser
+      # profile makes the browser, and the shell that came with the window
+      # is then closed so only the canvas is left.
+      #
+      # Known limitation: a brand new iTerm2 window opens at the profile's
+      # default size, the same too-small frame open_worker_tab below goes
+      # out of its way to avoid by reusing the caller's window. There is no
+      # way around it here -- the window has to be new, and the gem exposes
+      # no window sizing (create_tab takes only window_id/profile_name). If
+      # the controller comes up unusably small, that is this, and the fix
+      # belongs in the gem.
+      def open_browser_window(url)
+        return nil unless available?
+
+        with_timeout(10, default: nil) do
+          connect do |c|
+            created = c.create_tab
+            shell = created && created[:session_id]
+            next nil unless shell
+
+            pane = browser_pane_in(c, shell, url)
+
+            # Either way the shell goes: with a browser it would be clutter
+            # beside the canvas, and without one it is a window the user
+            # never asked for and cannot account for. Closing the only
+            # session takes the window with it. Scoped so a close that
+            # fails can never cost us a working pane's id -- losing that
+            # would leave a canvas window nothing can close later.
+            close_quietly(c, shell)
+            pane
+          end
+        end
+      rescue StandardError
+        nil
       end
 
       def close_pane(pane_id)
@@ -132,15 +180,26 @@ module StreamWeaver
       # Return is a carriage return, not a line feed -- that is what a
       # terminal actually sends when a human presses the key, and a raw-mode
       # TUI (the `claude` / `codex` CLIs) does not read an LF as submit.
+      #
+      # It also goes in a write of its OWN. UAT 2026-08-31: with the CR
+      # appended to the same write, the prompt appeared in the claude pane
+      # and just sat there -- the TUI read the whole write as pasted text,
+      # so the CR became a character in the composer rather than a keypress.
+      # A real Return is a separate event, so we send a separate one.
+      #
       # Owning the keystroke here is what lets callers hand over prompt text
       # and nothing terminal-shaped; a later herdr/cmux driver makes the
       # same promise its own way.
       def send_to_session(session_id, text, submit: true)
         return false unless available? && session_id
 
-        keys = submit ? "#{text}\r" : text
         with_timeout(8, default: false) do
-          connect { |c| !!c.send_text(session_id, keys) }
+          connect do |c|
+            next false unless c.send_text(session_id, text)
+            next true unless submit
+
+            c.send_text(session_id, "\r") ? true : false
+          end
         end
       rescue StandardError
         false
@@ -163,6 +222,27 @@ module StreamWeaver
       private
 
       APP_NAME = "StreamWeaver"
+
+      # The browser pane for `url`, or nil. The real client raises on a
+      # failed split (and returns nil only for an OK response with no
+      # session), so both spellings of failure are caught here rather than
+      # unwinding past the shell cleanup above.
+      def browser_pane_in(client, shell, url)
+        client.split_pane(
+          shell,
+          vertical: true,
+          profile_name: BROWSER_PROFILE,
+          profile_customizations: { "Initial URL" => url }
+        )
+      rescue StandardError
+        nil
+      end
+
+      def close_quietly(client, session_id)
+        client.close_session(session_id, force: true)
+      rescue StandardError
+        nil
+      end
 
       # The window holding the session this process is running in, or nil if
       # it can't be determined (not in iTerm2, or the lookup failed). Callers
@@ -196,7 +276,7 @@ module StreamWeaver
             c.split_pane(
               guid,
               vertical: !horizontal,
-              profile_name: "Web Browser",
+              profile_name: BROWSER_PROFILE,
               profile_customizations: { "Initial URL" => url }
             )
           end

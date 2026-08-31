@@ -6,8 +6,8 @@ Two versions, depending on who's getting it. Pick one and paste it as-is.
 
 > StreamWeaver is a Ruby DSL for building interactive UIs with almost no code, and it comes with a
 > five-step "Getting Started" course that teaches it by actually running it next to your terminal.
-> The full experience is a split iTerm2 tab (agent on one side, the course on the other) -- set that
-> up first, then install the gem and run the door command.
+> The full experience puts the course in an iTerm2 window of its own and your agent in a fresh tab
+> beside your work -- set iTerm2 up first, then install the gem and run the door command.
 
 **1. Prerequisites** (macOS + iTerm2 only -- skip if you're on another OS or terminal, you'll just
 get a browser tab instead):
@@ -31,13 +31,15 @@ streamweaver get-started
 ```
 
 You'll see a dependency checklist (✅/❌ per item), then, if everything's green, `=== Opening
-premier experience ===` followed by a brand new iTerm2 tab: your agent CLI on the left, the
-StreamWeaver University canvas on the right. If iTerm2 isn't set up, it falls back to a plain
-browser tab instead (same course, just not split-pane) -- pass `--degraded` to skip straight to
+premier experience ===` followed by two things: a new iTerm2 tab in your current window running
+your agent CLI, and the StreamWeaver University canvas in a window of its own. The canvas is the
+control panel -- you drive the course from there; the agent tab stays clear for the agent (and for
+the demo canvas panes it opens as you work through the steps). If iTerm2 isn't set up, the canvas
+falls back to a plain browser tab instead (same course) -- pass `--degraded` to skip straight to
 that.
 
 **You're done when** the Getting Started panel shows "Start with step 1." -- click "Run step 1" and
-watch it type the first prompt into the agent pane for you.
+watch it type the first prompt into the agent tab for you.
 
 ## Non-developer version
 

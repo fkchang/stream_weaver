@@ -283,11 +283,11 @@ RSpec.describe StreamWeaver::CLI do
     # Unsets the override explicitly: this example is about the default
     # location, and spec_helper sets STREAMWEAVER_UNIVERSITY_WORKER
     # suite-wide, which resolves first.
-    it 'writes both session ids (agent + canvas pane), agent, cwd, and an ISO8601 timestamp under ~/.streamweaver/university/worker.json' do
+    it 'writes the agent session id, the controller session id, agent, cwd, and an ISO8601 timestamp under ~/.streamweaver/university/worker.json' do
       Dir.mktmpdir do |home|
         with_env('STREAMWEAVER_UNIVERSITY_WORKER' => nil, 'HOME' => home) do
           path = described_class.write_get_started_worker_json(
-            'w-session-1', 'claude', '/some/project/dir', canvas_session_id: 'canvas-pane-1'
+            'w-session-1', 'claude', '/some/project/dir', controller_session_id: 'ctrl-1'
           )
 
           expect(path).to eq(File.join(home, '.streamweaver', 'university', 'worker.json'))
@@ -295,7 +295,7 @@ RSpec.describe StreamWeaver::CLI do
           expect(data['session_id']).to eq('w-session-1')
           expect(data['agent']).to eq('claude')
           expect(data['cwd']).to eq('/some/project/dir')
-          expect(data['canvas_session_id']).to eq('canvas-pane-1')
+          expect(data['controller_session_id']).to eq('ctrl-1')
           expect(data['created_at']).to match(/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\z/)
         end
       end
@@ -318,28 +318,29 @@ RSpec.describe StreamWeaver::CLI do
       end
     end
 
-    it 'defaults canvas_session_id to nil when the split failed or was not attempted' do
+    it 'defaults controller_session_id to nil when the controller window was not opened' do
       Dir.mktmpdir do |home|
         with_env('STREAMWEAVER_UNIVERSITY_WORKER' => nil, 'HOME' => home) do
           path = described_class.write_get_started_worker_json('w-session-1', 'claude', '/some/project/dir')
 
           data = JSON.parse(File.read(path))
-          expect(data['canvas_session_id']).to be_nil
+          expect(data['controller_session_id']).to be_nil
         end
       end
     end
   end
 
   describe '.get_started_premier' do
-    # Product design: the calling terminal is left untouched. One new tab
-    # holds the worker (agent) with the canvas split into THAT session, not
-    # panel's old behavior of splitting the calling terminal.
+    # Product design (revised 2026-08-31): the calling terminal is left
+    # untouched, the worker tab holds ONLY the agent -- so it stays free to
+    # acquire its own demo canvas pane per step -- and the University canvas
+    # is the CONTROLLER, in a window of its own.
     let(:canvas_url) { 'http://127.0.0.1:59321/canvas/university' }
 
     it 'never calls panel (which would split the calling terminal)' do
       allow(described_class).to receive(:get_started_create_university_canvas).and_return(canvas_url)
       allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return('w-session-1')
-      allow(described_class).to receive(:get_started_split_canvas_into).and_return('canvas-pane-1')
+      allow(described_class).to receive(:get_started_open_controller_window).and_return('ctrl-1')
       allow(described_class).to receive(:write_get_started_worker_json)
       allow(described_class).to receive(:push_get_started_placeholder_canvas)
       expect(described_class).not_to receive(:panel)
@@ -347,25 +348,56 @@ RSpec.describe StreamWeaver::CLI do
       capture_io { described_class.get_started_premier('claude') }
     end
 
-    it 'creates the canvas, opens the worker tab in the invoking directory, splits the canvas INTO the worker session, records worker.json (both session ids), then pushes the canvas last' do
+    # The worker tab must NOT be split with the canvas any more: the agent
+    # opens its own demo canvas pane there as the steps ask it to.
+    it 'never splits the canvas into the worker tab' do
+      allow(described_class).to receive(:get_started_create_university_canvas).and_return(canvas_url)
+      allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return('w-session-1')
+      allow(described_class).to receive(:get_started_open_controller_window).and_return('ctrl-1')
+      allow(described_class).to receive(:write_get_started_worker_json)
+      allow(described_class).to receive(:push_get_started_placeholder_canvas)
+      expect(StreamWeaver::ITerm).not_to receive(:split_vertical_with_url)
+
+      capture_io { described_class.get_started_premier('claude') }
+    end
+
+    it 'creates the canvas, opens the agent-only worker tab in the invoking directory, opens the controller window, records worker.json, then pushes the canvas last' do
       order = []
       allow(described_class).to receive(:get_started_create_university_canvas) { order << :create_canvas; canvas_url }
       allow(Dir).to receive(:pwd).and_return('/invoking/dir')
       allow(StreamWeaver::ITerm).to receive(:open_worker_tab).with('claude', dir: '/invoking/dir') { order << :worker; 'w-session-1' }
-      allow(described_class).to receive(:get_started_split_canvas_into).with('w-session-1', canvas_url) { order << :split; 'canvas-pane-1' }
+      allow(described_class).to receive(:get_started_open_controller_window).with(canvas_url) { order << :controller; 'ctrl-1' }
       allow(described_class).to receive(:write_get_started_worker_json)
-        .with('w-session-1', 'claude', '/invoking/dir', canvas_session_id: 'canvas-pane-1') { order << :record; '/fake/worker.json' }
+        .with('w-session-1', 'claude', '/invoking/dir', controller_session_id: 'ctrl-1') { order << :record; '/fake/worker.json' }
       allow(described_class).to receive(:push_get_started_placeholder_canvas) { order << :push }
 
       capture_io { described_class.get_started_premier('claude') }
 
-      expect(order).to eq(%i[create_canvas worker split record push])
+      expect(order).to eq(%i[create_canvas worker controller record push])
     end
 
-    it 'still pushes the canvas even when no worker tab could be opened, and never attempts the split' do
+    # A bridge restart moves the port (Forrest's live canvas came back on
+    # 4701). The controller window must be pointed at whatever the bridge
+    # just said it was listening on, never a remembered or default port.
+    it 'points the controller window at the URL the live bridge just returned' do
+      allow(described_class).to receive(:get_started_create_university_canvas)
+        .and_return('http://127.0.0.1:4701/canvas/university')
+      allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return('w-session-1')
+      allow(described_class).to receive(:write_get_started_worker_json)
+      allow(described_class).to receive(:push_get_started_placeholder_canvas)
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message)
+      allow(StreamWeaver::ITerm).to receive(:open_browser_window).and_return('ctrl-1')
+
+      capture_io { described_class.get_started_premier('claude') }
+
+      expect(StreamWeaver::ITerm).to have_received(:open_browser_window)
+        .with('http://127.0.0.1:4701/canvas/university')
+    end
+
+    it 'still pushes the canvas even when no worker tab could be opened, and never opens a controller window' do
       allow(described_class).to receive(:get_started_create_university_canvas).and_return(canvas_url)
       allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return(nil)
-      expect(described_class).not_to receive(:get_started_split_canvas_into)
+      expect(described_class).not_to receive(:get_started_open_controller_window)
       expect(described_class).to receive(:push_get_started_placeholder_canvas)
 
       capture_io { described_class.get_started_premier('claude') }
@@ -383,25 +415,23 @@ RSpec.describe StreamWeaver::CLI do
     end
   end
 
-  describe '.get_started_split_canvas_into' do
-    it 'splits the URL into the given worker session (not the calling session) and records the resulting pane id on the canvas session' do
-      allow(StreamWeaver::ITerm).to receive(:split_vertical_with_url)
-        .with('http://example/canvas', open_browser: false, target_session: 'w-session-1')
-        .and_return(type: :browser, pane_id: 'canvas-pane-1')
+  describe '.get_started_open_controller_window' do
+    it 'opens the canvas in its own window and records that session as the canvas pane' do
+      allow(StreamWeaver::ITerm).to receive(:open_browser_window)
+        .with('http://example/canvas')
+        .and_return('ctrl-1')
       expect(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
-        expect(msg).to include(type: 'set_pane_id', name: 'university', pane_id: 'canvas-pane-1')
+        expect(msg).to include(type: 'set_pane_id', name: 'university', pane_id: 'ctrl-1')
       end
 
-      result = described_class.get_started_split_canvas_into('w-session-1', 'http://example/canvas')
-
-      expect(result).to eq('canvas-pane-1')
+      expect(described_class.get_started_open_controller_window('http://example/canvas')).to eq('ctrl-1')
     end
 
-    it 'returns nil and records nothing when the split fails' do
-      allow(StreamWeaver::ITerm).to receive(:split_vertical_with_url).and_return(type: nil, pane_id: nil)
+    it 'returns nil and records nothing when the window could not be opened' do
+      allow(StreamWeaver::ITerm).to receive(:open_browser_window).and_return(nil)
       expect(StreamWeaver::Canvas::Client).not_to receive(:send_message)
 
-      expect(described_class.get_started_split_canvas_into('w-session-1', 'http://example/canvas')).to be_nil
+      expect(described_class.get_started_open_controller_window('http://example/canvas')).to be_nil
     end
   end
 

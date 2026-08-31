@@ -10,9 +10,13 @@ Three layers; the University app only knows the first.
 |---|---|---|
 | Curriculum | courses, steps, prompts, progress.yml | number of courses |
 | Driver | "canvas sends the step prompt to a worker session" | iterm2ctl send-text now; herdr/cmux later; LLM teacher (`/worker-session`) in a later epic |
-| Surface | "canvas beside the terminal" | iTerm split pane (`streamweaver panel`, lib/stream_weaver/iterm.rb) now; browser tab degraded; herdr/cmux later |
+| Surface | "a canvas the user drives, beside the work" | iTerm controller window of its own + agent-only worker tab (`ITerm.open_browser_window` / `open_worker_tab`, lib/stream_weaver/iterm.rb) now; browser tab degraded; herdr/cmux later |
 
 Driver and surface adapters both live in `iterm.rb`. Keep them as two small methods, not a framework.
+
+## Surface layout (decision 2026-08-31, supersedes the split-pane arrangement)
+
+Three surfaces, one job each. The terminal `get-started` was invoked from is left untouched. The **controller** is the University canvas in a window of its own — it is what the user drives, not a sidecar. The **worker tab** opens in the caller's own window (so it inherits a usable size) and holds only the agent, leaving it free to acquire its own demo canvas pane per step, which is exactly what the course prompts have it do from step 1. `get-started` therefore no longer splits the worker tab with the University canvas.
 
 ## Premier vs degraded (decision 2026-08-28)
 
@@ -20,7 +24,7 @@ iTerm2 is opt-OUT, not optional. Brett explicitly wants the split-pane experienc
 
 ## Existing facts (don't re-derive)
 
-- `iterm.rb:85` requires "iterm2" only on darwin inside an iTerm2 session; LoadError → `system("open", url)`. `ITerm.gem_missing?` (cli.rb:1921) already prints the gem tip.
+- `ITerm.check_availability` (iterm.rb) requires "iterm2" only on darwin inside an iTerm2 session; LoadError → `system("open", url)`. `ITerm.gem_missing?` already prints the gem tip. (Named, not line-numbered, so an insert above them does not date this note.)
 - `streamweaver setup` (cli.rb:2095-2133) adds `Bash(streamweaver *)` to Claude settings and calls `install_skill(['--global'])`. get-started wraps this.
 - `install_skill` (cli.rb:2039-2091) symlinks skill dirs into the Claude root and `~/.agents/skills` (spec/cli_install_skill_spec.rb). `gem_skills` hash at cli.rb:2056-2061 omits visual-plan and visual-recap.
 - Browser-open duplicated in service_client.rb:35-39, cli.rb:1060-1064, server.rb:1064-1068 — do not add a fourth; earmarked for dedupe.

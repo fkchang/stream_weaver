@@ -2535,11 +2535,11 @@ module StreamWeaver
 
     # One command: wraps `setup`, reports on dependencies across three tiers
     # (core / agent skills / premier iTerm2 surface), then opens the
-    # StreamWeaver University canvas either via a real iTerm2 split pane +
-    # worker tab (premier) or a browser tab with side-by-side instructions
-    # (degraded). iTerm2 is opt-OUT, not optional: this nags hard on a
-    # missing premier dependency and only degrades on --degraded or an
-    # explicit interactive "continue anyway".
+    # StreamWeaver University canvas -- premier, as a controller window of
+    # its own plus an agent-only worker tab, or degraded, as a browser tab
+    # with side-by-side instructions. iTerm2 is opt-OUT, not optional: this
+    # nags hard on a missing premier dependency and only degrades on
+    # --degraded or an explicit interactive "continue anyway".
     def self.get_started(args)
       degraded_flag = false
       yes_flag = false
@@ -2587,7 +2587,7 @@ module StreamWeaver
 
       if get_started_premier_ok?(report)
         proceed = yes_flag || get_started_confirm?(
-          "iTerm2 premier experience is ready. Open split pane + worker tab now?", default: true
+          "iTerm2 premier experience is ready. Open the canvas window + worker tab now?", default: true
         )
         unless proceed
           puts "Skipped. Re-run `streamweaver get-started` when ready, or pass --degraded for the browser fallback."
@@ -2737,7 +2737,7 @@ module StreamWeaver
       else
         puts "    ⚠️  no agent CLI (`claude` or `codex`) found on PATH"
       end
-      puts "  premier surface (iTerm2 split pane)"
+      puts "  premier surface (iTerm2 canvas window + worker tab)"
       puts "    #{get_started_check_mark(report[:premier][:darwin])} macOS"
       puts "    #{get_started_check_mark(report[:premier][:in_iterm])} running inside iTerm2"
       puts "    #{get_started_check_mark(report[:premier][:gem_loadable])} iterm2_ruby gem installed"
@@ -2746,7 +2746,7 @@ module StreamWeaver
 
     def self.print_get_started_remediation(report)
       premier = report[:premier]
-      puts "⚠️  The full split-pane experience needs iTerm2 — some checks above failed."
+      puts "⚠️  The full canvas-window + worker-tab experience needs iTerm2 — some checks above failed."
       puts ""
       unless premier[:darwin]
         puts "  - Premier mode is macOS + iTerm2 only. On this platform, use --degraded."
@@ -2793,10 +2793,12 @@ module StreamWeaver
 
     # --- Premier / degraded paths ---
 
-    # Product design (not optional): the calling terminal is left untouched.
-    # One new tab holds the whole premier experience -- the worker session
-    # (agent, left) with the canvas split into it (right), not a split on
-    # the terminal get-started was invoked from.
+    # Product design (revised 2026-08-31): three surfaces, each with one job.
+    # The calling terminal is left untouched. A new tab in the caller's own
+    # window holds ONLY the agent -- so it stays free to acquire its own
+    # demo canvas pane per step, which is what the course prompts have it
+    # do from step 1 onward. And the University canvas, being the
+    # controller rather than a sidecar, gets a window of its own.
     def self.get_started_premier(agent)
       puts "=== Opening premier experience ==="
       canvas_url = get_started_create_university_canvas
@@ -2816,14 +2818,18 @@ module StreamWeaver
         return get_started_push_and_listen
       end
 
-      canvas_pane_id = get_started_split_canvas_into(worker_session_id, canvas_url)
-      path = write_get_started_worker_json(worker_session_id, agent, invoking_dir, canvas_session_id: canvas_pane_id)
+      controller_session_id = get_started_open_controller_window(canvas_url)
+      path = write_get_started_worker_json(worker_session_id, agent, invoking_dir,
+                                           controller_session_id: controller_session_id)
 
       puts "Worker tab started running `#{agent}` in #{invoking_dir} (iTerm session #{worker_session_id})"
-      if canvas_pane_id
-        puts "Canvas split into that tab, right pane (iTerm session #{canvas_pane_id})"
+      if controller_session_id
+        puts "University canvas opened in its own window (iTerm session #{controller_session_id})"
       else
-        $stderr.puts "Could not split the canvas into the worker tab — open it manually: #{canvas_url}"
+        # Forrest's Law: don't hand the user a URL and a chore. The degraded
+        # path already opens the browser itself; do the same here.
+        $stderr.puts "Could not open the canvas window in iTerm2 — opening it in your browser instead."
+        open_browser(canvas_url)
       end
       puts "Recorded: #{path}"
 
@@ -2878,20 +2884,23 @@ module StreamWeaver
       url
     end
 
-    # Splits the canvas (browser pane, URL) into `worker_session_id` --
-    # NOT the calling terminal -- so agent and canvas share one tab.
-    # Records the resulting pane as the canvas session's pane_id (same
-    # bookkeeping `panel` does) for later cleanup. Returns the new pane's
-    # session id, or nil if the split failed/was unavailable.
-    def self.get_started_split_canvas_into(worker_session_id, url)
-      result = ITerm.split_vertical_with_url(url, open_browser: false, target_session: worker_session_id)
-      pane_id = result[:pane_id]
-      if pane_id
+    # Opens the University canvas as the controller, in a window of its
+    # own -- not a pane in the worker tab, which belongs to the agent.
+    # Records the browser session as the canvas session's pane_id (the same
+    # bookkeeping `panel` does) so later cleanup can close it. Returns that
+    # session id, or nil if the window couldn't be opened.
+    #
+    # `url` is whatever the bridge just handed back from its create
+    # response, so it always carries the port the bridge is actually
+    # listening on -- never a remembered one (a restart can move it).
+    def self.get_started_open_controller_window(url)
+      session_id = ITerm.open_browser_window(url)
+      if session_id
         Canvas::Client.send_message(
-          Canvas::Protocol::Messages.set_pane_id(UNIVERSITY_SESSION, pane_id)
+          Canvas::Protocol::Messages.set_pane_id(UNIVERSITY_SESSION, session_id)
         )
       end
-      pane_id
+      session_id
     end
 
     # The course-list app (lib/stream_weaver/university/canvas.rb) -- name
@@ -2912,14 +2921,14 @@ module StreamWeaver
     # including the STREAMWEAVER_UNIVERSITY_WORKER override, which the
     # writer must honor too or a spec exercising this path would overwrite
     # the developer's real recorded worker session.
-    def self.write_get_started_worker_json(session_id, agent, cwd, canvas_session_id: nil)
+    def self.write_get_started_worker_json(session_id, agent, cwd, controller_session_id: nil)
       path = University::Runner.worker_path
       FileUtils.mkdir_p(File.dirname(path))
       File.write(path, JSON.pretty_generate({
         session_id: session_id,
         agent: agent,
         cwd: cwd,
-        canvas_session_id: canvas_session_id,
+        controller_session_id: controller_session_id,
         created_at: Time.now.utc.strftime('%Y-%m-%dT%H:%M:%SZ')
       }))
       path

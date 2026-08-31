@@ -34,7 +34,7 @@ RSpec.describe StreamWeaver::University::Runner do
       session_id: session_id,
       agent: 'claude',
       cwd: '/tmp/project',
-      canvas_session_id: 'canvas-pane-1',
+      controller_session_id: 'ctrl-1',
       created_at: '2026-08-28T00:00:00Z'
     }.merge(extra)))
   end

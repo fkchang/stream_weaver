@@ -140,24 +140,46 @@ RSpec.describe StreamWeaver::ITerm do
 
       described_class.send_to_session('worker-session', 'do the thing')
 
-      expect(client).to have_received(:send_text).with('worker-session', "do the thing\r").once
+      expect(client).to have_received(:send_text).with('worker-session', 'do the thing').once
       expect(client).not_to have_received(:send_text).with('calling-session', anything)
     end
 
-    # Pressing Return is a carriage return, not a line feed -- an LF typed
-    # at a raw-mode TUI is not Enter. Owning that here (rather than letting
-    # callers append their own newline) is what keeps terminal semantics
-    # out of the University side.
-    it 'submits by pressing Return (CR), not by appending a line feed' do
+    # UAT 2026-08-31: the prompt arrived in the claude pane but sat there
+    # unsubmitted -- Forrest had to press Return. A CR riding in the same
+    # write as the text is read as part of the pasted text, not as a
+    # keypress. Return has to be its own event.
+    it 'submits with a SEPARATE write carrying only the carriage return' do
       described_class.send_to_session('worker-session', 'do the thing')
 
-      expect(client).to have_received(:send_text).with('worker-session', "do the thing\r")
+      expect(client).to have_received(:send_text).with('worker-session', 'do the thing').ordered
+      expect(client).to have_received(:send_text).with('worker-session', "\r").ordered
     end
 
-    it 'sends the text with no submit keystroke when submit: false' do
+    it 'never appends the carriage return to the text write' do
+      described_class.send_to_session('worker-session', 'do the thing')
+
+      expect(client).not_to have_received(:send_text).with('worker-session', "do the thing\r")
+    end
+
+    it 'sends one write and no Return when submit: false' do
       described_class.send_to_session('worker-session', 'half a thought', submit: false)
 
-      expect(client).to have_received(:send_text).with('worker-session', 'half a thought')
+      expect(client).to have_received(:send_text).with('worker-session', 'half a thought').once
+      expect(client).not_to have_received(:send_text).with('worker-session', "\r")
+    end
+
+    it 'reports failure when the text lands but the Return does not' do
+      allow(client).to receive(:send_text).with('worker-session', 'do the thing').and_return(true)
+      allow(client).to receive(:send_text).with('worker-session', "\r").and_return(false)
+
+      expect(described_class.send_to_session('worker-session', 'do the thing')).to be false
+    end
+
+    it 'does not try to press Return when the text itself failed to send' do
+      allow(client).to receive(:send_text).with('worker-session', 'do the thing').and_return(false)
+
+      expect(described_class.send_to_session('worker-session', 'do the thing')).to be false
+      expect(client).not_to have_received(:send_text).with('worker-session', "\r")
     end
 
     it 'returns true when the RPC reports success' do
@@ -227,6 +249,90 @@ RSpec.describe StreamWeaver::ITerm do
       allow(client).to receive(:topology).and_raise(ITerm2::Error, 'boom')
 
       expect(described_class.session_alive?('worker-session')).to be false
+    end
+  end
+
+  # Design decision 2026-08-31: the University canvas is the CONTROLLER and
+  # gets a window of its own, rather than riding as a pane inside the worker
+  # tab. The worker tab is then just the agent, free to acquire its own demo
+  # canvas pane per step. Built from primitives already proven in this file:
+  # create_tab with no window_id makes a new window, split_pane with the
+  # browser profile makes the browser, and the leftover shell is closed so
+  # the window holds only the canvas.
+  describe '.open_browser_window' do
+    let(:client) { instance_double(ITerm2::Client) }
+
+    before do
+      allow(described_class).to receive(:available?).and_return(true)
+      allow(ITerm2).to receive(:connect).and_yield(client)
+      allow(client).to receive(:create_tab)
+        .and_return(session_id: 'shell-1', window_id: 'win-new', tab_id: 'tab-1')
+      allow(client).to receive(:split_pane).and_return('browser-1')
+      allow(client).to receive(:close_session).and_return(true)
+    end
+
+    it 'creates a NEW window, not a tab in the calling one' do
+      allow(described_class).to receive(:current_session_guid).and_return('calling-session')
+
+      described_class.open_browser_window('http://example/canvas/university')
+
+      expect(client).to have_received(:create_tab).with(no_args)
+    end
+
+    it 'puts the browser in that window, pointed at the url' do
+      described_class.open_browser_window('http://example/canvas/university')
+
+      expect(client).to have_received(:split_pane).with(
+        'shell-1', vertical: true, profile_name: 'Web Browser',
+        profile_customizations: { 'Initial URL' => 'http://example/canvas/university' }
+      )
+    end
+
+    it 'closes the leftover shell so the window holds only the canvas' do
+      described_class.open_browser_window('http://example/canvas/university')
+
+      expect(client).to have_received(:close_session).with('shell-1', force: true)
+    end
+
+    it 'returns the browser session id' do
+      expect(described_class.open_browser_window('http://example/canvas')).to eq('browser-1')
+    end
+
+    # A failed close must never cost us the pane id: without it nothing
+    # records set_pane_id, and the canvas window becomes unclosable.
+    it 'still returns the pane id when closing the shell raises' do
+      allow(client).to receive(:close_session).and_raise(ITerm2::Error, 'boom')
+
+      expect(described_class.open_browser_window('http://example/canvas')).to eq('browser-1')
+    end
+
+    # The real client RAISES on a failed split; it returns nil only for an
+    # OK response carrying no session. Both mean the same thing here.
+    it 'takes the window down with it when the browser split raises' do
+      allow(client).to receive(:split_pane).and_raise(ITerm2::Error, 'boom')
+
+      expect(described_class.open_browser_window('http://example/canvas')).to be_nil
+      expect(client).to have_received(:close_session).with('shell-1', force: true)
+    end
+
+    it 'takes the window down with it when the browser split returns nothing' do
+      allow(client).to receive(:split_pane).and_return(nil)
+
+      expect(described_class.open_browser_window('http://example/canvas')).to be_nil
+      expect(client).to have_received(:close_session).with('shell-1', force: true)
+    end
+
+    it 'returns nil without connecting when the gem is unavailable' do
+      allow(described_class).to receive(:available?).and_return(false)
+
+      expect(described_class.open_browser_window('http://example/canvas')).to be_nil
+      expect(ITerm2).not_to have_received(:connect)
+    end
+
+    it 'returns nil rather than raising when the RPC blows up' do
+      allow(client).to receive(:create_tab).and_raise(ITerm2::Error, 'boom')
+
+      expect(described_class.open_browser_window('http://example/canvas')).to be_nil
     end
   end
 
