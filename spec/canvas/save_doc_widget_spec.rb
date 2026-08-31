@@ -58,10 +58,11 @@ RSpec.describe 'Save-as-doc widget injection' do
 
   # stream_weaver-j3b3: the This repo/Global scope toggle.
   describe 'the scope toggle' do
-    it 'is hidden when the session has no source_dir yet (nothing pushed, or pushed from outside a repo)' do
+    it "shows only the Gist radio (no 'This repo') when the session has no source_dir yet (nothing pushed, or pushed from outside a repo) -- bridge-canvas-gist-endpoint wires gist: through unconditionally, so the row no longer disappears entirely" do
       expect(StreamWeaver::Canvas::BridgeServer.bridge.get_session('mysession').source_dir).to be_nil
       expect(html).not_to include('This repo')
-      expect(html).not_to include('x-model="scope"')
+      expect(html).to include('x-model="scope"')
+      expect(html).to include('value="gist"')
     end
 
     it "shows 'This repo (<basename>)' with the resolved directory once the session has a source_dir" do
@@ -95,9 +96,9 @@ RSpec.describe 'Save-as-doc widget injection' do
   end
 
   # share-to-gist: the Gist destination radio. Exercised by calling
-  # SaveDocWidget.render directly (rather than through the bridge, which
-  # doesn't wire a gist: kwarg through until a later story) since this
-  # story's contract is the widget's rendering, not the bridge's wiring.
+  # SaveDocWidget.render directly (rather than through the bridge, whose
+  # wiring is covered by bridge_save_doc_gist_spec.rb) since this story's
+  # contract is the widget's rendering, not the bridge's wiring.
   describe 'the gist scope option (share-to-gist)' do
     def render_widget(gist: nil, source_dir: nil)
       StreamWeaver::Canvas::SaveDocWidget.render(

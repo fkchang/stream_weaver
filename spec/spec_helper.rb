@@ -52,6 +52,13 @@ ENV['STREAMWEAVER_UNIVERSITY_PROGRESS']     = File.join(SPEC_UNIVERSITY_DIR, 'pr
 ENV['STREAMWEAVER_UNIVERSITY_LISTENER_PID'] = File.join(SPEC_UNIVERSITY_DIR, 'listener.pid')
 ENV['STREAMWEAVER_UNIVERSITY_LISTENER_LOG'] = File.join(SPEC_UNIVERSITY_DIR, 'listener.log')
 
+# Same hazard again (share-to-gist, bridge-canvas-gist-endpoint): every
+# canvas render now calls GistStore.all to build the Save-as-doc widget's
+# gist: kwarg. Left unredirected, that reads the developer's real
+# ~/.streamweaver/canvas/gists.json on every BridgeServer spec -- silent,
+# still green, same remedy as the two hazards above.
+ENV['STREAMWEAVER_GIST_STORE'] = File.join(Dir.tmpdir, "streamweaver-spec-gists-#{Process.pid}.json")
+
 # Single definition of the state key alias for all resource specs
 SK = StreamWeaver::Resource::StateKeys
 

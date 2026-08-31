@@ -8,6 +8,8 @@ require_relative 'protocol'
 require_relative 'session'
 require_relative 'bridge'
 require_relative 'doc_store'
+require_relative 'gist_store'
+require_relative 'gist_publisher'
 require_relative 'save_doc_widget'
 require_relative '../org/writer'
 
@@ -153,6 +155,13 @@ module StreamWeaver
         doc_name = body[:name]
         format = body[:format] || 'rb'
         halt 422, { ok: false, error: "unrecognized format: #{format.inspect}" }.to_json unless %w[rb org].include?(format)
+
+        # Gist is a third destination, not a third format -- checked against
+        # the raw scope value before it collapses to :repo/:global below (that
+        # ternary treats anything other than 'global' as :repo, which would
+        # silently misroute a gist save into a file write).
+        return handle_gist_save(session, doc_name) if body[:scope] == 'gist'
+
         # The Save-as-doc toggle (stream_weaver-j3b3): 'global' always means
         # DEFAULT_ROOT; anything else (including a missing/malformed value)
         # means "this repo", resolved from the session's own source_dir --
@@ -160,7 +169,7 @@ module StreamWeaver
         scope = body[:scope] == 'global' ? :global : :repo
 
         if format == 'org'
-          begin
+          return rescue_save_errors do
             writer = StreamWeaver::Org::Writer.new(session.dsl)
             org_text = writer.call
             coverage = writer.coverage
@@ -175,11 +184,7 @@ module StreamWeaver
             # of silently coercing it via #to_s into a technically-valid name.
             org_name = doc_name.is_a?(String) ? "#{doc_name.sub(/\.(rb|org)\z/, '')}.org" : doc_name
             path = StreamWeaver::Canvas::DocStore.save(org_name, org_text, scope: scope, source_dir: session.source_dir)
-            return { ok: true, path: path, coverage: coverage }.to_json
-          rescue ArgumentError => e
-            halt 422, { ok: false, error: e.message }.to_json
-          rescue StandardError => e
-            halt 500, { ok: false, error: e.message }.to_json
+            { ok: true, path: path, coverage: coverage }.to_json
           end
         end
 
@@ -189,13 +194,9 @@ module StreamWeaver
           session.dsl, theme: session.theme, layout: session.layout
         )
 
-        begin
+        rescue_save_errors do
           path = StreamWeaver::Canvas::DocStore.save(doc_name, dsl, scope: scope, source_dir: session.source_dir)
           { ok: true, path: path }.to_json
-        rescue ArgumentError => e
-          halt 422, { ok: false, error: e.message }.to_json
-        rescue StandardError => e
-          halt 500, { ok: false, error: e.message }.to_json
         end
       end
 
@@ -223,6 +224,80 @@ module StreamWeaver
       end
 
       private
+
+      # scope == 'gist' branch of POST /canvas/:name/save-doc (share-to-gist
+      # epic). Publishes both the .org and .rb renderings of the session's
+      # DSL to one secret gist via GistPublisher, keyed to the doc name by
+      # GistStore so a second save from the same canvas updates the same
+      # gist instead of minting a duplicate.
+      #
+      # base_name mirrors GistPublisher's own (private) base_name derivation
+      # for a valid name: DocStore.normalize_name never rewrites characters,
+      # it only validates and forces/strips the .rb/.org extension, so
+      # stripping the extension here -- same regex the existing org branch
+      # above uses -- lands on the identical string GistPublisher records
+      # under. A non-String doc_name is passed through as-is (GistStore.lookup
+      # coerces via #to_s, so this can only ever miss, not raise) so
+      # GistPublisher.publish's own DocStore.normalize_name call is what
+      # raises the ArgumentError, exactly like the rb/org branches above.
+      def handle_gist_save(session, doc_name)
+        rescue_save_errors do
+          base_name = doc_name.is_a?(String) ? doc_name.sub(/\.(rb|org)\z/, '') : doc_name
+          existing_id = StreamWeaver::Canvas::GistStore.lookup(base_name)&.dig('id')
+
+          result = StreamWeaver::Canvas::GistPublisher.publish(
+            name: doc_name,
+            dsl: session.dsl,
+            theme: session.theme,
+            layout: session.layout,
+            existing_id: existing_id
+          )
+
+          halt 502, { ok: false, error: result[:error] }.to_json unless result[:ok]
+
+          response = {
+            ok: true,
+            gist_url: result[:url],
+            gist_id: result[:id],
+            revisions: result[:revisions],
+            action: result[:action],
+            coverage: result[:coverage]
+          }
+
+          # A GistStore.record failure must never fail an otherwise-successful
+          # publish -- the gist is already live at result[:url] regardless of
+          # whether we can remember it locally. Mirrors how DocStore.save
+          # swallows a DocRoots.record failure (doc_store.rb:151) rather than
+          # raising it back at the caller.
+          begin
+            StreamWeaver::Canvas::GistStore.record(
+              base_name, id: result[:id], url: result[:url], revisions: result[:revisions]
+            )
+          rescue StandardError => e
+            response[:warning] = "gist saved, but recording it locally failed: #{e.message}"
+          end
+
+          # Stale-id recovery (see GistPublisher#publish): result[:forget_stale_id],
+          # when present, is the OLD gist id that 404'd on PATCH -- there is
+          # nothing further to clean up for it. GistStore is keyed by doc NAME,
+          # not gist id, and GistStore.record above already overwrote this
+          # doc's one entry with the freshly-minted id, so the stale id was
+          # never left behind under any key to forget.
+          response.to_json
+        end
+      end
+
+      # Shared ArgumentError->422 / StandardError->500 mapping for the three
+      # save-doc branches above (org, rb, gist) -- the same 4-line rescue
+      # pattern each already needed on its own; factored out once a third
+      # copy (the gist branch) would have made it a triplicate.
+      def rescue_save_errors
+        yield
+      rescue ArgumentError => e
+        halt 422, { ok: false, error: e.message }.to_json
+      rescue StandardError => e
+        halt 500, { ok: false, error: e.message }.to_json
+      end
 
       def render_canvas_page(session_name, session)
         # Create adapter in websocket mode
@@ -323,7 +398,7 @@ module StreamWeaver
           # call (a long-lived canvas session can be saved many times), unlike
           # the reader's fixed snapshot-derived name -- see SaveDocWidget's
           # name_init/reset_name_js doc comment.
-          extra_alpine_data: <<~JS
+          extra_alpine_data: <<~JS,
             defaultName() {
               const d = new Date();
               const pad = n => String(n).padStart(2, '0');
@@ -332,7 +407,29 @@ module StreamWeaver
               return '#{session_name}-' + ymd + '-' + hm;
             },
           JS
+          gist: gist_widget_data(session_name)
         )
+      end
+
+      # Builds SaveDocWidget's `gist:` kwarg (share-to-gist epic) -- see that
+      # module's doc comment for the exact shape expected.
+      #
+      # known/prefill_name need both the doc NAME a gist was recorded under
+      # and its entry; GistStore.latest_for_prefix only returns the entry
+      # (see disc-155), so this re-derives the [name, entry] pair locally
+      # via GistStore.all with the same prefix/max_by logic instead.
+      def gist_widget_data(session_name)
+        available = StreamWeaver::Canvas::GistPublisher.gh_available?
+        name, entry = StreamWeaver::Canvas::GistStore.all
+                                                      .select { |n, _| n.start_with?(session_name) }
+                                                      .max_by { |_, e| e['updated_at'] }
+
+        {
+          available: available,
+          unavailable_reason: available ? nil : 'gh CLI not found on PATH',
+          known: entry ? { name => { url: entry['url'], revisions: entry['revisions'] } } : {},
+          prefill_name: name
+        }
       end
 
       def polling_script(session_name, current_version)
