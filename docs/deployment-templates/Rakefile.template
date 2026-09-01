@@ -1,0 +1,45 @@
+# Rakefile for StreamWeaver Production Apps
+#
+# Provides database migration tasks and other utilities
+
+require "sinatra/activerecord/rake"
+
+# Load your application
+require_relative "app"
+
+# Database tasks are automatically available:
+# rake db:create              # Create the database
+# rake db:drop                # Drop the database
+# rake db:migrate             # Run pending migrations
+# rake db:rollback            # Rollback last migration
+# rake db:seed                # Load seed data
+# rake db:create_migration    # Create a new migration
+# rake db:version             # Show current migration version
+
+namespace :db do
+  desc "Create database, run migrations, and seed data"
+  task :setup => [:create, :migrate, :seed]
+  
+  desc "Reset database (drop, create, migrate, seed)"
+  task :reset => [:drop, :create, :migrate, :seed]
+end
+
+# Custom tasks
+namespace :app do
+  desc "Start console with app loaded"
+  task :console do
+    require "irb"
+    ARGV.clear
+    IRB.start
+  end
+  
+  desc "Show app info"
+  task :info do
+    puts "StreamWeaver Application"
+    puts "========================="
+    puts "Environment: #{ENV['RACK_ENV'] || 'development'}"
+    puts "Database: #{ActiveRecord::Base.connection_config[:database]}"
+    puts "Ruby version: #{RUBY_VERSION}"
+    puts ""
+  end
+end

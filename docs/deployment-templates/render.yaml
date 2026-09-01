@@ -1,0 +1,68 @@
+# Render.com Deployment Configuration
+# 
+# This file configures automatic deployment to Render.com
+# Place this file in your repository root as render.yaml
+#
+# Documentation: https://render.com/docs/infrastructure-as-code
+
+# Database (PostgreSQL)
+databases:
+  - name: streamweaver-db
+    databaseName: streamweaver_production
+    user: streamweaver
+    plan: starter  # Free tier available
+
+# Web Service
+services:
+  - type: web
+    name: streamweaver-app
+    env: ruby
+    plan: starter  # Free tier available
+    
+    # Build configuration
+    buildCommand: bundle install; bundle exec rake db:migrate
+    startCommand: bundle exec ruby app.rb
+    
+    # Health check
+    healthCheckPath: /
+    
+    # Environment variables
+    envVars:
+      # Automatically link database
+      - key: DATABASE_URL
+        fromDatabase:
+          name: streamweaver-db
+          property: connectionString
+      
+      # Production environment
+      - key: RACK_ENV
+        value: production
+      
+      # Auto-generate secure session secret
+      - key: SESSION_SECRET
+        generateValue: true
+      
+      # Optional: Force HTTPS
+      - key: FORCE_SSL
+        value: true
+      
+      # Add your custom environment variables here
+      # - key: MY_CUSTOM_VAR
+      #   value: my_value
+
+# Optional: Background worker (for async jobs)
+# - type: worker
+#   name: streamweaver-worker
+#   env: ruby
+#   buildCommand: bundle install
+#   startCommand: bundle exec ruby worker.rb
+#   envVars:
+#     - fromGroup: web-env
+
+# Optional: Cron job (scheduled tasks)
+# - type: cron
+#   name: daily-cleanup
+#   env: ruby
+#   schedule: "0 0 * * *"  # Daily at midnight
+#   buildCommand: bundle install
+#   startCommand: bundle exec rake cleanup
