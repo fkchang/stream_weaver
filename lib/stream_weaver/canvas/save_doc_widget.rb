@@ -258,12 +258,12 @@ module StreamWeaver
               this.open = true;
               this.$nextTick(() => this.$refs.input && this.$refs.input.select());
             },
-            // The single definition of "what key does this name map to in
-            // gistKnown" -- shared by currentGist() (read) and save()'s
+            // The single definition of 'what key does this name map to in
+            // gistKnown' -- shared by currentGist() (read) and save()'s
             // record-the-new-gist step (write) so the two can never drift.
             // A drift would mean a just-saved gist gets recorded under a key
-            // currentGist() can't find, the button would stay on "Create
-            // gist", and the next save would mint a second gist -- exactly
+            // currentGist() can't find, the button would stay on 'Create
+            // gist', and the next save would mint a second gist -- exactly
             // what prefill_name exists to prevent. Strips a .rb/.org
             // extension in case the field ever carries one.
             gistKey(name) {
@@ -319,7 +319,7 @@ module StreamWeaver
                     // A gist save's payload IS the URL, not a path -- keep
                     // the dialog open until the user dismisses it (no
                     // auto-close below) and remember it under this name so
-                    // the button/hint flip to "Update gist" immediately.
+                    // the button/hint flip to 'Update gist' immediately.
                     this.gistResult = { url: data.gist_url, revisions: data.revisions };
                     this.gistKnown[this.gistKey(this.name)] = { url: data.gist_url, revisions: data.revisions };
                     // Auto-copy for zero-friction hand-off to a coworker.
