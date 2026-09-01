@@ -7,6 +7,7 @@ require 'socket'
 require 'json'
 require 'fileutils'
 require 'digest'
+require 'uri'
 require_relative 'session_store'
 require_relative 'dev_fallback_overlay'
 
@@ -114,6 +115,50 @@ module StreamWeaver
           end
         end
 
+        # Routing is just state, and the URL — not the session — is what says
+        # which state. GET has always known that; POST never did. Session
+        # state is one hash per browser (one cookie), so a route flag set by
+        # a tab on a dedicated view (e.g. /now) is read by EVERY sibling tab's
+        # next click, and `path_for_state` pushes them all there.
+        #
+        # `seed_route_state!` is the one merge-not-replace idea ("routing is
+        # just state") used by both GET routes and every state-mutating POST
+        # — a single core so the three call sites can't drift. htmx sends the
+        # requesting tab's own on-screen URL (HX-Current-URL) for free, so
+        # `reseed_route_state!` re-seeds from it exactly the way a GET seeds
+        # from its own path: same merge, same precedence, no new plumbing.
+        #
+        # Consequences worth knowing: every key a parser returns is now
+        # re-asserted on every htmx POST, not just at navigation time — put
+        # only URL-derived truth in a parser hash, never something a POST
+        # should be free to change without a URL change. And a second POST
+        # fired before the browser applies a prior HX-Push-Url reports the
+        # OLD url and reverts that navigation — a narrow window, self-healing
+        # on the tab's next interaction, and strictly better than the bug
+        # being fixed, but a new failure mode worth naming rather than
+        # leaving for the next reader to discover. A raw (non-htmx) POST
+        # sends no HX-Current-URL and is left exactly as before (multi-app
+        # `service.rb` carries the identical fix — see that file's own
+        # `seed_route_state!`/`reseed_route_state!`, mount-prefix aware).
+        def seed_route_state!(state, path)
+          return if path.to_s.empty?
+          return unless settings.streamlit_app.routable?
+
+          settings.streamlit_app.state_for_path(path)&.each { |k, v| state[k] = v }
+        end
+
+        def reseed_route_state!(state)
+          current_url = request.env['HTTP_HX_CURRENT_URL']
+          return unless current_url
+
+          path = begin
+            URI.parse(current_url).path
+          rescue URI::Error
+            nil
+          end
+          seed_route_state!(state, path)
+        end
+
         # Sync form params to state hash
         def sync_params_to_state(state, excluded_keys: [])
           excluded = App::ROUTE_OWNED_PARAMS + excluded_keys.map(&:to_s)
@@ -217,6 +262,13 @@ module StreamWeaver
         end
       end
 
+      # Multi-tab route_with fix (2026-08-31): a `before` filter, not a call
+      # at each POST route, so route #5 can't be added without it — see
+      # `reseed_route_state!` above for the full rationale.
+      before do
+        reseed_route_state!(session[:streamlit_state] ||= {}) if request.post?
+      end
+
       # Suppress browser's automatic /favicon.ico request (the real favicon
       # is served via <link rel="icon"> in the HTML head)
       get '/favicon.ico' do
@@ -258,11 +310,7 @@ module StreamWeaver
         end
 
         # Seed state from URL routing (e.g., `page :home, '/'` registers a parser for '/')
-        if settings.streamlit_app.routable?
-          if (route_state = settings.streamlit_app.state_for_path('/'))
-            route_state.each { |k, v| state[k] = v }
-          end
-        end
+        seed_route_state!(state, '/')
 
         sync_params_to_state(state)
         session[:streamlit_state] = session_safe_state(state)

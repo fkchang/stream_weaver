@@ -49,7 +49,7 @@ end.run!
 
 For apps with parameterized routes, multi-key navigation state, or complex URL structures. Requires two lambdas:
 
-- **`parser`**: `path → partial_state_hash | nil` — called on every GET request. Returns a hash to merge into state, or `nil` to pass through.
+- **`parser`**: `path → partial_state_hash | nil` — called on every GET request, **and now also re-run against the requesting tab's own current URL before every htmx POST** (see Pitfall 3). Returns a hash to merge into state, or `nil` to pass through.
 - **`builder`**: `current_state → path_string | nil` — called after every POST action. Returns the new path to push, or `nil` to leave the URL unchanged.
 
 ### Example: UTF Dashboard
@@ -173,9 +173,10 @@ elsif current_state[:initiative_id].to_s.strip != ''
 
 ## Common Pitfalls
 
-Two bug classes that show up in any sufficiently large `route_with` app (found in practice in an
-app with ~20 branches and 15 tabs). Both come from the same source: a `case`/`when` route table
-that isn't exhaustive in one direction or the other.
+Three bug classes that show up in any sufficiently large `route_with` app (found in practice in an
+app with ~20 branches and 15 tabs). The first two come from the same source: a `case`/`when` route
+table that isn't exhaustive in one direction or the other. The third is architectural: session
+state is one hash per browser, not per tab.
 
 ### Pitfall 1 — a narrow branch leaks a previous view's state
 
@@ -225,6 +226,28 @@ left behind.
 has a `when` clause on **both** the parser and the builder — not just the branch that was
 reported broken. In practice this bug hunts in pairs: if one branch of a route table is
 incomplete, check the others before considering it fixed.
+
+### Pitfall 3 — one session, many tabs
+
+`parser` only ran on GET, so a "special view" flag it sets (Pitfall 1's `SPECIAL_VIEW_RESET`
+pattern) only ever got reset on a real page navigation. Session state is one hash per browser
+(one cookie), not per tab — so once a tab navigated to a dedicated view, that flag stayed true
+for every OTHER tab of the same browser too, and `builder` read the same shared flag on every
+POST from any of them. Symptom: click something in tab A, land on whatever dedicated view tab B
+happens to have open — even a tab that's just sitting in the background, never clicked.
+
+**Fix**: htmx already sends the requesting tab's own on-screen URL on every request
+(`HX-Current-URL`). `parser` is now re-run against that URL — same merge-not-replace GET already
+does — before every htmx POST dispatches, so state gets re-scoped to what THAT tab is actually
+showing before `builder` decides where to push it. A sibling tab's stale flag can't survive
+contact with a real click. A raw (non-htmx) POST has no such header and is left unchanged.
+
+**Consequence for parser authors**: every key your parser returns is now re-asserted on every
+htmx POST, not just at navigation time — put only URL-derived truth in a parser hash, never
+something a POST handler should be free to change without a URL change also occurring.
+
+**Consequence for multi-app (`service.rb`) hosting**: the fix is mount-prefix aware — a URL for
+app A's tab is never applied to app B's state, even though both live in the same session.
 
 ## Testing route_with
 

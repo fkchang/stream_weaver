@@ -6,6 +6,7 @@ require 'securerandom'
 require 'json'
 require 'socket'
 require 'fileutils'
+require 'uri'
 require_relative 'css'
 
 module StreamWeaver
@@ -430,6 +431,40 @@ module StreamWeaver
       def set_state_version(app_id, version)
         session[:state_versions] ||= {}
         session[:state_versions][app_id] = version
+      end
+
+      # Multi-tab route_with fix (2026-08-31) -- service-mode counterpart to
+      # server.rb's `seed_route_state!`/`reseed_route_state!` (see that
+      # file's comment for the full rationale). Mount-prefix aware: an
+      # app hosted at /apps/:app_id needs the prefix stripped from
+      # HX-Current-URL before it matches what `state_for_path` expects, the
+      # same way the `after '/apps/:app_id/*'` hook re-applies it on the way
+      # out. A stale HX-Current-URL from a DIFFERENT mounted app (a session
+      # can hold many) is skipped rather than misapplied to this one.
+      def seed_route_state!(streamlit_app, state, path)
+        return if path.to_s.empty?
+        return unless streamlit_app.routable?
+
+        streamlit_app.state_for_path(path)&.each { |k, v| state[k] = v }
+      end
+
+      def reseed_route_state!(app_id, streamlit_app, state)
+        current_url = request.env['HTTP_HX_CURRENT_URL']
+        return unless current_url
+
+        path = begin
+          URI.parse(current_url).path
+        rescue URI::Error
+          nil
+        end
+        return unless path
+
+        prefix = "/apps/#{app_id}"
+        return unless path == prefix || path.start_with?("#{prefix}/")
+
+        suffix = path.sub(prefix, "")
+        suffix = "/" if suffix.empty?
+        seed_route_state!(streamlit_app, state, suffix)
       end
 
       # Sync form params to state hash (mirrors server.rb's helper of the same name)
@@ -980,9 +1015,7 @@ module StreamWeaver
       # Seed state from URL routing (e.g., `page :home, '/'` registers a parser for
       # '/') -- mirrors the standalone `GET /` seeding so a routed app's default view
       # doesn't depend on how it's hosted (stream_weaver-oow).
-      if streamlit_app.routable? && (route_state = streamlit_app.state_for_path('/'))
-        route_state.each { |k, v| state[k] = v }
-      end
+      seed_route_state!(streamlit_app, state, '/')
 
       streamlit_app.with_render_lock do
         # Only a URL decides a `url: true` tabs group's index (App#tab_index_source).
@@ -1032,6 +1065,20 @@ module StreamWeaver
           Views::AppView.new(streamlit_app, state, adapter, false).call
         end
       end
+    end
+
+    # Multi-tab route_with fix (2026-08-31) -- service-mode counterpart to
+    # server.rb's `before` filter. A path-scoped filter, not a call at each
+    # POST route, so a route #5 under /apps/:app_id/* can't be added without
+    # it -- see `reseed_route_state!` above for the full rationale.
+    before '/apps/:app_id/*' do
+      next unless request.post?
+
+      app_id = params[:app_id]
+      app_entry = self.class.apps[app_id]
+      next unless app_entry
+
+      reseed_route_state!(app_id, app_entry[:app], app_state(app_id))
     end
 
     # URL routing: push URL on POST responses when route state changes -- the

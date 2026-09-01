@@ -124,6 +124,48 @@ RSpec.describe "StreamWeaver::Service — URL-routing DSLs (stream_weaver-oow)" 
     end
   end
 
+  describe "multi-tab route_with state reconciliation (2026-08-31, service mode)" do
+    # Service mode's own session hash is shared across every app mounted in
+    # it, keyed by app_id -- so the standalone fix (server.rb) needs its own
+    # mount-prefix-aware pass here. Same fixture/mechanism as
+    # spec/route_multi_tab_state_spec.rb's standalone version.
+    it "does not push a same-session sibling tab's routed page onto this tab's click" do
+      get "/apps/#{app_id}"
+      button_id = last_response.body.match(%r{hx-post="/apps/#{app_id}/action/(\w+)"})[1]
+
+      # Tab 2 (same browser, same cookie jar) navigates to /about.
+      get "/apps/#{app_id}/about"
+      expect(last_response.body).to include("About Content")
+
+      # Tab 1 clicks its own button, reporting via HX-Current-URL that it's
+      # still on the app's root -- not tab 2's /about.
+      post "/apps/#{app_id}/action/#{button_id}", {},
+        { 'HTTP_HX_CURRENT_URL' => "http://example.org/apps/#{app_id}" }
+
+      # The click's own handler (`s[:page] = :about`) still wins -- this
+      # proves reconciliation runs BEFORE the action, not instead of it.
+      expect(last_response.headers['HX-Push-Url']).to eq("/apps/#{app_id}/about")
+    end
+
+    it "ignores a stale HX-Current-URL belonging to a DIFFERENT mounted app" do
+      other_app = StreamWeaver::App.new("Other App") { route_by :page, home: "/" }
+      other_app.rebuild_with_state({})
+      StreamWeaver::Service.apps["other01"] = {
+        app: other_app, path: "other_app.rb", name: "Other App",
+        loaded_at: Time.now, last_accessed: Time.now
+      }
+
+      get "/apps/#{app_id}/about"
+
+      post "/apps/#{app_id}/update", {},
+        { 'HTTP_HX_CURRENT_URL' => "http://example.org/apps/other01" }
+
+      # A URL for a different app_id must not seed this app's state --
+      # /about survives untouched.
+      expect(last_response.headers['HX-Push-Url']).to eq("/apps/#{app_id}/about")
+    end
+  end
+
   describe "standalone behavior is unchanged" do
     let(:app) do
       StreamWeaver::App.new("Routed App") do
