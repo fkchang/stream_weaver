@@ -33,6 +33,22 @@ Then in Chrome: `chrome://extensions` → enable **Developer mode** → **Load
 unpacked** → select this directory. Open any StreamWeaver doc on GitHub; a
 **View rendered** button appears in the file toolbar.
 
+## Shipping an update
+
+Live on the Chrome Web Store with real users -- an update needs a version
+bump (the store rejects a re-upload at the same version) and a clean
+package, not just a rebuild:
+
+```bash
+bin/package_extension   # bumps version (patch/minor/major), rebuilds, zips
+```
+
+Then the manual console steps: `chrome.google.com/webstore/devconsole` →
+Package → upload the new zip → Submit for review. See the
+`streamweaver-extension-ship` project skill for the full checklist
+(tests-first, store-listing updates, the version-bump commit), and
+`store-listing.md` for exact Privacy-tab field text and screenshot assets.
+
 `extension/vendor/` is generated and gitignored. Re-run `bin/build_extension`
 after changing anything under `lib/`, or the extension keeps rendering with the
 old runtime. Reloading the extension in `chrome://extensions` does not update
