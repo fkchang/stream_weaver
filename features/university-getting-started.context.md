@@ -37,6 +37,11 @@ iTerm2 is opt-OUT, not optional. Brett explicitly wants the split-pane experienc
 - disc-094: `streamweaver export` drops Chart.js for chart shorthands — step 4/5 doc must not use bar_chart etc.
 - disc-095: canvas-read buttons grey out and do nothing — the step-4 doc reviewed in canvas-read should be content-only.
 - disc-093 (findings_ready): backend-less component matrix — consult before choosing step-4/5 components.
+- disc-170: `text` inside a `callout` is silently dropped by `org-export` — `Org::Writer` doesn't recognize `Components::Text`, and a *nested* passthrough has no verbatim source, so the body becomes an "unrecognized component" placeholder with no warning. Use `md` inside callouts. Same shape: `columns`/`column` falls to raw passthrough, so step 4's two-column section uses `comparison` (native in both writer and reader). Verified 2026-09-03: the step-4 doc org-exports at 10/10 recognized, 0 passthrough, and round-trips back to an identical component sequence.
+
+## Course session names (content-v2, 2026-09-03)
+
+`dashboard` (step 1), `decision` (step 3), `doc-demo` (step 4) are the demo sessions; `university` is the controller canvas the user drives from and is **never** closed. Every step prompt opens by closing the previous step's demo session or background server, and step 5 closes them all. Asserted in spec/university/course_spec.rb.
 
 ## Deferred / out of scope
 
