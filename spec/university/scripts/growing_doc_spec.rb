@@ -20,6 +20,17 @@ RSpec.describe 'stream_weaver/university/scripts/growing_doc.rb' do
   let(:script_path) { SCRIPT_PATH }
   let(:session_name) { "growing-doc-smoke-#{Process.pid}" }
 
+  # Loaded once for every describe below that inspects the module directly
+  # (in-process, no bridge, no subprocess) -- eval'd with the trailing
+  # `run!` stripped, same reason each of them used to do this individually.
+  before(:all) do
+    source = File.read(SCRIPT_PATH)
+                 .sub(/^StreamWeaver::University::Scripts::GrowingDoc\.run!\s*\z/, '')
+    eval(source, TOPLEVEL_BINDING, SCRIPT_PATH) # rubocop:disable Security/Eval
+  end
+
+  let(:mod) { StreamWeaver::University::Scripts::GrowingDoc }
+
   after do
     require 'stream_weaver/canvas/client'
     StreamWeaver::Canvas::Client.send_message(
@@ -58,14 +69,6 @@ RSpec.describe 'stream_weaver/university/scripts/growing_doc.rb' do
   # script is eval'd with its trailing `run!` stripped, because requiring
   # the file outright would try to reach (and start) a canvas bridge.
   describe 'the finished document' do
-    before(:all) do
-      source = File.read(SCRIPT_PATH)
-                   .sub(/^StreamWeaver::University::Scripts::GrowingDoc\.run!\s*\z/, '')
-      eval(source, TOPLEVEL_BINDING, SCRIPT_PATH) # rubocop:disable Security/Eval
-    end
-
-    let(:mod) { StreamWeaver::University::Scripts::GrowingDoc }
-
     # What the pane holds after the last push: every stage accumulated,
     # exactly as #run! builds it.
     let(:final_body) do
@@ -143,6 +146,105 @@ RSpec.describe 'stream_weaver/university/scripts/growing_doc.rb' do
       expect(org).to include('#+begin_src mermaid')
       expect(org).to include('#+begin_src ruby')
       expect(org).not_to include('unrecognized component')
+    end
+
+    # Save-format callout (round-6): the doc's own "reading it back" section
+    # explains what .rb and .org are each FOR, not just what they're named.
+    it 'explains why .rb and .org both exist -- fidelity vs portability' do
+      expect(final_body).to match(/full fidelity/i)
+      expect(final_body).to match(/nothing to install/i)
+    end
+  end
+
+  # Round-6 UAT bug: the picker's radio choice used to be a human label and
+  # `--extend` expected the bare key -- a worker had to parse one out of
+  # the other, got it wrong, and the doc silently never grew (the
+  # unknown-key branch warned to stderr, easy to miss, and `run!` still
+  # printed "Saved: <path>" as though the pick had landed). `apply_extensions!`
+  # is the extracted fix, testable with no canvas bridge involved.
+  describe '.apply_extensions!' do
+    it 'adds a known extension, prints OK, and returns true' do
+      toc = []
+      body = +''
+      result = nil
+      expect { result = mod.apply_extensions!(['tradeoffs'], toc, body) }
+        .to output(/OK -- extension "tradeoffs" added/).to_stdout
+      expect(result).to be(true)
+      expect(toc).to eq([mod::EXTENSIONS['tradeoffs'][:toc]])
+      expect(body).to include(mod::EXTENSIONS['tradeoffs'][:dsl])
+    end
+
+    it 'fails loudly to stderr and leaves toc/body untouched for an unknown key' do
+      toc = []
+      body = +''
+      result = nil
+      expect { result = mod.apply_extensions!(['bogus'], toc, body) }
+        .to output(/FAILED -- no such extension "bogus"/).to_stderr
+      expect(result).to be(false)
+      expect(toc).to be_empty
+      expect(body).to be_empty
+    end
+
+    it 'is false overall when any key in a multi-key batch is unknown, but still applies the valid ones' do
+      toc = []
+      body = +''
+      result = nil
+      expect { result = mod.apply_extensions!(%w[tradeoffs bogus], toc, body) }.to output.to_stdout
+      expect(result).to be(false)
+      expect(toc).to eq([mod::EXTENSIONS['tradeoffs'][:toc]])
+    end
+
+    # Order independence: a failure has to stay a failure regardless of
+    # whether it comes before or after a success in the batch -- `map { }.
+    # all?` makes this true by construction, where a hand-threaded fold
+    # accumulator could silently regress to "only the last key counts".
+    it 'is false overall even when the unknown key comes before a valid one' do
+      toc = []
+      body = +''
+      result = nil
+      expect { result = mod.apply_extensions!(%w[bogus tradeoffs], toc, body) }.to output.to_stdout
+      expect(result).to be(false)
+      expect(toc).to eq([mod::EXTENSIONS['tradeoffs'][:toc]])
+    end
+  end
+
+  # Round-6 UAT: the old path printed "Saved: <path>" on stdout as
+  # unqualified success even when a pick had silently failed to land, with
+  # the only sign of trouble on stderr. `save_message` makes the save line
+  # itself say so.
+  describe '.save_message' do
+    it 'reads as plain success when every extension landed' do
+      expect(mod.save_message('/tmp/university-doc.rb', 'university-doc', true))
+        .to eq('Saved: /tmp/university-doc.rb')
+    end
+
+    it 'calls out a failed extension right on the save line itself' do
+      expect(mod.save_message('/tmp/university-doc.rb', 'university-doc', false))
+        .to eq('Saved: /tmp/university-doc.rb -- WITH FAILED EXTENSIONS, see above')
+    end
+
+    it 'still calls it out when the bridge reported no path' do
+      expect(mod.save_message(nil, 'university-doc', false)).to include('WITH FAILED EXTENSIONS')
+    end
+  end
+
+  # Round-6 UAT: step 4's push cadence was narrated only after the whole run
+  # finished. `announce_stage` gives the worker a stdout line right before
+  # and right after each of the growing doc's own pushes to relay live.
+  describe '.announce_stage' do
+    it 'names the stage and total, before the push' do
+      expect { mod.announce_stage(2, 'pushing') }
+        .to output(%r{stage 3/#{mod::STAGES.length} pushing: The push itself}).to_stdout
+    end
+
+    it 'names the stage and total, after the push' do
+      expect { mod.announce_stage(2, 'pushed') }
+        .to output(%r{stage 3/#{mod::STAGES.length} pushed: The push itself}).to_stdout
+    end
+
+    it 'announces the opening stage (no toc entry of its own) as "opening"' do
+      expect { mod.announce_stage(0, 'pushing') }
+        .to output(%r{stage 1/#{mod::STAGES.length} pushing: opening}).to_stdout
     end
   end
 end

@@ -779,6 +779,17 @@ _body = proc do
         number = step[:number]
         state = states[number]
         expanded = expanded_number == number
+        # "Re-run" once this step's prompt has actually gone out before --
+        # either it ever landed (requested_at, permanent, set only on a
+        # :sent status) or the very last click on this exact step was a
+        # failed/degraded send (last_run, which requested_at never records).
+        # Repeat (the :done branch below) is untouched -- a finished step
+        # was never going to say "Run" in the first place.
+        run_label = if progress.requested_at(number) || (last_run && last_run['step'].to_i == number)
+                      "Re-run"
+                    else
+                      "Run"
+                    end
         div(class: "uni-step uni-step--#{state}") do
           div(class: "uni-step__mark") do
             if state == :done
@@ -799,10 +810,10 @@ _body = proc do
             when :done
               button "Repeat", id: "repeat-#{number}", class: "uni-btn uni-btn--quiet"
             when :current
-              button "Run", id: "run-#{number}", class: "uni-btn uni-btn--outline"
+              button run_label, id: "run-#{number}", class: "uni-btn uni-btn--outline"
               button "Mark done", id: "mark-done-#{number}", class: "uni-btn uni-btn--quiet"
             else
-              button "Run", id: "run-#{number}", class: "uni-btn uni-btn--quiet"
+              button run_label, id: "run-#{number}", class: "uni-btn uni-btn--quiet"
             end
             button expanded ? "Hide" : "Details", id: "view-#{number}", class: "uni-btn uni-btn--quiet"
           end

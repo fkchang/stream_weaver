@@ -85,20 +85,32 @@ RSpec.describe StreamWeaver::University::Demos do
   # cycle to the "six-line app" framing hiding one of these two lines.
   describe 'counter' do
     let(:source) { File.read(described_class.path('counter')) }
+    let(:code) { source.lines[0..source.lines.index { |l| l.start_with?('end.run!') }] }
 
     it 'is a runnable file that keeps both lines the six-line framing hides' do
       expect(source).to include("require 'stream_weaver'")
       expect(source).to include('end.run!')
     end
 
-    # The prompt's own arithmetic -- "the app block really is six lines, but
-    # the file is eight" -- has to be true of the file the worker actually
-    # runs, or step 2 teaches a lie in its first sentence.
-    it 'really is a six-line block in an eight-line file' do
-      code = source.lines[0..source.lines.index { |l| l.start_with?('end.run!') }]
-      expect(code.length).to eq(8)
-      app_block = code[code.index { |l| l.start_with?('app ') }..]
-      expect(app_block.length).to eq(6)
+    # Round-6 UAT: the app introduces itself with a callout the moment it
+    # opens, so the file grew by one line -- "six lines in an eight-line
+    # file" (unchanged content, unchanged claim) plus a ninth, the callout,
+    # which is deliberately not part of that count.
+    it 'is the same six-line mechanism in an eight-line core, plus one caption line' do
+      expect(code.length).to eq(9)
+      mechanism = code.select do |line|
+        line.match?(/^\s*(state\[|header1 |text "Count|button\("\+1|app "Counter"|end\.run!)/)
+      end
+      expect(mechanism.length).to eq(6)
+    end
+
+    # Deliberately no line count in the callout's own text: the callout is
+    # aimed at whoever tabs over before the narration explains anything, and
+    # a stale count in it would repeat the exact "six-line app" framing trap
+    # this step spends its narration warning about.
+    it 'introduces itself on screen with a callout that names no stale line count' do
+      expect(source).to match(/callout "This whole app is the file your agent just ran/)
+      expect(source.lines.find { |l| l.include?('callout "This whole app') }).not_to match(/\d+ lines?/)
     end
 
     it 'parses' do
@@ -172,7 +184,23 @@ RSpec.describe StreamWeaver::University::Demos do
     it 'offers three or more canned sections plus a free-text escape' do
       expect(mod::EXTENSIONS.length).to be >= 3
       expect(mod.picker_dsl).to include('text_field :describe')
-      expect(mod.picker_dsl).to match(/done -- the doc is finished/)
+      expect(mod.picker_dsl).to match(/\*\*done\*\* -- the doc is finished/)
+    end
+
+    # Round-6 UAT bug: the picker's radio VALUE used to be a human label
+    # ("tradeoffs -- A before/after comparison ..."), and `--extend`
+    # expected the bare EXTENSIONS key -- a worker had to parse one out of
+    # the other, got it wrong, and the doc silently never grew. Single
+    # source of truth: the radio choices are exactly EXTENSIONS.keys (plus
+    # "done"), so the submitted value already IS a valid --extend key with
+    # nothing left to parse.
+    it 'presents the picker radio choices as exactly the --extend keys, with no parsing needed' do
+      choices = mod::EXTENSIONS.keys + ['done']
+      expect(mod.picker_dsl).to include("radio_group :section, #{choices.inspect}")
+    end
+
+    it 'documents every extension key in a legend above the radio choices' do
+      mod::EXTENSIONS.each_key { |key| expect(mod.picker_dsl).to include("**#{key}**") }
     end
 
     it 'org-exports cleanly with any one extension appended' do

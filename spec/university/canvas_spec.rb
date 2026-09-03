@@ -460,4 +460,70 @@ RSpec.describe StreamWeaver::University::Canvas do
       expect(html).to include(StreamWeaver::University::Course.step(2)[:title])
     end
   end
+
+  # Round-6: a step row whose prompt has actually gone out before labels its
+  # primary button "Re-run" instead of "Run" -- Repeat (done steps) is
+  # untouched, since a finished step was never going to say "Run" anyway.
+  describe 'the "Run" vs "Re-run" primary button label' do
+    it 'labels every step row "Run" before any prompt has ever been sent' do
+      html = render
+      expect(html).to include('id="btn_run_run-1"')
+      expect(html).to include('id="btn_run_run-2"')
+      expect(html).not_to include('Re-run')
+    end
+
+    it 'relabels a step "Re-run" once its prompt has actually landed (requested_at, permanent)' do
+      record_run(2, :sent)
+      html = render
+
+      expect(html).to include('id="btn_re_run_run-2"')
+      expect(html).not_to include('id="btn_run_run-2"')
+    end
+
+    it 'relabels a step "Re-run" when the most recent click on it was degraded/failed too' do
+      record_run(3, :session_missing)
+      html = render
+
+      expect(html).to include('id="btn_re_run_run-3"')
+    end
+
+    # requested_at is the permanent signal (stamped only on :sent, never
+    # cleared) -- it has to keep saying "Re-run" even once last_run has
+    # moved on to a different step's click.
+    it 'keeps "Re-run" on a step whose prompt landed, after a later step is run' do
+      record_run(2, :sent)
+      record_run(3, :sent)
+      html = render
+
+      expect(html).to include('id="btn_re_run_run-2"')
+    end
+
+    # The mirror case: last_run is the only thing that made step 3 read
+    # "Re-run" here (its send failed, so requested_at was never stamped) --
+    # once last_run moves off it, it has to drop back to "Run".
+    it 'drops back to "Run" once last_run moves off a step whose only send had failed' do
+      record_run(3, :session_missing)
+      record_run(4, :sent)
+      html = render
+
+      expect(html).to include('id="btn_run_run-3"')
+    end
+
+    it 'leaves every other step row labeled "Run"' do
+      record_run(2, :sent)
+      html = render
+
+      expect(html).to include('id="btn_run_run-1"')
+      expect(html).to include('id="btn_run_run-3"')
+    end
+
+    it 'never relabels Repeat on a done step, even if it was run again since' do
+      mark_done(1)
+      record_run(1, :sent)
+      html = render
+
+      expect(html).to include('id="btn_repeat_repeat-1"')
+      expect(html).not_to include('Re-run')
+    end
+  end
 end

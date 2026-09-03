@@ -156,8 +156,18 @@ RSpec.describe StreamWeaver::University::Course do
     it 'has step 2 name both bookend lines the six-line framing hides' do
       expect(prompt(2)).to include("`require 'stream_weaver'`")
       expect(prompt(2)).to include('`.run!`')
-      expect(prompt(2)).to include('The file is eight')
+      expect(prompt(2)).to include('eight-line file')
       expect(prompt(2)).to include("NoMethodError: undefined method 'app'")
+    end
+
+    # Round-6 UAT: the app used to pop up with no explanation of itself. A
+    # `callout` is now the ninth line of the file, deliberately outside the
+    # six-line mechanism -- the prompt has to say so, not let the worker
+    # fold it into "the eight lines" it just finished naming.
+    it 'has step 2 name the ninth-line callout as separate from the six-line mechanism' do
+      expect(prompt(2)).to match(/ninth line/i)
+      expect(prompt(2)).to match(/not part of the mechanism/i)
+      expect(prompt(2)).to include('`callout`')
     end
 
     it 'points step 2 at `streamweaver llm` instead of a search agent' do
@@ -351,6 +361,83 @@ RSpec.describe StreamWeaver::University::Course do
         expect(prompt(n)).to match(/tell me|say (?:this|out loud)|explain/i),
                              "step #{n} never narrates before acting"
       end
+    end
+
+    # Round-6 UAT: with no fixed sign-off, a worker either kept talking past
+    # a finished demo or went quiet with the user unsure the step was done.
+    # Every prompt now ends on the same two lines -- the closing ritual --
+    # so "done" always reads the same and always names the one next action.
+    describe 'the closing ritual' do
+      it 'ends steps 1-4 with the standard sign-off, naming the next step' do
+        (1..4).each do |n|
+          expect(prompt(n)).to match(/Step #{n} demo complete -- play with it as long as you like/),
+                               "step #{n} is missing the closing ritual's first line"
+          expect(prompt(n)).to match(/click Mark done -- that advances you to step #{n + 1}/),
+                               "step #{n} does not name step #{n + 1} as next"
+          expect(prompt(n)).to match(/then click Run on it/)
+        end
+      end
+
+      it 'ends step 5 with the same sign-off, pointing at the recap instead of a next step' do
+        expect(prompt(5)).to match(/Step 5 demo complete -- play with it as long as you like/)
+        expect(prompt(5)).to match(/click Mark done -- that closes out the course/)
+        expect(prompt(5)).to match(/recap/i)
+        expect(prompt(5)).not_to match(/advances you to step 6/)
+      end
+
+      it 'ends every prompt with the ritual, after the verify/present rules' do
+        (1..5).each do |n|
+          expect(prompt(n).index('demo complete')).to be > prompt(n).index('PRESENT (for me)'),
+                                                        "step #{n}'s ritual is not the last thing in the prompt"
+        end
+      end
+    end
+
+    # Round-6 UAT: step 1 ended on the third mutation with no signal that it
+    # was the last one, and the mermaid diagram (a picture of the very push
+    # that drew it) went unremarked once the narration moved on to numbers.
+    it 'has step 1 announce the final push and invite reading the mermaid as the mechanism' do
+      expect(prompt(1)).to match(/that was the final push/i)
+      expect(prompt(1)).to match(/the dashboard is done/i)
+      expect(prompt(1)).to match(/mermaid diagram is not decoration/i)
+    end
+
+    # Round-6 UAT: step 4 narrated in one summary after the whole 20-second
+    # run finished instead of relaying each push as it happened. The script
+    # now announces its own progress to stdout; the prompt has to point the
+    # worker at that stream and forbid the after-the-fact summary.
+    it 'has step 4 relay the script\'s own stage narration between pushes, not summarize after' do
+      expect(prompt(4)).to match(/stage n\/7 pushing/i)
+      expect(prompt(4)).to match(/stage n\/7 pushed/i)
+      expect(prompt(4)).to match(/do not wait for the whole run to finish/i)
+    end
+
+    # Round-6 UAT bug: the picker's radio choice was a human label, --extend
+    # expected the bare key, and a worker that guessed wrong got a silent
+    # "Saved: <path>" with nothing actually added. The fix touches the
+    # prompt too -- it must not let the worker claim success without
+    # checking.
+    it 'has step 4 verify a --extend actually landed before telling the user' do
+      expect(prompt(4)).to match(/OK line per key/i)
+      expect(prompt(4)).to match(/FAILED line per key/i)
+      expect(prompt(4)).to match(/exits? non-zero/i)
+      expect(prompt(4)).to match(/curl the `doc-demo` session/i)
+      expect(prompt(4)).to match(/grep for the new section/i)
+      expect(prompt(4)).to match(/only then say it is there/i)
+    end
+
+    it 'has step 4 use the radio choice as the --extend key verbatim, with no parsing' do
+      expect(prompt(4)).to match(/the visible choice is the exact `--extend` key/i)
+      expect(prompt(4)).to match(/do not paraphrase or shorten it/i)
+    end
+
+    # Save-format callout (round-6): step 4 explains what .rb and .org are
+    # each FOR, not just what they're named -- full fidelity vs. portable,
+    # human-readable text.
+    it 'has step 4 explain why .rb and .org both exist -- fidelity vs portability' do
+      expect(prompt(4)).to match(/full fidelity/i)
+      expect(prompt(4)).to match(/re-render and extend it again later/i)
+      expect(prompt(4)).to match(/nothing to install/i)
     end
   end
 

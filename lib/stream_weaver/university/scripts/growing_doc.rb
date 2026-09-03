@@ -132,7 +132,7 @@ module StreamWeaver
         READBACK = <<~RUBY
           doc_section_header "05", "Reading it back", id: "readback"
 
-          md "The saved `.rb` is the document, not a snapshot of it. `streamweaver canvas-read <file>` re-renders it with no live session behind it, and `streamweaver org-export <file>` writes the `.org` sibling that step 5 pushes to a gist."
+          md "The saved `.rb` is the document, not a snapshot of it -- full fidelity, and StreamWeaver can re-render or extend it again later exactly as it looked here. `streamweaver org-export <file>` writes a `.org` sibling instead: plain text, human-readable anywhere with nothing to install, and the StreamWeaver Doc Viewer extension (step 5) makes that same file beautiful again without needing StreamWeaver at all."
 
           callout(variant: :info, title: "Content-only on purpose") do
             md "There is not one button in this document. Outside the live canvas -- in `canvas-read`, in an export, in the gist -- controls grey out and do nothing. A doc meant to travel is written to be read, not clicked."
@@ -239,8 +239,20 @@ module StreamWeaver
         # Appended BELOW the finished document for the co-edit loop. Never
         # saved -- `--picker` and saving are mutually exclusive, so no
         # control ever lands in the file step 5 carries out.
+        #
+        # Round-6 UAT bug: the radio choices used to be human labels
+        # ("tradeoffs -- A before/after comparison ..."), and `--extend`
+        # expected the bare EXTENSIONS key. A worker had to parse one out of
+        # the other, got it wrong, and `run!`'s unknown-key branch warned to
+        # stderr (easy to miss) and then still printed "Saved: <path>" as if
+        # the pick had landed -- the doc was unchanged. The fix is single
+        # source of truth: the radio choice IS the `--extend` key, verbatim,
+        # so there is nothing left to parse. The legend line explains what
+        # each key means, since the key alone is not self-explanatory.
         def self.picker_dsl
-          options = EXTENSIONS.map { |key, ext| "#{key} -- #{ext[:label]}" }
+          legend = (EXTENSIONS.map { |key, ext| "- **#{key}** -- #{ext[:label]}" } +
+                    ["- **done** -- the doc is finished, move on"]).join("\n")
+          choices = EXTENSIONS.keys + ['done']
           <<~RUBY
             doc_section_header "--", "Your turn", id: "your-turn"
 
@@ -248,7 +260,9 @@ module StreamWeaver
               md "This is the same blocking form from step 3, doing a real job. Your agent is sitting inside `streamweaver canvas-wait` and will not move until you answer."
             end
 
-            radio_group :section, #{(options + ['done -- the doc is finished, move on']).inspect}
+            md #{legend.inspect}
+
+            radio_group :section, #{choices.inspect}
 
             md "**Or describe a section in your own words.** If you type something here your agent writes that section itself instead of using a canned one."
 
@@ -256,6 +270,49 @@ module StreamWeaver
 
             button "Add it"
           RUBY
+        end
+
+        # One stdout line right before a stage's push, and one right after
+        # -- "stage N/7 pushing: <name>" / "stage N/7 pushed: <name>" -- so
+        # the worker narrating this run has a live feed to relay between
+        # pushes instead of watching a silent twenty-second pause and
+        # summarizing it all at the end once it's over. `name` comes from
+        # the stage's own `toc` label (the same text that lands in the
+        # sidebar) rather than a second, parallel name to keep in sync; the
+        # opening stage has no `toc` (see STAGES, above), so it announces as
+        # "opening".
+        def self.announce_stage(index, verb)
+          stage = STAGES[index]
+          label = stage[:toc] ? stage[:toc][:label] : 'opening'
+          puts "growing_doc: stage #{index + 1}/#{STAGES.length} #{verb}: #{label}"
+        end
+
+        # Applies `keys` to the running `toc`/`body` in place. Prints one
+        # unmistakable OK line per key EXTENSIONS recognizes and one FAILED
+        # line (to stderr) per key it does not, and returns true only if
+        # EVERY key was recognized -- `map { }.all?` rather than a hand-
+        # threaded `reduce`, so "did everything succeed" is what the code
+        # says, not a fold accumulator a later edit could quietly break.
+        # Extracted out of `run!` so it is testable with no canvas bridge
+        # involved, and so `run!` can exit non-zero rather than the old
+        # silent-warn-and-continue path that printed "Saved: <path>" on a
+        # pick that never actually landed (round-6 UAT).
+        def self.apply_extensions!(keys, toc, body)
+          keys.map { |key| apply_extension!(key, toc, body) }.all?
+        end
+
+        def self.apply_extension!(key, toc, body)
+          ext = EXTENSIONS[key]
+          unless ext
+            warn "growing_doc: FAILED -- no such extension #{key.inspect} " \
+                 "(have: #{EXTENSIONS.keys.join(', ')})"
+            return false
+          end
+
+          toc << ext[:toc]
+          body << ext[:dsl] << "\n"
+          puts "growing_doc: OK -- extension #{key.inspect} added"
+          true
         end
 
         def self.run!(argv = ARGV)
@@ -287,19 +344,13 @@ module StreamWeaver
             body << stage[:dsl] << "\n"
             next unless growing
 
+            announce_stage(i, 'pushing')
             push(session_name, document(toc, body))
+            announce_stage(i, 'pushed')
             sleep(pause) unless i == STAGES.length - 1
           end
 
-          extend_keys.each do |key|
-            ext = EXTENSIONS[key]
-            unless ext
-              warn "growing_doc: no such extension #{key.inspect} (have: #{EXTENSIONS.keys.join(', ')})"
-              next
-            end
-            toc << ext[:toc]
-            body << ext[:dsl] << "\n"
-          end
+          extend_ok = apply_extensions!(extend_keys, toc, body)
 
           document_body = document(toc, body)
           push(session_name, picker ? "#{document_body}\n#{picker_dsl}" : document_body)
@@ -310,12 +361,25 @@ module StreamWeaver
                  "streamweaver canvas-wait #{session_name}"
           elsif save
             path = save_doc(bridge, session_name, doc_name)
-            puts(path ? "Saved: #{path}" : "Saved as '#{doc_name}' (the bridge did not report a path).")
+            puts(save_message(path, doc_name, extend_ok))
           end
+
+          exit(1) unless extend_ok
         rescue ::StreamWeaver::Canvas::Client::NotRunningError,
                ::StreamWeaver::Canvas::Client::ConnectionError => e
           warn "growing_doc: could not reach the canvas bridge (#{e.message}) -- " \
                "run `streamweaver panel #{session_name} --theme=doc` first"
+        end
+
+        # The line printed after a save -- self-incriminating on purpose
+        # when an --extend key failed, so "Saved: <path>" can never again
+        # read as unqualified success on its own (round-6 UAT: the old path
+        # printed exactly that, on stdout, with the only sign of trouble on
+        # stderr where a worker skimming just the save line would miss it).
+        def self.save_message(path, doc_name, extend_ok)
+          failure_note = extend_ok ? '' : ' -- WITH FAILED EXTENSIONS, see above'
+          base = path ? "Saved: #{path}" : "Saved as '#{doc_name}' (the bridge did not report a path)."
+          "#{base}#{failure_note}"
         end
 
         def self.push(session_name, dsl)

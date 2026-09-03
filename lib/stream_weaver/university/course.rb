@@ -85,6 +85,32 @@ module StreamWeaver
           "driving this course from. Then go straight to the demo; do not report on the cleanup."
       end
 
+      # Referenced by `closing_ritual` below while GETTING_STARTED_STEPS
+      # itself is still being built (its own step hashes call
+      # `closing_ritual`, so the array constant does not exist yet at that
+      # point) -- mirrors why VERIFY_RULE/PRESENT_RULE/cleanup_line are also
+      # plain methods/constants rather than reaching into the array.
+      TOTAL_STEPS = 5
+
+      # Round-6 UAT: with no fixed sign-off, a worker either kept talking
+      # past a finished demo or went quiet with the user unsure the step was
+      # actually done. Every prompt now ends on the exact same two lines, so
+      # "done" always looks the same and always names the one next action --
+      # click Mark done -- rather than the worker inventing its own closing
+      # line. Step 5 has no next step to advance to, so its own variant below
+      # points at the course recap instead of "step N+1".
+      def self.closing_ritual(number)
+        intro = "✅ Step #{number} demo complete -- play with it as long as you like."
+        next_hint = if number >= TOTAL_STEPS
+                      "When ready: go to the StreamWeaver University window and click Mark done -- " \
+                      "that closes out the course and shows you the recap of everything you just ran."
+                    else
+                      "When ready: go to the StreamWeaver University window and click Mark done -- " \
+                      "that advances you to step #{number + 1} (then click Run on it)."
+                    end
+        "#{intro}\n\n#{next_hint}"
+      end
+
       GETTING_STARTED_STEPS = [
         {
           number: 1,
@@ -128,9 +154,17 @@ module StreamWeaver
             Same layout, new numbers, in place -- no reload, no flicker, no page I had to
             open.
 
+            That third push was the last one for this step -- say so plainly: "That was
+            the final push -- the dashboard is done." Then stop moving the pane for a
+            moment and invite me to actually look at it: the mermaid diagram is not
+            decoration, it is the mechanism -- it names you, the CLI, the bridge and this
+            pane, the exact chain that just drew everything else on screen.
+
             #{VERIFY_RULE}
 
             #{PRESENT_RULE}
+
+            #{closing_ritual(1)}
           PROMPT
           what_you_should_see: [
             "Something is on your screen within seconds -- your agent ran the demo first and explained it after, instead of composing one while you waited.",
@@ -169,15 +203,19 @@ module StreamWeaver
             than sleeping on the log, and open that URL for me the way the PRESENT rule
             below says.
 
-            NOW narrate. Print the file -- all eight lines, `streamweaver university-demo
+            NOW narrate. Print the file -- nine lines now, `streamweaver university-demo
             counter` prints its path -- and walk me through it:
 
-            - The app block really is six lines. The file is eight, and the two extra are
-              the ones people leave out: `require 'stream_weaver'` on line 1, and `.run!`
-              chained onto the block's closing `end`. Without the first you get
-              `NoMethodError: undefined method 'app'`; without the second the process
-              builds the app, starts no server, and exits silently. Both are in the file,
-              on purpose.
+            - The mechanism itself is still exactly six lines, in an eight-line file: four
+              statements wrapped by `app "Counter" do` and `end.run!`. The two hidden
+              bookends are `require 'stream_weaver'` on line 1, and `.run!` chained onto
+              the block's closing `end`. Without the first you get `NoMethodError:
+              undefined method 'app'`; without the second the process builds the app,
+              starts no server, and exits silently. Both are in the file, on purpose.
+            - The ninth line is new, and it is not part of the mechanism: a `callout` at
+              the top of the block that introduces the app to whoever it opens for. Point
+              at it on my screen and read it to me instead of paraphrasing it -- I may tab
+              over here before your narration reaches me.
             - There is no event handler anywhere in it. Tell me to click `+1` a few times,
               and say what actually happens: the whole block re-executes, `state[:count]`
               is one higher when it does, so the `text` line renders a different number.
@@ -195,12 +233,15 @@ module StreamWeaver
             #{VERIFY_RULE}
 
             #{PRESENT_RULE}
+
+            #{closing_ritual(2)}
           PROMPT
           what_you_should_see: [
             "The browser opens on its own within seconds -- no port to guess, no URL to type, and your agent did not quietly verify it with curl and move on without showing you.",
             "Each click updates the count immediately, with no page reload or spinner.",
             "The Ruby block ran again on every click; nothing else touched the page.",
-            "Your agent printed all eight lines of the file it actually ran, and named `require 'stream_weaver'` and `end.run!` as the two the \"six-line app\" framing hides -- the two that cost real sessions a debug cycle each.",
+            "Your agent printed all nine lines of the file it actually ran, and named `require 'stream_weaver'` and `end.run!` as the two the \"six-line app\" framing hides -- the two that cost real sessions a debug cycle each.",
+            "A callout at the top of the app explains itself the moment it opens -- what it is and what to click -- in case you tab over here before the narration reaches you.",
             "It said plainly that the app runs as a background task, offered to kill it, and did kill it at the end -- no orphaned server left behind."
           ]
         },
@@ -267,6 +308,8 @@ module StreamWeaver
             #{VERIFY_RULE}
 
             #{PRESENT_RULE}
+
+            #{closing_ritual(3)}
           PROMPT
           what_you_should_see: [
             "The browser opened by itself with a real question in it -- you never opened a page, never copied a URL, and never had to tell your agent you were done.",
@@ -307,6 +350,13 @@ module StreamWeaver
             what survives an export, and a closing section. Six outline entries, which is
             what makes the sidebar nav in step 5 worth looking at.
 
+            The script narrates its own progress to stdout so you don't have to guess when
+            a push landed: a `stage N/7 pushing: <name>` line right before each one, and a
+            `stage N/7 pushed: <name>` line right after. Watch that stream and say
+            something to me the moment each stage lands -- do not wait for the whole run
+            to finish and then summarize it in one breath at the end. That is what "while
+            it runs" means here.
+
             The script saves the document itself, through the same `save-doc` endpoint the
             floating button calls, under the deterministic name `university-doc`, and
             prints the exact path it landed at. Read that path back to me verbatim -- step
@@ -316,8 +366,13 @@ module StreamWeaver
             doc" button at the bottom right of the pane. Tell me to click it, and explain
             the dialog before I do -- typing a name and pressing Save writes a permanent,
             git-tracked `docs/streamweaver_canvas/<name>.rb`; "Save as Org" writes the
-            same content as a plain-text `.org` sibling. Mine is a bonus lap. Step 5 uses
-            yours.
+            same content as a plain-text `.org` sibling. Say what the two formats are for,
+            not just what they're named: `.rb` is full fidelity -- StreamWeaver can
+            re-render and extend it again later, exactly as it looked here. `.org` is the
+            portable half -- plain text, human-readable anywhere with nothing to install,
+            and the StreamWeaver Doc Viewer extension (step 5) makes that same file
+            beautiful again without needing StreamWeaver at all. Mine is a bonus lap. Step
+            5 uses yours.
 
             THE TWEAK LOOP. Now tell me the doc is mine to change for as long as I like,
             and offer to extend it -- and say what you are doing as you do it: "I am using
@@ -327,22 +382,29 @@ module StreamWeaver
             ruby "$(streamweaver university-demo doc)" doc-demo --picker
 
             That appends a picker to the bottom of the doc: a `radio_group` of sections
-            not yet in it, a free-text field, and a "done, move on" option. Wait on it
-            with `streamweaver canvas-wait doc-demo` AS A BACKGROUND TASK -- same rule as
-            step 3, never a foreground block on a human -- and react the moment the
-            notification lands.
+            not yet in it (the visible choice IS the exact `--extend` key -- read a
+            legend line above the choices for what each one means), a free-text field,
+            and a "done, move on" option. Wait on it with `streamweaver canvas-wait
+            doc-demo` AS A BACKGROUND TASK -- same rule as step 3, never a foreground
+            block on a human -- and react the moment the notification lands.
 
-            If I pick a canned section, add it and re-save in one command:
+            If I pick a canned section, add it and re-save in one command, using the key
+            exactly as it appeared on the radio choice -- do not paraphrase or shorten it:
 
             ruby "$(streamweaver university-demo doc)" doc-demo --extend=<key>
 
-            (Keys accumulate: `--extend=timeline,cheatsheet` for two.) If I typed a
-            description instead, write that section yourself -- and keep it to
-            `doc_section_header`, `md`, `table headers:/rows:`, `comparison`, `code_block`,
-            `callout` and `mermaid`. Those are exactly the components `streamweaver
-            org-export` recognizes; anything else looks right in the pane and then leaves
-            as an unrecognized placeholder, silently, which is the failure step 5 exists to
-            disprove.
+            (Keys accumulate: `--extend=timeline,cheatsheet` for two.) The command tells
+            you plainly -- an OK line per key it recognized, a FAILED line per key it did
+            not, and it exits non-zero if anything failed. Still VERIFY before telling me
+            anything landed: curl the `doc-demo` session (or read the command's own
+            OK/FAILED output) and grep for the new section's heading text. Only then say
+            it is there -- a push that silently no-op'd once looked identical to a
+            successful one. If I typed a description instead, write that section yourself
+            -- and keep it to `doc_section_header`, `md`, `table headers:/rows:`,
+            `comparison`, `code_block`, `callout` and `mermaid`. Those are exactly the
+            components `streamweaver org-export` recognizes; anything else looks right in
+            the pane and then leaves as an unrecognized placeholder, silently, which is
+            the failure step 5 exists to disprove.
 
             Then push the picker again and loop, until I choose "done". Say the saved path
             once more at the end.
@@ -350,6 +412,8 @@ module StreamWeaver
             #{VERIFY_RULE}
 
             #{PRESENT_RULE}
+
+            #{closing_ritual(4)}
           PROMPT
           what_you_should_see: [
             "The pane grows a new section every few seconds -- you watch it happen, you don't just see the end state.",
@@ -421,6 +485,8 @@ module StreamWeaver
             #{VERIFY_RULE}
 
             #{PRESENT_RULE}
+
+            #{closing_ritual(5)}
           PROMPT
           what_you_should_see: [
             "Your agent checked `gh auth status` first and told you up front if gh was missing, logged out, or short the gist scope -- with the exact command to fix it -- instead of failing halfway through.",
