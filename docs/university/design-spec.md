@@ -7,6 +7,8 @@ Screenshots: `course-list-light.png`, `course-list-dark.png`, `step-screen-light
 
 **Revision note (v2).** v1 was reviewed and rejected as "a decent first start" that read as a *document* rather than an app: the course state sat at page level above everything, sections were divided by hairlines and 11px small-caps labels that reviewers missed entirely, and the single-blue palette left every state looking alike. v2 rebuilds the information architecture around course panels, replaces hairlines with real surfaces, raises the type scale, and introduces a three-colour state language. Sections 1–4 describe v2; §5 records what v1 taught us that still binds the build.
 
+**Revision note (single-mode, 2026-09-03).** Live UAT (round 5) cut the separate "step screen" this doc's §2/§6 describe: "Details" on a course-list row now expands that row's content inline on the SAME course-list render (why it matters, prompt + Run/Copy, payoffs, Mark done + a next-step hint) instead of navigating to a second screen. Expanding one row collapses any other, and there is nothing to get "back" from — no `← All steps`, no `Next: step N+1` link. The content and CSS classes §2's "Step screen" table describes (`.uni-label`, `.uni-prose`, `.uni-promptbox`, `.uni-payoff`, the footer) carry over unchanged as the expansion body; only the App band / Context row (wordmark+breadcrumbs, `← All steps`, `Step N of 5`) are gone, since there is no second screen to orient within. See `lib/stream_weaver/university/canvas.rb` (`.uni-step__expansion`) and `Progress#expanded_step`/`#expand_step!`/`#collapse!`.
+
 ---
 
 ## 1. Visual direction

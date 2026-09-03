@@ -118,26 +118,39 @@ module StreamWeaver
         @data['last_done']
       end
 
-      # Which step's detail screen is showing, or nil for the course list.
-      # canvas-push instance_evals canvas.rb fresh on every render (no
-      # in-memory app state survives between pushes -- see canvas.rb's file
-      # header), so which of the app's two screens to render has to live
+      # Which step's row is expanded inline on the course list, or nil if
+      # none is. canvas-push instance_evals canvas.rb fresh on every render
+      # (no in-memory app state survives between pushes -- see canvas.rb's
+      # file header), so which row (if any) renders expanded has to live
       # somewhere that does survive: this ledger, same as done/last_run.
-      def viewing_step
+      # Also what makes a deep link work -- whoever set this before the
+      # canvas was last (re)pushed gets that row auto-expanded on load,
+      # with no separate navigation step to get there.
+      #
+      # Still the `'viewing'` key on disk -- deliberately not renamed to
+      # `'expanded'` alongside this method (single-mode, 2026-09-03): only
+      # the meaning of "which row" changed (a screen to navigate to versus
+      # a row to expand in place), not what's being tracked, and a silent
+      # key rename would orphan whatever any already-running canvas last
+      # wrote. Renaming the key belongs to a real migration, not this diff.
+      def expanded_step
         @data['viewing']
       end
 
-      # Opens step `step_number`'s detail screen on the next render --
-      # "Details" on a step row, or "Next: step N" on the step screen's own
-      # footer.
-      def view_step!(step_number)
+      # Expands step `step_number`'s row inline on the next render --
+      # "Details" on a step row. At most one step is ever expanded: this
+      # simply overwrites whichever was expanded before, which is what
+      # makes "expanding one collapses others" true by construction.
+      def expand_step!(step_number)
         @data['viewing'] = step_number.to_i
         write
         self
       end
 
-      # Returns to the course list on the next render -- "All steps".
-      def clear_view!
+      # Collapses whichever row is expanded -- "Hide" on an expanded row's
+      # own Details button, and what mark_done! calls so a Mark-done click
+      # never leaves a stale expansion open under the confirmation band.
+      def collapse!
         @data['viewing'] = nil
         write
         self

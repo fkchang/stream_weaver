@@ -63,6 +63,14 @@ iTerm2 is opt-OUT, not optional. Brett explicitly wants the split-pane experienc
 
 `dashboard` (step 1), `decision` (step 3), `doc-demo` (step 4) are the demo sessions; `university` is the controller canvas the user drives from and is **never** closed. Every step prompt opens by closing the previous step's demo session or background server, and step 5 closes them all. Asserted in spec/university/course_spec.rb.
 
+## Controller: single-mode + warm-up push (Forrest, live UAT round 5, 2026-09-03)
+
+Three controller-level fixes, all in `lib/stream_weaver/university/{canvas,listener,progress}.rb` (not course.rb/scripts):
+
+1. **Warm-up push on Run.** The worker's own first push took ~5 minutes live. `Listener.warm_up!` now pushes a deterministic, no-LLM placeholder card to that step's demo canvas (`Listener::STEP_DEMO_SESSIONS`, creating the session if absent) BEFORE `Runner.run_step!` sends the prompt — first paint in well under a second. Gated on `Listener.send_would_reach_worker?` (a recorded worker + `ITerm.session_alive?`) so it's never pushed on a refused/degraded send. `Listener::DEMO_SESSION_NAMES` (used by Reset) is now derived from `STEP_DEMO_SESSIONS` — it had drifted to the pre-content-v2 names (`hello`, `form-demo`) and never actually closed `dashboard`/`decision`.
+2. **Single-mode: the step screen is gone.** "Details" now expands a step's full content (why it matters, prompt + Run/Copy, payoffs, Mark done + next hint) inline on its course-list row — no second screen, no `back-to-list`/`next-N` navigation. `Progress#viewing_step`/`#view_step!`/`#clear_view!` renamed to `#expanded_step`/`#expand_step!`/`#collapse!` (same ledger field, `viewing`, so old deep-link/persistence behavior — the ledger state auto-expands a row on load — is unchanged). See design-spec.md's "Revision note (single-mode, 2026-09-03)".
+3. **Doc-theme code-block contrast.** `.sw-code-block` fell back to `var(--sw-surface, #ffffff)` (a visual-skills token the `:doc` theme never sets), so Prism's tomorrow-theme token colors read pastel-on-white instead of on the dark background that theme assumes. Fixed with a `body.sw-theme-doc .sw-code-block` override in `views.rb` forcing the dark reverse-video scheme in both light and dark mode — scoped to `:doc` only.
+
 ## Deferred / out of scope
 
 LLM teacher session, Codex as full worker (pickup check only), cmux/herdr adapters, `template`/`pick`/`confirm` docs, tutorial refresh, skill packaging tiers. See roadmap "Earmarked epics".

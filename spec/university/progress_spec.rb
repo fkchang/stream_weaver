@@ -159,23 +159,23 @@ RSpec.describe StreamWeaver::University::Progress do
     end
   end
 
-  describe '#view_step! / #clear_view! (step screen navigation)' do
-    it 'is nil before any step screen has been opened' do
-      expect(new_progress.viewing_step).to be_nil
+  describe '#expand_step! / #collapse! (inline Details expansion)' do
+    it 'is nil before any row has been expanded' do
+      expect(new_progress.expanded_step).to be_nil
     end
 
-    it 'persists which step is showing, across instances' do
-      new_progress.view_step!(3)
+    it 'persists which step is expanded, across instances' do
+      new_progress.expand_step!(3)
 
-      expect(new_progress.viewing_step).to eq(3)
+      expect(new_progress.expanded_step).to eq(3)
     end
 
-    it 'returns to the course list on clear_view!' do
+    it 'collapses on collapse!' do
       progress = new_progress
-      progress.view_step!(3)
-      progress.clear_view!
+      progress.expand_step!(3)
+      progress.collapse!
 
-      expect(new_progress.viewing_step).to be_nil
+      expect(new_progress.expanded_step).to be_nil
     end
   end
 
@@ -204,7 +204,7 @@ RSpec.describe StreamWeaver::University::Progress do
     it 'returns every step to undone, on this instance and a freshly loaded one' do
       progress = new_progress
       progress.record_run!(2, status: :sent)
-      progress.view_step!(3)
+      progress.expand_step!(3)
       progress.mark_done!(1)
 
       progress.reset!
@@ -212,12 +212,12 @@ RSpec.describe StreamWeaver::University::Progress do
       expect(progress.done_steps).to eq([])
       expect(progress.last_run).to be_nil
       expect(progress.last_done).to be_nil
-      expect(progress.viewing_step).to be_nil
+      expect(progress.expanded_step).to be_nil
       reloaded = new_progress
       expect(reloaded.done_steps).to eq([])
       expect(reloaded.last_run).to be_nil
       expect(reloaded.last_done).to be_nil
-      expect(reloaded.viewing_step).to be_nil
+      expect(reloaded.expanded_step).to be_nil
     end
 
     it 'removes the ledger file rather than leaving an empty one behind' do
