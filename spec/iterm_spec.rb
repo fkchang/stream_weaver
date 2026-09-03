@@ -381,15 +381,12 @@ RSpec.describe StreamWeaver::ITerm do
     # raises and every refused/degraded send does not: activation only ever
     # happens after both writes (text, then Return) succeed.
     describe 'raise on Run (activate_session)' do
-      # A plain (non-verifying) double, not instance_double(ITerm2::Client):
-      # activate_session is the newest method on this adapter's surface, and
-      # the locally installed gem can be mid-upgrade while these specs run.
-      # See the frame-sizing specs' note on 0.2.0 for the same class of
-      # problem.
-      let(:client) { double('ITerm2::Client') }
-
+      # activate_session has shipped since iterm2_ruby 0.1.0 (confirmed live
+      # against the installed 0.3.0), so unlike get_window_frame above this
+      # stays on the outer instance_double(ITerm2::Client) -- the
+      # respond_to? guard in production is cheap insurance, not a version
+      # gate, so nothing here needs a moving-target workaround.
       before do
-        allow(client).to receive(:send_text).and_return(true)
         allow(client).to receive(:activate_session).and_return(true)
       end
 
@@ -459,7 +456,7 @@ RSpec.describe StreamWeaver::ITerm do
 
         expect(client).not_to have_received(:activate_session)
         expect(described_class).to have_received(:warn)
-          .with('StreamWeaver: raise-on-run needs iterm2_ruby >= 0.3.1').once
+          .with('StreamWeaver: raise-on-run needs an iterm2_ruby client with activate_session (gem install iterm2_ruby)').once
       end
     end
   end

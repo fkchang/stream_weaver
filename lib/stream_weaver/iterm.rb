@@ -232,7 +232,8 @@ module StreamWeaver
             # like handing control to the agent, not typing into a pane he
             # has to go find. Only a full send (text landed AND Return
             # landed) gets here; a refused, degraded, or half-sent attempt
-            # returns false above and never raises anything.
+            # returns false above and never raises anything. Fire-and-forget:
+            # no poll to confirm it landed (see activate_session_quietly).
             activate_session_quietly(c, session_id)
             true
           end
@@ -350,12 +351,17 @@ module StreamWeaver
         nil
       end
 
-      # Best-effort: brings the worker's tab and window to the front after a
-      # step prompt actually goes out, so Run feels like handing control to
-      # the agent rather than something the user has to go find. Degrades
-      # silently (one memoized stderr hint) on an older iterm2_ruby that
-      # lacks activate_session -- never raises past this, since a raise
-      # failing is not a reason to report the send itself as failed.
+      # Best-effort, fire-and-forget: brings the worker's tab and window to
+      # the front after a step prompt actually goes out, so Run feels like
+      # handing control to the agent rather than something the user has to
+      # go find. Never polls to confirm the raise actually landed (the gem
+      # author flagged iterm2_ruby's own client.focus as unreliable with
+      # multiple windows open) -- fire it and move on. The respond_to?
+      # check is cheap insurance, not a version gate: activate_session has
+      # shipped since iterm2_ruby 0.1.0, so this only degrades on a client
+      # missing it altogether. One memoized stderr hint either way; never
+      # raises past this, since a raise failing is not a reason to report
+      # the send itself as failed.
       def activate_session_quietly(client, session_id)
         unless client.respond_to?(:activate_session)
           warn_activate_unsupported_once
@@ -370,7 +376,7 @@ module StreamWeaver
       def warn_activate_unsupported_once
         return if @activate_hint_shown
         @activate_hint_shown = true
-        warn "StreamWeaver: raise-on-run needs iterm2_ruby >= 0.3.1"
+        warn "StreamWeaver: raise-on-run needs an iterm2_ruby client with activate_session (gem install iterm2_ruby)"
       end
 
       # The window holding the session this process is running in, or nil if
