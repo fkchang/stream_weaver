@@ -104,6 +104,19 @@ RSpec.describe StreamWeaver::University::Runner do
       expect(sent).not_to end_with("\r")
     end
 
+    # The bracketed-paste wrapping lives in the adapter (ITerm.send_to_session)
+    # so every driver caller gets it. The runner's half of that bargain is to
+    # hand over prompt text and nothing terminal-shaped -- if it bracketed too,
+    # the block would be nested and the markers would land in the composer.
+    it 'hands the adapter plain prompt text, with no paste escapes of its own' do
+      described_class.run_step!(1)
+
+      sent = nil
+      expect(StreamWeaver::ITerm).to have_received(:send_to_session) { |_id, text| sent = text }
+      expect(sent).not_to include("\e[200~")
+      expect(sent).not_to include("\e[201~")
+    end
+
     it 'reports :sent with the step, prompt, and target session' do
       result = described_class.run_step!(1)
 

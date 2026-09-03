@@ -18,6 +18,26 @@ Driver and surface adapters both live in `iterm.rb`. Keep them as two small meth
 
 Three surfaces, one job each. The terminal `get-started` was invoked from is left untouched. The **controller** is the University canvas in a window of its own — it is what the user drives, not a sidecar. The **worker tab** opens in the caller's own window (so it inherits a usable size) and holds only the agent, leaving it free to acquire its own demo canvas pane per step, which is exactly what the course prompts have it do from step 1. `get-started` therefore no longer splits the worker tab with the University canvas.
 
+## Submitting a prompt into an agent TUI (four UAT rounds, don't re-derive)
+
+`ITerm.send_to_session` is the only place that turns prompt text into keystrokes. Getting `claude`'s TUI to actually *submit* took four live rounds; each earlier shape looked right and failed in a different way:
+
+| Round | Shape sent | Live result |
+|---|---|---|
+| 1 | `text + "\n"` in one write | multi-line prompt submitted one broken fragment per line |
+| 2 | collapsed one line + CR in the same write | text appears, sits unsubmitted (the CR is read as pasted content) |
+| 3 | one line, then a lone `"\r"` as a second write | text appears, still sits unsubmitted |
+| 4 | `\e[200~<text>\e[201~` as write 1, lone `"\r"` as write 2 | current |
+
+Round 4 is bracketed paste (DEC 2004): the markers tell the TUI where the pasted block ends, so the Return that follows is a keypress rather than more paste content. Rules that fall out of this and must survive any refactor:
+
+- The bracketing lives in the **adapter** (`ITerm.send_to_session`, `bracketed_paste`), never in a caller — `Runner.run_step!` hands over plain prose and nothing terminal-shaped. Nested paste blocks would put the markers in the composer.
+- The CR is bracketed **never**, and always ships as its own write, last.
+- Prompts are still collapsed to one line first (`Runner.one_line`) — bracketed paste makes embedded newlines survivable but not meaningful.
+- No sleeps anywhere in this path. Timing has never been the failure.
+
+**Runbook — if round 4 also fails live:** the next lever is *investigation, not another build*. Look at `iterm2_ruby`'s raw `Session.async_send_text` path (does the gem's `send_text` reach it directly, and does it pass `suppress_broadcast`?) — a broadcast-suppressed or re-encoded write could be mangling the escapes before iTerm2 ever sees them. Confirm what bytes land in the pane (e.g. `cat -v` in a scratch pane as the target) before changing `send_to_session` again.
+
 ## Premier vs degraded (decision 2026-08-28)
 
 iTerm2 is opt-OUT, not optional. Brett explicitly wants the split-pane experience. get-started nags hard with exact install steps (gem install iterm2_ruby; iTerm2 → Preferences → General → Magic → Enable Python API) and only degrades on `--degraded` or explicit "continue anyway". Degraded users arrange browser + second terminal themselves and paste prompts from copy buttons.

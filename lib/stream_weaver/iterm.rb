@@ -18,6 +18,13 @@ module StreamWeaver
     CONTROLLER_FRAME_DEFAULTS = { x: 40, y: 40, width: 760, height: 1200 }.freeze
     WORKER_FRAME_DEFAULTS = { x: 80, y: 80, width: 1600, height: 1000 }.freeze
 
+    # Bracketed paste (DEC 2004). A TUI that has enabled the mode reads
+    # everything between these two sequences as one pasted block and takes
+    # the block whole, rather than interpreting each byte as it arrives --
+    # which is what lets the Return that follows read as a keypress.
+    PASTE_START = "\e[200~"
+    PASTE_END = "\e[201~"
+
     class << self
       def available?
         return @available if defined?(@available)
@@ -198,6 +205,14 @@ module StreamWeaver
       # so the CR became a character in the composer rather than a keypress.
       # A real Return is a separate event, so we send a separate one.
       #
+      # UAT 2026-09-03 (round 3): a separate CR write still did not submit.
+      # The text write is therefore wrapped in bracketed paste markers, so
+      # the TUI knows exactly where the pasted block ends -- without them it
+      # keeps treating the following bytes as more of the same paste, and
+      # the CR is swallowed as paste content rather than read as Return.
+      # Only the text is bracketed; the CR must arrive OUTSIDE the block or
+      # the whole exercise is moot.
+      #
       # Owning the keystroke here is what lets callers hand over prompt text
       # and nothing terminal-shaped; a later herdr/cmux driver makes the
       # same promise its own way.
@@ -206,7 +221,7 @@ module StreamWeaver
 
         with_timeout(8, default: false) do
           connect do |c|
-            next false unless c.send_text(session_id, text)
+            next false unless c.send_text(session_id, bracketed_paste(text))
             next true unless submit
 
             c.send_text(session_id, "\r") ? true : false
@@ -233,6 +248,11 @@ module StreamWeaver
       private
 
       APP_NAME = "StreamWeaver"
+
+      # `text` as one bracketed-paste block. A terminal that has not enabled
+      # the mode drops the markers on the floor, so this is safe to apply
+      # unconditionally rather than sniffing what is running in the pane.
+      def bracketed_paste(text) = "#{PASTE_START}#{text}#{PASTE_END}"
 
       # The browser pane for `url`, or nil. The real client raises on a
       # failed split (and returns nil only for an OK response with no

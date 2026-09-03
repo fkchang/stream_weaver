@@ -182,6 +182,11 @@ RSpec.describe StreamWeaver::ITerm do
 
   describe '.send_to_session' do
     let(:client) { instance_double(ITerm2::Client) }
+    # The exact bytes the text write must carry: the prompt inside one
+    # bracketed-paste block. Spelled out literally here rather than built
+    # from the constants, so a typo in either escape sequence fails a spec
+    # instead of quietly agreeing with itself.
+    let(:pasted) { "\e[200~do the thing\e[201~" }
 
     before do
       allow(described_class).to receive(:available?).and_return(true)
@@ -194,7 +199,7 @@ RSpec.describe StreamWeaver::ITerm do
 
       described_class.send_to_session('worker-session', 'do the thing')
 
-      expect(client).to have_received(:send_text).with('worker-session', 'do the thing').once
+      expect(client).to have_received(:send_text).with('worker-session', pasted).once
       expect(client).not_to have_received(:send_text).with('calling-session', anything)
     end
 
@@ -205,7 +210,7 @@ RSpec.describe StreamWeaver::ITerm do
     it 'submits with a SEPARATE write carrying only the carriage return' do
       described_class.send_to_session('worker-session', 'do the thing')
 
-      expect(client).to have_received(:send_text).with('worker-session', 'do the thing').ordered
+      expect(client).to have_received(:send_text).with('worker-session', pasted).ordered
       expect(client).to have_received(:send_text).with('worker-session', "\r").ordered
     end
 
@@ -213,24 +218,52 @@ RSpec.describe StreamWeaver::ITerm do
       described_class.send_to_session('worker-session', 'do the thing')
 
       expect(client).not_to have_received(:send_text).with('worker-session', "do the thing\r")
+      expect(client).not_to have_received(:send_text).with('worker-session', "#{pasted}\r")
+    end
+
+    # UAT 2026-09-03 (round 3): text write + separate CR write still left
+    # the prompt sitting in the composer. Round 4 wraps the text -- and only
+    # the text -- in bracketed paste so the TUI sees the block end before
+    # the Return arrives.
+    it 'wraps the text write in bracketed paste markers, then presses Return' do
+      writes = []
+      allow(client).to receive(:send_text) do |_id, t|
+        writes << t
+        true
+      end
+
+      described_class.send_to_session('worker-session', 'do the thing')
+
+      expect(writes).to eq(["\e[200~do the thing\e[201~", "\r"])
+      expect(writes.first).to start_with("\e[200~")
+      expect(writes.first).to end_with("\e[201~")
+    end
+
+    it 'leaves the carriage return OUTSIDE the bracketed block' do
+      described_class.send_to_session('worker-session', 'do the thing')
+
+      expect(client).to have_received(:send_text).with('worker-session', "\r").once
+      expect(client).not_to have_received(:send_text).with('worker-session', "\e[200~\r\e[201~")
+      expect(client).not_to have_received(:send_text).with('worker-session', "\e[200~do the thing\r\e[201~")
     end
 
     it 'sends one write and no Return when submit: false' do
       described_class.send_to_session('worker-session', 'half a thought', submit: false)
 
-      expect(client).to have_received(:send_text).with('worker-session', 'half a thought').once
+      expect(client).to have_received(:send_text)
+        .with('worker-session', "\e[200~half a thought\e[201~").once
       expect(client).not_to have_received(:send_text).with('worker-session', "\r")
     end
 
     it 'reports failure when the text lands but the Return does not' do
-      allow(client).to receive(:send_text).with('worker-session', 'do the thing').and_return(true)
+      allow(client).to receive(:send_text).with('worker-session', pasted).and_return(true)
       allow(client).to receive(:send_text).with('worker-session', "\r").and_return(false)
 
       expect(described_class.send_to_session('worker-session', 'do the thing')).to be false
     end
 
     it 'does not try to press Return when the text itself failed to send' do
-      allow(client).to receive(:send_text).with('worker-session', 'do the thing').and_return(false)
+      allow(client).to receive(:send_text).with('worker-session', pasted).and_return(false)
 
       expect(described_class.send_to_session('worker-session', 'do the thing')).to be false
       expect(client).not_to have_received(:send_text).with('worker-session', "\r")
