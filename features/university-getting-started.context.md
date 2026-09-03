@@ -70,3 +70,7 @@ LLM teacher session, Codex as full worker (pickup check only), cmux/herdr adapte
 ## Course content law (Forrest, 2026-09-03)
 
 Never present anything a TUI already does (and does faster). Every step must show a capability delta: live arbitrary UI, diagrams, charts, blocking visual decision forms, growing styled docs, portability. "Claude could just open an HTML page of that" = the step has failed. Applies to all future courses.
+
+## Pane-width rule (2026-09-03)
+
+Course demo visuals render in a SPLIT pane (~750-800px when the worker window is at the 1600px minimum; critique baseline 620px). Design every step's canvas for that width: KPI tiles wrap to 2x2, charts full-width, no layout that needs >800px to read. Content and window sizing are one decision, not two.
