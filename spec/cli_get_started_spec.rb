@@ -316,7 +316,7 @@ RSpec.describe StreamWeaver::CLI do
     end
 
     context 'premier deps available, --yes' do
-      it 'skips the confirm prompt and goes straight to the premier path with the default agent' do
+      it 'goes straight to the premier path with the default agent (--yes has nothing to skip here)' do
         stub_probes
         expect(described_class).to receive(:get_started_premier).with('claude')
         expect($stdin).not_to receive(:gets)
@@ -325,25 +325,19 @@ RSpec.describe StreamWeaver::CLI do
       end
     end
 
-    context 'premier deps available, interactive, user confirms with default (empty) answer' do
-      it 'proceeds to the premier path' do
+    # Trilaws invariant: on a green-dependency machine, the bare command
+    # (no flags, no env vars) runs the full premier experience with ZERO
+    # prompts -- the interactive confirm is reserved for the degrade
+    # decision when premier deps are MISSING (see the contexts above).
+    context 'premier deps available, no flags, interactive stdin' do
+      it 'proceeds straight to the premier path without ever asking' do
         stub_probes
         allow($stdin).to receive(:tty?).and_return(true)
-        allow($stdin).to receive(:gets).and_return("\n")
+        expect($stdin).not_to receive(:gets)
+        expect(described_class).not_to receive(:get_started_confirm?)
         expect(described_class).to receive(:get_started_premier).with('claude')
 
         capture_io { described_class.get_started([]) }
-      end
-    end
-
-    context 'premier deps available, interactive, user declines' do
-      it 'exits without opening the premier path' do
-        stub_probes
-        allow($stdin).to receive(:tty?).and_return(true)
-        allow($stdin).to receive(:gets).and_return("n\n")
-        expect(described_class).not_to receive(:get_started_premier)
-
-        expect { capture_io { described_class.get_started([]) } }.to raise_error(SystemExit)
       end
     end
 
@@ -362,6 +356,38 @@ RSpec.describe StreamWeaver::CLI do
 
         expect { capture_io { described_class.get_started(['--agent', 'gemini']) } }.to raise_error(SystemExit)
       end
+    end
+  end
+
+  # Trilaws invariant, end to end through the real `get_started` entry
+  # point (not just the gating branch): on a machine where every premier
+  # dependency is green, the bare command -- no flags, no env vars -- runs
+  # the full premier experience with zero prompts and no stray browser tab,
+  # opening exactly one controller window and one worker tab.
+  describe '.get_started (bare happy path)' do
+    let(:canvas_url) { 'http://127.0.0.1:59321/canvas/university' }
+
+    it 'runs end to end with no confirm, no gets, and no open_browser call, opening the controller and worker exactly once each' do
+      stub_probes
+      allow(described_class).to receive(:setup)
+      allow(described_class).to receive(:get_started_create_university_canvas).and_return(canvas_url)
+      allow(described_class).to receive(:push_get_started_placeholder_canvas)
+      allow(StreamWeaver::University::Listener).to receive(:start!).and_return(123)
+      allow(StreamWeaver::University::Listener).to receive(:log_path).and_return('/fake/log')
+      allow(described_class).to receive(:command_on_path?).with('claude').and_return(true)
+      allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return('w-session-1')
+      allow(StreamWeaver::ITerm).to receive(:open_browser_window).and_return('ctrl-1')
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message)
+      allow(described_class).to receive(:write_get_started_worker_json)
+
+      expect($stdin).not_to receive(:gets)
+      expect(described_class).not_to receive(:get_started_confirm?)
+      expect(described_class).not_to receive(:open_browser)
+
+      capture_io { described_class.get_started([]) }
+
+      expect(StreamWeaver::ITerm).to have_received(:open_worker_tab).once
+      expect(StreamWeaver::ITerm).to have_received(:open_browser_window).once
     end
   end
 

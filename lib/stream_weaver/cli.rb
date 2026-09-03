@@ -696,7 +696,7 @@ module StreamWeaver
         Getting Started (one-command door):
           streamweaver get-started                Setup + dependency check + open StreamWeaver University
                        [--degraded]                Skip the iTerm2 premier check, use the browser fallback
-                       [--yes]                     Skip the interactive confirm on the premier path
+                       [--yes]                     Skip the interactive confirm when degrading (premier deps missing)
                        [--agent claude|codex]       Worker CLI to launch in the new tab (default: claude)
           streamweaver university-listener        Background process that makes the University
                        [start|stop|status]           canvas buttons work (get-started starts it)
@@ -2559,7 +2559,7 @@ module StreamWeaver
       parser = OptionParser.new do |opts|
         opts.banner = "Usage: streamweaver get-started [--degraded] [--yes] [--agent claude|codex]"
         opts.on('--degraded', 'Skip the iTerm2 premier check, use the browser fallback') { degraded_flag = true }
-        opts.on('-y', '--yes', 'Skip the interactive confirm on the premier path') { yes_flag = true }
+        opts.on('-y', '--yes', 'Skip the interactive confirm when degrading (premier deps missing)') { yes_flag = true }
         opts.on('--agent AGENT', 'Worker CLI to launch: claude (default) or codex') { |a| agent = a }
       end
 
@@ -2597,13 +2597,9 @@ module StreamWeaver
       end
 
       if get_started_premier_ok?(report)
-        proceed = yes_flag || get_started_confirm?(
-          "iTerm2 premier experience is ready. Open the canvas window + worker tab now?", default: true
-        )
-        unless proceed
-          puts "Skipped. Re-run `streamweaver get-started` when ready, or pass --degraded for the browser fallback."
-          exit 1
-        end
+        # Trilaws invariant: on a green-dependency machine, the bare command
+        # runs zero-prompt -- no confirm here, ever. --yes has nothing to
+        # skip on this branch; it only matters below, on the degraded path.
         get_started_premier(agent)
       else
         print_get_started_remediation(report)
@@ -2615,7 +2611,7 @@ module StreamWeaver
           exit 1
         end
 
-        unless get_started_confirm?("Continue in degraded (browser tab) mode?", default: false)
+        unless yes_flag || get_started_confirm?("Continue in degraded (browser tab) mode?", default: false)
           puts "Aborting. Install the missing pieces above, then re-run: streamweaver get-started"
           exit 1
         end
