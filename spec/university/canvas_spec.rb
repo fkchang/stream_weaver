@@ -340,7 +340,11 @@ RSpec.describe StreamWeaver::University::Canvas do
       expect(html).to include('uni-step__expect')
       expect(html).to include('What you should see')
       step_2 = StreamWeaver::University::Course.step(2)
-      step_2[:what_you_should_see].each { |line| expect(html).to include(line) }
+      # Lines render through `md` (code spans, em-dashes, smart quotes), so
+      # assert each line's longest run free of any md-transformed character.
+      step_2[:what_you_should_see].each do |line|
+        expect(html).to include(CGI.escapeHTML(line.split(/[`"']|--/).max_by(&:length)))
+      end
     end
 
     it 'does not expand any row before a Run/Repeat click has happened' do
