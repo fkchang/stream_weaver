@@ -737,6 +737,55 @@ module StreamWeaver
                   white-space: nowrap;
                 }
 
+                /* Doc theme — code blocks always render in the dark
+                   reverse-video scheme (Forrest, live UAT screenshot,
+                   2026-09-03), regardless of the page's own light/dark
+                   toggle: unlike the rest of the doc theme (which tracks
+                   light/dark via --sw-color-bg-card etc.), a code block's
+                   own background is pinned to these tokens in BOTH modes.
+                   `.sw-code-block` normally reads --sw-surface, which IS
+                   bridged to --sw-color-bg-card on body (theme.rb) --  so
+                   the prior symptom wasn't a raw #ffffff fallback, it was
+                   the doc theme's own warm near-white card colour showing
+                   through a wrapper Prism's tomorrow-theme token colours
+                   (loaded for every code_block, adapter/alpinejs.rb
+                   inject_prism_cdn) assume is dark. Scoped to
+                   .sw-theme-doc only -- every other theme's code blocks
+                   are untouched. */
+                body.sw-theme-doc {
+                  --sw-doc-code-bg: #1e1e1e;
+                  --sw-doc-code-bg-elevated: #252526;
+                  --sw-doc-code-border: #333333;
+                  --sw-doc-code-text: #d4d4d4;
+                  --sw-doc-code-text-dim: #9a9a9a;
+                }
+                body.sw-theme-doc .sw-code-block {
+                  background: var(--sw-doc-code-bg);
+                  border-color: var(--sw-doc-code-border);
+                }
+                body.sw-theme-doc .sw-code-block__header {
+                  background: var(--sw-doc-code-bg-elevated);
+                  border-color: var(--sw-doc-code-border);
+                  color: var(--sw-doc-code-text-dim);
+                }
+                body.sw-theme-doc .sw-code-block__copy {
+                  background: #2d2d2d;
+                  border-color: #444444;
+                  color: var(--sw-doc-code-text);
+                }
+                body.sw-theme-doc .sw-code-block__copy:hover {
+                  background: #3a3a3a;
+                }
+                body.sw-theme-doc .sw-code-block__pre,
+                body.sw-theme-doc .sw-code-block__pre code {
+                  color: var(--sw-doc-code-text);
+                }
+                body.sw-theme-doc .sw-code-block__truncated {
+                  background: var(--sw-doc-code-bg-elevated);
+                  border-color: var(--sw-doc-code-border);
+                  color: var(--sw-doc-code-text-dim);
+                }
+
                 /* ===========================================
                    Base Styles
                    =========================================== */
