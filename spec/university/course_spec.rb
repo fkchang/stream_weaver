@@ -58,10 +58,46 @@ RSpec.describe StreamWeaver::University::Course do
       expect(prompt(2)).not_to include('canvas-push')
     end
 
+    # Mined from the two real worker sessions
+    # (docs/university/worker-session-mining.md): both verified with curl and
+    # the action log before touching a browser, and one wasted a tool call
+    # reflexively reaching for a browser MCP its own config forbids.
+    it 'carries the same verification preamble on every step' do
+      (1..5).each do |n|
+        expect(prompt(n)).to include(
+          StreamWeaver::University::Runner.one_line(described_class::VERIFY_RULE)
+        )
+      end
+    end
+
+    it 'tells every step to prove it with curl and logs before reaching for a browser' do
+      (1..5).each do |n|
+        expect(prompt(n)).to include('`curl`')
+        expect(prompt(n)).to match(/never fetch or install a new browser tool/i)
+        expect(prompt(n)).to match(/already configured for/i)
+      end
+    end
+
     it 'has step 2 name the background task and kill it at the end' do
       expect(prompt(2)).to include('BACKGROUND task')
       expect(prompt(2)).to match(/kill that background task/i)
       expect(step(2)[:what_you_should_see].join(' ')).to match(/background task/i)
+    end
+
+    # Two independent worker sessions hit two different startup failures on
+    # this one step -- one omitted `require 'stream_weaver'`, the other
+    # omitted `.run!`. The "6-line app" framing hides exactly those two
+    # lines, so the prompt now names both and recounts honestly.
+    it 'has step 2 name both bookend lines the six-line framing hides' do
+      expect(prompt(2)).to include("`require 'stream_weaver'`")
+      expect(prompt(2)).to include('`end.run!`')
+      expect(prompt(2)).to include('the file is eight')
+      expect(prompt(2)).to include("NoMethodError: undefined method 'app'")
+    end
+
+    it 'points step 2 at `streamweaver llm` instead of a search agent' do
+      expect(prompt(2)).to include('`streamweaver llm`')
+      expect(prompt(2)).to match(/do not dispatch a search agent/i)
     end
 
     it 'has step 3 explain itself first, then block on a canvas form' do
@@ -115,8 +151,27 @@ RSpec.describe StreamWeaver::University::Course do
     it 'has step 5 check gh before exporting the step 4 doc and pushing it to a gist' do
       expect(prompt(5)).to include('gh auth status')
       expect(prompt(5)).to include('org-export')
-      expect(prompt(5)).to include('gh gist create')
+      expect(prompt(5)).to include('gh gist create --public')
       expect(prompt(5)).to include('StreamWeaver Doc Viewer')
+    end
+
+    # The real session discovered this live and improvised it well: name the
+    # constraint, hand the click back, wait. No automated browser can install
+    # a Web Store extension or reach the user's logged-in Chrome, so the
+    # prompt owns the boundary instead of letting each agent rediscover it.
+    it 'hands the extension moment back to the user instead of attempting it' do
+      expect(prompt(5)).to match(/no\s+automated or headless browser/i)
+      expect(prompt(5)).to match(/logged-in Chrome/i)
+      expect(prompt(5)).to match(/do not attempt it and do not skip it silently/i)
+      expect(prompt(5)).to match(/wait for me/i)
+      expect(step(5)[:what_you_should_see].join(' ')).to match(/hands the extension step back to you/i)
+    end
+
+    # Both real sessions' step-5 assumption broke: the Save-as-doc dialog
+    # writes relative to the canvas bridge's cwd, not the shell's.
+    it 'has step 5 locate the saved doc rather than assume its path' do
+      expect(prompt(5)).to include('~/.streamweaver/canvas/')
+      expect(prompt(5)).to match(/do not assume the path/i)
     end
 
     it 'has step 5 close every demo session and leave only the controller' do

@@ -27,6 +27,20 @@ module StreamWeaver
     #    (step 3) and `doc-demo` (step 4); `university` is the controller
     #    canvas the user drives the course from and is never closed.
     module Course
+      # Mined from the two real worker sessions
+      # (docs/university/worker-session-mining.md): both reached for `curl`
+      # and the app's own action log before any browser, and one burned a
+      # tool call plus a visible reasoning detour reflexively reaching for a
+      # browser MCP its own config forbids. Same line on every step so
+      # neither is rediscovered per step. Interpolated into each prompt
+      # rather than repeated, so the five can never drift.
+      VERIFY_RULE = "Verification rule for this whole course: prove it with `curl` and " \
+                    "the app's own logs first -- a POST to `.../action/...` returning 200, " \
+                    "plus the expected text in the HTML that comes back, is proof the DSL " \
+                    "block re-ran server-side. Only then click through it, and only with " \
+                    "the browser tooling this session is already configured for. Never " \
+                    "fetch or install a new browser tool mid-course."
+
       GETTING_STARTED_STEPS = [
         {
           number: 1,
@@ -42,6 +56,8 @@ module StreamWeaver
             stand up by hand, no page reload.
           WHY
           prompt: <<~PROMPT.strip,
+            #{VERIFY_RULE}
+
             Housekeeping first: run `streamweaver canvas-list` and close any leftover
             University demo session with `streamweaver canvas-close <name>` (the demo
             sessions this course uses are `dashboard`, `decision` and `doc-demo`). Never
@@ -83,15 +99,30 @@ module StreamWeaver
             canvas, the doc theme -- is just this same loop wearing different clothes.
           WHY
           prompt: <<~PROMPT.strip,
+            #{VERIFY_RULE}
+
             Close step 1's demo pane first: `streamweaver canvas-close dashboard`. Leave
             `university` alone -- that is the controller. Then tell me what you are about
             to do before you do it.
 
-            Write a 6-line app: a button that increments a counter held in `state`, and a
-            line of text showing the count. Start it with `ruby app.rb` as a BACKGROUND
-            task -- say out loud that it is a background task, tell me the port
-            StreamWeaver picked, and tell me you will kill it when we are done.
-            StreamWeaver finds a free port and opens the browser itself.
+            For any DSL syntax question, run `streamweaver llm` FIRST -- it is the
+            canonical reference, it is one command, and its counter example is exactly
+            this app. Do not dispatch a search agent to grep the repo for it.
+
+            Now write the app: a button that increments a counter held in `state`, and a
+            line of text showing the count. The app block really is six lines, but the
+            file is eight, and the two extra lines are the ones people leave out: `require
+            'stream_weaver'` on line 1, and `.run!` chained onto the block's closing `end`
+            (`end.run!`). Without the first you get `NoMethodError: undefined method
+            'app'`; without the second the process builds the app, starts no server, and
+            exits silently. Write both deliberately.
+
+            Start it with `ruby app.rb` as a BACKGROUND task -- say out loud that it is a
+            background task, tell me the port StreamWeaver picked, and tell me you will
+            kill it when we are done. StreamWeaver finds a free port and opens the browser
+            itself; if the startup banner does not show up in the captured output, find
+            the port with `lsof -i :4567-4620 -sTCP:LISTEN` rather than sleeping on the
+            log.
 
             Click the button a few times and watch the count update after every click --
             that is the same DSL block re-running, not JavaScript.
@@ -103,7 +134,8 @@ module StreamWeaver
             "The browser opens on its own -- no port to guess, no URL to type.",
             "Each click updates the count immediately, with no page reload or spinner.",
             "The Ruby block you wrote ran again on every click; nothing else touched the page.",
-            "Your agent said plainly that the app runs as a background task, offered to kill it, and did kill it at the end -- no orphaned server left behind."
+            "Your agent said plainly that the app runs as a background task, offered to kill it, and did kill it at the end -- no orphaned server left behind.",
+            "It wrote `require 'stream_weaver'` and `end.run!` on purpose, and said why -- the two lines the \"six-line app\" framing hides, and the two that cost real sessions a debug cycle each."
           ]
         },
         {
@@ -121,6 +153,8 @@ module StreamWeaver
             is the step where the canvas stops being a display and becomes an input.
           WHY
           prompt: <<~PROMPT.strip,
+            #{VERIFY_RULE}
+
             Close step 2's demo first: kill the background `ruby app.rb` task if it is
             still running, and run `streamweaver canvas-close dashboard` if that session
             survived. Leave `university` open -- it is the controller.
@@ -176,6 +210,8 @@ module StreamWeaver
             into a file you keep.
           WHY
           prompt: <<~PROMPT.strip,
+            #{VERIFY_RULE}
+
             Close step 3's demo first: `streamweaver canvas-close decision`, and kill the
             standalone app if it is still running. Leave `university` open. Then tell me
             what is about to happen before it happens.
@@ -220,22 +256,34 @@ module StreamWeaver
             extension.
           WHY
           prompt: <<~PROMPT.strip,
+            #{VERIFY_RULE}
+
             Before anything else, run `gh auth status`. If the `gh` CLI is missing or not
             authenticated, tell me exactly that, tell me how to fix it (`brew install gh`
             then `gh auth login`), and stop -- do not fake the gist half of this step.
 
-            Then tell me what you are about to do, and take the doc I saved in the
-            previous step -- `docs/streamweaver_canvas/doc-demo.rb` if I kept the
-            suggested name. Run `streamweaver org-export
-            docs/streamweaver_canvas/doc-demo.rb` to produce a sibling `.org` file next
-            to it, and show me the first few lines so I can see it is plain text.
+            Then tell me what you are about to do, and find the doc I saved in the
+            previous step. Do not assume the path: the Save-as-doc dialog writes relative
+            to the canvas bridge's working directory, which is often not this shell's, so
+            check `docs/streamweaver_canvas/` AND `~/.streamweaver/canvas/` and tell me
+            where it actually landed. Run `streamweaver org-export <that file>` to produce
+            a sibling `.org` next to it, and show me the first few lines so I can see it
+            is plain text.
 
-            Push that `.org` file to a gist with `gh gist create
-            docs/streamweaver_canvas/doc-demo.org`, then give me the gist URL. Tell me to
-            look at it twice: once as plain GitHub rendering, then again after installing
-            the StreamWeaver Doc Viewer extension (linked in this project's README) --
-            same file, but a "View rendered" button now renders it with the outline,
-            two-column section, code block, callout and diagram it had in the canvas.
+            Push that `.org` to a gist with `gh gist create --public <that .org file>`
+            (public on purpose -- this step ends with the file being opened and compared
+            in a browser), then give me the gist URL and show me the plain GitHub
+            rendering. That much is yours to finish.
+
+            The last beat is NOT. Stop and hand it to me, and say why in plain words: no
+            automated or headless browser can install a Chrome Web Store extension or see
+            my logged-in Chrome, so this part is structurally out of your reach no matter
+            which browser tool you have. Do not attempt it and do not skip it silently.
+            Give me the StreamWeaver Doc Viewer link from this project's README, tell me
+            to install it, reload the gist in my own Chrome and click "View rendered", and
+            then wait for me to tell you what I saw -- the same file, now carrying the
+            outline, two-column section, code block, callout and diagram it had in the
+            canvas.
 
             Finish by cleaning up after the whole course: `streamweaver canvas-close
             doc-demo`, then `streamweaver canvas-list` and close every remaining demo
@@ -246,8 +294,9 @@ module StreamWeaver
           what_you_should_see: [
             "Your agent checked `gh auth status` first and told you up front if gh was missing or logged out, instead of failing halfway through.",
             "`org-export` writes a .org file next to the doc -- no network access, no server.",
-            "`gh gist create` prints a gist URL you can open right away.",
-            "Plain GitHub already reads the .org file close to markdown; the extension's \"View rendered\" button brings back the outline, two-column section, code block, callout and diagram exactly as they looked in the canvas.",
+            "`gh gist create --public` prints a gist URL you can open right away, and your agent shows you the plain GitHub rendering itself.",
+            "Then it stops and hands the extension step back to you, saying why: no automated or headless browser can install a Web Store extension or reach your logged-in Chrome. It gives you the link and waits -- it does not try, and it does not quietly skip.",
+            "Plain GitHub already reads the .org file close to markdown; once you install it, the extension's \"View rendered\" button brings back the outline, two-column section, code block, callout and diagram exactly as they looked in the canvas.",
             "Every demo session from steps 1-4 is closed at the end -- `streamweaver canvas-list` shows only `university`, the controller you have been driving from."
           ]
         }
