@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'rbconfig'
 require 'stream_weaver/canvas/client'
+require 'stream_weaver/university/course'
 require 'stream_weaver/university/progress'
 require 'stream_weaver/university/runner'
 
@@ -11,16 +12,16 @@ module StreamWeaver
     # Turns one canvas click event into a ledger write plus a re-push.
     # Mark-done writes the ledger directly; Run/Repeat hands off to
     # Runner, which sends the step's prompt to the recorded worker session
-    # (or records why it wouldn't) and leaves the outcome in the ledger for
-    # the re-push to render.
+    # (or records why it wouldn't), warms up that step's own demo canvas
+    # the moment (and only if) the send actually lands (see `.warm_up!`),
+    # and leaves the outcome in the ledger for the re-push to render.
     #
     # Button ids come from lib/stream_weaver/university/canvas.rb's `id:`
     # scheme: "mark-done-N", "run-N" / "repeat-N", "hero-run-N" /
-    # "hero-repeat-N" on the course list; "view-N" (a row's Details button),
-    # "back-to-list" (the step screen's "All steps"), and "next-N" (the step
-    # screen's "Next: step N") navigate between the app's two screens;
-    # "reset-course" (the recap screen and the course-list footer) clears
-    # the whole course. The rendered `id:` (e.g. "mark-done-3") becomes a
+    # "hero-repeat-N" on the course list; "view-N" (a row's Details/Hide
+    # button) toggles that row's inline expansion; "reset-course" (the
+    # recap screen and the course-list footer) clears the whole course.
+    # The rendered `id:` (e.g. "mark-done-3") becomes a
     # `btn_<label-slug>_<id>` DOM/dispatch id (app.rb `button`), so every
     # pattern below is anchored to the string's end, not its start.
     module Listener
@@ -29,48 +30,82 @@ module StreamWeaver
       # How long run! waits before reconnecting to a bridge that went away.
       RECONNECT_DELAY = 1
 
-      # Canvas sessions the course steps themselves open (step 1's `hello`,
-      # step 3's `form-demo`, step 4's `doc-demo` -- the exact names the
-      # course prompts in course.rb tell the worker to use). "Reset course"
-      # closes exactly these, by name, and nothing else: never the
-      # controller session (SESSION, above) and never a session the user
-      # opened on their own that just happens to still exist.
-      DEMO_SESSION_NAMES = %w[hello form-demo doc-demo].freeze
+      # name/theme pair for one step's own demo canvas session.
+      DemoSession = Struct.new(:name, :theme)
+
+      # Which of the course's own canvas demo sessions each step opens, and
+      # the theme its prompt creates that session with -- mined from
+      # course.rb's step prompts, and named in
+      # features/university-getting-started.context.md ("Course session
+      # names"). The theme matters here specifically because
+      # `Bridge#create_session` is `@sessions[name] ||= Session.new(...)`
+      # (canvas/bridge.rb): a session's theme is fixed by whichever `create`
+      # reaches the bridge FIRST, and every later `create` for that name --
+      # including the worker's own, e.g. `streamweaver panel doc-demo
+      # --theme=doc` (course.rb) or `growing_doc.rb`'s `create(...,
+      # theme: :doc)` -- is a no-op. `warm_up!` runs before any of that, so
+      # it has to create with the SAME theme the real demo will, not the
+      # bridge's `:default`, or the worker's own theme call would silently
+      # never take effect for the rest of that get-started run. Steps 2 and
+      # 5 never open a demo canvas of their own (a standalone `ruby app.rb`,
+      # and gists/org-export respectively), so neither appears here: a Run
+      # click on either has nothing to warm up, and "Reset course" has
+      # nothing of theirs to close.
+      STEP_DEMO_SESSIONS = {
+        1 => DemoSession.new('dashboard', :default),
+        3 => DemoSession.new('decision', :default),
+        4 => DemoSession.new('doc-demo', :doc)
+      }.freeze
+
+      # "Reset course" closes exactly these, by name, and nothing else:
+      # never the controller session (SESSION, above) and never a session
+      # the user opened on their own that just happens to still exist.
+      # Derived from STEP_DEMO_SESSIONS so the two lists can never drift.
+      DEMO_SESSION_NAMES = STEP_DEMO_SESSIONS.values.map(&:name).freeze
 
       # Applies one dispatched button token to the ledger. Returns the step
-      # number acted on, true for a navigation/whole-course action with no
-      # step of its own (back-to-list, reset-course), or nil if the token
-      # didn't match a known action.
+      # number acted on, true for a whole-course action with no step of its
+      # own (reset-course), or nil if the token didn't match a known
+      # action.
       def self.handle_token(token, progress)
         case token.to_s
         when /mark-done-(\d+)\z/
           step = Regexp.last_match(1).to_i
           # progress.mark_done! stamps `last_done`, which the re-push below
-          # renders as an inline confirmation band -- but only on the
-          # course list (canvas.rb has no such band on the step screen).
-          # clear_view! is what makes that true regardless of which of the
-          # two Mark-done buttons was clicked (the course-list row's, or
-          # the step screen's own): both land back on the list, where the
-          # updated rail AND the confirmation are both visible. This is
-          # also what canvas.rb's step-screen footer comment already
-          # claims happens -- it just didn't, before this.
+          # renders as an inline confirmation band. collapse! is what
+          # closes that row's expansion regardless of which of the two
+          # Mark-done buttons was clicked (the row's own, or its expanded
+          # body's) -- a stale expansion left open under the confirmation
+          # band would read as though nothing happened.
           progress.mark_done!(step)
-          progress.clear_view!
+          progress.collapse!
           step
         when /(?:run|repeat)-(\d+)\z/ # also catches hero-run-N / hero-repeat-N
           step = Regexp.last_match(1).to_i
           # Dispatches to the worker session and records the outcome
           # (including the refusals) in the ledger; the re-push in `step!`
-          # then renders whatever it wrote.
-          Runner.run_step!(step, progress: progress)
+          # then renders whatever it wrote. The block runs once, only after
+          # Runner confirms the send actually landed -- warm_up! paints
+          # something instantly (Forrest's UAT round 5 clocked the worker's
+          # own first push at ~5 minutes) without ever promising "your
+          # agent is preparing" on a click that turned out refused or
+          # degraded (no recorded worker, a closed session, or the RPC
+          # itself failing) -- Runner is the one place that already knows
+          # which of those this click was.
+          Runner.run_step!(step, progress: progress) { warm_up!(step) }
           step
-        when /view-(\d+)\z/, /next-(\d+)\z/
+        when /view-(\d+)\z/
+          # Toggles: Details on the already-expanded row hides it again
+          # (Hide), Details on any other row expands that one instead --
+          # at most one row is ever expanded, so this is also what makes
+          # "expanding one collapses others" true.
           step = Regexp.last_match(1).to_i
-          progress.view_step!(step)
+          if progress.expanded_step == step
+            progress.collapse!
+          else
+            progress.expand_step!(step)
+          end
           step
-        when /back-to-list\z/
-          progress.clear_view!
-          true
         when /reset-course\z/
           # Same effect as `streamweaver university-reset -y`: back up +
           # clear the ledger, close the demo sessions the course itself
@@ -113,6 +148,59 @@ module StreamWeaver
         rescue ::StreamWeaver::Canvas::Client::NotRunningError, ::StreamWeaver::Canvas::Client::ConnectionError
           nil
         end
+      end
+
+      # Pushes a deterministic, no-LLM placeholder card to step `step_number`'s
+      # own demo canvas session -- called by Runner.run_step!'s block, which
+      # only runs once a send has actually landed, so the pane paints
+      # something in well under a second instead of sitting empty for
+      # however long the worker takes to reach its own first push
+      # (Forrest's UAT round 5: ~5 minutes), and never on a refused or
+      # degraded send. Creates the session first if it doesn't exist yet
+      # (canvas `push` errors on a session it can't find), WITH the same
+      # theme the step's own demo uses (STEP_DEMO_SESSIONS) -- a session's
+      # theme is fixed by whichever `create` reaches the bridge first, so
+      # creating with the wrong one here would permanently strand the
+      # worker's own later `--theme=doc` as a no-op for the rest of this
+      # get-started run. The worker's own first real push against the same
+      # session name replaces this outright -- nothing here persists.
+      # No-op for a step with no demo session of its own (steps 2 and 5).
+      def self.warm_up!(step_number)
+        demo = STEP_DEMO_SESSIONS[step_number.to_i] or return
+        step = Course.step(step_number) or return
+
+        ::StreamWeaver::Canvas::Client.send_message(
+          ::StreamWeaver::Canvas::Protocol::Messages.create(demo.name, theme: demo.theme)
+        )
+        ::StreamWeaver::Canvas::Client.send_message(
+          ::StreamWeaver::Canvas::Protocol::Messages.push(demo.name, warm_up_dsl(step), source_dir: nil)
+        )
+      rescue ::StreamWeaver::Canvas::Client::NotRunningError, ::StreamWeaver::Canvas::Client::ConnectionError
+        nil
+      end
+
+      # The warm-up card's own DSL source, instance_eval'd bridge-side --
+      # same "one string of Ruby, eval'd fresh" contract canvas.rb's own
+      # file header describes. Deliberately small: a title, one line of
+      # what's coming, a tasteful mini stat row plus a one-sentence
+      # callout, and the "preparing" line -- everything a terminal-only
+      # tool cannot show while a real worker is still thinking.
+      def self.warm_up_dsl(step)
+        <<~RUBY
+          use_theme :doc
+          use_layout :default
+          card(depth: :elevated) do
+            card_header { header2 #{step[:title].inspect} }
+            card_body do
+              phrase #{"Coming up: #{step[:payoff]}".inspect}
+              div(style: "display:flex; gap:14px; margin:16px 0;") do
+                stat_display value: #{step[:number].to_s.inspect}, label: "this step"
+                stat_display value: #{StreamWeaver::University::Course::GETTING_STARTED_STEPS.size.to_s.inspect}, label: "steps in the course"
+              end
+              callout "Your agent is preparing the live demo…", variant: :info
+            end
+          end
+        RUBY
       end
 
       def self.repush(session_name: SESSION)

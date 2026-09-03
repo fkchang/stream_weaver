@@ -2,9 +2,11 @@
 
 require 'spec_helper'
 require 'tmpdir'
+require 'json'
 require 'stream_weaver/university/listener'
 require 'stream_weaver/university/progress'
 require 'stream_weaver/university/runner'
+require 'stream_weaver/iterm'
 require_relative '../support/env_helper'
 
 # Covers the button-id -> ledger-write mapping (progress-ledger: "Wire
@@ -18,19 +20,24 @@ RSpec.describe StreamWeaver::University::Listener do
   around do |example|
     Dir.mktmpdir('university-listener-spec') do |dir|
       @path = File.join(dir, 'progress.yml')
-      # Points at a worker.json that this tmpdir never contains -- the
-      # examples can then exercise the degraded path without ever being
-      # able to reach the developer's real recorded worker session.
-      # STREAMWEAVER_UNIVERSITY_PROGRESS is here too so `.handle_event`
-      # (which loads its own Progress internally) never touches the
-      # developer's real ledger either.
-      with_env('STREAMWEAVER_UNIVERSITY_WORKER' => File.join(dir, 'worker.json'),
+      # Points at a worker.json that this tmpdir never contains unless an
+      # example writes one (write_worker, below) -- the examples can then
+      # exercise the degraded path without ever being able to reach the
+      # developer's real recorded worker session. STREAMWEAVER_UNIVERSITY_PROGRESS
+      # is here too so `.handle_event` (which loads its own Progress
+      # internally) never touches the developer's real ledger either.
+      @worker_path = File.join(dir, 'worker.json')
+      with_env('STREAMWEAVER_UNIVERSITY_WORKER' => @worker_path,
                'STREAMWEAVER_UNIVERSITY_PROGRESS' => @path) { example.run }
     end
   end
 
   def progress
     StreamWeaver::University::Progress.new(@path)
+  end
+
+  def write_worker(session_id: 'worker-session-1')
+    File.write(@worker_path, JSON.generate(session_id: session_id, agent: 'claude'))
   end
 
   # reset-course (via handle_token) and repush (via handle_event) both
@@ -101,24 +108,27 @@ RSpec.describe StreamWeaver::University::Listener do
       expect(p.done_steps).to eq([])
     end
 
-    it 'opens the step screen for a view-N button id (a row\'s Details button)' do
+    it 'expands the row for a view-N button id (a row\'s Details button)' do
       p = progress
       expect(described_class.handle_token('btn_details_view-2', p)).to eq(2)
-      expect(p.viewing_step).to eq(2)
+      expect(p.expanded_step).to eq(2)
     end
 
-    it 'opens the step screen for a next-N button id (the step screen\'s Next link)' do
+    it 'collapses the row on a second view-N click on the same step (Details/Hide toggle)' do
       p = progress
-      expect(described_class.handle_token('btn_next_step_4_next-4', p)).to eq(4)
-      expect(p.viewing_step).to eq(4)
+      described_class.handle_token('btn_details_view-2', p)
+
+      expect(described_class.handle_token('btn_hide_view-2', p)).to eq(2)
+      expect(p.expanded_step).to be_nil
     end
 
-    it 'returns to the course list for a back-to-list button id' do
+    it 'expanding one row\'s Details collapses whichever other was expanded' do
       p = progress
-      p.view_step!(2)
+      described_class.handle_token('btn_details_view-2', p)
 
-      expect(described_class.handle_token('btn_all_steps_back-to-list', p)).to be(true)
-      expect(p.viewing_step).to be_nil
+      described_class.handle_token('btn_details_view-4', p)
+
+      expect(p.expanded_step).to eq(4)
     end
 
     # progress-ledger's Reset deliverable: the canvas's "Reset course"
@@ -168,20 +178,112 @@ RSpec.describe StreamWeaver::University::Listener do
         expect(p.last_done).to include('step' => 2)
       end
 
-      # The confirmation band only exists on the course list (canvas.rb
-      # has no equivalent on the step screen), and canvas.rb's own "Two
-      # exits, deliberately unequal" comment claims Mark done returns
-      # there -- so this has to be true regardless of which of the two
-      # Mark-done buttons was clicked, the course-list row's or the step
-      # screen's own.
-      it 'clears the viewed step, landing back on the course list' do
+      # Mark done closes the row's own expansion regardless of which of the
+      # two Mark-done buttons was clicked, the compact row's or the
+      # expanded body's -- a stale expansion left open under the
+      # confirmation band would read as though nothing happened.
+      it 'collapses the expanded row' do
         p = progress
-        p.view_step!(2)
+        p.expand_step!(2)
 
         described_class.handle_token('btn_mark_step_2_done_mark-done-2', p)
 
-        expect(p.viewing_step).to be_nil
+        expect(p.expanded_step).to be_nil
       end
+    end
+  end
+
+  # Warm-up push (Forrest, live UAT round 5: worker's own first paint took
+  # ~5 minutes). The real Runner runs here (only its ITerm edges stubbed,
+  # same as runner_spec.rb) so the block Listener hands it only fires on
+  # whatever Runner itself determines was a confirmed :sent -- a card
+  # promising "your agent is preparing" must never be pushed on a send
+  # that turned out refused or degraded, and the only place that actually
+  # knows which one a click was is Runner, not a duplicate check here.
+  describe 'warm-up push on Run' do
+    it 'pushes a warm-up card to the step\'s demo session once the send is confirmed' do
+      write_worker
+      allow(StreamWeaver::ITerm).to receive(:session_alive?).and_return(true)
+      allow(StreamWeaver::ITerm).to receive(:send_to_session).and_return(true)
+      calls = []
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message) { |msg| calls << msg }
+
+      described_class.handle_token('btn_run_run-1', progress)
+
+      # create then push, both against step 1's own demo session ("dashboard").
+      expect(calls[0]).to include(type: 'create', name: 'dashboard')
+      expect(calls[1]).to include(type: 'push', name: 'dashboard')
+    end
+
+    it 'creates the session with the same theme the step\'s own demo uses' do
+      write_worker
+      allow(StreamWeaver::ITerm).to receive(:session_alive?).and_return(true)
+      allow(StreamWeaver::ITerm).to receive(:send_to_session).and_return(true)
+      create_call = nil
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+        create_call = msg if msg[:type] == 'create'
+      end
+
+      # Step 4's demo (course.rb: `streamweaver panel doc-demo --theme=doc`)
+      # is the one step whose demo isn't the bridge's :default theme --
+      # `Bridge#create_session` is `||=`, so getting this wrong here would
+      # permanently strand the worker's own later --theme=doc as a no-op.
+      described_class.handle_token('btn_run_run-4', progress)
+
+      expect(create_call).to include(name: 'doc-demo', theme: :doc)
+    end
+
+    it 'includes the step title and the "preparing" line in the warm-up card' do
+      write_worker
+      allow(StreamWeaver::ITerm).to receive(:session_alive?).and_return(true)
+      allow(StreamWeaver::ITerm).to receive(:send_to_session).and_return(true)
+      push_dsl = nil
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+        push_dsl = msg[:dsl] if msg[:type] == 'push'
+      end
+
+      described_class.handle_token('btn_run_run-1', progress)
+
+      step1 = StreamWeaver::University::Course.step(1)
+      expect(push_dsl).to include(step1[:title])
+      expect(push_dsl).to include('preparing the live demo')
+    end
+
+    it 'is not pushed when no worker is recorded (no_worker)' do
+      described_class.handle_token('btn_run_run-1', progress)
+
+      expect(StreamWeaver::Canvas::Client).not_to have_received(:send_message)
+    end
+
+    it 'is not pushed when the recorded worker session has gone away (session_missing)' do
+      write_worker
+      allow(StreamWeaver::ITerm).to receive(:session_alive?).and_return(false)
+
+      described_class.handle_token('btn_run_run-1', progress)
+
+      expect(StreamWeaver::Canvas::Client).not_to have_received(:send_message)
+    end
+
+    # The gap a prior version of this feature had: session_alive? passing
+    # is not the same as the send itself landing.
+    it 'is not pushed when the send RPC itself fails (send_failed)' do
+      write_worker
+      allow(StreamWeaver::ITerm).to receive(:session_alive?).and_return(true)
+      allow(StreamWeaver::ITerm).to receive(:send_to_session).and_return(false)
+
+      described_class.handle_token('btn_run_run-1', progress)
+
+      expect(StreamWeaver::Canvas::Client).not_to have_received(:send_message)
+    end
+
+    it 'is not pushed for a step with no demo session of its own (step 2)' do
+      write_worker
+      allow(StreamWeaver::ITerm).to receive(:session_alive?).and_return(true)
+      allow(StreamWeaver::ITerm).to receive(:send_to_session).and_return(true)
+
+      described_class.handle_token('btn_run_run-2', progress)
+
+      expect(StreamWeaver::Canvas::Client).not_to have_received(:send_message)
     end
   end
 

@@ -84,6 +84,15 @@ module StreamWeaver
       # Records the outcome in the ledger (`requested_at` only on a real
       # send) so the next canvas render can report it. Returns a Result;
       # never raises for an absent/closed worker.
+      #
+      # Yields (no arguments) once, only when the send actually lands --
+      # after `send_to_session` returns true, not before. This is the one
+      # moment a caller can act on "the worker is definitely about to see
+      # this" without the caller re-checking worker/session-alive itself
+      # (a second, redundant iTerm2 RPC) and without a caller ever being
+      # told a send is inbound when it wasn't (Listener.warm_up! uses this
+      # to push its placeholder card only on a confirmed :sent, never on a
+      # send that turned out refused or degraded).
       def self.run_step!(step_number, progress: Progress.load)
         prompt = Course.prompt_for(step_number)
         # Recorded like any other outcome: a click on a step the course no
@@ -99,6 +108,7 @@ module StreamWeaver
           ITerm.session_alive?(session_id)
 
         status = ITerm.send_to_session(session_id, one_line(prompt)) ? :sent : :send_failed
+        yield if status == :sent && block_given?
         finish(status, step_number, prompt, session_id, progress: progress)
       end
 

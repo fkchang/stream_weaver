@@ -369,28 +369,29 @@ RSpec.describe StreamWeaver::University::Canvas do
     end
   end
 
-  # --- step-1-canvas-push: the step screen, a second view of this same app,
-  # reached from a row's Details button and left via "All steps" or "Next".
+  # --- step-1-canvas-push / course-list-canvas (single-mode, 2026-09-03):
+  # "Details" expands a row in place on this same course list -- no separate
+  # step screen, no navigation, nothing to get "back" from.
 
-  def view_step(number)
-    StreamWeaver::University::Progress.new(@progress_path).view_step!(number)
+  def expand_step(number)
+    StreamWeaver::University::Progress.new(@progress_path).expand_step!(number)
   end
 
   describe 'course list rows' do
-    it 'offers a Details button on every step row, reachable into the step screen' do
+    it 'offers a Details button on every step row, expandable in place' do
       html = render
       expect(html.scan('id="btn_details_view-').size).to eq(5)
     end
   end
 
-  describe 'rendered step screen' do
-    it 'is not shown until a step is being viewed' do
+  describe 'a row\'s Details expansion' do
+    it 'is not shown until a step is expanded' do
       html = render
       expect(html).not_to include('uni-promptbox')
     end
 
     it 'renders the step title, why-it-matters, prompt, and what-you-should-see' do
-      view_step(3)
+      expand_step(3)
       html = render
       step3 = StreamWeaver::University::Course.step(3)
 
@@ -412,34 +413,51 @@ RSpec.describe StreamWeaver::University::Canvas do
     end
 
     it 'offers Run in worker session (routed through the same run-N id Runner handles) and Copy prompt' do
-      view_step(3)
+      expand_step(3)
       html = render
 
       expect(html).to include('id="btn_run_in_worker_session_run-3"')
       expect(html).to include('sw-copy-button')
     end
 
-    it 'offers Mark step N done and a back to the list' do
-      view_step(3)
+    it 'offers a Mark step N done button and a next-step hint' do
+      expand_step(3)
       html = render
 
       expect(html).to include('id="btn_mark_step_3_done_mark-done-3"')
-      expect(html).to include('id="btn_all_steps_back-to-list"')
+      expect(html).to include('Unlocks step 4.')
     end
 
-    it 'offers a Next: step N+1 link for steps before the last' do
-      view_step(3)
+    it 'reads "That is the whole course" on the last step, with no unlocks-next hint' do
+      expand_step(5)
       html = render
 
-      expect(html).to include('id="btn_next_step_4_next-4"')
-    end
-
-    it 'has no Next link on the last step' do
-      view_step(5)
-      html = render
-
-      expect(html).not_to include('btn_next_step')
       expect(html).to include('That is the whole course.')
+      expect(html).not_to include('Unlocks step 6')
+    end
+
+    it 'relabels the Details button to Hide once expanded' do
+      expand_step(3)
+      html = render
+
+      expect(html).to include('id="btn_hide_view-3"')
+      expect(html).not_to include('id="btn_details_view-3"')
+    end
+
+    it 'expands only the row that was expanded, not every row' do
+      expand_step(3)
+      html = render
+
+      expect(html.scan('uni-step__expansion"').size).to eq(1)
+    end
+
+    it 'stays expanded across a re-render (deep-link / auto-expand on load)' do
+      expand_step(2)
+
+      html = render
+
+      expect(html).to include('id="btn_hide_view-2"')
+      expect(html).to include(StreamWeaver::University::Course.step(2)[:title])
     end
   end
 end
