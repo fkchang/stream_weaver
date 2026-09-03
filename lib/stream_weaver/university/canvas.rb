@@ -100,6 +100,19 @@ module StreamWeaver::University::Canvas
   def self.bullets(lines)
     lines.map { |line| "- #{line}" }.join("\n")
   end
+
+  # "Re-run" once step `number`'s prompt has actually gone out before --
+  # either it ever landed (requested_at, permanent, stamped only on a
+  # :sent status) or the last click on this exact step was a failed/
+  # degraded send (last_run, which requested_at never records). Shared by
+  # the hero button and each step row's own primary button so the two can
+  # never say different things about the same step -- round-6 UAT shipped
+  # them as two separate inline copies, and the hero one was missed
+  # entirely (Forrest, follow-up). Repeat (done steps) never calls this.
+  def self.run_label(progress, last_run, number)
+    ever_sent = progress.requested_at(number) || (last_run && last_run['step'].to_i == number)
+    ever_sent ? "Re-run" : "Run"
+  end
 end
 
 _css = <<~CSS
@@ -680,7 +693,8 @@ _body = proc do
         div(class: "uni-actions") do
           run_number = current_number || 1
           unless all_done
-            button "Run step #{run_number}", id: "hero-run-#{run_number}",
+            hero_label = StreamWeaver::University::Canvas.run_label(progress, last_run, run_number)
+            button "#{hero_label} step #{run_number}", id: "hero-run-#{run_number}",
                    class: "uni-btn uni-btn--run"
           end
           if done_count.positive? && !all_done
@@ -779,17 +793,7 @@ _body = proc do
         number = step[:number]
         state = states[number]
         expanded = expanded_number == number
-        # "Re-run" once this step's prompt has actually gone out before --
-        # either it ever landed (requested_at, permanent, set only on a
-        # :sent status) or the very last click on this exact step was a
-        # failed/degraded send (last_run, which requested_at never records).
-        # Repeat (the :done branch below) is untouched -- a finished step
-        # was never going to say "Run" in the first place.
-        run_label = if progress.requested_at(number) || (last_run && last_run['step'].to_i == number)
-                      "Re-run"
-                    else
-                      "Run"
-                    end
+        run_label = StreamWeaver::University::Canvas.run_label(progress, last_run, number)
         div(class: "uni-step uni-step--#{state}") do
           div(class: "uni-step__mark") do
             if state == :done

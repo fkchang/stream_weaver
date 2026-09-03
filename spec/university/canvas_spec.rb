@@ -526,4 +526,37 @@ RSpec.describe StreamWeaver::University::Canvas do
       expect(html).not_to include('Re-run')
     end
   end
+
+  # Follow-up (Forrest): the hero button is the most visible primary action
+  # on the page and has to say the same thing as the row button for the same
+  # step -- round-6 relabeled the row only and missed the hero entirely.
+  describe 'the hero button\'s "Run" vs "Re-run" label' do
+    it 'reads "Run step 1" before any prompt has ever been sent' do
+      html = render
+      expect(html).to include('id="btn_run_step_1_hero-run-1"')
+    end
+
+    it 'reads "Re-run step N" once that step\'s prompt has actually landed' do
+      record_run(1, :sent)
+      html = render
+
+      expect(html).to include('id="btn_re_run_step_1_hero-run-1"')
+      expect(html).not_to include('id="btn_run_step_1_hero-run-1"')
+    end
+
+    it 'reads "Re-run" for the current step even when only its last click failed/degraded' do
+      record_run(1, :session_missing)
+      html = render
+
+      expect(html).to include('id="btn_re_run_step_1_hero-run-1"')
+    end
+
+    it 'tracks whichever step is current, not just step 1' do
+      mark_done(1)
+      record_run(2, :sent)
+      html = render
+
+      expect(html).to include('id="btn_re_run_step_2_hero-run-2"')
+    end
+  end
 end
