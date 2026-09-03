@@ -3728,6 +3728,10 @@ module StreamWeaver
 
           function loadChartJs() {
             if (_chartJsLoaded) { initAllCharts(); return; }
+            // Chart.js may already be on the page via a host-level <script>
+            // tag (e.g. the canvas bridge loads it unconditionally in
+            // <head>) -- reuse it instead of injecting a second copy.
+            if (window.Chart) { _chartJsLoaded = true; initAllCharts(); return; }
             if (_chartJsLoading) return;
             _chartJsLoading = true;
 

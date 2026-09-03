@@ -276,6 +276,13 @@ module StreamWeaver
             #{adapter.cdn_scripts.join("\n")}
             <!-- Chart.js for charts -->
             <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+            <!-- Chart lazy-init engine — always present (like the mermaid engine below) so a
+                 `chart type:` push is initialized even though the poll swap that lands it
+                 replaces #app-container via innerHTML, which never executes embedded <script>
+                 tags. Without this, only a chart present in the page's very first HTML render
+                 -- never a later canvas-push -- would ever call `new Chart(...)`. -->
+            <style>#{StreamWeaver::Adapter::AlpineJS::CHART_CSS}</style>
+            <script>#{StreamWeaver::Adapter::AlpineJS::CHART_JS_INIT}</script>
             <!-- Highlight.js for syntax highlighting -->
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
             <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
@@ -468,18 +475,11 @@ module StreamWeaver
                       });
                     }
 
-                    // Initialize Chart.js charts
-                    if (window.Chart) {
-                      container.querySelectorAll('canvas[data-chart-config]:not([data-chart-init])').forEach((canvas) => {
-                        try {
-                          const config = JSON.parse(canvas.dataset.chartConfig);
-                          new Chart(canvas, config);
-                          canvas.dataset.chartInit = 'true';
-                        } catch (e) {
-                          console.error('Chart init error:', e);
-                        }
-                      });
-                    }
+                    // Initialize `chart type:` charts (data-sw-chart-* canvases --
+                    // see sw-chart__canvas in adapter/alpinejs.rb). The shorthand
+                    // chart family (bar_chart, line_chart, ...) uses Alpine x-init
+                    // and is already covered by Alpine.initTree(container) above.
+                    if (window.swChartInit) window.swChartInit();
                   }, 10);
                 }
               } catch (e) {
