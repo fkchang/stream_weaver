@@ -73,3 +73,37 @@ For the extension step specifically, the course should say up front: *"This step
 
 - README/growing_doc step: note that a doc saved via the canvas "Save as doc" button lands under `~/.streamweaver/canvas/` (not `docs/streamweaver_canvas/<repo>/`) whenever the canvas bridge process was started from a different working directory than the current shell — this is exactly what broke the assumed path in the org-export step of the Sep 3 session, and the design doc (`docs/plans/canvas-doc-location...`) is already flagged as not-yet-built for the global-vs-repo toggle.
 - `streamweaver llm` reference: confirm it's positioned as the first stop for DSL syntax questions (it worked well when used) — the Aug 31 session's slower path (dispatching an Explore subagent instead) suggests it isn't yet the obvious/first instinct.
+
+## Round-5 latency + portability pass (2026-09-03)
+
+Two additional Sep-3 worker sessions matched the course signature and were not yet in this report. `f53afb90` (21:27-22:05 UTC, ~38 min) ran the full redesigned 5-step course end to end and is the primary source below. `5cf4fbb1` (20:36-20:45, ~9 min) is an earlier, isolated run of just the dashboard-push step — fast and clean, no drag worth noting. A third large file, `bc7f531e`, was excluded: it spans Aug 11-Sep 2 and is general dev work, not a course run.
+
+### Latency ledger (`f53afb90`)
+
+| Step | Prompt arrival | First payoff | Elapsed (agent-active) | Notable drag |
+|---|---|---|---|---|
+| 1. Dashboard (3 pushes) | 21:27:58 | 21:30:54 | ~3 min | none — clean |
+| 2. Counter app | 21:35:12 | 21:37:52 | ~2.7 min | none — clean |
+| 3. Decision form (standalone + canvas + canvas-wait) | 21:47:34 | 21:57:17 | ~9.7 min | see below |
+| 4. Growing doc | 21:57:47 | 22:01:00 | ~3.2 min | none — clean |
+| 5. Org-export + gist | 22:04:29 | 22:05:55 | ~1.5 min | none — clean |
+
+### Top time sinks
+
+1. **`canvas-wait` foreground block + background promotion (~3.5 min, step 3)**: the session ran `canvas-wait decision` in the foreground, hit the harness's 120s foreground-block ceiling, got silently demoted to a background task, then had to wait for a `task-notification` and poll for the result before it could read the submitted JSON (21:53:44 to 21:57:17). This is the single largest agent-side sink found in this pass — a form-submission confirmation that should read back in a few seconds cost 3.5 minutes of wall clock, all spent waiting on the harness's own polling/promotion mechanics, not on the app or the model.
+2. **Step-to-step human/driver advance gaps (~4-10 min each)**: gaps of ~4.3 min (step 1→2) and ~9.7 min (step 2→3) between the agent finishing a step and the next step-prompt arriving. Confirmed by an `away_summary` system event at 21:40:55 stating the session was idle, "waiting for you to click it, then say so" — this is pacing/human latency, not agent drag, and matches the same pattern already noted for `25b1a28c` in the original report.
+3. **Doc-save location re-discovery (~10s, step 5)**: the session had to re-derive that the saved org file landed under `~/.streamweaver/canvas/` instead of the course's assumed `docs/streamweaver_canvas/` path — same known issue as the prior round, but resolved in one quick check this time rather than costing a debug cycle.
+
+### Env-portability risks
+
+| Risk | Detail |
+|---|---|
+| Hardcoded personal skill path | Every `browse` invocation ran `B="~/.claude/skills/gstack/browse/dist/browse"` directly via Bash — a personal global skill-install path that would not exist on a coworker's machine even with this repo checked out fresh. |
+| `gh` CLI auth dependency | Step 5 (gist) hard-requires `gh auth status` to already show an authenticated session with gist scope, with no fallback path or check-first framing if it's missing or unauthenticated. |
+| Dynamically-discovered bridge port baked into commands | The bridge bound port 4700 this run; once discovered, curl calls hardcoded that port rather than resolving it per call — fine within one session, but any copy-pasted command from a transcript or doc breaks on a different run/machine where the port differs (consistent with the project's own port-auto-detection memory note). |
+
+### Fixed vs. still-open (against the canned-demo redesign)
+
+**Already fixed** (both observed working cleanly in `f53afb90`): the `require 'stream_weaver'` + `.run!` omission from the original report is gone — the session wrote both deliberately and called them out explicitly; port discovery used `lsof` directly instead of the `sleep && cat log` polling loop; the gist step used `gh gist create --public` outright instead of defaulting to secret.
+
+**Still open**: the `canvas-wait` foreground-block/background-promotion tax (new finding, not in the original report — worth a course-prompt or harness-level fix, e.g. a shorter poll-and-report pattern instead of a blocking wait); the human/driver step-pacing gaps (framework-level, not prompt-fixable); the hardcoded personal `gstack/browse` path and `gh` auth dependency (both env-portability, need either a repo-relative resolution or an explicit prereq check at course start); the doc-save-location mismatch (already tracked, not yet built).
