@@ -11,6 +11,13 @@ module StreamWeaver
     # iTerm2's built-in profile that renders a web view instead of a shell.
     BROWSER_PROFILE = "Web Browser"
 
+    # Default window frames (points) for the two windows this class ever
+    # creates from scratch -- the University controller (narrow, tall) and a
+    # worker tab that couldn't inherit the caller's window (wide, short).
+    # Each is overridable via env as "x,y,width,height".
+    CONTROLLER_FRAME_DEFAULTS = { x: 40, y: 40, width: 760, height: 1200 }.freeze
+    WORKER_FRAME_DEFAULTS = { x: 80, y: 80, width: 1600, height: 1000 }.freeze
+
     class << self
       def available?
         return @available if defined?(@available)
@@ -64,13 +71,12 @@ module StreamWeaver
       # profile makes the browser, and the shell that came with the window
       # is then closed so only the canvas is left.
       #
-      # Known limitation: a brand new iTerm2 window opens at the profile's
-      # default size, the same too-small frame open_worker_tab below goes
-      # out of its way to avoid by reusing the caller's window. There is no
-      # way around it here -- the window has to be new, and the gem exposes
-      # no window sizing (create_tab takes only window_id/profile_name). If
-      # the controller comes up unusably small, that is this, and the fix
-      # belongs in the gem.
+      # A brand new iTerm2 window opens at the profile's default size --
+      # unlike open_worker_tab below, this one has no caller's window to
+      # reuse (the controller is its own window by design), so it sizes
+      # itself explicitly via set_window_frame instead: a narrow controller
+      # shape (CONTROLLER_FRAME_DEFAULTS, overridable via SW_CONTROLLER_FRAME).
+      # Degrades silently on an older iterm2_ruby that lacks the method.
       def open_browser_window(url)
         return nil unless available?
 
@@ -79,6 +85,8 @@ module StreamWeaver
             created = c.create_tab
             shell = created && created[:session_id]
             next nil unless shell
+
+            apply_window_frame(c, created[:window_id], "SW_CONTROLLER_FRAME", CONTROLLER_FRAME_DEFAULTS)
 
             pane = browser_pane_in(c, shell, url)
 
@@ -146,16 +154,19 @@ module StreamWeaver
         return nil unless available?
         with_timeout(8, default: nil) do
           connect do |c|
-            # In the caller's own window when we can find it. A brand new
-            # iTerm2 window opens at the profile's default size, which UAT
-            # found unusably small twice over; the window the user is
-            # already sitting in is by definition the size they chose. The
-            # gem exposes no set_property, so inheriting is the only way to
-            # get a sane frame -- and the calling PANE is still untouched
-            # either way, which is the actual product promise.
+            # In the caller's own window when we can find it -- the window
+            # the user is already sitting in is by definition the size they
+            # chose, so that path leaves the frame untouched (and the
+            # calling PANE is untouched either way, which is the actual
+            # product promise). Only the fallback path -- a genuinely new
+            # window -- gets an explicit wide frame via set_window_frame,
+            # since a brand new iTerm2 window otherwise opens at the
+            # profile's default size (UAT found that unusably small twice
+            # over).
             window_id = calling_window_id(c)
             result = window_id ? c.create_tab(window_id: window_id) : c.create_tab
             session_id = result && result[:session_id]
+            apply_window_frame(c, result[:window_id], "SW_WORKER_FRAME", WORKER_FRAME_DEFAULTS) if session_id && !window_id
             c.send_text(session_id, "cd #{Shellwords.escape(dir)} && #{command}\n") if session_id
             session_id
           end
@@ -242,6 +253,43 @@ module StreamWeaver
         client.close_session(session_id, force: true)
       rescue StandardError
         nil
+      end
+
+      # Sets window_id's frame to defaults, overridden by an "x,y,width,height"
+      # value in ENV[env_var] when present and parseable. Silently a no-op on
+      # an iterm2_ruby too old to have set_window_frame (one stderr hint,
+      # printed once) -- callers don't need to know which gem version is
+      # installed.
+      def apply_window_frame(client, window_id, env_var, defaults)
+        return unless window_id
+
+        unless client.respond_to?(:set_window_frame)
+          warn_frame_unsupported_once
+          return
+        end
+
+        frame = parse_frame_env(ENV[env_var], defaults)
+        client.set_window_frame(window_id, **frame)
+      rescue StandardError
+        nil
+      end
+
+      def parse_frame_env(raw, defaults)
+        return defaults if raw.to_s.empty?
+
+        parts = raw.split(",").map(&:strip)
+        return defaults unless parts.size == 4
+
+        x, y, width, height = parts.map { |p| Integer(p, exception: false) }
+        return defaults if [x, y, width, height].any?(&:nil?)
+
+        { x: x, y: y, width: width, height: height }
+      end
+
+      def warn_frame_unsupported_once
+        return if @frame_hint_shown
+        @frame_hint_shown = true
+        warn "StreamWeaver: window sizing needs iterm2_ruby >= 0.3.0 (gem install iterm2_ruby)"
       end
 
       # The window holding the session this process is running in, or nil if

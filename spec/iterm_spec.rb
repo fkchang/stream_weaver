@@ -5,9 +5,16 @@ require 'stream_weaver/iterm'
 require 'iterm2'
 
 RSpec.describe StreamWeaver::ITerm do
-  # available? memoizes; reset between examples so stubs take effect
-  before { described_class.remove_instance_variable(:@available) if described_class.instance_variable_defined?(:@available) }
-  after  { described_class.remove_instance_variable(:@available) if described_class.instance_variable_defined?(:@available) }
+  # available? memoizes; reset between examples so stubs take effect. The
+  # unsupported-gem warning is also memoized (printed once), same reason.
+  before do
+    described_class.remove_instance_variable(:@available) if described_class.instance_variable_defined?(:@available)
+    described_class.remove_instance_variable(:@frame_hint_shown) if described_class.instance_variable_defined?(:@frame_hint_shown)
+  end
+  after do
+    described_class.remove_instance_variable(:@available) if described_class.instance_variable_defined?(:@available)
+    described_class.remove_instance_variable(:@frame_hint_shown) if described_class.instance_variable_defined?(:@frame_hint_shown)
+  end
 
   describe '.gem_missing?' do
     it 'is true when in iTerm on macOS but the gem is unavailable' do
@@ -55,6 +62,7 @@ RSpec.describe StreamWeaver::ITerm do
       allow(ITerm2).to receive(:connect).and_yield(client)
       allow(client).to receive(:create_tab).and_return(session_id: 'w-1', window_id: 'win-1', tab_id: 'tab-1')
       allow(client).to receive(:send_text)
+      allow(client).to receive(:set_window_frame)
       # Default: the calling window can't be resolved, so these examples
       # exercise the new-window path. The window-inheritance examples below
       # override this.
@@ -116,6 +124,52 @@ RSpec.describe StreamWeaver::ITerm do
 
       expect(described_class.open_worker_tab('claude', dir: '/tmp')).to be_nil
       expect(ITerm2).not_to have_received(:connect)
+    end
+
+    # window-frame sizing (driver-worker-runner): a genuinely new window gets
+    # sized wide; a window inherited from the caller is left alone.
+    describe 'window frame sizing' do
+      it 'sizes the new window to the default wide worker frame' do
+        described_class.open_worker_tab('claude', dir: '/tmp')
+
+        expect(client).to have_received(:set_window_frame).with('win-1', x: 80, y: 80, width: 1600, height: 1000)
+      end
+
+      it 'honors SW_WORKER_FRAME when set to a valid "x,y,w,h" value' do
+        allow(ENV).to receive(:[]).and_call_original
+        allow(ENV).to receive(:[]).with('SW_WORKER_FRAME').and_return('10,20,900,700')
+
+        described_class.open_worker_tab('claude', dir: '/tmp')
+
+        expect(client).to have_received(:set_window_frame).with('win-1', x: 10, y: 20, width: 900, height: 700)
+      end
+
+      it 'falls back to defaults when SW_WORKER_FRAME is garbage' do
+        allow(ENV).to receive(:[]).and_call_original
+        allow(ENV).to receive(:[]).with('SW_WORKER_FRAME').and_return('not-a-frame')
+
+        described_class.open_worker_tab('claude', dir: '/tmp')
+
+        expect(client).to have_received(:set_window_frame).with('win-1', x: 80, y: 80, width: 1600, height: 1000)
+      end
+
+      it 'does not touch the frame when reusing the calling window' do
+        allow(described_class).to receive(:current_session_guid).and_return('calling-session')
+        allow(client).to receive(:topology).and_return(
+          [{ window_id: 'callers-window', tab_id: 'tab-0', session_id: 'calling-session' }]
+        )
+
+        described_class.open_worker_tab('claude', dir: '/tmp')
+
+        expect(client).not_to have_received(:set_window_frame)
+      end
+
+      it 'degrades silently when the installed client lacks set_window_frame' do
+        allow(client).to receive(:respond_to?).with(:set_window_frame).and_return(false)
+
+        expect { described_class.open_worker_tab('claude', dir: '/tmp') }.not_to raise_error
+        expect(client).not_to have_received(:set_window_frame)
+      end
     end
   end
 
@@ -269,6 +323,7 @@ RSpec.describe StreamWeaver::ITerm do
         .and_return(session_id: 'shell-1', window_id: 'win-new', tab_id: 'tab-1')
       allow(client).to receive(:split_pane).and_return('browser-1')
       allow(client).to receive(:close_session).and_return(true)
+      allow(client).to receive(:set_window_frame)
     end
 
     it 'creates a NEW window, not a tab in the calling one' do
@@ -333,6 +388,42 @@ RSpec.describe StreamWeaver::ITerm do
       allow(client).to receive(:create_tab).and_raise(ITerm2::Error, 'boom')
 
       expect(described_class.open_browser_window('http://example/canvas')).to be_nil
+    end
+
+    # window-frame sizing (driver-worker-runner): the controller always gets
+    # its own new window, so it always sizes it (unlike open_worker_tab,
+    # which only sizes on the no-window-to-inherit path).
+    describe 'window frame sizing' do
+      it 'sizes the new window to the default narrow controller frame' do
+        described_class.open_browser_window('http://example/canvas')
+
+        expect(client).to have_received(:set_window_frame).with('win-new', x: 40, y: 40, width: 760, height: 1200)
+      end
+
+      it 'honors SW_CONTROLLER_FRAME when set to a valid "x,y,w,h" value' do
+        allow(ENV).to receive(:[]).and_call_original
+        allow(ENV).to receive(:[]).with('SW_CONTROLLER_FRAME').and_return('5,5,500,900')
+
+        described_class.open_browser_window('http://example/canvas')
+
+        expect(client).to have_received(:set_window_frame).with('win-new', x: 5, y: 5, width: 500, height: 900)
+      end
+
+      it 'falls back to defaults when SW_CONTROLLER_FRAME is garbage' do
+        allow(ENV).to receive(:[]).and_call_original
+        allow(ENV).to receive(:[]).with('SW_CONTROLLER_FRAME').and_return('1,2,3')
+
+        described_class.open_browser_window('http://example/canvas')
+
+        expect(client).to have_received(:set_window_frame).with('win-new', x: 40, y: 40, width: 760, height: 1200)
+      end
+
+      it 'degrades silently when the installed client lacks set_window_frame' do
+        allow(client).to receive(:respond_to?).with(:set_window_frame).and_return(false)
+
+        expect { described_class.open_browser_window('http://example/canvas') }.not_to raise_error
+        expect(client).not_to have_received(:set_window_frame)
+      end
     end
   end
 
