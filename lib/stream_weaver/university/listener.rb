@@ -18,24 +18,44 @@ module StreamWeaver
     # scheme: "mark-done-N", "run-N" / "repeat-N", "hero-run-N" /
     # "hero-repeat-N" on the course list; "view-N" (a row's Details button),
     # "back-to-list" (the step screen's "All steps"), and "next-N" (the step
-    # screen's "Next: step N") navigate between the app's two screens. The
-    # rendered `id:` (e.g. "mark-done-3") becomes a `btn_<label-slug>_<id>`
-    # DOM/dispatch id (app.rb `button`), so every pattern below is anchored
-    # to the string's end, not its start.
+    # screen's "Next: step N") navigate between the app's two screens;
+    # "reset-course" (the recap screen and the course-list footer) clears
+    # the whole course. The rendered `id:` (e.g. "mark-done-3") becomes a
+    # `btn_<label-slug>_<id>` DOM/dispatch id (app.rb `button`), so every
+    # pattern below is anchored to the string's end, not its start.
     module Listener
       SESSION = 'university'
 
       # How long run! waits before reconnecting to a bridge that went away.
       RECONNECT_DELAY = 1
 
+      # Canvas sessions the course steps themselves open (step 1's `hello`,
+      # step 3's `form-demo`, step 4's `doc-demo` -- the exact names the
+      # course prompts in course.rb tell the worker to use). "Reset course"
+      # closes exactly these, by name, and nothing else: never the
+      # controller session (SESSION, above) and never a session the user
+      # opened on their own that just happens to still exist.
+      DEMO_SESSION_NAMES = %w[hello form-demo doc-demo].freeze
+
       # Applies one dispatched button token to the ledger. Returns the step
-      # number acted on, true for a navigation action with no step of its
-      # own (back-to-list), or nil if the token didn't match a known action.
+      # number acted on, true for a navigation/whole-course action with no
+      # step of its own (back-to-list, reset-course), or nil if the token
+      # didn't match a known action.
       def self.handle_token(token, progress)
         case token.to_s
         when /mark-done-(\d+)\z/
           step = Regexp.last_match(1).to_i
+          # progress.mark_done! stamps `last_done`, which the re-push below
+          # renders as an inline confirmation band -- but only on the
+          # course list (canvas.rb has no such band on the step screen).
+          # clear_view! is what makes that true regardless of which of the
+          # two Mark-done buttons was clicked (the course-list row's, or
+          # the step screen's own): both land back on the list, where the
+          # updated rail AND the confirmation are both visible. This is
+          # also what canvas.rb's step-screen footer comment already
+          # claims happens -- it just didn't, before this.
           progress.mark_done!(step)
+          progress.clear_view!
           step
         when /(?:run|repeat)-(\d+)\z/ # also catches hero-run-N / hero-repeat-N
           step = Regexp.last_match(1).to_i
@@ -51,13 +71,24 @@ module StreamWeaver
         when /back-to-list\z/
           progress.clear_view!
           true
+        when /reset-course\z/
+          # Same effect as `streamweaver university-reset -y`: back up +
+          # clear the ledger, close the demo sessions the course itself
+          # opened. The trailing repush in `handle_event` below is what
+          # then renders the zero-state list -- this branch does not push.
+          progress.reset!
+          close_demo_sessions!
+          true
         end
       end
 
       # Applies one event to the ledger and re-pushes the app so the
       # rendered page reflects the new state. The re-push is not optional
       # bookkeeping: a click swaps the page for the canvas_continue spinner
-      # (see canvas.rb), and this push is what puts the real page back.
+      # (see canvas.rb), and this push is what puts the real page back --
+      # and, for Mark-done specifically, is what makes the row visibly flip
+      # to done AND shows the "Step N done" confirmation, both read
+      # straight off the ledger this same push just wrote.
       # Returns the button token handled, or nil if the event carried none.
       def self.handle_event(event, session_name: SESSION)
         token = event.dig(:data, :button)
@@ -66,6 +97,22 @@ module StreamWeaver
         handle_token(token, Progress.load)
         repush(session_name: session_name)
         token
+      end
+
+      # "Reset course": closes DEMO_SESSION_NAMES, one `close` message each.
+      # Best-effort per session -- a session that was never opened (most
+      # courses never get all three names created) or an already-closed
+      # one just gets "Session not found" back, which is not a reason to
+      # skip the rest. Shared by the canvas's own Reset button
+      # (`handle_token`, above) and `streamweaver university-reset`.
+      def self.close_demo_sessions!
+        DEMO_SESSION_NAMES.each do |name|
+          ::StreamWeaver::Canvas::Client.send_message(
+            ::StreamWeaver::Canvas::Protocol::Messages.close(name)
+          )
+        rescue ::StreamWeaver::Canvas::Client::NotRunningError, ::StreamWeaver::Canvas::Client::ConnectionError
+          nil
+        end
       end
 
       def self.repush(session_name: SESSION)

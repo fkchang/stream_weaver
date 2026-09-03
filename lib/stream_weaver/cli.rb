@@ -7,6 +7,7 @@ require 'uri'
 require 'fileutils'
 require 'yaml'
 require 'time'
+require 'timeout'
 require_relative 'opal/builder'
 require_relative 'university/runner'
 require_relative 'university/listener'
@@ -106,6 +107,8 @@ module StreamWeaver
         setup
       when 'university-listener'
         university_listener(args)
+      when 'university-reset'
+        university_reset(args)
       when 'get-started'
         get_started(args)
       when '--help', '-h', 'help'
@@ -697,6 +700,9 @@ module StreamWeaver
                        [--agent claude|codex]       Worker CLI to launch in the new tab (default: claude)
           streamweaver university-listener        Background process that makes the University
                        [start|stop|status]           canvas buttons work (get-started starts it)
+          streamweaver university-reset [--yes]   Reset course progress (backed up to progress.yml.bak),
+                                                     close its demo canvas sessions, re-push the zero-state
+                                                     course list. Same as the canvas's own Reset button.
       HELP
     end
 
@@ -2532,6 +2538,11 @@ module StreamWeaver
     UNIVERSITY_SESSION = University::Listener::SESSION
     # Keep in sync with stream_weaver.gemspec's required_ruby_version.
     GET_STARTED_MIN_RUBY = '3.0.0'
+    # `gh auth status` validates the token against the GitHub API -- on a
+    # captive portal or dead network, that can hang far longer than an
+    # "advisory, never a blocker" probe should ever cost the very first
+    # command a new user runs.
+    GH_AUTH_TIMEOUT = 3 # seconds
 
     # One command: wraps `setup`, reports on dependencies across three tiers
     # (core / agent skills / premier iTerm2 surface), then opens the
@@ -2682,6 +2693,25 @@ module StreamWeaver
       ITerm.python_api_reachable?
     end
 
+    # `gh` is only needed by course step 5 (pushing a doc to a gist), long
+    # after get-started has already opened the door -- advisory, never a
+    # blocker, same spirit as the "no agent CLI" warning above.
+    def self.get_started_gh_cli_present?
+      command_on_path?('gh')
+    end
+
+    # A timed-out `gh` keeps running as an orphaned child until this
+    # process exits -- harmless for a short-lived `get-started`, and no
+    # worse than what happens to any backgrounded child of a CLI that
+    # doesn't reap its own subprocesses on exit.
+    def self.get_started_gh_authed?
+      return false unless get_started_gh_cli_present?
+
+      Timeout.timeout(GH_AUTH_TIMEOUT) { !!system('gh', 'auth', 'status', out: File::NULL, err: File::NULL) }
+    rescue Timeout::Error
+      false
+    end
+
     # check_premier: false skips the 4 premier probes (and their real cost --
     # a Python API handshake timeout, a bridge boot) entirely, leaving them
     # nil. Used when --degraded is explicit: the answer can't change the
@@ -2697,6 +2727,12 @@ module StreamWeaver
           claude_root: get_started_claude_skills_root?,
           agents_root: get_started_agents_skills_root?,
           agent_cli: get_started_agent_cli_present?
+        },
+        # Neither entry here blocks get-started -- both are only needed by
+        # a specific later course step, long after the door has opened.
+        course: {
+          gh_cli: get_started_gh_cli_present?,
+          gh_authed: get_started_gh_authed?
         },
         premier: if check_premier
           {
@@ -2742,6 +2778,29 @@ module StreamWeaver
       puts "    #{get_started_check_mark(report[:premier][:in_iterm])} running inside iTerm2"
       puts "    #{get_started_check_mark(report[:premier][:gem_loadable])} iterm2_ruby gem installed"
       puts "    #{get_started_check_mark(report[:premier][:python_api])} iTerm2 Python API reachable"
+      # `.dig` -- :course is absent from a hand-built report (a caller that
+      # only wants the premier-tier printing, e.g. an old/partial report),
+      # and neither entry here ever blocks get-started. Distinguished from
+      # a real, checked-and-failing false the same way get_started_check_mark
+      # distinguishes a skipped premier tier: nil means "not checked", not
+      # "checked and missing".
+      gh_cli = report.dig(:course, :gh_cli)
+      puts "  course tools (used by later steps only -- never blocks get-started)"
+      case gh_cli
+      when true
+        puts "    #{get_started_check_mark(report[:course][:gh_authed])} gh CLI authenticated (`gh auth status`) -- step 5 pushes a doc to a gist with it"
+      when false
+        puts "    ⚠️  gh CLI not found on PATH -- step 5 pushes a doc to a gist with it"
+        puts "        Install: https://cli.github.com (or `brew install gh`), then `gh auth login`."
+      else
+        puts "    ⏭  gh CLI (not checked)"
+      end
+      puts "    💡 Install the StreamWeaver Doc Viewer Chrome extension now, so it's ready for step 5:"
+      puts "        https://chromewebstore.google.com/detail/streamweaver-doc-viewer/odjjednfpfiagefgpcfdlelldphmpcgj"
+      puts "    💡 Browser control speeds up the worker session -- claude-in-chrome, playwright-cli, or " \
+           "gstack's /browse skill, any one of them (course steps verify with curl first, so this is " \
+           "optional, never a blocker). The Chrome extension above always installs in your own browser " \
+           "regardless of which one you use."
     end
 
     def self.print_get_started_remediation(report)
@@ -2789,6 +2848,47 @@ module StreamWeaver
         $stderr.puts "Usage: streamweaver university-listener [start|stop|status]"
         exit 1
       end
+    end
+
+    # "Reset course" from the terminal -- the same thing the canvas's own
+    # Reset button does (University::Listener.handle_token's
+    # "reset-course" branch), for anyone who wants it without clicking:
+    # back up + clear the progress ledger, close the demo canvas sessions
+    # the course itself opened, and re-push the course list so it comes
+    # back at the zero-state. The bridge/session steps are skipped
+    # entirely when no bridge is running -- resetting progress does not
+    # require one, and there would be nothing to close or re-push into.
+    def self.university_reset(args)
+      yes_flag = args.any? { |a| %w[-y --yes].include?(a) }
+      return puts("Aborted. No changes made.") unless yes_flag || university_reset_confirmed?
+
+      progress_path = University::Progress.path
+      had_progress = File.exist?(progress_path)
+      University::Progress.load.reset!
+      puts(had_progress ? "Progress reset (backup: #{progress_path}.bak)" : "Progress reset (there was nothing to back up)")
+
+      require_relative 'canvas/client'
+      if Canvas::Client.bridge_running?
+        University::Listener.close_demo_sessions!
+        puts "Closed demo canvas sessions: #{University::Listener::DEMO_SESSION_NAMES.join(', ')}"
+        # Listener.repush, not push_get_started_placeholder_canvas -- same
+        # push, but this reuses the exact call the canvas's own Reset
+        # button already makes instead of a second implementation of "read
+        # canvas.rb, push it to the university session."
+        University::Listener.repush
+        puts "Re-pushed the course list at its zero-state."
+      else
+        puts "(canvas bridge not running -- nothing to close or re-push)"
+      end
+    end
+
+    def self.university_reset_confirmed?
+      get_started_confirm?(
+        "Reset University progress and close its demo canvas sessions " \
+        "(#{University::Listener::DEMO_SESSION_NAMES.join(', ')})? " \
+        "Your current progress is backed up to progress.yml.bak.",
+        default: false
+      )
     end
 
     # --- Premier / degraded paths ---

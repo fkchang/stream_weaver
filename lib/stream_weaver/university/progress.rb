@@ -46,19 +46,31 @@ module StreamWeaver
       # last click did, and marking a step done IS a later click. Without
       # this, a run notice (in degraded mode, a whole copy-this-prompt
       # block for step 1) stays pinned above the step list for days.
+      #
+      # Stamps `last_done` for the SAME reason `record_run!` stamps
+      # `last_run`: the next canvas render needs to say what a click just
+      # did, and it needs to say so reliably. An earlier version of this
+      # feedback used a bridge toast instead -- broken by construction,
+      # because the toast and this same write's re-push land in the same
+      # ~500ms poll response, and the client unconditionally clears any
+      # toast the instant new HTML arrives (bridge_server.rb's poll()).
+      # Putting the message IN the re-pushed HTML has no such race.
       def mark_done!(step_number)
         @data['done'][step_number.to_s] = true
         @data['last_run'] = nil
+        @data['last_done'] = { 'step' => step_number.to_i, 'at' => Time.now.utc.iso8601 }
         write
         self
       end
 
       # Undoes a mark-done -- not exercised by the current UI, but the
       # natural inverse and cheap to keep correct for tests/future use.
-      # Clears `last_run` for the same reason mark_done! does.
+      # Clears `last_run`/`last_done` for the same reason mark_done! sets
+      # them: this instance no longer reflects what either field claims.
       def unmark_done!(step_number)
         @data['done'].delete(step_number.to_s)
         @data['last_run'] = nil
+        @data['last_done'] = nil
         write
         self
       end
@@ -83,6 +95,7 @@ module StreamWeaver
         now = Time.now.utc.iso8601
         @data['requested'][step_number.to_s] = now if status.to_s == 'sent'
         @data['last_run'] = { 'step' => step_number.to_i, 'status' => status.to_s, 'at' => now }
+        @data['last_done'] = nil
         write
         self
       end
@@ -95,6 +108,14 @@ module StreamWeaver
       # nil before the first click.
       def last_run
         @data['last_run']
+      end
+
+      # The step a Mark-done click just finished: {'step' =>, 'at' =>}, or
+      # nil. Mutually exclusive with `last_run` -- each write clears the
+      # other, so the canvas only ever has one "what just happened" band to
+      # show, whichever action was more recent.
+      def last_done
+        @data['last_done']
       end
 
       # Which step's detail screen is showing, or nil for the course list.
@@ -122,6 +143,21 @@ module StreamWeaver
         self
       end
 
+      # "Reset course": backs up whatever was on disk to `<path>.bak`
+      # (overwriting any earlier backup -- one reset's worth of undo, not a
+      # history) and returns to the zero-state. Deletes rather than
+      # rewrites the file, so this in-memory instance and a freshly loaded
+      # one agree the same way every other zero-state case already does
+      # (`#read`, below, and the "does not create the file just by reading
+      # it" contract) -- there is exactly one representation of "nothing
+      # done yet", not two that both mean it.
+      def reset!
+        FileUtils.cp(@path, "#{@path}.bak") if File.exist?(@path)
+        FileUtils.rm_f(@path)
+        @data = blank_data
+        self
+      end
+
       private
 
       def read
@@ -132,6 +168,7 @@ module StreamWeaver
           'done' => loaded['done'] || {},
           'requested' => loaded['requested'] || {},
           'last_run' => loaded['last_run'],
+          'last_done' => loaded['last_done'],
           'viewing' => loaded['viewing']
         }
       rescue Psych::SyntaxError
@@ -139,7 +176,7 @@ module StreamWeaver
       end
 
       def blank_data
-        { 'done' => {}, 'requested' => {}, 'last_run' => nil, 'viewing' => nil }
+        { 'done' => {}, 'requested' => {}, 'last_run' => nil, 'last_done' => nil, 'viewing' => nil }
       end
 
       def write

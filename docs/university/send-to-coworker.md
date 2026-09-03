@@ -41,6 +41,14 @@ that.
 **You're done when** the Getting Started panel shows "Start with step 1." -- click "Run step 1" and
 watch it type the first prompt into the agent tab for you.
 
+Your progress persists to disk as you go, so you can close everything and come back later -- even
+after a reboot -- and `get-started` picks up exactly where you left off. Want to start over? Click
+the quiet "Reset course" link at the bottom of the list (or run `streamweaver university-reset`).
+
+If your agent CLI has browser control -- claude-in-chrome, playwright-cli, or gstack's `/browse`
+skill -- the worker session moves faster, but it's optional: every course step verifies what it did
+with `curl` first, so none of this blocks you from finishing the course without it.
+
 ## Non-developer version
 
 > The gist link below is a placeholder -- replace it with the real one before sending.

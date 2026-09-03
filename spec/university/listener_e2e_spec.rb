@@ -144,14 +144,22 @@ RSpec.describe 'University listener end to end', :unstubbed_listener_start do
     expect(body['html']).to include('uni-step uni-step--done')
     expect(body['html']).not_to include('You can close this window')
     expect(body['version']).to be > 1
+    # The actual point of replacing the mark-done toast with an inline
+    # ledger-driven band: this confirmation is IN the payload that just
+    # proved the ledger moved, not a separate message that can race it.
+    expect(body['html']).to include('Step 2 done -- pick up at step 3.')
 
     # Second leg: a Run click drives the Runner too. No worker.json exists
     # here, so this is the degraded outcome -- which must reach the canvas as
-    # the prompt plus a Copy button, not silence.
+    # the prompt plus a Copy button, not silence. Waited on specifically by
+    # 'sw-copy-button' rather than the shared 'uni-run-notice' band class --
+    # the mark-done click above is still showing its OWN 'uni-run-notice'
+    # confirmation until this run click's async processing clears it, so
+    # the generic class name would (and did) match one poll too early.
     run_body = wait_until do
       click('btn_run_run-1')
       body = poll_html
-      body if body['html'].include?('uni-run-notice')
+      body if body['html'].include?('sw-copy-button')
     end
 
     expect(run_body).to be_truthy
