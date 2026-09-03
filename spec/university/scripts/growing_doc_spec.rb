@@ -84,8 +84,11 @@ RSpec.describe 'stream_weaver/university/scripts/growing_doc.rb' do
       ctx.components.map { |c| c.class.name.split('::').last }
     end
 
-    it 'grows in four pushes, each carrying everything before it' do
-      expect(mod::STAGES.length).to eq(4)
+    # Six outline entries is the floor, not a coincidence: below it the doc
+    # theme's sidebar nav has nothing worth showing, and round-5 UAT ended
+    # step 5 pointing at a nav that wasn't there.
+    it 'grows in enough pushes to fill a sidebar outline, each carrying everything before it' do
+      expect(mod::STAGES.count { |s| s[:toc] }).to be >= 6
       bodies = mod::STAGES.each_with_object([+'']) { |s, acc| acc << (acc.last + s[:dsl]) }.drop(1)
       bodies.each_cons(2) { |earlier, later| expect(later).to start_with(earlier) }
     end
