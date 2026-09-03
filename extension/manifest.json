@@ -1,34 +1,43 @@
 {
   "manifest_version": 3,
   "name": "StreamWeaver Doc Viewer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Renders StreamWeaver docs on GitHub the way they look when run, instead of as Ruby source.",
-
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
     "https://raw.githubusercontent.com/*",
     "https://gist.githubusercontent.com/*"
   ],
-
-  "background": { "service_worker": "background.js" },
-
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["https://github.com/*", "https://gist.github.com/*"],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "matches": [
+        "https://github.com/*",
+        "https://gist.github.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
-
-  "sandbox": { "pages": ["sandbox.html"] },
-
+  "sandbox": {
+    "pages": [
+      "sandbox.html"
+    ]
+  },
   "content_security_policy": {
     "sandbox": "sandbox allow-scripts allow-popups; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; child-src 'self';"
   }

@@ -1,0 +1,82 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Bumps the extension's manifest version, rebuilds extension/vendor/, and
+# zips exactly the files the Chrome Web Store needs for an upload -- no dev
+# cruft (no icons/concepts, no store-listing.md, no .git).
+#
+# Chrome Web Store rejects a re-upload at the same version, so this always
+# bumps first: pareto-safe default (patch), explicit override for a real
+# feature/breaking release.
+#
+# Usage: bin/package_extension [patch|minor|major]   (default: patch)
+
+require "json"
+require "fileutils"
+
+ROOT     = File.expand_path("..", __dir__)
+EXT_DIR  = File.join(ROOT, "extension")
+MANIFEST = File.join(EXT_DIR, "manifest.json")
+DIST     = File.join(EXT_DIR, "dist")
+
+bump = ARGV.fetch(0, "patch")
+unless %w[patch minor major].include?(bump)
+  abort "Usage: bin/package_extension [patch|minor|major]"
+end
+
+manifest = JSON.parse(File.read(MANIFEST))
+old_version = manifest["version"]
+major, minor, patch = old_version.split(".").map(&:to_i)
+case bump
+when "major" then major += 1; minor = 0; patch = 0
+when "minor" then minor += 1; patch = 0
+when "patch" then patch += 1
+end
+new_version = "#{major}.#{minor}.#{patch}"
+
+zip_path = File.join(DIST, "streamweaver-doc-viewer-#{new_version}.zip")
+if File.exist?(zip_path)
+  abort "#{zip_path} already exists -- already packaged this version? " \
+        "Commit/clear it first, or pass a bump type to go further."
+end
+
+manifest["version"] = new_version
+File.write(MANIFEST, "#{JSON.pretty_generate(manifest)}\n")
+puts "Version: #{old_version} -> #{new_version}"
+
+puts "\nRebuilding extension/vendor/..."
+system("ruby", File.join(ROOT, "bin", "build_extension"), exception: true)
+
+puts "\nPackaging zip..."
+FileUtils.mkdir_p(DIST)
+
+# Explicit file list, not `zip -r extension/`: extension/ also holds
+# store-listing.md, dist/ itself, and icons/concepts/ (draft logo art) --
+# none of which belong in the uploaded package.
+files = %w[
+  manifest.json background.js content.js content.css
+  sandbox.html sandbox.js viewer.html viewer.js
+  vendor
+  icons/icon16.png icons/icon48.png icons/icon128.png
+]
+
+Dir.chdir(EXT_DIR) do
+  system("zip", "-r", zip_path, *files, exception: true)
+end
+
+size_kb = File.size(zip_path) / 1024
+puts "\nBuilt: #{zip_path} (#{size_kb} KB)"
+
+puts <<~NEXT
+
+  Next (manual -- see stream_weaver-cdb5 for wiring up the Publish API to
+  automate this too):
+    1. https://chrome.google.com/webstore/devconsole -> StreamWeaver Doc Viewer -> Package
+    2. Upload #{File.basename(zip_path)}
+    3. Store listing changed (screenshots, description)? Update that tab too.
+    4. Save draft, then Submit for review.
+
+  Commit the version bump once you've actually submitted it:
+    git add extension/manifest.json
+    git commit -m "chore(extension): bump to #{new_version}"
+NEXT
