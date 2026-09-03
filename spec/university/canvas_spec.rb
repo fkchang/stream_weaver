@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'cgi'
 require 'tmpdir'
 require 'stream_weaver/cli'
 require 'stream_weaver/university/canvas'
@@ -247,9 +248,18 @@ RSpec.describe StreamWeaver::University::Canvas do
       expect(html).to include(step3[:title])
       expect(html).to include('Why this matters')
       expect(html).to include('The prompt your worker session receives')
-      expect(html).to include(step3[:prompt])
+      # Course copy is rendered, not injected: Phlex escapes it on the way
+      # into the markup, so the comparison has to escape too. (Before the
+      # content-v2 rewrite every prompt happened to be free of ' and " and
+      # a raw comparison passed by luck.)
+      expect(html).to include(CGI.escapeHTML(step3[:prompt]))
       expect(html).to include('What you should see')
-      step3[:what_you_should_see].each { |line| expect(html).to include(line) }
+      # The payoff lines render through `md`, so an inline code span becomes
+      # a <code> tag and the line is no longer contiguous in the markup --
+      # assert each line's longest plain-prose run instead.
+      step3[:what_you_should_see].each do |line|
+        expect(html).to include(CGI.escapeHTML(line.split('`').max_by(&:length)))
+      end
     end
 
     it 'offers Run in worker session (routed through the same run-N id Runner handles) and Copy prompt' do
