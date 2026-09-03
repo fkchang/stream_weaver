@@ -73,6 +73,17 @@ RSpec.describe StreamWeaver::University::Canvas do
     end
   end
 
+  describe '.mark_done_message' do
+    it 'points at the next step for anything but the last' do
+      expect(described_class.mark_done_message(2)).to eq('Step 2 done -- pick up at step 3.')
+    end
+
+    it 'reads as course-complete on the last step' do
+      last = StreamWeaver::University::Course::GETTING_STARTED_STEPS.size
+      expect(described_class.mark_done_message(last)).to eq("Step #{last} done -- that's the whole course!")
+    end
+  end
+
   describe 'rendered course list (zero-state)' do
     it 'renders the app name and Getting Started as an enabled, open course' do
       html = render
@@ -92,6 +103,15 @@ RSpec.describe StreamWeaver::University::Canvas do
       html = render
       expect(html).to include('Start with step 1')
       expect(html).to include('0 of 5 done')
+    end
+
+    # progress-ledger docs deliverable: the course intro says, in its own
+    # words, that progress persists and survives a reboot, and how to
+    # reset -- not just something the send-to-coworker doc claims.
+    it 'tells the reader progress persists across reboots and how to reset' do
+      html = render
+      expect(html).to include('even after a reboot')
+      expect(html).to include('id="btn_reset_course_reset-course"')
     end
 
     it 'offers Run on every step row (no Repeat yet -- nothing is done)' do
@@ -146,6 +166,64 @@ RSpec.describe StreamWeaver::University::Canvas do
       expect(html).to include('Complete')
       expect(html.scan('id="btn_repeat_repeat-').size).to eq(5)
       expect(html).not_to include('id="btn_run_step')
+    end
+
+    # progress-ledger: the completion recap -- what you learned, where to
+    # go next, and a quiet reset -- rendered inline on this same course
+    # list so "Run/Repeat stays available from the list" is true by
+    # construction (the step rows below are unchanged).
+    describe 'the completion recap' do
+      it 'summarizes what was learned, one line per step' do
+        html = render
+        expect(html).to include('What you learned')
+        StreamWeaver::University::Course::GETTING_STARTED_STEPS.each do |step|
+          expect(html).to include(step[:payoff])
+        end
+      end
+
+      it 'points at the docs, showcase, examples, and classic tutorial' do
+        html = render
+        expect(html).to include('docs/')
+        expect(html).to include('streamweaver showcase')
+        expect(html).to include('examples/')
+        expect(html).to include('streamweaver tutorial')
+      end
+
+      it 'still leaves Run/Repeat on every step row below it' do
+        html = render
+        expect(html.scan('id="btn_repeat_repeat-').size).to eq(5)
+      end
+
+      it 'offers a quiet Reset course button' do
+        html = render
+        expect(html).to include('id="btn_reset_course_reset-course"')
+      end
+
+      it 'does not also render the always-available footer reset link (no duplicate id)' do
+        html = render
+        expect(html.scan('id="btn_reset_course_reset-course"').size).to eq(1)
+      end
+
+      it 'reads the last click\'s "whole course" notice as the recap\'s lead-in, not a footnote under it' do
+        # mark_done(1, 2, 3, 4, 5) in the enclosing before block leaves
+        # last_done pointed at step 5 (the most recent mark_done! call).
+        html = render
+
+        expect(html.index('whole course')).to be < html.index('What you learned')
+      end
+    end
+  end
+
+  describe 'the course-list footer reset link' do
+    it 'offers Reset course before the course is complete' do
+      html = render # zero-state
+      expect(html).to include('id="btn_reset_course_reset-course"')
+    end
+
+    it 'offers it while in progress too' do
+      mark_done(1)
+      html = render
+      expect(html).to include('id="btn_reset_course_reset-course"')
     end
   end
 
@@ -217,6 +295,73 @@ RSpec.describe StreamWeaver::University::Canvas do
       expect(html).to include('uni-run-notice')
       expect(html).to include('Sent step 3')
       expect(html).not_to include('sw-copy-button')
+    end
+  end
+
+  # progress-ledger: Mark-done feedback -- confirmed in the SAME re-pushed
+  # HTML the ledger write produced, not a bridge toast (which races the
+  # re-push and never paints -- see Progress#mark_done!'s comment).
+  describe 'rendered mark-done notice' do
+    it 'confirms which step was just marked done' do
+      mark_done(2)
+      html = render
+
+      expect(html).to include('uni-run-notice')
+      expect(html).to include('Step 2 done -- pick up at step 3.')
+    end
+
+    it 'supersedes a previous run notice (mark_done! clears last_run)' do
+      record_run(4, :sent)
+      mark_done(4)
+      html = render
+
+      expect(html).to include('Step 4 done')
+      expect(html).not_to include('Sent step 4')
+    end
+
+    it 'is itself superseded by a later Run/Repeat click' do
+      mark_done(2)
+      record_run(3, :sent)
+      html = render
+
+      expect(html).to include('Sent step 3')
+      expect(html).not_to include('Step 2 done')
+    end
+  end
+
+  # progress-ledger: "Expectations at Run" -- a Run/Repeat click expands
+  # that row's "What you should see" inline on the course list, not just
+  # on the step screen reached via Details.
+  describe 'the expanded row after a Run/Repeat click' do
+    it 'expands the clicked step\'s What you should see inline on its row' do
+      record_run(2, :sent)
+      html = render
+
+      expect(html).to include('uni-step__expect')
+      expect(html).to include('What you should see')
+      step_2 = StreamWeaver::University::Course.step(2)
+      step_2[:what_you_should_see].each { |line| expect(html).to include(line) }
+    end
+
+    it 'does not expand any row before a Run/Repeat click has happened' do
+      html = render
+      expect(html).not_to include('uni-step__expect')
+    end
+
+    it 'expands only the step that was actually run, not every row' do
+      record_run(3, :sent)
+      html = render
+
+      step_2 = StreamWeaver::University::Course.step(2)
+      expect(html).not_to include(step_2[:what_you_should_see].first)
+    end
+
+    it 'collapses again once that step is marked done (last_run is cleared)' do
+      record_run(2, :sent)
+      mark_done(2)
+      html = render
+
+      expect(html).not_to include('uni-step__expect')
     end
   end
 

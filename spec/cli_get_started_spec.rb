@@ -37,6 +37,8 @@ RSpec.describe StreamWeaver::CLI do
     get_started_claude_skills_root?: true,
     get_started_agents_skills_root?: true,
     get_started_agent_cli_present?: true,
+    get_started_gh_cli_present?: true,
+    get_started_gh_authed?: true,
     get_started_premier_darwin?: true,
     get_started_premier_in_iterm?: true,
     get_started_premier_gem_loadable?: true,
@@ -63,6 +65,56 @@ RSpec.describe StreamWeaver::CLI do
       allow(described_class).to receive(:require).with('iterm2').and_raise(LoadError)
 
       expect(described_class.get_started_premier_gem_loadable?).to be(false)
+    end
+  end
+
+  # gh is only needed by course step 5 (pushing a doc to a gist) -- neither
+  # probe ever blocks get-started, so both are advisory-only in the report.
+  describe '.get_started_gh_cli_present?' do
+    it 'is true when gh is on PATH' do
+      allow(described_class).to receive(:command_on_path?).with('gh').and_return(true)
+      expect(described_class.get_started_gh_cli_present?).to be(true)
+    end
+
+    it 'is false when gh is not on PATH' do
+      allow(described_class).to receive(:command_on_path?).with('gh').and_return(false)
+      expect(described_class.get_started_gh_cli_present?).to be(false)
+    end
+  end
+
+  describe '.get_started_gh_authed?' do
+    it 'is false without even trying `gh auth status` when gh itself is missing' do
+      allow(described_class).to receive(:get_started_gh_cli_present?).and_return(false)
+      allow(described_class).to receive(:system)
+
+      expect(described_class.get_started_gh_authed?).to be(false)
+      expect(described_class).not_to have_received(:system)
+    end
+
+    it 'is true when gh is present and `gh auth status` exits successfully' do
+      allow(described_class).to receive(:get_started_gh_cli_present?).and_return(true)
+      allow(described_class).to receive(:system).with('gh', 'auth', 'status', out: File::NULL, err: File::NULL).and_return(true)
+
+      expect(described_class.get_started_gh_authed?).to be(true)
+    end
+
+    it 'is false when gh is present but not authenticated' do
+      allow(described_class).to receive(:get_started_gh_cli_present?).and_return(true)
+      allow(described_class).to receive(:system).with('gh', 'auth', 'status', out: File::NULL, err: File::NULL).and_return(false)
+
+      expect(described_class.get_started_gh_authed?).to be(false)
+    end
+
+    # A captive portal or dead network must not make the very first command
+    # a new user runs (get-started) look hung over an advisory-only check.
+    # The timeout constant is stubbed down so this spec doesn't itself cost
+    # GH_AUTH_TIMEOUT real seconds every suite run.
+    it 'is false, not hung, when `gh auth status` outlasts the timeout' do
+      stub_const('StreamWeaver::CLI::GH_AUTH_TIMEOUT', 0.05)
+      allow(described_class).to receive(:get_started_gh_cli_present?).and_return(true)
+      allow(described_class).to receive(:system) { sleep 5 }
+
+      expect(described_class.get_started_gh_authed?).to be(false)
     end
   end
 
@@ -111,6 +163,14 @@ RSpec.describe StreamWeaver::CLI do
       expect(report[:skills][:agent_cli]).to be(false)
       expect(report[:skills][:claude_root]).to be(true)
     end
+
+    it 'includes the course tier (gh CLI + auth), which never blocks the premier decision' do
+      stub_probes
+      report = described_class.get_started_dependency_report
+
+      expect(report[:course]).to eq(gh_cli: true, gh_authed: true)
+      expect(described_class.get_started_premier_ok?(report)).to be(true)
+    end
   end
 
   describe '.print_get_started_report' do
@@ -128,6 +188,7 @@ RSpec.describe StreamWeaver::CLI do
       expect(out).to include('✅ running inside iTerm2')
       expect(out).to include('✅ iterm2_ruby gem installed')
       expect(out).to include('✅ iTerm2 Python API reachable')
+      expect(out).to include('✅ gh CLI authenticated')
     end
 
     it 'prints a fail mark and a distinct PATH warning when every probe fails' do
@@ -142,10 +203,13 @@ RSpec.describe StreamWeaver::CLI do
       expect(out).to include('❌ running inside iTerm2')
       expect(out).to include('❌ iterm2_ruby gem installed')
       expect(out).to include('❌ iTerm2 Python API reachable')
+      expect(out).to include('⚠️  gh CLI not found')
+      expect(out).to include('https://cli.github.com')
     end
 
     it 'prints a skipped mark, not a fail mark, for a premier tier that was never probed' do
-      report = { premier: { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil } }
+      report = { premier: { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil },
+                 course: { gh_cli: true, gh_authed: true } }
       out, _err = capture_io { described_class.print_get_started_report(report.merge(
         core: { ruby_ok: true, ruby_version: RUBY_VERSION, bridge_ok: true },
         skills: { claude_root: true, agents_root: true, agent_cli: true }
@@ -153,6 +217,28 @@ RSpec.describe StreamWeaver::CLI do
 
       expect(out).not_to include('❌ macOS')
       expect(out.scan('⏭ ').size).to eq(4)
+    end
+
+    it 'does not raise, and prints a skipped mark rather than a false "not found", when the report has no course tier at all (a hand-built partial report)' do
+      report = { premier: { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil },
+                 core: { ruby_ok: true, ruby_version: RUBY_VERSION, bridge_ok: true },
+                 skills: { claude_root: true, agents_root: true, agent_cli: true } }
+
+      out = nil
+      expect { out, _err = capture_io { described_class.print_get_started_report(report) } }.not_to raise_error
+      expect(out).to include('⏭  gh CLI (not checked)')
+      expect(out).not_to include('gh CLI not found')
+    end
+
+    it 'always prints the Chrome extension and browser-control advisories, regardless of any probe' do
+      stub_probes
+      report = described_class.get_started_dependency_report
+      out, _err = capture_io { described_class.print_get_started_report(report) }
+
+      expect(out).to include('chromewebstore.google.com/detail/streamweaver-doc-viewer/odjjednfpfiagefgpcfdlelldphmpcgj')
+      expect(out).to include('claude-in-chrome')
+      expect(out).to include('playwright-cli')
+      expect(out).to include('/browse')
     end
   end
 

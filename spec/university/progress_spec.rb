@@ -72,6 +72,31 @@ RSpec.describe StreamWeaver::University::Progress do
       expect(new_progress.done_steps).to eq([1, 2])
       expect(new_progress.done_count).to eq(2)
     end
+
+    # progress-ledger's Mark-done feedback deliverable: `last_done` is what
+    # the canvas renders as "Step N done -- ..." on the SAME re-push that
+    # wrote it -- see the class comment for why that replaced a bridge
+    # toast (a toast queued alongside this same write's re-push loses a
+    # race against the client unconditionally clearing it on new HTML).
+    it 'stamps last_done, persisted across instances' do
+      new_progress.mark_done!(3)
+
+      reloaded = new_progress
+      expect(reloaded.last_done).to include('step' => 3)
+      expect(reloaded.last_done['at']).to be_a(String)
+    end
+
+    it 'is nil before any Mark-done click' do
+      expect(new_progress.last_done).to be_nil
+    end
+
+    it 'is cleared by a subsequent record_run! (a later click supersedes it)' do
+      new_progress.mark_done!(1)
+      progress = new_progress
+      progress.record_run!(2, status: :no_worker)
+
+      expect(progress.last_done).to be_nil
+    end
   end
 
   describe '#unmark_done!' do
@@ -81,6 +106,14 @@ RSpec.describe StreamWeaver::University::Progress do
       progress.unmark_done!(1)
 
       expect(new_progress.done?(1)).to be(false)
+    end
+
+    it 'clears last_done along with the done flag' do
+      progress = new_progress
+      progress.mark_done!(1)
+      progress.unmark_done!(1)
+
+      expect(new_progress.last_done).to be_nil
     end
   end
 
@@ -156,4 +189,65 @@ RSpec.describe StreamWeaver::University::Progress do
     end
   end
 
+  describe '#reset! ("Reset course")' do
+    it 'backs the ledger up to <path>.bak before clearing it' do
+      progress = new_progress
+      progress.mark_done!(1)
+      progress.mark_done!(2)
+      original = File.read(@path)
+
+      progress.reset!
+
+      expect(File.read("#{@path}.bak")).to eq(original)
+    end
+
+    it 'returns every step to undone, on this instance and a freshly loaded one' do
+      progress = new_progress
+      progress.record_run!(2, status: :sent)
+      progress.view_step!(3)
+      progress.mark_done!(1)
+
+      progress.reset!
+
+      expect(progress.done_steps).to eq([])
+      expect(progress.last_run).to be_nil
+      expect(progress.last_done).to be_nil
+      expect(progress.viewing_step).to be_nil
+      reloaded = new_progress
+      expect(reloaded.done_steps).to eq([])
+      expect(reloaded.last_run).to be_nil
+      expect(reloaded.last_done).to be_nil
+      expect(reloaded.viewing_step).to be_nil
+    end
+
+    it 'removes the ledger file rather than leaving an empty one behind' do
+      progress = new_progress
+      progress.mark_done!(1)
+
+      progress.reset!
+
+      expect(File.exist?(@path)).to be(false)
+    end
+
+    it 'does not blow up, and writes no backup, when there was nothing on disk yet' do
+      progress = new_progress
+
+      expect { progress.reset! }.not_to raise_error
+      expect(File.exist?("#{@path}.bak")).to be(false)
+      expect(progress.done_steps).to eq([])
+    end
+
+    it 'overwrites a previous backup rather than accumulating history' do
+      progress = new_progress
+      progress.mark_done!(1)
+      progress.reset!
+      first_backup = File.read("#{@path}.bak")
+
+      progress = new_progress
+      progress.mark_done!(2)
+      progress.reset!
+
+      expect(File.read("#{@path}.bak")).not_to eq(first_backup)
+    end
+  end
 end

@@ -73,6 +73,30 @@ module StreamWeaver::University::Canvas
                              end
     end
   end
+
+  # "Step N done -- pick up at step N+1." (or, on the last step, the
+  # course-complete variant), rendered from `progress.last_done` on the
+  # SAME re-push that wrote it -- not a bridge toast. A toast queued
+  # alongside this push's HTML both arrive in one ~500ms poll response,
+  # and the client unconditionally clears any toast the instant new HTML
+  # lands (bridge_server.rb's poll()), so it never has a chance to paint.
+  # Putting the message in the HTML itself has no such race.
+  def self.mark_done_message(step_number, steps: StreamWeaver::University::Course::GETTING_STARTED_STEPS)
+    total = steps.size
+    if step_number.to_i >= total
+      "Step #{step_number} done -- that's the whole course!"
+    else
+      "Step #{step_number} done -- pick up at step #{step_number.to_i + 1}."
+    end
+  end
+
+  # A plain markdown bullet list from an array of lines -- what
+  # "What you should see" renders as, both on the step screen and inline
+  # on a course-list row (`md` turns this into the checked `.uni-payoff`
+  # list via its own `- ` list syntax).
+  def self.bullets(lines)
+    lines.map { |line| "- #{line}" }.join("\n")
+  end
 end
 
 _css = <<~CSS
@@ -384,6 +408,27 @@ _css = <<~CSS
   }
   .uni-step__actions { display: flex; align-items: center; gap: 4px; }
 
+  /* The row a Run/Repeat click just targeted, expanded in place --
+     grid-column spans every track (the row's own 3-column grid otherwise
+     auto-places a 4th child back into column 1, the 28px mark column).
+     Indented to 43px (28px mark + 15px gap) so it lines up under the
+     title/payoff text, not the mark. */
+  .uni-step__expect {
+    grid-column: 1 / -1;
+    margin: 2px 0 4px 43px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--uni-line-soft);
+  }
+  .uni-step__expect-label {
+    display: block;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--uni-muted);
+    margin-bottom: 6px;
+  }
+  @media (max-width: 620px) {
+    .uni-step__expect { grid-column: 1 / -1; margin-left: 0; }
+  }
+
   /* Report band for the last Run/Repeat click -- what the driver did, or
      why it refused to send. Sits between the resume band and the step
      rows so it's directly under the button that produced it. */
@@ -435,6 +480,23 @@ _css = <<~CSS
     background: var(--uni-panel); border: 1px solid var(--uni-line);
     border-radius: 4px; padding: 2px 6px; color: var(--uni-ink);
   }
+
+  /* The all-done recap -- what the resume band's congratulation opens
+     onto. Same card, same body; the step rows below are untouched. */
+  .uni-recap {
+    padding: 4px 22px 22px;
+    border-bottom: 1px solid var(--uni-line);
+  }
+  .uni-recap > .uni-label:first-child { margin-top: 0; }
+  .uni-recap__foot {
+    display: flex; align-items: center; gap: 14px;
+    margin-top: 22px; flex-wrap: wrap;
+  }
+
+  /* The quiet "start over" escape hatch on the course list itself, for
+     anyone resetting before finishing. Hidden once all_done, where the
+     recap above offers the same action at its natural place instead. */
+  .uni-reset { margin-top: 12px; text-align: right; }
 
   /* ---- Step screen ------------------------------------------------------- */
   .uni-context {
@@ -502,13 +564,21 @@ _css = <<~CSS
   }
 
   .uni-payoff ul { list-style: none; padding: 0; margin: 0; max-width: 64ch; }
+  /* A hanging indent (padding-left + absolutely positioned check), not a
+     grid row -- a grid item split every inline child of the <li> onto its
+     own auto-placed row (`.uni-payoff` items come from `md`, so a step
+     whose text has any inline markdown -- a `code` span, say -- produces
+     more than one child), and the auto-placed rows landed in the 20px
+     icon column, wrapping that text one character per line. Position
+     keeps the check glyph out of the flow entirely, so the <li> is back to
+     one ordinary block wrapping however many inline children it has. */
   .uni-payoff li {
-    display: grid; grid-template-columns: 20px 1fr; gap: 11px;
+    position: relative;
     font-size: 15px; line-height: 1.5; color: var(--uni-ink);
-    padding: 7px 0;
+    padding: 7px 0 7px 31px;
   }
   .uni-payoff li::before {
-    content: ""; margin-top: 4px;
+    content: ""; position: absolute; left: 0; top: 11px;
     width: 15px; height: 15px;
     background-color: var(--uni-done);
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.2 8.4l3.1 3.1 6.5-7'/%3E%3C/svg%3E");
@@ -566,6 +636,15 @@ _body = proc do
   current_number = steps.find { |s| states[s[:number]] == :current }&.dig(:number)
   all_done = done_count == total
   viewing_step = StreamWeaver::University::Course.step(progress.viewing_step)
+  # Hoisted above the resume band (not just the run-notice band that reads
+  # it below) because the course-list row loop also reads it -- a Run or
+  # Repeat click expands that step's "What you should see" inline on its
+  # row, right there next to the button the user just pressed, instead of
+  # only being visible on the step screen (Details).
+  last_run = progress.last_run
+  # Mutually exclusive with last_run -- mark_done!/record_run! each clear
+  # the other, so at most one of the two notice bands below ever renders.
+  last_done = progress.last_done
 
   if viewing_step
     # =========================================================================
@@ -633,12 +712,14 @@ _body = proc do
 
         div(class: "uni-section") do
           phrase "What you should see", class: "uni-label"
-          md viewing_step[:what_you_should_see].map { |line| "- #{line}" }.join("\n"),
+          md StreamWeaver::University::Canvas.bullets(viewing_step[:what_you_should_see]),
              class: "uni-payoff"
         end
 
-        # Two exits, deliberately unequal: Mark done writes the ledger and
-        # returns to the list (where the updated rail is visible); Next is
+        # Two exits, deliberately unequal: Mark done writes the ledger AND
+        # clears viewing (Listener.handle_token), landing back on the list
+        # where the updated rail and the "Step N done" confirmation band
+        # are both visible -- this screen has no band of its own. Next is
         # a quiet way to keep moving without leaving this screen.
         div(class: "uni-foot") do
           button "Mark step #{number} done", id: "mark-done-#{number}", class: "uni-btn uni-btn--outline"
@@ -659,153 +740,219 @@ _body = proc do
       theme_toggle mode: :auto
     end
     phrase "Learn StreamWeaver by running it. Every step is a real app that appears " \
-           "in this pane while you stay in your terminal.",
+           "in this pane while you stay in your terminal. Your progress is saved as you go, " \
+           "so you can close this and pick up right where you left off, even after a reboot -- " \
+           "reset any time from the link at the bottom of the list.",
            class: "uni-tagline"
 
     # ---- Getting Started: open, and holding its own state --------------------
-  card(depth: :elevated, class: "uni-course") do
-    card_header(class: "uni-course__bar") do
-      div(class: "uni-course__dot") {}
-      header2 "Getting Started", class: "uni-course__name"
-      chip_label = if all_done
-                     "Complete"
-                   elsif done_count.zero?
-                     "Not started"
-                   else
-                     "In progress"
-                   end
-      phrase chip_label, class: "uni-chip#{' uni-chip--done' if all_done}"
-    end
-
-    card_body(class: "uni-course__body") do
-      div(class: "uni-resume") do
-        if all_done
-          phrase "All five steps done.", class: "uni-resume__lead"
-          phrase "Nice work -- repeat any step below, or look at what's next on the shelf.",
-                 class: "uni-resume__sub"
-        elsif done_count.zero?
-          phrase "Start with step 1.", class: "uni-resume__lead"
-          phrase steps.first[:payoff], class: "uni-resume__sub"
-        else
-          current_step = steps.find { |s| s[:number] == current_number }
-          phrase "Pick up at step #{current_number}.", class: "uni-resume__lead"
-          phrase current_step[:payoff], class: "uni-resume__sub"
-        end
-
-        div(class: "uni-actions") do
-          run_number = current_number || 1
-          unless all_done
-            button "Run step #{run_number}", id: "hero-run-#{run_number}",
-                   class: "uni-btn uni-btn--run"
-          end
-          if done_count.positive? && !all_done
-            repeat_number = [run_number - 1, 1].max
-            button "Repeat step #{repeat_number}", id: "hero-repeat-#{repeat_number}",
-                   class: "uni-btn uni-btn--quiet"
-          end
-        end
-
-        div(class: "uni-rail") do
-          div(class: "uni-rail__track") do
-            steps.each do |step|
-              seg_class = case states[step[:number]]
-                          when :done then "uni-rail__seg uni-rail__seg--done"
-                          when :current then "uni-rail__seg uni-rail__seg--current"
-                          else "uni-rail__seg"
-                          end
-              div(class: seg_class) {}
-            end
-          end
-          phrase "#{done_count} of #{total} done", class: "uni-rail__label"
-        end
-      end
-
-      # What the last Run/Repeat click actually did. On anything but a
-      # clean send the prompt itself is offered here with a copy button --
-      # the degraded path's whole experience, and the fallback whenever the
-      # recorded worker session has gone away (driver-worker-runner
-      # criteria 4 and 5). The canvas never talks to iTerm; it reports what
-      # the driver wrote to the ledger.
-      last_run = progress.last_run
-      if last_run
-        status = last_run['status'].to_s
-        run_step = last_run['step'].to_i
-        run_sent = StreamWeaver::University::Runner.sent?(status)
-        run_prompt = StreamWeaver::University::Course.prompt_for(run_step)
-
-        div(class: "uni-run-notice uni-run-notice--#{run_sent ? 'sent' : 'degraded'}") do
-          phrase StreamWeaver::University::Runner.message_for(status, run_step),
-                 class: "uni-run-notice__msg"
-          if !run_sent && run_prompt
-            # The human gets the prompt as written -- line breaks and all.
-            # Only the wire gets Runner.one_line's collapsed form, because
-            # a clipboard paste has no keystroke-per-newline problem.
-            code_block run_prompt, lang: "text", copy: true
-            phrase "Copy it, then paste it into the terminal where your agent is " \
-                   "running and press Enter.",
-                   class: "uni-run-notice__hint"
-          end
-        end
-      end
-
-      steps.each do |step|
-        number = step[:number]
-        state = states[number]
-        div(class: "uni-step uni-step--#{state}") do
-          div(class: "uni-step__mark") do
-            if state == :done
-              phrase "", class: "uni-i uni-i--check"
-              phrase "Step #{number}, done", class: "uni-sr"
-            else
-              phrase number.to_s
-              phrase(state == :current ? "Step #{number}, current step" : "Step #{number}, not started",
-                     class: "uni-sr")
-            end
-          end
-          div do
-            header3 step[:title], class: "uni-step__title"
-            phrase step[:payoff], class: "uni-step__payoff"
-          end
-          div(class: "uni-step__actions") do
-            case state
-            when :done
-              button "Repeat", id: "repeat-#{number}", class: "uni-btn uni-btn--quiet"
-            when :current
-              button "Run", id: "run-#{number}", class: "uni-btn uni-btn--outline"
-              button "Mark done", id: "mark-done-#{number}", class: "uni-btn uni-btn--quiet"
-            else
-              button "Run", id: "run-#{number}", class: "uni-btn uni-btn--quiet"
-            end
-            button "Details", id: "view-#{number}", class: "uni-btn uni-btn--quiet"
-          end
-        end
-      end
-    end
-  end
-
-  # ---- The shelf: closed, dormant, no controls ------------------------------
-  div(class: "uni-divider") do
-    phrase "In the works", class: "uni-divider__label"
-    div(class: "uni-divider__rule") {}
-  end
-
-  StreamWeaver::University::Course::FUTURE_COURSES.each do |course|
-    card(depth: :recessed, class: "uni-course uni-course--dormant") do
+    card(depth: :elevated, class: "uni-course") do
       card_header(class: "uni-course__bar") do
         div(class: "uni-course__dot") {}
-        header2 course[:name], class: "uni-course__name"
-        div(class: "uni-chip uni-chip--soon") do
-          phrase "", class: "uni-i uni-i--lock"
-          phrase "Soon"
+        header2 "Getting Started", class: "uni-course__name"
+        chip_label = if all_done
+                       "Complete"
+                     elsif done_count.zero?
+                       "Not started"
+                     else
+                       "In progress"
+                     end
+        phrase chip_label, class: "uni-chip#{' uni-chip--done' if all_done}"
+      end
+
+      card_body(class: "uni-course__body") do
+        div(class: "uni-resume") do
+          if all_done
+            phrase "All five steps done.", class: "uni-resume__lead"
+            phrase "Nice work -- repeat any step below, or look at what's next on the shelf.",
+                   class: "uni-resume__sub"
+          elsif done_count.zero?
+            phrase "Start with step 1.", class: "uni-resume__lead"
+            phrase steps.first[:payoff], class: "uni-resume__sub"
+          else
+            current_step = steps.find { |s| s[:number] == current_number }
+            phrase "Pick up at step #{current_number}.", class: "uni-resume__lead"
+            phrase current_step[:payoff], class: "uni-resume__sub"
+          end
+
+          div(class: "uni-actions") do
+            run_number = current_number || 1
+            unless all_done
+              button "Run step #{run_number}", id: "hero-run-#{run_number}",
+                     class: "uni-btn uni-btn--run"
+            end
+            if done_count.positive? && !all_done
+              repeat_number = [run_number - 1, 1].max
+              button "Repeat step #{repeat_number}", id: "hero-repeat-#{repeat_number}",
+                     class: "uni-btn uni-btn--quiet"
+            end
+          end
+
+          div(class: "uni-rail") do
+            div(class: "uni-rail__track") do
+              steps.each do |step|
+                seg_class = case states[step[:number]]
+                            when :done then "uni-rail__seg uni-rail__seg--done"
+                            when :current then "uni-rail__seg uni-rail__seg--current"
+                            else "uni-rail__seg"
+                            end
+                div(class: seg_class) {}
+              end
+            end
+            phrase "#{done_count} of #{total} done", class: "uni-rail__label"
+          end
+        end
+
+        # Mark-done's confirmation -- "Step N done -- pick up at step N+1."
+        # -- reusing the same green/--sent band a successful Run gets.
+        # Checked first: mark_done! clears last_run, so the two never both
+        # have something to say, but last_done is the more specific read
+        # when it's present. Rendered BEFORE the completion recap below on
+        # purpose: this is the report of the click that just happened
+        # (design-spec's "report band ... sits directly under the button
+        # that produced it"), and on the step that finishes the course,
+        # that click's own "that's the whole course!" line should read as
+        # the lead-in to the recap, not a footnote under it.
+        if last_done
+          div(class: "uni-run-notice uni-run-notice--sent") do
+            phrase StreamWeaver::University::Canvas.mark_done_message(last_done['step']),
+                   class: "uni-run-notice__msg"
+          end
+        # What the last Run/Repeat click actually did. On anything but a
+        # clean send the prompt itself is offered here with a copy button --
+        # the degraded path's whole experience, and the fallback whenever the
+        # recorded worker session has gone away (driver-worker-runner
+        # criteria 4 and 5). The canvas never talks to iTerm; it reports what
+        # the driver wrote to the ledger.
+        elsif last_run
+          status = last_run['status'].to_s
+          run_step = last_run['step'].to_i
+          run_sent = StreamWeaver::University::Runner.sent?(status)
+          run_prompt = StreamWeaver::University::Course.prompt_for(run_step)
+
+          div(class: "uni-run-notice uni-run-notice--#{run_sent ? 'sent' : 'degraded'}") do
+            phrase StreamWeaver::University::Runner.message_for(status, run_step),
+                   class: "uni-run-notice__msg"
+            if !run_sent && run_prompt
+              # The human gets the prompt as written -- line breaks and all.
+              # Only the wire gets Runner.one_line's collapsed form, because
+              # a clipboard paste has no keystroke-per-newline problem.
+              code_block run_prompt, lang: "text", copy: true
+              phrase "Copy it, then paste it into the terminal where your agent is " \
+                     "running and press Enter.",
+                     class: "uni-run-notice__hint"
+            end
+          end
+        end
+
+        # The completion recap -- what the resume band's "look at what's
+        # next on the shelf" line points at once every step is done. Sits
+        # inside this same course-list render (not a separate screen) so
+        # "Run/Repeat stays available from the list" is true by
+        # construction: the step rows below are untouched.
+        if all_done
+          div(class: "uni-recap") do
+            phrase "What you learned", class: "uni-label"
+            md steps.map { |s| "- **Step #{s[:number]}:** #{s[:payoff]}" }.join("\n"),
+               class: "uni-payoff"
+
+            phrase "Where to go next", class: "uni-label"
+            md <<~MD, class: "uni-prose"
+              - Browse the reference docs in `docs/`.
+              - Run `streamweaver showcase` for a tour of every component.
+              - Read worked examples in `examples/`.
+              - Run `streamweaver tutorial` for the classic component-by-component walkthrough.
+            MD
+
+            div(class: "uni-recap__foot") do
+              phrase "Run or Repeat any step below to go through it again.",
+                     class: "uni-foot__hint"
+              div(class: "uni-foot__spacer") {}
+              button "Reset course", id: "reset-course", class: "uni-btn uni-btn--quiet"
+            end
+          end
+        end
+
+        steps.each do |step|
+          number = step[:number]
+          state = states[number]
+          div(class: "uni-step uni-step--#{state}") do
+            div(class: "uni-step__mark") do
+              if state == :done
+                phrase "", class: "uni-i uni-i--check"
+                phrase "Step #{number}, done", class: "uni-sr"
+              else
+                phrase number.to_s
+                phrase(state == :current ? "Step #{number}, current step" : "Step #{number}, not started",
+                       class: "uni-sr")
+              end
+            end
+            div do
+              header3 step[:title], class: "uni-step__title"
+              phrase step[:payoff], class: "uni-step__payoff"
+            end
+            div(class: "uni-step__actions") do
+              case state
+              when :done
+                button "Repeat", id: "repeat-#{number}", class: "uni-btn uni-btn--quiet"
+              when :current
+                button "Run", id: "run-#{number}", class: "uni-btn uni-btn--outline"
+                button "Mark done", id: "mark-done-#{number}", class: "uni-btn uni-btn--quiet"
+              else
+                button "Run", id: "run-#{number}", class: "uni-btn uni-btn--quiet"
+              end
+              button "Details", id: "view-#{number}", class: "uni-btn uni-btn--quiet"
+            end
+            # Expands exactly the row a Run/Repeat click just targeted, so
+            # "what should this do" is answered right there without a trip
+            # to Details -- last_run is what a click just wrote, and
+            # mark_done! clears it, so this can never point at a step that
+            # was actually finished instead of run.
+            if last_run && last_run['step'].to_i == number
+              div(class: "uni-step__expect") do
+                phrase "What you should see", class: "uni-step__expect-label"
+                md StreamWeaver::University::Canvas.bullets(step[:what_you_should_see]),
+                   class: "uni-payoff"
+              end
+            end
+          end
         end
       end
-      phrase course[:blurb], class: "uni-course__blurb"
     end
-  end
 
-  md "Looking for the old component tour? Run `streamweaver tutorial` -- the classic " \
-     "walkthrough of every component. Older than these courses, and being refreshed.",
-     class: "uni-note"
+    # ---- The shelf: closed, dormant, no controls ------------------------------
+    div(class: "uni-divider") do
+      phrase "In the works", class: "uni-divider__label"
+      div(class: "uni-divider__rule") {}
+    end
+
+    StreamWeaver::University::Course::FUTURE_COURSES.each do |course|
+      card(depth: :recessed, class: "uni-course uni-course--dormant") do
+        card_header(class: "uni-course__bar") do
+          div(class: "uni-course__dot") {}
+          header2 course[:name], class: "uni-course__name"
+          div(class: "uni-chip uni-chip--soon") do
+            phrase "", class: "uni-i uni-i--lock"
+            phrase "Soon"
+          end
+        end
+        phrase course[:blurb], class: "uni-course__blurb"
+      end
+    end
+
+    md "Looking for the old component tour? Run `streamweaver tutorial` -- the classic " \
+       "walkthrough of every component. Older than these courses, and being refreshed.",
+       class: "uni-note"
+
+    # A second "Reset course" entry point, for anyone who wants to start
+    # over before finishing -- the recap screen (above, `all_done`) offers
+    # its own, so this one steps aside there rather than rendering the same
+    # id: "reset-course" button twice on one page.
+    unless all_done
+      div(class: "uni-reset") do
+        button "Reset course", id: "reset-course", class: "uni-btn uni-btn--quiet"
+      end
+    end
   end
 end
 
