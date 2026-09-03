@@ -71,6 +71,35 @@ LLM teacher session, Codex as full worker (pickup check only), cmux/herdr adapte
 
 Never present anything a TUI already does (and does faster). Every step must show a capability delta: live arbitrary UI, diagrams, charts, blocking visual decision forms, growing styled docs, portability. "Claude could just open an HTML page of that" = the step has failed. Applies to all future courses.
 
+## Canned artifacts, narrating agent (round 5, 2026-09-03)
+
+The worker never concocts demo DSL live and never reads a source checkout. Every demo ships finished inside the gem under `lib/stream_weaver/university/demos/` (plus `scripts/growing_doc.rb`, registered as `doc`), and prompts reach them only through `streamweaver university-demo <name>`, which prints the absolute path from the installed gem. Round 5 measured ~5 minutes to first paint with the agent composing; the rule is **run first, narrate after**.
+
+Facts that fall out and must survive any refactor:
+
+- The DSL is rendered **inside the bridge process**, so a pushed DSL file cannot read the caller's ENV. That is why `dashboard.rb` is a parameterized push script rather than three DSL files, and why `decision_form.rb` pushes itself rather than being piped through `canvas-push`.
+- `decision_form.rb` is ONE artifact with two surfaces: `run_once!` (finds a port, opens the browser, blocks, prints JSON) and `canvas <session>` (pushes the same context and inputs). Agentic mode renders its own submit button, so only the canvas surface carries an explicit one.
+- `growing_doc.rb` saves itself through the bridge's own `POST /canvas/:name/save-doc` under the deterministic name `university-doc` — the same endpoint the floating button calls, so script and button cannot diverge. Step 5 uses that name; the user's manual save is a bonus lap.
+- Six outline sections is the **floor**, not a target: below it the doc theme's sidebar has nothing worth showing, and round 5 ended step 5 pointing at a nav that wasn't there.
+
+## Verify vs present (round 5, 2026-09-03)
+
+Two rules, both on every prompt (`Course::VERIFY_RULE`, `Course::PRESENT_RULE`). Round 5 curl-verified step 2 and then never showed it to the user at all.
+
+- **Verify** is silent and for the agent: curl plus the app's own action log. Browser automation only if the session already has it; never fetched mid-course.
+- **Present** is for the user: `open <url>` / `xdg-open <url>`, or let `streamweaver panel` open the pane. Never browser automation (it renders into the agent's session, not the user's), never `SW_NO_OPEN` on a run the user is meant to interact with, and never a command with a discovered port baked into it — a real session shelled a personal `gstack/browse` path and hardcoded port 4700, neither of which survives a coworker's machine.
+
+## Waiting on a human is a background job (2026-09-03)
+
+Mined from `f53afb90`: a foreground `streamweaver canvas-wait` blew past the harness's 120s foreground-block ceiling, was silently demoted to a background task, and cost ~3.5 minutes in notification/poll lag — the single largest agent-side sink in the round-5 pass. Steps 3 and 4 now instruct the worker to background the blocking wait **from the start** and react on the completion notification. Taught as a pattern, not a workaround.
+
+## Org-export-safe component set (2026-09-03)
+
+`Org::Writer` recognizes exactly: `DocHeader`, `DocSectionHeader`, `SidebarToc`, `Markdown`, `Table`, `Comparison`, `Callout`, `CodeBlock`, `Mermaid`, `Card`/`CardHeader`/`CardBody`. Anything else raw-passes-through. Two traps already paid for:
+
+- `table` is only recognized in the `headers:`/`rows:` form. The array-of-hashes and `data:` forms render identically in the pane and then leave as an unrecognized block, silently (`Writer#render_table` returns `raw_passthrough` when `headers` is nil).
+- Timeline and KPI-dashboard shapes are NOT in the set — which is why step 4's co-edit menu offers a table, a comparison, a callout and a mermaid instead.
+
 ## Pane-width rule (2026-09-03)
 
 Course demo visuals render in a SPLIT pane (~750-800px when the worker window is at the 1600px minimum; critique baseline 620px). Design every step's canvas for that width: KPI tiles wrap to 2x2, charts full-width, no layout that needs >800px to read. Content and window sizing are one decision, not two.

@@ -12,8 +12,8 @@ module StreamWeaver
     # (rendered as two paragraphs via `md`) and the payoff checklist
     # (rendered as a bulleted list), respectively.
     #
-    # Two rules every step's content obeys (Forrest, 2026-09-03, after the
-    # full live UAT -- see features/university-getting-started.context.md,
+    # Rules every step's content obeys (Forrest, after the live UAT rounds
+    # of 2026-09-03 -- see features/university-getting-started.context.md,
     # "Course content law"):
     #
     # 1. Never show what a TUI already does, and does faster. Each step has
@@ -21,11 +21,22 @@ module StreamWeaver
     #    charts, diagrams, a blocking visual decision, a growing styled doc,
     #    portability. "The agent could have just printed that" means the
     #    step failed.
-    # 2. Every prompt opens by closing the previous step's demo session or
-    #    background server, and says what is about to happen before it
-    #    happens. The demo sessions are `dashboard` (step 1), `decision`
-    #    (step 3) and `doc-demo` (step 4); `university` is the controller
-    #    canvas the user drives the course from and is never closed.
+    # 2. CANNED ARTIFACTS, NARRATING AGENT (round 5). The worker never
+    #    concocts demo DSL live and never reads a source checkout: every
+    #    demo ships finished inside the gem and is reached through
+    #    `streamweaver university-demo <name>`. Round 5 measured ~5 minutes
+    #    to first paint with the agent composing; the fix is to run first
+    #    and narrate after, so the explanation lands on something the user
+    #    can already see.
+    # 3. Verifying and presenting are different jobs (VERIFY_RULE vs
+    #    PRESENT_RULE). Round 5 curl-verified step 2 and then never showed
+    #    it to the user at all.
+    # 4. Every prompt opens with previous-step cleanup as ONE backgrounded
+    #    command that nothing waits on (`cleanup_line`), so housekeeping
+    #    never sits between the user and the demo. The demo sessions are
+    #    `dashboard` (step 1), `decision` (step 3) and `doc-demo` (step 4);
+    #    `university` is the controller canvas the user drives the course
+    #    from and is never closed.
     module Course
       # Mined from the two real worker sessions
       # (docs/university/worker-session-mining.md): both reached for `curl`
@@ -34,12 +45,45 @@ module StreamWeaver
       # browser MCP its own config forbids. Same line on every step so
       # neither is rediscovered per step. Interpolated into each prompt
       # rather than repeated, so the five can never drift.
-      VERIFY_RULE = "Verification rule for this whole course: prove it with `curl` and " \
-                    "the app's own logs first -- a POST to `.../action/...` returning 200, " \
-                    "plus the expected text in the HTML that comes back, is proof the DSL " \
-                    "block re-ran server-side. Only then click through it, and only with " \
-                    "the browser tooling this session is already configured for. Never " \
-                    "fetch or install a new browser tool mid-course."
+      VERIFY_RULE = "VERIFY (for you, silently): prove it with `curl` and the app's own " \
+                    "logs -- a POST to `.../action/...` returning 200, plus the expected " \
+                    "text in the HTML that comes back, is proof the DSL block re-ran " \
+                    "server-side. Verification is yours alone: it opens nothing and shows " \
+                    "me nothing. Use a headless/automation browser only if this session is " \
+                    "already configured with one, and never fetch or install a new browser " \
+                    "tool mid-course."
+
+      # Round-5 UAT's biggest content failure was not a bug: step 2 was
+      # verified with curl and then never shown to the user at all, and step
+      # 3 made the user find and open a page themselves. Verifying and
+      # presenting are two different jobs with two different tools, so they
+      # are now two different rules and every prompt carries both.
+      #
+      # The second mining pass (docs/university/worker-session-mining.md,
+      # "Round-5 latency + portability pass") added the portability half: a
+      # real session shelled a personal skill path to show the user a page,
+      # which would not exist on a coworker's machine, and baked a
+      # dynamically-discovered bridge port into commands it printed.
+      PRESENT_RULE = "PRESENT (for me): when something is meant for my eyes, open it in MY " \
+                     "own default browser -- `open <url>` on macOS, `xdg-open <url>` on " \
+                     "Linux -- or let `streamweaver panel` open the pane itself. Never use " \
+                     "browser automation to show me something; that renders into your " \
+                     "session, not mine. Never set SW_NO_OPEN on a run I am meant to " \
+                     "interact with. And never hand me a command with a discovered port " \
+                     "baked into it -- ports move between runs and machines; give me the " \
+                     "URL that was printed, or a command that resolves the port itself."
+
+      # One backgrounded command, at the very start, that nothing waits on.
+      # Round-5 UAT measured ~5 minutes to first paint; serialized
+      # housekeeping in front of the demo was part of it, and none of it is
+      # anything the user came to watch.
+      def self.cleanup_line(*sessions)
+        closes = sessions.map { |s| "streamweaver canvas-close #{s}" }.join('; ')
+        "Housekeeping, backgrounded, first line, waited on by nothing: " \
+          "`( #{closes} ) >/dev/null 2>&1 &`. Kill any background app task from an earlier " \
+          "step the same way. Never close `university` -- that is the controller canvas I am " \
+          "driving this course from. Then go straight to the demo; do not report on the cleanup."
+      end
 
       GETTING_STARTED_STEPS = [
         {
@@ -56,34 +100,44 @@ module StreamWeaver
             stand up by hand, no page reload.
           WHY
           prompt: <<~PROMPT.strip,
+            #{cleanup_line('dashboard', 'decision', 'doc-demo')}
+
+            Then run these two commands immediately, before you explain anything. Getting
+            something on my screen inside the first minute is the point of this step; the
+            explanation is worth more once I can see what you are explaining.
+
+            streamweaver panel dashboard
+            ruby "$(streamweaver university-demo dashboard)" dashboard
+
+            The demo is a finished file that ships inside the stream_weaver gem. Do not
+            write your own, and do not go looking for a source checkout -- there may not
+            be one on this machine.
+
+            NOW narrate what is on my screen: KPI tiles, a Chart.js bar chart and a
+            rendered mermaid sequence diagram, all in one push. Point out that the diagram
+            is a picture of the command you just ran -- you, the CLI, the bridge, this
+            pane. Then read the demo file (`streamweaver university-demo dashboard` prints
+            its path) and show me the eight or so lines of DSL that produced all three.
+
+            Then mutate it while I watch, a few seconds apart, saying what changes before
+            each one:
+
+            ruby "$(streamweaver university-demo dashboard)" dashboard 2
+            ruby "$(streamweaver university-demo dashboard)" dashboard 3
+
+            Same layout, new numbers, in place -- no reload, no flicker, no page I had to
+            open.
+
             #{VERIFY_RULE}
 
-            Housekeeping first: run `streamweaver canvas-list` and close any leftover
-            University demo session with `streamweaver canvas-close <name>` (the demo
-            sessions this course uses are `dashboard`, `decision` and `doc-demo`). Never
-            close `university` -- that is the controller I am driving the course from.
-
-            Now tell me in the terminal what you are about to do, then do it.
-
-            Open a pane with `streamweaver panel dashboard`. Write ONE DSL file holding
-            all three of: a row of KPI tiles (`stat_display value:, label:`); a bar chart
-            written in the explicit form `chart type: :bar, data: { labels: [...],
-            datasets: [{ data: [...] }] }` (not the `bar_chart` shorthand); and a
-            `mermaid` sequenceDiagram of the very command you are about to run -- you,
-            the streamweaver CLI, the canvas bridge, this pane. Push it with
-            `streamweaver canvas-push dashboard < your_file.rb` and say so in the
-            terminal.
-
-            Then push the SAME file twice more, a few seconds apart, changing the tile
-            numbers and the chart bars each time -- and narrate each push in the terminal
-            as you make it, so I can watch the pane change while I read what you are
-            doing.
+            #{PRESENT_RULE}
           PROMPT
           what_you_should_see: [
+            "Something is on your screen within seconds -- your agent ran the demo first and explained it after, instead of composing one while you waited.",
             "One push, and the pane holds KPI tiles, a chart and a diagram at once -- three things a terminal cannot draw.",
             "The mermaid diagram describes the canvas-push that put it there: agent, CLI, bridge, pane.",
             "Two more pushes a few seconds later change the numbers in place -- no reload, no flicker.",
-            "Your agent said what it was about to do before each push, so the terminal reads like a narration of the pane."
+            "The demo came out of the installed gem, not out of this repo -- your agent ran `streamweaver university-demo dashboard` and never went looking for a checkout."
           ]
         },
         {
@@ -99,43 +153,55 @@ module StreamWeaver
             canvas, the doc theme -- is just this same loop wearing different clothes.
           WHY
           prompt: <<~PROMPT.strip,
+            #{cleanup_line('dashboard')}
+
+            Then start the app immediately, as a BACKGROUND task, before explaining
+            anything:
+
+            ruby "$(streamweaver university-demo counter)"
+
+            That is a finished eight-line file inside the stream_weaver gem. Do not write
+            your own version and do not go looking for a source checkout. Do NOT set
+            SW_NO_OPEN -- this app is meant to open in MY browser, and it opens itself.
+
+            The browser should already be up. If the startup banner did not reach your
+            captured output, find the port with `lsof -i :4567-4620 -sTCP:LISTEN` rather
+            than sleeping on the log, and open that URL for me the way the PRESENT rule
+            below says.
+
+            NOW narrate. Print the file -- all eight lines, `streamweaver university-demo
+            counter` prints its path -- and walk me through it:
+
+            - The app block really is six lines. The file is eight, and the two extra are
+              the ones people leave out: `require 'stream_weaver'` on line 1, and `.run!`
+              chained onto the block's closing `end`. Without the first you get
+              `NoMethodError: undefined method 'app'`; without the second the process
+              builds the app, starts no server, and exits silently. Both are in the file,
+              on purpose.
+            - There is no event handler anywhere in it. Tell me to click `+1` a few times,
+              and say what actually happens: the whole block re-executes, `state[:count]`
+              is one higher when it does, so the `text` line renders a different number.
+              That is the entire mechanism, and everything else in StreamWeaver is this
+              loop wearing different clothes.
+
+            Say plainly that the app is running as a background task and that you will
+            kill it. When I say I have seen it, kill it and confirm it is gone -- never
+            leave a course demo server listening.
+
+            For any DSL syntax question, run `streamweaver llm` FIRST -- one command, the
+            canonical reference, and its counter example is exactly this app. Do not
+            dispatch a search agent to grep a repo for it.
+
             #{VERIFY_RULE}
 
-            Close step 1's demo pane first: `streamweaver canvas-close dashboard`. Leave
-            `university` alone -- that is the controller. Then tell me what you are about
-            to do before you do it.
-
-            For any DSL syntax question, run `streamweaver llm` FIRST -- it is the
-            canonical reference, it is one command, and its counter example is exactly
-            this app. Do not dispatch a search agent to grep the repo for it.
-
-            Now write the app: a button that increments a counter held in `state`, and a
-            line of text showing the count. The app block really is six lines, but the
-            file is eight, and the two extra lines are the ones people leave out: `require
-            'stream_weaver'` on line 1, and `.run!` chained onto the block's closing `end`
-            (`end.run!`). Without the first you get `NoMethodError: undefined method
-            'app'`; without the second the process builds the app, starts no server, and
-            exits silently. Write both deliberately.
-
-            Start it with `ruby app.rb` as a BACKGROUND task -- say out loud that it is a
-            background task, tell me the port StreamWeaver picked, and tell me you will
-            kill it when we are done. StreamWeaver finds a free port and opens the browser
-            itself; if the startup banner does not show up in the captured output, find
-            the port with `lsof -i :4567-4620 -sTCP:LISTEN` rather than sleeping on the
-            log.
-
-            Click the button a few times and watch the count update after every click --
-            that is the same DSL block re-running, not JavaScript.
-
-            When I tell you I have seen it, kill that background task and confirm in the
-            terminal that it is gone. Never leave a course demo server listening.
+            #{PRESENT_RULE}
           PROMPT
           what_you_should_see: [
-            "The browser opens on its own -- no port to guess, no URL to type.",
+            "The browser opens on its own within seconds -- no port to guess, no URL to type, and your agent did not quietly verify it with curl and move on without showing you.",
             "Each click updates the count immediately, with no page reload or spinner.",
-            "The Ruby block you wrote ran again on every click; nothing else touched the page.",
-            "Your agent said plainly that the app runs as a background task, offered to kill it, and did kill it at the end -- no orphaned server left behind.",
-            "It wrote `require 'stream_weaver'` and `end.run!` on purpose, and said why -- the two lines the \"six-line app\" framing hides, and the two that cost real sessions a debug cycle each."
+            "The Ruby block ran again on every click; nothing else touched the page.",
+            "Your agent printed all eight lines of the file it actually ran, and named `require 'stream_weaver'` and `end.run!` as the two the \"six-line app\" framing hides -- the two that cost real sessions a debug cycle each.",
+            "It said plainly that the app runs as a background task, offered to kill it, and did kill it at the end -- no orphaned server left behind."
           ]
         },
         {
@@ -153,92 +219,144 @@ module StreamWeaver
             is the step where the canvas stops being a display and becomes an input.
           WHY
           prompt: <<~PROMPT.strip,
+            #{cleanup_line('dashboard', 'decision')}
+
+            PART ONE -- the founding loop. Run this now, as a BACKGROUND task, before
+            explaining anything:
+
+            ruby "$(streamweaver university-demo decision-form)"
+
+            That is a finished file inside the stream_weaver gem: a mermaid diagram of two
+            candidate architectures, a comparison table, a `radio_group` and a rationale
+            `text_field`. Do not write your own and do not look for a source checkout.
+
+            It runs through `run_once!`, which means it finds a free port, OPENS my browser
+            itself, and BLOCKS until I submit. So: do not ask me to open anything, do not
+            print a URL for me to click, and do not ask me to tell you when I am done. The
+            page is already in front of me. Say one line -- "answer that, I am waiting" --
+            and then wait for the process to exit.
+
+            The moment it exits it prints my submitted state as JSON on stdout. Print that
+            JSON verbatim and REACT to it: name the option I picked, quote the rationale I
+            typed, and say what you would actually do differently because of it. That
+            round trip -- your process blocked on a human, and resumed with their answer
+            in hand -- is the whole step.
+
+            PART TWO -- the same file, a second surface. Say that plainly, because it is
+            the lesson: not a second form, the same one.
+
+            streamweaver panel decision
+            ruby "$(streamweaver university-demo decision-form)" canvas decision
+
+            Same context, same `radio_group`, same `text_field` -- now on the canvas,
+            with a callout saying you are frozen, and an explicit submit button.
+
+            Then wait on it -- and how you wait is itself worth saying out loud. Run
+            `streamweaver canvas-wait decision` AS A BACKGROUND TASK from the start, not
+            in the foreground. A foreground wait on a human will blow past your harness's
+            foreground-block ceiling, get demoted to a background task anyway, and cost
+            minutes in polling lag on the way back. A blocking wait on a human is a
+            background job with a completion notification, and that is how an agent should
+            wait on a person. The moment the notification lands, read the result and react
+            to it immediately -- do not sit in a poll loop.
+
+            Close on one beat: the same form left live with no `canvas-wait` behind it
+            keeps its state in the pane, and you can read my answer back whenever you need
+            it. Blocking is a choice, not a limitation.
+
             #{VERIFY_RULE}
 
-            Close step 2's demo first: kill the background `ruby app.rb` task if it is
-            still running, and run `streamweaver canvas-close dashboard` if that session
-            survived. Leave `university` open -- it is the controller.
-
-            Before you build anything, say this in the terminal in your own words: that
-            you are about to build the same decision twice -- once as a standalone app so
-            I can compare, then as a canvas form you will BLOCK on -- and that following
-            along here in the worker terminal is the best way to take this course, because
-            your narration is half the lesson.
-
-            First, standalone. Write an app with a `radio_group` offering two candidate
-            architectures for something real in this repo, a `text_field` for my
-            rationale, and a submit `button`. Run it as a background `ruby app.rb`. I
-            click, it re-renders in place, nothing blocks. Kill it when I say I have seen
-            it.
-
-            Now the same question on the canvas, carrying the things a terminal prompt
-            cannot. Open `streamweaver panel decision`, then push a DSL file holding: a
-            `callout` reading, in your own words, "this is a blocking form -- Claude is
-            waiting on you, and its terminal is frozen until you submit"; a `mermaid`
-            diagram of the two candidate architectures; a `table` comparing them on three
-            axes; then the same `radio_group`, `text_field` and submit `button`.
-
-            Then run `streamweaver canvas-wait decision` and STOP. Your terminal must
-            visibly block -- no output, no new prompt -- until I submit. When it returns,
-            print the JSON verbatim and react to it: say what you would actually do
-            differently given my choice AND the rationale I typed.
-
-            Close with one beat: the same form left live, with no `canvas-wait` behind it,
-            keeps its state in the pane, and you can read my answer back later whenever
-            you need it. Blocking is a choice, not a limitation.
+            #{PRESENT_RULE}
           PROMPT
           what_you_should_see: [
-            "Your agent told you the plan before building anything -- standalone first, then the blocking canvas form.",
-            "The canvas form carries a diagram and a comparison table right next to the choice; a terminal prompt can carry neither.",
-            "A callout on the form says it in plain words: this is a blocking form, Claude is waiting on you.",
-            "The worker terminal visibly freezes on `canvas-wait` until you press submit, then prints your answer as JSON -- including the free-text rationale -- and reacts to it.",
+            "The browser opened by itself with a real question in it -- you never opened a page, never copied a URL, and never had to tell your agent you were done.",
+            "The form carries a rendered diagram of both designs and a comparison table right next to the choice; a terminal prompt can carry neither.",
+            "The moment you submitted, your agent printed the JSON verbatim and reacted to it -- naming your choice and quoting the rationale you typed.",
+            "Then the same file, unchanged, appeared on the canvas -- your agent said so out loud: one artifact, two surfaces.",
+            "It waited on the canvas form as a background task and said why: a blocking wait on a human is a background job with a notification, not a frozen foreground prompt.",
             "The closing beat: the same form left live without `canvas-wait` becomes state the agent can query later."
           ]
         },
         {
           number: 4,
           title: "A doc that writes itself",
-          payoff: "Watch a script append sections, then save the result as a document.",
+          payoff: "Watch a script write a document, save it, then ask you what else it should say.",
           why_it_matters: <<~WHY.strip,
             A canvas isn't limited to one static push -- a script can keep adding to the
             same session over time, and the pane updates each time without you touching
             anything. What grows is a real document: an outline, a two-column section,
-            syntax-highlighted code, a callout, a rendered diagram.
+            syntax-highlighted code, a callout, a rendered diagram, a table.
 
-            And then it is gone, unless you save it. That is the actual lesson of this
-            step -- a canvas lives as long as the bridge does, and one button turns it
-            into a file you keep.
+            Then the interesting half. The script saves the doc itself and tells you where
+            it went -- and your agent asks what else it should say, blocks on your answer,
+            adds it, and saves again. That loop is the point: co-editing a document with an
+            agent, in a pane, with no file open on either side.
           WHY
           prompt: <<~PROMPT.strip,
+            #{cleanup_line('decision')}
+
+            Then start the doc growing immediately, before explaining anything:
+
+            streamweaver panel doc-demo --theme=doc
+            ruby "$(streamweaver university-demo doc)" doc-demo
+
+            Narrate it WHILE it runs -- it takes about twenty seconds and the pacing is
+            the point. Each push carries everything before it plus one more section, so
+            the page grows instead of blinking: a doc header, a two-column comparison, a
+            syntax-highlighted code block and a callout, a mermaid diagram, a table of
+            what survives an export, and a closing section. Six outline entries, which is
+            what makes the sidebar nav in step 5 worth looking at.
+
+            The script saves the document itself, through the same `save-doc` endpoint the
+            floating button calls, under the deterministic name `university-doc`, and
+            prints the exact path it landed at. Read that path back to me verbatim -- step
+            5 uses that file, and you are not to make me transcribe anything.
+
+            THEN, and only then, invite me to do it by hand: there is a floating "Save as
+            doc" button at the bottom right of the pane. Tell me to click it, and explain
+            the dialog before I do -- typing a name and pressing Save writes a permanent,
+            git-tracked `docs/streamweaver_canvas/<name>.rb`; "Save as Org" writes the
+            same content as a plain-text `.org` sibling. Mine is a bonus lap. Step 5 uses
+            yours.
+
+            THE TWEAK LOOP. Now tell me the doc is mine to change for as long as I like,
+            and offer to extend it -- and say what you are doing as you do it: "I am using
+            the same blocking form from step 3 to ask you a real question. This is how an
+            agent and a human co-edit a document."
+
+            ruby "$(streamweaver university-demo doc)" doc-demo --picker
+
+            That appends a picker to the bottom of the doc: a `radio_group` of sections
+            not yet in it, a free-text field, and a "done, move on" option. Wait on it
+            with `streamweaver canvas-wait doc-demo` AS A BACKGROUND TASK -- same rule as
+            step 3, never a foreground block on a human -- and react the moment the
+            notification lands.
+
+            If I pick a canned section, add it and re-save in one command:
+
+            ruby "$(streamweaver university-demo doc)" doc-demo --extend=<key>
+
+            (Keys accumulate: `--extend=timeline,cheatsheet` for two.) If I typed a
+            description instead, write that section yourself -- and keep it to
+            `doc_section_header`, `md`, `table headers:/rows:`, `comparison`, `code_block`,
+            `callout` and `mermaid`. Those are exactly the components `streamweaver
+            org-export` recognizes; anything else looks right in the pane and then leaves
+            as an unrecognized placeholder, silently, which is the failure step 5 exists to
+            disprove.
+
+            Then push the picker again and loop, until I choose "done". Say the saved path
+            once more at the end.
+
             #{VERIFY_RULE}
 
-            Close step 3's demo first: `streamweaver canvas-close decision`, and kill the
-            standalone app if it is still running. Leave `university` open. Then tell me
-            what is about to happen before it happens.
-
-            Open the pane with `streamweaver panel doc-demo --theme=doc`. Then run the
-            growing-doc script that ships inside the stream_weaver gem -- no path to type:
-
-            ruby -e "require 'stream_weaver'; require 'stream_weaver/university/scripts/growing_doc'" doc-demo
-
-            Narrate it while it runs: the script pushes the same session four times, a
-            few seconds apart, and each push carries everything before it plus one more
-            piece -- a doc header and outline, then a two-column section, then a
-            syntax-highlighted code block and a callout, then a mermaid diagram.
-
-            When it settles, tell me to click the floating "Save as doc" button at the
-            bottom right of the pane, and explain the dialog I will get: typing a name
-            and pressing Save writes a permanent, git-tracked
-            `docs/streamweaver_canvas/<name>.rb`, while "Save as Org" writes the same
-            content as a plain-text `.org` sibling. That file is the whole point -- it is
-            what step 5 takes with it. Everything else on a canvas lives only as long as
-            the bridge does.
+            #{PRESENT_RULE}
           PROMPT
           what_you_should_see: [
-            "The pane grows a new section every few seconds -- you can watch it happen, not just see the end state.",
-            "What grows is a document, not three cards: a header and outline, a two-column section, a code block, a callout, and a rendered diagram.",
-            "The outline on the left fills in as each section arrives.",
-            "The floating \"Save as doc\" dialog offers two formats -- Save writes docs/streamweaver_canvas/<name>.rb, Save as Org writes the .org sibling -- and your agent explained which is which before you clicked."
+            "The pane grows a new section every few seconds -- you watch it happen, you don't just see the end state.",
+            "What grows is a document, not three cards: a header and outline, a two-column section, a code block, a callout, a rendered diagram and a table.",
+            "The outline on the left fills in as each section arrives, and ends up long enough to be worth navigating.",
+            "Your agent saved the doc itself and read you the exact path -- no dialog to fill in, nothing to transcribe. The floating \"Save as doc\" button is then offered to you as a bonus lap, with the dialog explained before you click.",
+            "Then it asks what else the doc should say, using the same blocking form from step 3, and says so -- adds your pick, re-pushes, re-saves, and asks again until you say you're done. That is co-editing a document with an agent, with no file open on either side."
           ]
         },
         {
@@ -256,45 +374,59 @@ module StreamWeaver
             extension.
           WHY
           prompt: <<~PROMPT.strip,
-            #{VERIFY_RULE}
+            Before anything else, run `gh auth status`. If the `gh` CLI is missing, not
+            logged in, or logged in without the `gist` scope, say exactly which of those
+            it is, and hand it back friendly and concrete: `brew install gh`, then `gh auth
+            login`, or `gh auth refresh -s gist` if it is only the scope that is missing.
+            Then stop and wait for me. Do not fake the gist half of this step, and do not
+            press on hoping it works.
 
-            Before anything else, run `gh auth status`. If the `gh` CLI is missing or not
-            authenticated, tell me exactly that, tell me how to fix it (`brew install gh`
-            then `gh auth login`), and stop -- do not fake the gist half of this step.
+            Then, with the doc still open in the `doc-demo` pane, show me what it grew
+            into before it leaves. Point at two things I would otherwise walk past:
 
-            Then tell me what you are about to do, and find the doc I saved in the
-            previous step. Do not assume the path: the Save-as-doc dialog writes relative
-            to the canvas bridge's working directory, which is often not this shell's, so
-            check `docs/streamweaver_canvas/` AND `~/.streamweaver/canvas/` and tell me
-            where it actually landed. Run `streamweaver org-export <that file>` to produce
-            a sibling `.org` next to it, and show me the first few lines so I can see it
-            is plain text.
+            - The outline. Six-plus sections is what earns a sidebar; in a pane this
+              narrow the doc theme moves that nav to the top instead of the side, and it
+              is the same nav either way. Scroll it, or click an entry, so I see it work.
+            - The mermaid diagram's popout control -- a rendered diagram in a 750px pane
+              is a thumbnail until you open it full size.
 
-            Push that `.org` to a gist with `gh gist create --public <that .org file>`
-            (public on purpose -- this step ends with the file being opened and compared
-            in a browser), then give me the gist URL and show me the plain GitHub
-            rendering. That much is yours to finish.
+            Now take it with you. Step 4's script saved the doc under the deterministic
+            name `university-doc` and printed the path; use that path. If you no longer
+            have it, look in `docs/streamweaver_canvas/` AND `~/.streamweaver/canvas/`
+            (the bridge's working directory is often not this shell's) and tell me where
+            it actually is -- but do not make me name it.
 
-            The last beat is NOT. Stop and hand it to me, and say why in plain words: no
-            automated or headless browser can install a Chrome Web Store extension or see
-            my logged-in Chrome, so this part is structurally out of your reach no matter
-            which browser tool you have. Do not attempt it and do not skip it silently.
-            Give me the StreamWeaver Doc Viewer link from this project's README, tell me
-            to install it, reload the gist in my own Chrome and click "View rendered", and
-            then wait for me to tell you what I saw -- the same file, now carrying the
-            outline, two-column section, code block, callout and diagram it had in the
+            Run `streamweaver org-export <that file>` to write the sibling `.org`, and show
+            me the first few lines so I can see it is plain text with no server behind it.
+            Then `gh gist create --public <that .org file>` -- public on purpose, because
+            this step ends with the file being opened and compared in a browser -- and give
+            me the gist URL. Open it in MY browser, not yours.
+
+            The last beat is NOT yours. Stop and hand it to me, and say why in plain words:
+            no automated or headless browser can install a Chrome Web Store extension or
+            see my logged-in Chrome, so this part is structurally out of your reach no
+            matter which browser tool you have. Do not attempt it and do not skip it
+            silently. Give me the StreamWeaver Doc Viewer link from this project's README,
+            tell me to install it, reload the gist and click "View rendered", and then wait
+            for me to tell you what I saw -- the same file, now carrying the outline, the
+            two-column section, the code block, the callout and the diagram it had in the
             canvas.
 
-            Finish by cleaning up after the whole course: `streamweaver canvas-close
-            doc-demo`, then `streamweaver canvas-list` and close every remaining demo
-            session (`dashboard`, `decision`, `doc-demo`). Leave only `university` -- the
-            controller. Kill any background app task still running, and confirm in the
-            terminal that nothing but the controller is left.
+            Finish by cleaning up after the whole course, backgrounded and in one line:
+            `( streamweaver canvas-close dashboard; streamweaver canvas-close decision;
+            streamweaver canvas-close doc-demo ) >/dev/null 2>&1 &`. Kill any background
+            task still running. Then `streamweaver canvas-list` and confirm to me that
+            only `university` -- the controller -- is left.
+
+            #{VERIFY_RULE}
+
+            #{PRESENT_RULE}
           PROMPT
           what_you_should_see: [
-            "Your agent checked `gh auth status` first and told you up front if gh was missing or logged out, instead of failing halfway through.",
-            "`org-export` writes a .org file next to the doc -- no network access, no server.",
-            "`gh gist create --public` prints a gist URL you can open right away, and your agent shows you the plain GitHub rendering itself.",
+            "Your agent checked `gh auth status` first and told you up front if gh was missing, logged out, or short the gist scope -- with the exact command to fix it -- instead of failing halfway through.",
+            "It pointed out the doc's own navigation before exporting it: the outline the six sections earned, moved to the top in a narrow pane, and the mermaid diagram's popout.",
+            "It used the doc step 4 saved for you, at the path step 4 printed -- you never had to name a file.",
+            "`org-export` writes a .org file next to the doc -- no network access, no server -- and `gh gist create --public` prints a gist URL that opens in your own browser.",
             "Then it stops and hands the extension step back to you, saying why: no automated or headless browser can install a Web Store extension or reach your logged-in Chrome. It gives you the link and waits -- it does not try, and it does not quietly skip.",
             "Plain GitHub already reads the .org file close to markdown; once you install it, the extension's \"View rendered\" button brings back the outline, two-column section, code block, callout and diagram exactly as they looked in the canvas.",
             "Every demo session from steps 1-4 is closed at the end -- `streamweaver canvas-list` shows only `university`, the controller you have been driving from."

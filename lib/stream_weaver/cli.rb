@@ -109,6 +109,8 @@ module StreamWeaver
         university_listener(args)
       when 'university-reset'
         university_reset(args)
+      when 'university-demo'
+        university_demo(args)
       when 'get-started'
         get_started(args)
       when '--help', '-h', 'help'
@@ -703,6 +705,9 @@ module StreamWeaver
           streamweaver university-reset [--yes]   Reset course progress (backed up to progress.yml.bak),
                                                      close its demo canvas sessions, re-push the zero-state
                                                      course list. Same as the canvas's own Reset button.
+          streamweaver university-demo [<name>]   Print the absolute path of a course demo file inside the
+                                                     installed gem (no name: list them). The course prompts
+                                                     run these; nothing is composed live.
       HELP
     end
 
@@ -2876,6 +2881,36 @@ module StreamWeaver
       else
         puts "(canvas bridge not running -- nothing to close or re-push)"
       end
+    end
+
+    # Print the absolute path of a canned course demo inside the installed
+    # gem. Every Getting Started prompt runs its demo through this rather
+    # than naming a path, so the course works from a plain `gem install`
+    # with no checkout anywhere -- and so a worker session can never go
+    # looking for the source repo (round-5 UAT, 2026-09-03).
+    def self.university_demo(args)
+      require_relative 'university/demos'
+      name = args.find { |a| !a.start_with?('-') }
+
+      unless name
+        puts "Course demos (streamweaver university-demo <name> prints the path):"
+        University::Demos::NAMES.each { |n| puts "  #{n}" }
+        return
+      end
+
+      path = University::Demos.path(name)
+      unless path
+        $stderr.puts "Unknown demo: #{name}"
+        $stderr.puts "Known demos: #{University::Demos::NAMES.join(', ')}"
+        exit 1
+      end
+
+      unless File.exist?(path)
+        $stderr.puts "Demo #{name} is registered but missing from the gem at #{path}"
+        exit 1
+      end
+
+      puts path
     end
 
     def self.university_reset_confirmed?
