@@ -41,3 +41,7 @@ iTerm2 is opt-OUT, not optional. Brett explicitly wants the split-pane experienc
 ## Deferred / out of scope
 
 LLM teacher session, Codex as full worker (pickup check only), cmux/herdr adapters, `template`/`pick`/`confirm` docs, tutorial refresh, skill packaging tiers. See roadmap "Earmarked epics".
+
+## Course content law (Forrest, 2026-09-03)
+
+Never present anything a TUI already does (and does faster). Every step must show a capability delta: live arbitrary UI, diagrams, charts, blocking visual decision forms, growing styled docs, portability. "Claude could just open an HTML page of that" = the step has failed. Applies to all future courses.
