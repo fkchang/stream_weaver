@@ -163,18 +163,20 @@ module StreamWeaver
           connect do |c|
             # In the caller's own window when we can find it -- the window
             # the user is already sitting in is by definition the size they
-            # chose, so that path leaves the frame untouched (and the
-            # calling PANE is untouched either way, which is the actual
-            # product promise). Only the fallback path -- a genuinely new
-            # window -- gets an explicit wide frame via set_window_frame,
-            # since a brand new iTerm2 window otherwise opens at the
-            # profile's default size (UAT found that unusably small twice
-            # over).
+            # chose, so that path leaves the frame untouched apart from
+            # growing it up to the worker minimum (and the calling PANE is
+            # untouched either way, which is the actual product promise).
+            # Only the fallback path -- a genuinely new window -- gets an
+            # explicit wide frame via set_window_frame, since a brand new
+            # iTerm2 window otherwise opens at the profile's default size
+            # (UAT found that unusably small twice over).
             window_id = calling_window_id(c)
             result = window_id ? c.create_tab(window_id: window_id) : c.create_tab
             session_id = result && result[:session_id]
-            apply_window_frame(c, result[:window_id], "SW_WORKER_FRAME", WORKER_FRAME_DEFAULTS) if session_id && !window_id
-            c.send_text(session_id, "cd #{Shellwords.escape(dir)} && #{command}\n") if session_id
+            if session_id
+              window_id ? ensure_min_worker_frame(c, window_id) : apply_window_frame(c, result[:window_id], "SW_WORKER_FRAME", WORKER_FRAME_DEFAULTS)
+              c.send_text(session_id, "cd #{Shellwords.escape(dir)} && #{command}\n")
+            end
             session_id
           end
         end
@@ -223,8 +225,16 @@ module StreamWeaver
           connect do |c|
             next false unless c.send_text(session_id, bracketed_paste(text))
             next true unless submit
+            next false unless c.send_text(session_id, "\r")
 
-            c.send_text(session_id, "\r") ? true : false
+            # A successful submit is exactly the moment the worker's tab and
+            # window should come to front -- Forrest's UAT wants Run to feel
+            # like handing control to the agent, not typing into a pane he
+            # has to go find. Only a full send (text landed AND Return
+            # landed) gets here; a refused, degraded, or half-sent attempt
+            # returns false above and never raises anything.
+            activate_session_quietly(c, session_id)
+            true
           end
         end
       rescue StandardError
@@ -310,6 +320,57 @@ module StreamWeaver
         return if @frame_hint_shown
         @frame_hint_shown = true
         warn "StreamWeaver: window sizing needs iterm2_ruby >= 0.3.0 (gem install iterm2_ruby)"
+      end
+
+      # Grows window_id up to the worker minimum (WORKER_FRAME_DEFAULTS,
+      # overridable via SW_WORKER_FRAME) when the caller's own window --
+      # reused rather than created by open_worker_tab -- is smaller than
+      # that on either axis. Keeps the window's current x,y: this is a
+      # floor, not a reposition. Never shrinks a window already at or above
+      # the minimum, and never touches set_window_frame at all in that
+      # case. Degrades silently on an older iterm2_ruby that lacks
+      # get_window_frame.
+      def ensure_min_worker_frame(client, window_id)
+        return unless client.respond_to?(:get_window_frame)
+
+        current = client.get_window_frame(window_id)
+        return unless current && current[:width] && current[:height]
+
+        minimum = parse_frame_env(ENV["SW_WORKER_FRAME"], WORKER_FRAME_DEFAULTS)
+        return if current[:width] >= minimum[:width] && current[:height] >= minimum[:height]
+
+        client.set_window_frame(
+          window_id,
+          x: current[:x],
+          y: current[:y],
+          width: [current[:width], minimum[:width]].max,
+          height: [current[:height], minimum[:height]].max
+        )
+      rescue StandardError
+        nil
+      end
+
+      # Best-effort: brings the worker's tab and window to the front after a
+      # step prompt actually goes out, so Run feels like handing control to
+      # the agent rather than something the user has to go find. Degrades
+      # silently (one memoized stderr hint) on an older iterm2_ruby that
+      # lacks activate_session -- never raises past this, since a raise
+      # failing is not a reason to report the send itself as failed.
+      def activate_session_quietly(client, session_id)
+        unless client.respond_to?(:activate_session)
+          warn_activate_unsupported_once
+          return
+        end
+
+        client.activate_session(session_id)
+      rescue StandardError
+        nil
+      end
+
+      def warn_activate_unsupported_once
+        return if @activate_hint_shown
+        @activate_hint_shown = true
+        warn "StreamWeaver: raise-on-run needs iterm2_ruby >= 0.3.1"
       end
 
       # The window holding the session this process is running in, or nil if

@@ -10,10 +10,12 @@ RSpec.describe StreamWeaver::ITerm do
   before do
     described_class.remove_instance_variable(:@available) if described_class.instance_variable_defined?(:@available)
     described_class.remove_instance_variable(:@frame_hint_shown) if described_class.instance_variable_defined?(:@frame_hint_shown)
+    described_class.remove_instance_variable(:@activate_hint_shown) if described_class.instance_variable_defined?(:@activate_hint_shown)
   end
   after do
     described_class.remove_instance_variable(:@available) if described_class.instance_variable_defined?(:@available)
     described_class.remove_instance_variable(:@frame_hint_shown) if described_class.instance_variable_defined?(:@frame_hint_shown)
+    described_class.remove_instance_variable(:@activate_hint_shown) if described_class.instance_variable_defined?(:@activate_hint_shown)
   end
 
   describe '.gem_missing?' do
@@ -170,6 +172,81 @@ RSpec.describe StreamWeaver::ITerm do
         expect { described_class.open_worker_tab('claude', dir: '/tmp') }.not_to raise_error
         expect(client).not_to have_received(:set_window_frame)
       end
+
+      # Ensure-minimum resize (driver-worker-runner round 2): reusing the
+      # caller's window is otherwise hands-off, but a window smaller than
+      # the worker minimum on EITHER axis is unusable for the same reason a
+      # brand-new profile-default window was -- so it grows to the floor
+      # instead of being left alone.
+      describe 'ensure-minimum resize on the reused window' do
+        # A plain (non-verifying) double, not instance_double(ITerm2::Client):
+        # get_window_frame is the newest method on this adapter's surface,
+        # and the locally installed gem can be mid-upgrade while these specs
+        # run -- a verifying double would fail depending on exactly what the
+        # gem on disk exposes at that instant, which is not what these specs
+        # are about. See the frame-sizing specs' note on 0.2.0 for the same
+        # class of problem.
+        let(:client) { double('ITerm2::Client') }
+
+        before do
+          allow(described_class).to receive(:current_session_guid).and_return('calling-session')
+          allow(client).to receive(:create_tab).and_return(session_id: 'w-1', window_id: 'win-1', tab_id: 'tab-1')
+          allow(client).to receive(:send_text)
+          allow(client).to receive(:set_window_frame)
+          allow(client).to receive(:get_window_frame).and_return(x: 80, y: 80, width: 1600, height: 1000)
+          allow(client).to receive(:topology).and_return(
+            [{ window_id: 'callers-window', tab_id: 'tab-0', session_id: 'calling-session' }]
+          )
+        end
+
+        it 'grows a too-small window to the worker minimum, keeping its x,y' do
+          allow(client).to receive(:get_window_frame).with('callers-window')
+            .and_return(x: 12, y: 34, width: 400, height: 300)
+
+          described_class.open_worker_tab('claude', dir: '/tmp')
+
+          expect(client).to have_received(:set_window_frame)
+            .with('callers-window', x: 12, y: 34, width: 1600, height: 1000)
+        end
+
+        it 'grows only the short axis when just one dimension is under the minimum' do
+          allow(client).to receive(:get_window_frame).with('callers-window')
+            .and_return(x: 0, y: 0, width: 2000, height: 300)
+
+          described_class.open_worker_tab('claude', dir: '/tmp')
+
+          expect(client).to have_received(:set_window_frame)
+            .with('callers-window', x: 0, y: 0, width: 2000, height: 1000)
+        end
+
+        it 'never shrinks or moves a window already at or above the minimum' do
+          allow(client).to receive(:get_window_frame).with('callers-window')
+            .and_return(x: 5, y: 5, width: 2400, height: 1400)
+
+          described_class.open_worker_tab('claude', dir: '/tmp')
+
+          expect(client).not_to have_received(:set_window_frame)
+        end
+
+        it 'honors SW_WORKER_FRAME as the floor, same as the new-window path' do
+          allow(ENV).to receive(:[]).and_call_original
+          allow(ENV).to receive(:[]).with('SW_WORKER_FRAME').and_return('0,0,900,700')
+          allow(client).to receive(:get_window_frame).with('callers-window')
+            .and_return(x: 0, y: 0, width: 400, height: 300)
+
+          described_class.open_worker_tab('claude', dir: '/tmp')
+
+          expect(client).to have_received(:set_window_frame)
+            .with('callers-window', x: 0, y: 0, width: 900, height: 700)
+        end
+
+        it 'degrades silently when the installed client lacks get_window_frame' do
+          allow(client).to receive(:respond_to?).with(:get_window_frame).and_return(false)
+
+          expect { described_class.open_worker_tab('claude', dir: '/tmp') }.not_to raise_error
+          expect(client).not_to have_received(:set_window_frame)
+        end
+      end
     end
   end
 
@@ -295,6 +372,95 @@ RSpec.describe StreamWeaver::ITerm do
       allow(client).to receive(:send_text).and_raise(ITerm2::Error, 'boom')
 
       expect(described_class.send_to_session('worker-session', "hi\n")).to be false
+    end
+
+    # Raise on Run (driver-worker-runner round 2): once a step prompt is
+    # actually SENT, the worker's tab and window should come to front --
+    # Run should feel like handing control to the agent, not something the
+    # user has to go find. Scoped to the one seam where every legit send
+    # raises and every refused/degraded send does not: activation only ever
+    # happens after both writes (text, then Return) succeed.
+    describe 'raise on Run (activate_session)' do
+      # A plain (non-verifying) double, not instance_double(ITerm2::Client):
+      # activate_session is the newest method on this adapter's surface, and
+      # the locally installed gem can be mid-upgrade while these specs run.
+      # See the frame-sizing specs' note on 0.2.0 for the same class of
+      # problem.
+      let(:client) { double('ITerm2::Client') }
+
+      before do
+        allow(client).to receive(:send_text).and_return(true)
+        allow(client).to receive(:activate_session).and_return(true)
+      end
+
+      it 'activates the session after a successful send' do
+        described_class.send_to_session('worker-session', 'do the thing')
+
+        expect(client).to have_received(:activate_session).with('worker-session').ordered
+      end
+
+      it 'activates only after both writes land, not before' do
+        described_class.send_to_session('worker-session', 'do the thing')
+
+        expect(client).to have_received(:send_text).with('worker-session', pasted).ordered
+        expect(client).to have_received(:send_text).with('worker-session', "\r").ordered
+        expect(client).to have_received(:activate_session).ordered
+      end
+
+      it 'does not activate when the text write itself failed' do
+        allow(client).to receive(:send_text).with('worker-session', pasted).and_return(false)
+
+        described_class.send_to_session('worker-session', 'do the thing')
+
+        expect(client).not_to have_received(:activate_session)
+      end
+
+      it 'does not activate when the text lands but the Return does not (send_failed)' do
+        allow(client).to receive(:send_text).with('worker-session', pasted).and_return(true)
+        allow(client).to receive(:send_text).with('worker-session', "\r").and_return(false)
+
+        described_class.send_to_session('worker-session', 'do the thing')
+
+        expect(client).not_to have_received(:activate_session)
+      end
+
+      it 'does not activate when submit: false (nothing was run)' do
+        described_class.send_to_session('worker-session', 'half a thought', submit: false)
+
+        expect(client).not_to have_received(:activate_session)
+      end
+
+      it 'does not connect at all -- and so cannot activate -- without a session id (degraded mode)' do
+        described_class.send_to_session(nil, 'do the thing')
+
+        expect(ITerm2).not_to have_received(:connect)
+      end
+
+      it 'does not connect at all -- and so cannot activate -- when iTerm2 is unavailable (degraded mode)' do
+        allow(described_class).to receive(:available?).and_return(false)
+
+        described_class.send_to_session('worker-session', 'do the thing')
+
+        expect(ITerm2).not_to have_received(:connect)
+      end
+
+      it 'still reports the send as successful even if activation itself blows up' do
+        allow(client).to receive(:activate_session).and_raise(ITerm2::Error, 'boom')
+
+        expect(described_class.send_to_session('worker-session', 'do the thing')).to be true
+      end
+
+      it 'degrades silently, with one memoized stderr hint, when the client lacks activate_session' do
+        allow(client).to receive(:respond_to?).with(:activate_session).and_return(false)
+        allow(described_class).to receive(:warn)
+
+        described_class.send_to_session('worker-session', 'first')
+        described_class.send_to_session('worker-session', 'second')
+
+        expect(client).not_to have_received(:activate_session)
+        expect(described_class).to have_received(:warn)
+          .with('StreamWeaver: raise-on-run needs iterm2_ruby >= 0.3.1').once
+      end
     end
   end
 
