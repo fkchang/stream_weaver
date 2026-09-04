@@ -1066,6 +1066,9 @@ module StreamWeaver
       StreamWeaver::Opal::OpalBuilder.build(file, output_dir: output_dir, theme: theme)
       puts "Built to #{output_dir}/"
       puts "Open #{output_dir}/index.html in a browser or deploy to GitHub Pages."
+    rescue LoadError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
     end
 
     private

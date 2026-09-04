@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 require "fileutils"
-require "opal"
 require_relative "shell"
 require_relative "../css"
 require_relative "../theme"
@@ -8,8 +7,19 @@ require_relative "../theme"
 module StreamWeaver
   module Opal
     class OpalBuilder
+      # opal is the heavyweight compiler behind `streamweaver opal-build` --
+      # not a runtime dependency of the gem (see stream_weaver.gemspec), so a
+      # doc-shelf-only install must never be forced to have it. Load it here,
+      # on first actual use, instead of at file-load time.
+      def self.require_opal!
+        require "opal"
+      rescue LoadError
+        raise LoadError, "Opal features need the opal gem: gem install opal"
+      end
+
       # Convenience entry point
       def self.build(app_file, output_dir: "dist", title: nil, theme: nil)
+        require_opal!
         new(app_file, output_dir: output_dir, title: title, theme: theme).call
       end
 

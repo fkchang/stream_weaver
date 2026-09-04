@@ -7,6 +7,20 @@ require "stream_weaver/theme"
 require "tmpdir"
 
 RSpec.describe StreamWeaver::Opal::OpalBuilder do
+  describe ".require_opal!" do
+    it "raises a friendly, actionable error when the opal gem isn't installed" do
+      allow(described_class).to receive(:require).with("opal").and_raise(LoadError)
+
+      expect { described_class.require_opal! }.to raise_error(
+        LoadError, "Opal features need the opal gem: gem install opal"
+      )
+    end
+
+    it "loads opal successfully when it is installed" do
+      expect { described_class.require_opal! }.not_to raise_error
+    end
+  end
+
   describe ".build" do
     let(:app_content) do
       <<~RUBY

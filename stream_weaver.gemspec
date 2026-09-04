@@ -14,7 +14,9 @@ Gem::Specification.new do |spec|
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.0.0"
 
-  spec.metadata["homepage_uri"] = spec.homepage
+  # homepage_uri metadata is omitted: it would just duplicate spec.homepage,
+  # which RubyGems already shows on the gem page, and `gem build` warns when
+  # both keys carry the same URI.
   spec.metadata["source_code_uri"] = "https://github.com/fkchang/stream_weaver"
   spec.metadata["changelog_uri"] = "https://github.com/fkchang/stream_weaver/blob/main/CHANGELOG.md"
 
@@ -50,6 +52,11 @@ Gem::Specification.new do |spec|
   spec.add_dependency "kramdown", "~> 2.4"
   spec.add_dependency "kramdown-parser-gfm", "~> 1.1"
   spec.add_dependency "ostruct"  # Explicit dep for Ruby 3.5+ compatibility
+  # opal (the browser-compile toolchain behind `streamweaver opal-build`) is
+  # deliberately NOT a runtime dependency here. It's the Gemfile's dev
+  # dependency only -- a doc-shelf-only install must never be forced to pull
+  # it in. lib/stream_weaver/opal/builder.rb requires it lazily, on first
+  # actual use, and raises a friendly error if it's missing.
   # iterm2_ruby (https://rubygems.org/gems/iterm2_ruby) is an OPTIONAL enhancement:
   # iTerm2 split-pane browser panes on macOS, enabled with `gem install iterm2_ruby`.
   # StreamWeaver::ITerm degrades gracefully when it isn't installed — panel/canvas
