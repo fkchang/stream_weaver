@@ -4,6 +4,8 @@ require 'socket'
 require 'json'
 require 'fileutils'
 require_relative 'protocol'
+require_relative 'code_stamp'
+require_relative 'staleness_guard'
 
 module StreamWeaver
   module Canvas
@@ -62,6 +64,7 @@ module StreamWeaver
         # @param timeout [Integer] Timeout in seconds
         # @return [Hash, nil] Response message or nil
         def send_message(message, timeout: 5)
+          StalenessGuard.ensure_current!
           raise NotRunningError, "Canvas bridge is not running" unless bridge_running?
 
           socket = UNIXSocket.new(socket_path)
@@ -93,6 +96,7 @@ module StreamWeaver
         # @param timeout [Integer] Timeout in seconds
         # @return [Hash, nil] Event message or nil
         def send_and_wait(message, event_type:, timeout: DEFAULT_TIMEOUT)
+          StalenessGuard.ensure_current!
           raise NotRunningError, "Canvas bridge is not running" unless bridge_running?
 
           socket = UNIXSocket.new(socket_path)
@@ -138,6 +142,7 @@ module StreamWeaver
         # @param name [String, nil] session to filter on; nil yields all
         # @yield [Hash] each event message
         def each_event(name = nil)
+          StalenessGuard.ensure_current!
           raise NotRunningError, "Canvas bridge is not running" unless bridge_running?
 
           socket = UNIXSocket.new(socket_path)
@@ -170,6 +175,8 @@ module StreamWeaver
         # Start the bridge process if not running
         # @return [Hash] { pid: Integer, port: Integer }
         def ensure_bridge_running
+          StalenessGuard.ensure_current!
+
           if bridge_running?
             info = read_bridge_info
             # Verify HTTP server is actually responding
@@ -254,7 +261,8 @@ module StreamWeaver
         end
 
         # Read bridge info from PID file
-        # @return [Hash] { pid: Integer, port: Integer }
+        # @return [Hash] { pid: Integer, port: Integer, version: String, code: String }
+        #   version/code are nil for a bridge started before the stamp existed
         def read_bridge_info
           return nil unless File.exist?(pid_file_path)
 
@@ -262,7 +270,7 @@ module StreamWeaver
           pid = content[/pid=(\d+)/, 1]&.to_i
           port = content[/port=(\d+)/, 1]&.to_i || Bridge::DEFAULT_PORT
 
-          { pid: pid, port: port }
+          { pid: pid, port: port }.merge(CodeStamp.parse(content))
         end
 
         # Stop the bridge process

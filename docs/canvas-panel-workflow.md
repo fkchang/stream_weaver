@@ -36,6 +36,14 @@ streamweaver canvas-close myapp
 | `canvas-reset <name>` | Reset session state (keep connections) |
 | `canvas-list` | List all canvas sessions |
 
+## Upgrading StreamWeaver under a running bridge
+
+The canvas bridge is a long-lived process holding its classes in memory, so a `gem update` or `rake install` underneath it leaves it serving the old code -- pushed canvas source calling a brand-new method used to fail with a bare `NameError`. It now heals itself: the bridge stamps the StreamWeaver version and a fingerprint of the code it loaded into `~/.streamweaver/canvas.pid` at boot, every canvas command compares that stamp against its own before talking to the bridge, and on a mismatch it restarts the bridge in place -- snapshot, stop, start, restore -- so open sessions keep their content, then carries on with the command you actually ran. You see one line on stderr (stdout stays clean for `canvas-wait`'s JSON): `StreamWeaver: canvas bridge was running older code — restarting it (sessions preserved)…`. It speaks up again, on the same stream, if anything about that claim needs qualifying: a session it could not read before stopping the old bridge, a restore that failed, or a restarted bridge that landed on a different port -- which means the tab you have open is pointing at a dead one and wants a reload.
+
+Two things it deliberately will not do. It never restarts twice within a minute: a second mismatch that soon means two callers disagree about which code is current -- a dev checkout and the installed gem, typically -- and restarting again would just hand the bridge back and forth, taking your sessions with it each time. And it does not notice a single edited file deep in a dev checkout, because the fingerprint tracks `stream_weaver.rb`, which an install rewrites and a targeted edit does not. Both cases print a warning naming `streamweaver canvas-restart`, which is the answer.
+
+Set `SW_NO_AUTO_RESTART=1` to be warned instead of healed everywhere; the command then continues against the old bridge.
+
 ## Multi-Step Workflows
 
 Use `canvas_continue` to show a spinner after submit instead of "You can close this window":

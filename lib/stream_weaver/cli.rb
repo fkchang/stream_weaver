@@ -1537,6 +1537,7 @@ module StreamWeaver
     # Stop the canvas bridge
     def self.canvas_stop
       require_relative 'canvas/client'
+      Canvas::StalenessGuard.disable!
 
       if Canvas::Client.stop_bridge
         puts "Canvas bridge stopped"
@@ -1814,6 +1815,7 @@ module StreamWeaver
     # to blow away), asks for confirmation before stopping unless --yes.
     def self.canvas_restart(args = [])
       require_relative 'canvas/client'
+      Canvas::StalenessGuard.disable!
 
       auto_yes = args.include?('--yes') || args.include?('-y')
 
@@ -1863,6 +1865,36 @@ module StreamWeaver
       end
 
       exit 1 unless ok
+    end
+
+    # The programmatic core of canvas-restart: snapshot -> stop -> start ->
+    # wait -> restore, with none of the command's narration, prompting or exit
+    # codes. Returns { ok:, dir:, unconfirmed:, old_port:, port: } -- `ok` is
+    # true iff every session that needed restoring came back, `unconfirmed`
+    # names the sessions the snapshot could not read at all, and the two ports
+    # let the caller say so when the bridge moved. All three are things the
+    # caller owes the operator: it cannot honestly claim to have preserved a
+    # session it never read, or to have healed anything if every open tab is
+    # now pointing at a dead port (the ps84 port-squat gotcha, which
+    # canvas-restart itself warns about in stars).
+    #
+    # Used by the staleness auto-heal (disc-171), which runs in the middle of
+    # some other command: it must not exit that command, and must not stop to
+    # ask a question nobody is sitting there to answer.
+    def self.restart_bridge_preserving_sessions
+      require_relative 'canvas/client'
+      Canvas::StalenessGuard.disable!
+
+      old_port = Canvas::Client.bridge_running? ? Canvas::Client.read_bridge_info&.dig(:port) : nil
+
+      dir = default_snapshot_dir
+      snapshot = do_canvas_snapshot(dir)
+      Canvas::Client.stop_bridge
+      new_port = Canvas::Client.ensure_bridge_running[:port]
+      wait_for_bridge_ready
+
+      { ok: do_canvas_restore(dir, force: false), dir: dir,
+        unconfirmed: snapshot[:unconfirmed] || [], old_port: old_port, port: new_port }
     end
 
     # Bounded-wait retry on the bridge's liveness, called right after

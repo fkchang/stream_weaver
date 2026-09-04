@@ -5,6 +5,7 @@ require 'json'
 require 'socket'
 require 'fileutils'
 require_relative 'protocol'
+require_relative 'code_stamp'
 require_relative 'scroll_top_hint'
 require_relative 'session'
 require_relative 'bridge'
@@ -613,10 +614,13 @@ module StreamWeaver
         # For HTTP polling mode, browsers will get updates on next poll
       end
 
-      # Write PID file
+      # Write PID file. The version/code stamp records which StreamWeaver
+      # code this process loaded, so a later CLI invocation can tell that the
+      # bridge it is about to talk to predates an install (disc-171).
       def self.write_pid_file
         FileUtils.mkdir_p(File.dirname(pid_file_path))
-        File.write(pid_file_path, "pid=#{Process.pid}\nport=#{@port || DEFAULT_PORT}\n")
+        File.write(pid_file_path,
+                   "pid=#{Process.pid}\nport=#{@port || DEFAULT_PORT}\n#{CodeStamp.pid_file_stanza}")
       end
 
       # Cleanup on shutdown

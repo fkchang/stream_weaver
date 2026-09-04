@@ -9,6 +9,14 @@
 # guarantee that holds even for a spec nobody thought to check.
 ENV['SW_NO_OPEN'] = '1'
 
+# Same guarantee for the canvas bridge staleness auto-heal (disc-171): any
+# spec that stubs the bridge as running can reach the guard, and the guard's
+# cure is to restart the bridge -- which, without a redirected pid file, is
+# the developer's live bridge and every session they have open in a browser.
+# The specs that exercise the heal for real clear this locally, alongside
+# their own throwaway socket and pid file.
+ENV['SW_NO_AUTO_RESTART'] = '1'
+
 # Set RACK_ENV to test to disable Sinatra protection middleware
 ENV['RACK_ENV'] = 'test'
 
