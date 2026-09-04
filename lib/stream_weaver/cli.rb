@@ -70,6 +70,8 @@ module StreamWeaver
         canvas_wait(args)
       when 'canvas-close'
         canvas_close(args)
+      when 'canvas-raise'
+        canvas_raise(args)
       when 'canvas-toast'
         canvas_toast(args)
       when 'canvas-list'
@@ -640,6 +642,8 @@ module StreamWeaver
           streamweaver canvas-wait <name>         Wait for user interaction
           streamweaver canvas-toast <name> <msg>  Show toast overlay (doesn't replace content)
           streamweaver canvas-close <name>        Close a canvas session
+          streamweaver canvas-raise <name>        Surface an already-pushed canvas (its iTerm pane if
+                                                     tracked, else the URL in the default browser)
           streamweaver canvas-reset <name>        Reset session state (keep connections)
           streamweaver canvas-reset --all         Reset all sessions
           streamweaver canvas-list                List canvas sessions
@@ -1430,6 +1434,59 @@ module StreamWeaver
       else
         $stderr.puts "Session not found: #{session_name}"
         exit 1
+      end
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
+    # Surfaces an already-pushed canvas session without opening a second
+    # pane. `panel` always splits a NEW pane (stream_weaver, round-7 UAT:
+    # calling it again on a session that already has one would duplicate
+    # it), and only a successful worker-prompt *submit* raises anything on
+    # its own (ITerm.send_to_session's activate_session_quietly) -- a push
+    # the worker makes mid-response, after the user's attention has moved
+    # elsewhere (e.g. to a blocking standalone form's own browser tab),
+    # raises nothing. This is the one-liner for that gap: reuse the pane
+    # iTerm already tracks for the session (Session#pane_id, set by `panel`
+    # via set_pane_id) when there is one, else fall back to raising the
+    # session's URL in the default browser the same way `panel` does when
+    # iTerm2 isn't available.
+    def self.canvas_raise(args)
+      require_relative 'iterm'
+      require_relative 'canvas/client'
+      require_relative 'canvas/bridge_server'
+
+      session_name = args.first
+
+      if session_name.nil? || help_flag?(session_name)
+        $stderr.puts "Usage: streamweaver canvas-raise <session-name>"
+        exit 1
+      end
+
+      response = Canvas::Client.send_message({ type: 'list' })
+      sessions = (response && response[:sessions]) || []
+      session = sessions.find { |s| s[:name].to_s == session_name }
+
+      unless session
+        $stderr.puts "Session not found: #{session_name}"
+        exit 1
+      end
+
+      pane_id = session[:pane_id]
+      # session_alive? already guards on ITerm.available? internally.
+      if pane_id && ITerm.session_alive?(pane_id)
+        ITerm.activate_session(pane_id)
+        puts "Raised '#{session_name}' in its iTerm pane"
+      else
+        # The `list` call above already proved the bridge is up -- its port
+        # is only missing here in a vanishingly narrow race (bridge exits
+        # between that call and this one), so this falls back to the
+        # bridge's own default rather than a second not-running check.
+        port = Canvas::Client.read_bridge_info&.dig(:port) || Canvas::BridgeServer::DEFAULT_PORT
+        url = "http://localhost:#{port}/canvas/#{session_name}"
+        open_browser(url)
+        puts "Raised '#{session_name}' at #{url}"
       end
     rescue Canvas::Client::NotRunningError => e
       $stderr.puts "Error: #{e.message}"

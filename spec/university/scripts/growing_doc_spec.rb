@@ -163,14 +163,14 @@ RSpec.describe 'stream_weaver/university/scripts/growing_doc.rb' do
   # printed "Saved: <path>" as though the pick had landed). `apply_extensions!`
   # is the extracted fix, testable with no canvas bridge involved.
   describe '.apply_extensions!' do
-    it 'adds a known extension, prints OK, and returns true' do
+    it 'adds a known extension, prints OK with the exact rendered header, and returns true' do
       toc = []
       body = +''
       result = nil
       expect { result = mod.apply_extensions!(['tradeoffs'], toc, body) }
-        .to output(/OK -- extension "tradeoffs" added/).to_stdout
+        .to output("growing_doc: OK tradeoffs → section 'Tradeoffs — two ways to share it'\n").to_stdout
       expect(result).to be(true)
-      expect(toc).to eq([mod::EXTENSIONS['tradeoffs'][:toc]])
+      expect(toc).to eq([{ id: 'tradeoffs', label: mod::EXTENSIONS['tradeoffs'][:header] }])
       expect(body).to include(mod::EXTENSIONS['tradeoffs'][:dsl])
     end
 
@@ -191,7 +191,7 @@ RSpec.describe 'stream_weaver/university/scripts/growing_doc.rb' do
       result = nil
       expect { result = mod.apply_extensions!(%w[tradeoffs bogus], toc, body) }.to output.to_stdout
       expect(result).to be(false)
-      expect(toc).to eq([mod::EXTENSIONS['tradeoffs'][:toc]])
+      expect(toc).to eq([{ id: 'tradeoffs', label: mod::EXTENSIONS['tradeoffs'][:header] }])
     end
 
     # Order independence: a failure has to stay a failure regardless of
@@ -204,7 +204,7 @@ RSpec.describe 'stream_weaver/university/scripts/growing_doc.rb' do
       result = nil
       expect { result = mod.apply_extensions!(%w[bogus tradeoffs], toc, body) }.to output.to_stdout
       expect(result).to be(false)
-      expect(toc).to eq([mod::EXTENSIONS['tradeoffs'][:toc]])
+      expect(toc).to eq([{ id: 'tradeoffs', label: mod::EXTENSIONS['tradeoffs'][:header] }])
     end
   end
 
@@ -245,6 +245,149 @@ RSpec.describe 'stream_weaver/university/scripts/growing_doc.rb' do
     it 'announces the opening stage (no toc entry of its own) as "opening"' do
       expect { mod.announce_stage(0, 'pushing') }
         .to output(%r{stage 1/#{mod::STAGES.length} pushing: opening}).to_stdout
+    end
+  end
+
+  # Round-7 UAT: the user picked "cheatsheet" and could not find a matching
+  # header -- the rendered title never said which key it came from. Every
+  # extension's header now begins with its own key, capitalized.
+  describe 'the key -> header convention (every EXTENSIONS entry)' do
+    it 'renders a header that begins with its own key, capitalized -- for every extension' do
+      mod::EXTENSIONS.each do |key, ext|
+        expect(ext[:header]).to start_with(key.capitalize)
+      end
+    end
+
+    it 'keeps the header field and the doc_section_header title identical -- no drift' do
+      mod::EXTENSIONS.each do |key, ext|
+        expect(ext[:dsl]).to include(%(doc_section_header "07", "#{ext[:header]}", id: "#{key}"))
+      end
+    end
+
+    it 'surfaces every header in the picker legend, not just the label' do
+      mod::EXTENSIONS.each_value do |ext|
+        expect(mod.picker_dsl).to include(ext[:header])
+      end
+    end
+  end
+
+  # Round-7 UAT: a worker re-ran `--picker` without re-passing `--extend`
+  # and clobbered the doc -- the rebuild had no memory of an earlier
+  # invocation's picks. `resolve_extend_keys` is the extracted merge,
+  # testable with no canvas bridge involved (same reason apply_extensions!
+  # was extracted before it).
+  describe '.resolve_extend_keys (picker state persists across invocations)' do
+    let(:state_session) { "growing-doc-state-spec-#{Process.pid}" }
+
+    around do |example|
+      Dir.mktmpdir('growing_doc_resolve') do |dir|
+        prev = ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR']
+        ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR'] = dir
+        example.run
+      ensure
+        ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR'] = prev
+      end
+    end
+
+    it 'is empty with no persisted state and no --extend given (plain --picker)' do
+      expect(mod.resolve_extend_keys(state_session, ['--picker'])).to eq([])
+    end
+
+    it 'picks up a fresh --extend with nothing persisted yet' do
+      expect(mod.resolve_extend_keys(state_session, ['--extend=tradeoffs'])).to eq(['tradeoffs'])
+    end
+
+    # The exact live failure: run picker -> extend(tradeoffs) [persists] ->
+    # picker again, with NO --extend flag -- tradeoffs must still resolve.
+    it 'keeps a persisted key on a LATER --picker call that passes no --extend at all' do
+      StreamWeaver::University::Scripts::GrowingDocState.save(state_session, ['tradeoffs'])
+
+      expect(mod.resolve_extend_keys(state_session, ['--picker'])).to eq(['tradeoffs'])
+    end
+
+    it 'adds a new --extend key to what was already persisted, not replacing it' do
+      StreamWeaver::University::Scripts::GrowingDocState.save(state_session, ['tradeoffs'])
+
+      expect(mod.resolve_extend_keys(state_session, ['--extend=cheatsheet']))
+        .to eq(%w[tradeoffs cheatsheet])
+    end
+
+    it 'never lists the same key twice, persisted and re-passed' do
+      StreamWeaver::University::Scripts::GrowingDocState.save(state_session, ['tradeoffs'])
+
+      expect(mod.resolve_extend_keys(state_session, ['--extend=tradeoffs'])).to eq(['tradeoffs'])
+    end
+  end
+
+  # DHH review of the round-7 fix caught a hole it opened: resolve_extend_keys
+  # merges PERSISTED keys into every call, so a later PLAIN re-run (clicking
+  # Repeat on step 4, no flags at all) would silently inherit an earlier
+  # --picker round's picks and skip the six-stage growing animation --
+  # step 4's entire payoff. fresh_start? plus clearing state on it is the fix.
+  describe '.fresh_start?' do
+    it 'is true for a bare invocation -- no --picker, no --extend' do
+      expect(mod.fresh_start?(['doc-demo'])).to be true
+    end
+
+    it 'is false when --picker is present' do
+      expect(mod.fresh_start?(['doc-demo', '--picker'])).to be false
+    end
+
+    it 'is false when --extend= is present' do
+      expect(mod.fresh_start?(['doc-demo', '--extend=tradeoffs'])).to be false
+    end
+  end
+
+  describe 'a bare re-run forgets persisted picks and starts the demo over' do
+    let(:state_session) { "growing-doc-fresh-start-spec-#{Process.pid}" }
+
+    around do |example|
+      Dir.mktmpdir('growing_doc_fresh_start') do |dir|
+        prev = ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR']
+        ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR'] = dir
+        example.run
+      ensure
+        ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR'] = prev
+      end
+    end
+
+    it 'resolves to no extend keys on a plain re-run, even with picks persisted from an earlier --picker round' do
+      StreamWeaver::University::Scripts::GrowingDocState.save(state_session, ['tradeoffs'])
+
+      argv = [state_session]
+      StreamWeaver::University::Scripts::GrowingDocState.clear(state_session) if mod.fresh_start?(argv)
+
+      expect(mod.resolve_extend_keys(state_session, argv)).to eq([])
+    end
+  end
+
+  describe 'the space form of --extend (round-6-class failure)' do
+    it 'aborts loudly instead of silently ignoring the flag and reporting success' do
+      expect { mod.run!(['doc-demo', '--extend', 'tradeoffs']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).not_to eq(0) }
+    end
+  end
+
+  describe '--reset (run!)' do
+    let(:state_session) { "growing-doc-reset-spec-#{Process.pid}" }
+
+    around do |example|
+      Dir.mktmpdir('growing_doc_reset') do |dir|
+        prev = ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR']
+        ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR'] = dir
+        example.run
+      ensure
+        ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR'] = prev
+      end
+    end
+
+    it 'clears persisted extend keys and returns without touching the canvas bridge' do
+      StreamWeaver::University::Scripts::GrowingDocState.save(state_session, ['tradeoffs'])
+      expect(StreamWeaver::Canvas::Client).not_to receive(:ensure_bridge_running)
+
+      expect { mod.run!([state_session, '--reset']) }.to output(/cleared persisted extensions/).to_stdout
+
+      expect(StreamWeaver::University::Scripts::GrowingDocState.load(state_session)).to eq([])
     end
   end
 end

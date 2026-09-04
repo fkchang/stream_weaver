@@ -23,6 +23,16 @@ StreamWeaver is a Ruby DSL for building reactive web UIs with minimal code. Thin
 
 **For AI agents:** Parse the terminal output after `ruby app.rb` to find the actual URL.
 
+**Finding the port an agent is already driving (do this, not a second boot):** Run the app as a
+background task, then read its own stdout for the `http://127.0.0.1:<port>` line the startup
+banner prints — that line IS the port, there is nothing to discover beyond reading it. **NEVER
+boot a second instance of the same app to "find" a port** — StreamWeaver's own port-scan means a
+second launch just finds the NEXT free port and starts a duplicate, orphaned server; it never
+tells you what the first one is running on. If the banner didn't reach your captured output
+(e.g. you weren't backgrounding the process yet), find the live port with
+`lsof -i :4567-4620 -sTCP:LISTEN` against the ALREADY-running process rather than sleeping on
+the log or launching another one.
+
 ## THE KEY INSIGHT
 
 **Your Ruby DSL block RE-EXECUTES on every user interaction.**
@@ -1206,7 +1216,7 @@ end.run!
 ## Common Mistakes
 
 1. **Forgetting state is a hash** - Use `state[:key]`, not `state.key`
-2. **Assuming port 4567** - Read stdout for actual port
+2. **Assuming port 4567, or booting a second instance to "find" the port** - Read the already-running process's stdout for the actual port; a second launch just starts an orphaned duplicate on the next free one
 3. **Missing `.run!`** - App won't start without it
 4. **Agentic mode button state** - Only input values returned, not button-set state
 5. **Wrong checkbox signature** - `checkbox :key, "label"` (key first, then label). NOT `checkbox "label", value: x`

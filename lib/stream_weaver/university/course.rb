@@ -198,10 +198,16 @@ module StreamWeaver
             your own version and do not go looking for a source checkout. Do NOT set
             SW_NO_OPEN -- this app is meant to open in MY browser, and it opens itself.
 
-            The browser should already be up. If the startup banner did not reach your
-            captured output, find the port with `lsof -i :4567-4620 -sTCP:LISTEN` rather
-            than sleeping on the log, and open that URL for me the way the PRESENT rule
-            below says.
+            The browser should already be up, but confirm it yourself: read the
+            `http://127.0.0.1:<port>` line your own captured stdout just printed -- that
+            line IS the port, nothing to search for. NEVER run a second `ruby ...` to
+            "find" the port; StreamWeaver's own port-scan means a second launch just
+            starts a duplicate, orphaned app on the NEXT free port, which is a terrible
+            first impression and tells you nothing about the one already running. If the
+            banner genuinely did not reach your captured output, find the live port
+            against the process you already started with `lsof -i :4567-4620
+            -sTCP:LISTEN` rather than sleeping on the log or launching another one, and
+            open that URL for me the way the PRESENT rule below says.
 
             NOW narrate. Print the file -- nine lines now, `streamweaver university-demo
             counter` prints its path -- and walk me through it:
@@ -291,6 +297,13 @@ module StreamWeaver
 
             Same context, same `radio_group`, same `text_field` -- now on the canvas,
             with a callout saying you are frozen, and an explicit submit button.
+
+            Then immediately: `streamweaver canvas-raise decision`. PART ONE's blocking
+            form pulled my attention to its own browser tab, and a push you make mid-
+            response -- unlike a Run submit -- raises nothing on its own; without this
+            I would never see the canvas surface unprompted. This is PRESENT-mode
+            discipline, same as `open`/`streamweaver panel` elsewhere in this course:
+            for my eyes, never automation.
 
             Then wait on it -- and how you wait is itself worth saying out loud. Run
             `streamweaver canvas-wait decision` AS A BACKGROUND TASK from the start, not
@@ -393,13 +406,17 @@ module StreamWeaver
 
             ruby "$(streamweaver university-demo doc)" doc-demo --extend=<key>
 
-            (Keys accumulate: `--extend=timeline,cheatsheet` for two.) The command tells
-            you plainly -- an OK line per key it recognized, a FAILED line per key it did
-            not, and it exits non-zero if anything failed. Still VERIFY before telling me
-            anything landed: curl the `doc-demo` session (or read the command's own
-            OK/FAILED output) and grep for the new section's heading text. Only then say
-            it is there -- a push that silently no-op'd once looked identical to a
-            successful one. If I typed a description instead, write that section yourself
+            (Keys accumulate: `--extend=timeline,cheatsheet` for two -- and so do repeat
+            invocations, on their own: the command remembers every key you have already
+            applied to this session, so a later `--picker` round never loses one.) The
+            command tells you plainly -- one line per key, `OK <key> → section '<exact
+            rendered header>'` for a key it recognized, `FAILED` for one it did not -- and
+            it exits non-zero if anything failed. Every rendered header BEGINS with its
+            own key, capitalized, so that OK line is something you can act on directly.
+            Still VERIFY before telling me anything landed: curl the `doc-demo` session
+            (or read the command's own OK/FAILED output) and grep for that exact header
+            text. Only then say it is there -- a push that silently no-op'd once looked
+            identical to a successful one. If I typed a description instead, write that section yourself
             -- and keep it to `doc_section_header`, `md`, `table headers:/rows:`,
             `comparison`, `code_block`, `callout` and `mermaid`. Those are exactly the
             components `streamweaver org-export` recognizes; anything else looks right in

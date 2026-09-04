@@ -6,6 +6,7 @@ require 'stream_weaver/canvas/client'
 require 'stream_weaver/university/course'
 require 'stream_weaver/university/progress'
 require 'stream_weaver/university/runner'
+require 'stream_weaver/university/scripts/growing_doc_state'
 
 module StreamWeaver
   module University
@@ -142,11 +143,18 @@ module StreamWeaver
       # (`handle_token`, above) and `streamweaver university-reset`.
       def self.close_demo_sessions!
         DEMO_SESSION_NAMES.each do |name|
-          ::StreamWeaver::Canvas::Client.send_message(
-            ::StreamWeaver::Canvas::Protocol::Messages.close(name)
-          )
-        rescue ::StreamWeaver::Canvas::Client::NotRunningError, ::StreamWeaver::Canvas::Client::ConnectionError
-          nil
+          begin
+            ::StreamWeaver::Canvas::Client.send_message(
+              ::StreamWeaver::Canvas::Protocol::Messages.close(name)
+            )
+          rescue ::StreamWeaver::Canvas::Client::NotRunningError, ::StreamWeaver::Canvas::Client::ConnectionError
+            nil
+          end
+          # growing_doc.rb's own persisted --extend keys (round-7 UAT) --
+          # otherwise a reset course still remembers last run's picks the
+          # next time its script runs. A no-op (FileUtils.rm_f) for every
+          # name but doc-demo's, which never had state to begin with.
+          ::StreamWeaver::University::Scripts::GrowingDocState.clear(name)
         end
       end
 

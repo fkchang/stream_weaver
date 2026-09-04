@@ -32,6 +32,7 @@ streamweaver canvas-close myapp
 | `canvas-wait <name>` | Block until user clicks a button, returns form state as JSON |
 | `canvas-toast <name> <msg>` | Show toast notification overlay |
 | `canvas-close <name>` | Close session and browser pane |
+| `canvas-raise <name>` | Surface an already-open session without opening a second pane: activates its tracked iTerm pane, or opens its URL in the default browser if there is none to reuse |
 | `canvas-reset <name>` | Reset session state (keep connections) |
 | `canvas-list` | List all canvas sessions |
 
@@ -58,7 +59,7 @@ After user clicks "Next", they see "Processing..." spinner until you push the ne
 
 ### Automatic Pane Tracking
 
-When you open a panel, StreamWeaver tracks the iTerm2 pane ID. When you call `canvas-close`, it automatically closes the browser pane.
+When you open a panel, StreamWeaver tracks the iTerm2 pane ID. When you call `canvas-close`, it automatically closes the browser pane. `panel` always opens a NEW pane -- calling it a second time on a session that already has one duplicates it. To bring an existing session's pane back to the front instead (a push you made after the user's attention moved elsewhere, for example), use `canvas-raise <name>`.
 
 ### URL Fallback
 

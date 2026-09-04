@@ -149,6 +149,16 @@ RSpec.describe StreamWeaver::University::Course do
       expect(step(2)[:what_you_should_see].join(' ')).to match(/background task/i)
     end
 
+    # Live UAT (round-7): the worker took ages finding the app's port and
+    # booted a SECOND instance to find it -- an orphaned duplicate server
+    # and a terrible first impression. The fix is prompt-level: read the
+    # port from your own captured stdout; never launch a second process.
+    it 'tells step 2 to read the port from its own stdout, never boot a second instance' do
+      expect(prompt(2)).to match(/read the `http:\/\/127\.0\.0\.1:<port>` line/i)
+      expect(prompt(2)).to match(/NEVER run a second `ruby \.\.\.` to "find" the port/)
+      expect(prompt(2)).to match(/duplicate, orphaned app/i)
+    end
+
     # Two independent worker sessions hit two different startup failures on
     # this one step -- one omitted `require 'stream_weaver'`, the other
     # omitted `.run!`. The "6-line app" framing hides exactly those two
@@ -196,6 +206,19 @@ RSpec.describe StreamWeaver::University::Course do
       expect(prompt(3)).to match(/not a second form, the same one/i)
       expect(prompt(3)).to include('canvas-wait decision')
       expect(prompt(3)).to match(/no `canvas-wait` behind it/)
+    end
+
+    # Round-7 UAT: a worker-initiated push (unlike a Run submit) raises
+    # nothing on its own, so the canvas variant sat unseen after PART ONE's
+    # blocking form pulled attention to its own browser tab.
+    it 'raises the canvas pane right after pushing it, before waiting' do
+      push_at = prompt(3).index('canvas decision')
+      raise_at = prompt(3).index('canvas-raise decision')
+      wait_at = prompt(3).index('canvas-wait decision')
+
+      expect(raise_at).not_to be_nil
+      expect(push_at).to be < raise_at
+      expect(raise_at).to be < wait_at
     end
 
     # Mined 2026-09-03 (worker-session-mining.md, "Round-5 latency +
@@ -418,12 +441,27 @@ RSpec.describe StreamWeaver::University::Course do
     # prompt too -- it must not let the worker claim success without
     # checking.
     it 'has step 4 verify a --extend actually landed before telling the user' do
-      expect(prompt(4)).to match(/OK line per key/i)
-      expect(prompt(4)).to match(/FAILED line per key/i)
+      expect(prompt(4)).to match(/OK <key> → section/i)
+      expect(prompt(4)).to match(/`FAILED` for one it did not/i)
       expect(prompt(4)).to match(/exits? non-zero/i)
       expect(prompt(4)).to match(/curl the `doc-demo` session/i)
-      expect(prompt(4)).to match(/grep for the new section/i)
+      expect(prompt(4)).to match(/grep for that exact header text/i)
       expect(prompt(4)).to match(/only then say it is there/i)
+    end
+
+    # Round-7 UAT: the user picked "cheatsheet" and could not find a
+    # matching header -- the rendered title never said which key it came
+    # from. Every extension's header now begins with its own key.
+    it 'tells the worker every extension header begins with its own key' do
+      expect(prompt(4)).to match(/every rendered header begins with its own key/i)
+    end
+
+    # Round-7 UAT: a worker re-ran --picker without re-passing --extend and
+    # clobbered the doc -- the rebuild had no memory of an earlier
+    # invocation's picks.
+    it 'tells the worker repeated invocations remember prior --extend picks on their own' do
+      expect(prompt(4)).to match(/repeat invocations, on their own/i)
+      expect(prompt(4)).to match(/never loses one/i)
     end
 
     it 'has step 4 use the radio choice as the --extend key verbatim, with no parsing' do

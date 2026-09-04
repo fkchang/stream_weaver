@@ -206,7 +206,7 @@ RSpec.describe StreamWeaver::University::Demos do
     it 'org-exports cleanly with any one extension appended' do
       toc, body = base_document
       mod::EXTENSIONS.each do |key, ext|
-        dsl = mod.document(toc + [ext[:toc]], body + ext[:dsl] + "\n")
+        dsl = mod.document(toc + [{ id: key, label: ext[:header] }], body + ext[:dsl] + "\n")
         writer = StreamWeaver::Org::Writer.new(dsl)
         writer.call
         expect(writer.coverage).to include(passthrough_verbatim: 0, passthrough_lossy: 0),

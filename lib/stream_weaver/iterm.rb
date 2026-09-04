@@ -118,6 +118,24 @@ module StreamWeaver
         false
       end
 
+      # Brings an already-open pane to the front. Public wrapper around the
+      # private, connection-scoped activate_session_quietly used by the
+      # raise-on-run path (send_to_session, above) -- this is the same
+      # primitive for a caller that isn't already inside a `connect` block
+      # (`streamweaver canvas-raise`, round-7 UAT: a worker-initiated canvas
+      # push, unlike a Run submit, has nothing that raises it, and `panel`
+      # can't be called twice without splitting a second pane). Fire-and-
+      # forget, same as the private version: false only means "could not
+      # even try", not "did not land".
+      def activate_session(session_id)
+        return false unless available? && session_id
+
+        connect { |c| activate_session_quietly(c, session_id) }
+        true
+      rescue StandardError
+        false
+      end
+
       def split_vertical_with_command(command)
         return false unless available?
 

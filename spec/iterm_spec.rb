@@ -461,6 +461,55 @@ RSpec.describe StreamWeaver::ITerm do
     end
   end
 
+  # Public wrapper around the same activate_session RPC raise-on-Run uses
+  # internally (round-7 UAT): `streamweaver canvas-raise` needs to bring an
+  # existing pane forward from OUTSIDE a `connect` block, and without
+  # calling `panel` again (which would split a second one).
+  describe '.activate_session' do
+    let(:client) { instance_double(ITerm2::Client) }
+
+    before do
+      allow(described_class).to receive(:available?).and_return(true)
+      allow(ITerm2).to receive(:connect).and_yield(client)
+      allow(client).to receive(:activate_session).and_return(true)
+    end
+
+    it 'activates exactly the given session id' do
+      described_class.activate_session('canvas-pane')
+
+      expect(client).to have_received(:activate_session).with('canvas-pane')
+    end
+
+    it 'returns true once it has attempted the activation' do
+      expect(described_class.activate_session('canvas-pane')).to be true
+    end
+
+    it 'returns false without connecting when no session id is given' do
+      expect(described_class.activate_session(nil)).to be false
+      expect(ITerm2).not_to have_received(:connect)
+    end
+
+    it 'returns false without connecting when iTerm2 is unavailable' do
+      allow(described_class).to receive(:available?).and_return(false)
+
+      expect(described_class.activate_session('canvas-pane')).to be false
+      expect(ITerm2).not_to have_received(:connect)
+    end
+
+    it 'still reports true even if the activation RPC itself blows up (fire-and-forget)' do
+      allow(client).to receive(:activate_session).and_raise(ITerm2::Error, 'boom')
+
+      expect(described_class.activate_session('canvas-pane')).to be true
+    end
+
+    it 'degrades silently when the installed client lacks activate_session' do
+      allow(client).to receive(:respond_to?).with(:activate_session).and_return(false)
+
+      expect { described_class.activate_session('canvas-pane') }.not_to raise_error
+      expect(client).not_to have_received(:activate_session)
+    end
+  end
+
   describe '.session_alive?' do
     let(:client) { instance_double(ITerm2::Client) }
 

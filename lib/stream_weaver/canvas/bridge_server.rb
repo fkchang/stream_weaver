@@ -452,6 +452,16 @@ module StreamWeaver
                   currentVersion = data.version;
                   window._swContentVersion = data.version;
                   window._swFeedbackActive = false;
+
+                  // Auto-scroll to follow doc growth (round-7 UAT): a growing
+                  // canvas (step 4's doc) lands new sections below the fold
+                  // with nothing to tell the viewer to look down. Standard
+                  // chat-app rule -- only follow if the viewer was already
+                  // at/near the bottom BEFORE this swap; never yank someone
+                  // who scrolled up to reread something.
+                  const wasNearBottom = (window.innerHeight + window.scrollY) >=
+                    (document.documentElement.scrollHeight - 150);
+
                   container.innerHTML = data.html;
 
                   // Remove toast when new content arrives (unless persistent)
@@ -480,6 +490,10 @@ module StreamWeaver
                     // chart family (bar_chart, line_chart, ...) uses Alpine x-init
                     // and is already covered by Alpine.initTree(container) above.
                     if (window.swChartInit) window.swChartInit();
+
+                    if (wasNearBottom) {
+                      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+                    }
                   }, 10);
                 }
               } catch (e) {

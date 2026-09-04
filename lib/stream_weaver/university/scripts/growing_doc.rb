@@ -37,11 +37,18 @@
 #   --no-save        grow only; don't save
 #   --extend=a,b     append these canned extension sections before saving
 #   --picker         append the co-edit picker form and DON'T save
+#   --reset          forget this session's persisted --extend keys, do nothing else
 #
 # Pause between pushes is STREAMWEAVER_GROWING_DOC_PAUSE seconds (default 3;
 # specs override it to run fast).
+#
+# Applied --extend keys persist per session (GrowingDocState, round-7 UAT)
+# so a second invocation -- another --picker round, a resumed course run --
+# rebuilds base + every key applied so far on its own; --extend only ever
+# ADDS to that set, and --reset is the only thing that clears it.
 
 require 'stream_weaver/canvas/client'
+require_relative 'growing_doc_state'
 
 module StreamWeaver
   module University
@@ -176,12 +183,22 @@ module StreamWeaver
         # timeline or a kpi_dashboard would look fine in the pane and then
         # fall out of the export as an unrecognized placeholder, which is
         # exactly the trap this course spends step 5 avoiding.
+        # `header:` is the rendered `doc_section_header` title, verbatim --
+        # kept as its own field (rather than parsed back out of `dsl`) so
+        # the picker legend and the OK line can quote it directly with no
+        # risk of drifting from what actually lands in the pane. Round-7
+        # UAT: the user picked "cheatsheet" and could not find a matching
+        # header, because the rendered title ("Commands used so far") never
+        # named the key it came from. Every header now BEGINS with its key,
+        # capitalized, so "which section did my pick add?" is never a
+        # guess -- a spec below pins `header` and `dsl`'s embedded title as
+        # identical for every entry, and that the key starts each one.
         EXTENSIONS = {
           'timeline' => {
             label: 'A release timeline (as an org-safe table)',
-            toc: { id: 'timeline', label: 'How it got here' },
+            header: 'Timeline — how it got here',
             dsl: <<~RUBY
-              doc_section_header "07", "How it got here", id: "timeline"
+              doc_section_header "07", "Timeline — how it got here", id: "timeline"
 
               table headers: ["Milestone", "What changed"], rows: [
                 ["First push", "One session, one DSL string, one pane"],
@@ -193,9 +210,9 @@ module StreamWeaver
           },
           'tradeoffs' => {
             label: 'A before/after comparison of the two ways to share a doc',
-            toc: { id: 'tradeoffs', label: 'Two ways to share it' },
+            header: 'Tradeoffs — two ways to share it',
             dsl: <<~RUBY
-              doc_section_header "07", "Two ways to share it", id: "tradeoffs"
+              doc_section_header "07", "Tradeoffs — two ways to share it", id: "tradeoffs"
 
               comparison(before_label: "Paste the terminal output", after_label: "Send the .org file") do
                 before do
@@ -209,9 +226,9 @@ module StreamWeaver
           },
           'cheatsheet' => {
             label: 'A cheat-sheet callout of the commands used so far',
-            toc: { id: 'cheatsheet', label: 'Commands used so far' },
+            header: 'Cheatsheet — commands used so far',
             dsl: <<~RUBY
-              doc_section_header "07", "Commands used so far", id: "cheatsheet"
+              doc_section_header "07", "Cheatsheet — commands used so far", id: "cheatsheet"
 
               callout(variant: :tip, title: "The whole course, in six commands") do
                 md "- `streamweaver panel <name>` -- open a pane\\n- `streamweaver canvas-push <name>` -- draw into it\\n- `streamweaver canvas-wait <name>` -- block on a human\\n- `streamweaver canvas-list` / `canvas-close` -- housekeeping\\n- `streamweaver org-export <file>` -- make it portable\\n- `streamweaver canvas-read <file>` -- read it back later"
@@ -220,9 +237,9 @@ module StreamWeaver
           },
           'architecture' => {
             label: 'A diagram of where a saved doc can travel next',
-            toc: { id: 'architecture', label: 'Where a saved doc travels' },
+            header: 'Architecture — where a saved doc travels',
             dsl: <<~RUBY
-              doc_section_header "07", "Where a saved doc travels", id: "architecture"
+              doc_section_header "07", "Architecture — where a saved doc travels", id: "architecture"
 
               mermaid <<~DIAGRAM
                 graph TD
@@ -250,7 +267,12 @@ module StreamWeaver
         # so there is nothing left to parse. The legend line explains what
         # each key means, since the key alone is not self-explanatory.
         def self.picker_dsl
-          legend = (EXTENSIONS.map { |key, ext| "- **#{key}** -- #{ext[:label]}" } +
+          # "key -- what it adds → the exact header it renders as" (round-7
+          # UAT: a key alone did not let the user find the section it
+          # produced, since the rendered title never said which key it came
+          # from -- it always does now, but the legend spells out the
+          # mapping up front too).
+          legend = (EXTENSIONS.map { |key, ext| "- **#{key}** -- #{ext[:label]} → \"#{ext[:header]}\"" } +
                     ["- **done** -- the doc is finished, move on"]).join("\n")
           choices = EXTENSIONS.keys + ['done']
           <<~RUBY
@@ -309,23 +331,74 @@ module StreamWeaver
             return false
           end
 
-          toc << ext[:toc]
+          # { id:, label: } derived from the key and its header rather than
+          # carried as its own EXTENSIONS field -- id always matches the
+          # key (see each entry's own doc_section_header call), and label
+          # always matches header, so a third copy had nothing to say that
+          # wasn't already true by construction, and nothing to keep in
+          # sync either.
+          toc << { id: key, label: ext[:header] }
           body << ext[:dsl] << "\n"
-          puts "growing_doc: OK -- extension #{key.inspect} added"
+          # Names the exact rendered header, not just the key (round-7
+          # UAT) -- "OK tradeoffs → section 'Tradeoffs — two ways to share
+          # it'" is something you can grep for directly.
+          puts "growing_doc: OK #{key} → section '#{ext[:header]}'"
           true
+        end
+
+        # Persisted --extend keys (round-7 UAT) merged with any passed to
+        # THIS invocation, so a second invocation for the same session --
+        # another --picker round, a resumed course run -- rebuilds
+        # everything applied so far on its own; a fresh --extend only ever
+        # ADDS to that set. Extracted, like apply_extensions! before it, so
+        # the merge itself is testable with no canvas bridge involved.
+        def self.resolve_extend_keys(session_name, argv)
+          new_keys = argv.grep(/\A--extend=/) { |a| a.split('=', 2).last }
+                         .flat_map { |v| v.split(',') }
+                         .map(&:strip).reject(&:empty?)
+          (GrowingDocState.load(session_name) + new_keys).uniq
+        end
+
+        # True for a bare invocation -- no --picker, no --extend -- which
+        # means "start the demo over": grow from scratch, forget prior
+        # picks, same as clicking Repeat expects. Without this carve-out a
+        # later plain re-run would inherit whatever an earlier --picker/
+        # --extend round had persisted and silently skip step 4's own
+        # payoff, the six-stage growing animation (caught in round-7 review
+        # as the fix that broke this exact case).
+        def self.fresh_start?(argv)
+          !argv.include?('--picker') && argv.grep(/\A--extend=/).empty?
         end
 
         def self.run!(argv = ARGV)
           session_name = argv.find { |a| !a.start_with?('-') } || 'doc-demo'
+
+          if argv.include?('--reset')
+            GrowingDocState.clear(session_name)
+            puts "growing_doc: cleared persisted extensions for '#{session_name}'"
+            return
+          end
+
           pause = Float(ENV.fetch('STREAMWEAVER_GROWING_DOC_PAUSE', 3))
           picker = argv.include?('--picker')
           save = !picker && !argv.include?('--no-save')
           doc_name = argv.grep(/\A--save-as=/) { |a| a.split('=', 2).last }.first ||
                      (argv.include?('--save-as') ? argv[argv.index('--save-as') + 1] : nil) ||
                      DEFAULT_DOC_NAME
-          extend_keys = argv.grep(/\A--extend=/) { |a| a.split('=', 2).last }
-                            .flat_map { |v| v.split(',') }
-                            .map(&:strip).reject(&:empty?)
+          # `--extend key` (space form) would otherwise be silently ignored
+          # by resolve_extend_keys's `--extend=` regex below -- exactly the
+          # class of bug round-6 fixed (a pick that never landed, printing
+          # "Saved:" anyway). Fail loudly instead of guessing.
+          abort 'growing_doc: use --extend=key, not --extend key' if argv.include?('--extend')
+
+          # Round-7 UAT: a worker re-ran --picker without re-passing
+          # --extend and clobbered the doc -- every invocation now rebuilds
+          # base + every persisted key on its own, and --extend only ever
+          # ADDS to that set. fresh_start? is the other half: a PLAIN
+          # re-run (Repeat) still means "start over", not "inherit
+          # whatever a previous --picker round persisted".
+          GrowingDocState.clear(session_name) if fresh_start?(argv)
+          extend_keys = resolve_extend_keys(session_name, argv)
 
           bridge = ::StreamWeaver::Canvas::Client.ensure_bridge_running
           ::StreamWeaver::Canvas::Client.send_message(
@@ -335,9 +408,11 @@ module StreamWeaver
           toc = []
           body = +''
 
-          # Growing the base document is skipped once extensions are in play:
-          # a re-push during the co-edit loop must land in one beat, not
-          # re-run the whole six-push show the user already watched.
+          # Growing the base document is skipped once extensions are in play
+          # -- this call's own --extend, OR any persisted from an earlier
+          # invocation: a re-push during the co-edit loop must land in one
+          # beat, not re-run the whole six-push show the user already
+          # watched.
           growing = extend_keys.empty? && !picker
           STAGES.each_with_index do |stage, i|
             toc << stage[:toc] if stage[:toc]
@@ -351,6 +426,10 @@ module StreamWeaver
           end
 
           extend_ok = apply_extensions!(extend_keys, toc, body)
+          # Persist only the keys EXTENSIONS actually recognizes -- an
+          # unknown key never applied anything, so it has no business
+          # surviving into the NEXT invocation's rebuild.
+          GrowingDocState.save(session_name, extend_keys & EXTENSIONS.keys)
 
           document_body = document(toc, body)
           push(session_name, picker ? "#{document_body}\n#{picker_dsl}" : document_body)
