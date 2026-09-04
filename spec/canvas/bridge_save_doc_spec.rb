@@ -171,7 +171,7 @@ RSpec.describe StreamWeaver::Canvas::BridgeServer, type: :request do
       body = JSON.parse(last_response.body)
       expect(body['ok']).to eq(true)
       expect(body['coverage']).to eq(
-        { 'total' => 2, 'recognized' => 2, 'passthrough_verbatim' => 0, 'passthrough_lossy' => 0 }
+        { 'total' => 2, 'recognized' => 2, 'passthrough_verbatim' => 0, 'passthrough_lossy' => 0, 'omitted' => 0 }
       )
       saved_path = File.join(StreamWeaver::Canvas::DocStore.path, 'mydoc.org')
       expect(body['path']).to eq(saved_path)
