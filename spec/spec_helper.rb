@@ -59,6 +59,13 @@ ENV['STREAMWEAVER_UNIVERSITY_WORKER']       = File.join(SPEC_UNIVERSITY_DIR, 'wo
 ENV['STREAMWEAVER_UNIVERSITY_PROGRESS']     = File.join(SPEC_UNIVERSITY_DIR, 'progress.yml')
 ENV['STREAMWEAVER_UNIVERSITY_LISTENER_PID'] = File.join(SPEC_UNIVERSITY_DIR, 'listener.pid')
 ENV['STREAMWEAVER_UNIVERSITY_LISTENER_LOG'] = File.join(SPEC_UNIVERSITY_DIR, 'listener.log')
+# Third file, same reasoning and a sharper edge: the artifact manifest
+# (University::Artifacts) is the allowlist `University::Cleanup` deletes
+# against, and every University canvas render reads it. Unredirected, a spec
+# that records an artifact would be adding entries to the developer's real
+# manifest -- entries a later real `streamweaver university-cleanup` would
+# then offer to delete.
+ENV['STREAMWEAVER_UNIVERSITY_ARTIFACTS']    = File.join(SPEC_UNIVERSITY_DIR, 'artifacts.yml')
 
 # Same hazard again (share-to-gist, bridge-canvas-gist-endpoint): every
 # canvas render now calls GistStore.all to build the Save-as-doc widget's

@@ -631,6 +631,13 @@ module StreamWeaver
             never leave "pushing to gist..." sitting there past the point where it stopped
             being true.
 
+            The moment you have that URL, record it -- and the `.org` file beside it --
+            so the course knows what it left behind: `streamweaver university-artifact
+            add <gist URL> --step 5`, then the same for the `.org` path. Everything else
+            records itself (the saved doc, the demo canvas sessions); a gist exists only
+            in your own output, and `streamweaver university-cleanup` can offer to
+            delete only what has been recorded.
+
             The last beat is NOT yours. Stop and hand it to me, and say why in plain words:
             no automated or headless browser can install a Chrome Web Store extension or
             see my logged-in Chrome, so this part is structurally out of your reach no

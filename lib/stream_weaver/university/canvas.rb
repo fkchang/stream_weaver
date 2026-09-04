@@ -43,7 +43,9 @@
 # `btn_mark_done_mark-done-3`. The mockup itself uses `submit: false` (fully
 # decorative) because it is a review artifact, not the built app.
 
+require 'stream_weaver/university/artifacts'
 require 'stream_weaver/university/course'
+require 'stream_weaver/university/listener'
 require 'stream_weaver/university/progress'
 require 'stream_weaver/university/runner'
 
@@ -112,6 +114,37 @@ module StreamWeaver::University::Canvas
   def self.run_label(progress, last_run, number)
     ever_sent = progress.requested_at(number) || (last_run && last_run['step'].to_i == number)
     ever_sent ? "Re-run" : "Run"
+  end
+
+  # Human name for one artifact type, in the recap's Artifacts section and
+  # in its confirmation copy.
+  def self.artifact_group_label(type)
+    {
+      'doc' => 'Saved docs',
+      'org' => 'Exported .org files',
+      'gist' => 'Gists',
+      'session' => 'Course canvas sessions'
+    }.fetch(type.to_s, type.to_s)
+  end
+
+  # Which `cleanup-ask-<target>` button a whole-group delete uses, read
+  # back out of Listener::CLEANUP_GROUPS rather than repeated here -- the
+  # button this renders and the branch that handles it have to agree, and
+  # the handler is the one that decides what a target means. nil for `gist`,
+  # which is never deleted as a group.
+  def self.artifact_group_target(type)
+    StreamWeaver::University::Listener::CLEANUP_GROUPS
+      .find { |_target, group| group[:kind] == type.to_s }&.first
+  end
+
+  # "created: a.rb, doc-demo" for one step's row, or nil when that step
+  # created nothing. Display only -- the delete buttons live in the recap,
+  # where the whole list is visible at once.
+  def self.step_artifacts_line(step_number)
+    refs = StreamWeaver::University::Artifacts.for_step(step_number).map { |e| e['ref'] }
+    return nil if refs.empty?
+
+    "created: #{refs.join(', ')}"
   end
 end
 
@@ -780,6 +813,57 @@ _body = proc do
             - Run `streamweaver tutorial` for the classic component-by-component walkthrough.
           MD
 
+          # What the course left on the machine, and the offer to take it
+          # back. Buttons here only ever ASK -- every one of them writes a
+          # pending confirmation and the listener's own re-push renders it,
+          # so nothing on this canvas can delete anything in one click.
+          # Gists get one button each, showing the URL, because a gist is
+          # the only artifact here that left the machine.
+          artifacts = StreamWeaver::University::Artifacts.grouped
+          pending = StreamWeaver::University::Artifacts.pending_delete
+          last_cleanup = StreamWeaver::University::Artifacts.last_cleanup
+          unless artifacts.empty?
+            phrase "Artifacts", class: "uni-label"
+            phrase "This course created #{artifacts.values.sum(&:size)} things on your machine. " \
+                   "`streamweaver university-cleanup` does the same from the terminal.",
+                   class: "uni-prose"
+
+            if pending
+              div(class: "uni-run-notice uni-run-notice--degraded") do
+                phrase "Really delete #{pending['label']}?", class: "uni-run-notice__msg"
+                md StreamWeaver::University::Canvas.bullets(pending['refs']), class: "uni-payoff"
+                div(class: "uni-actions") do
+                  button "Confirm delete", id: "cleanup-confirm", class: "uni-btn uni-btn--run"
+                  button "Keep", id: "cleanup-keep", class: "uni-btn uni-btn--quiet"
+                end
+              end
+            else
+              if last_cleanup&.any?
+                div(class: "uni-run-notice uni-run-notice--sent") do
+                  md StreamWeaver::University::Canvas.bullets(last_cleanup), class: "uni-payoff"
+                end
+              end
+
+              artifacts.each do |type, entries|
+                phrase StreamWeaver::University::Canvas.artifact_group_label(type), class: "uni-label"
+                md StreamWeaver::University::Canvas.bullets(entries.map { |e| e['ref'] }),
+                   class: "uni-payoff"
+                div(class: "uni-actions") do
+                  if type == 'gist'
+                    entries.each_with_index do |entry, index|
+                      button "Delete #{entry['ref']}", id: "cleanup-ask-gist-#{index}",
+                             class: "uni-btn uni-btn--outline"
+                    end
+                  else
+                    target = StreamWeaver::University::Canvas.artifact_group_target(type)
+                    button "Delete #{StreamWeaver::University::Canvas.artifact_group_label(type).downcase}",
+                           id: "cleanup-ask-#{target}", class: "uni-btn uni-btn--outline"
+                  end
+                end
+              end
+            end
+          end
+
           div(class: "uni-recap__foot") do
             phrase "Run or Repeat any step below to go through it again.",
                    class: "uni-foot__hint"
@@ -864,6 +948,14 @@ _body = proc do
               phrase "What you should see", class: "uni-label"
               md StreamWeaver::University::Canvas.bullets(step[:what_you_should_see]),
                  class: "uni-payoff"
+
+              # What this step actually left behind, straight off the
+              # artifact manifest. Display only: deleting happens in the
+              # recap's Artifacts section, where the whole list is visible
+              # at once rather than one step's slice of it.
+              if (created = StreamWeaver::University::Canvas.step_artifacts_line(number))
+                phrase created, class: "uni-foot__hint"
+              end
 
               div(class: "uni-step__expansion-foot") do
                 button "Mark step #{number} done", id: "mark-done-#{number}", class: "uni-btn uni-btn--outline"

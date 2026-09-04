@@ -4,6 +4,8 @@ require 'fileutils'
 require 'rbconfig'
 require 'stream_weaver/canvas/client'
 require 'stream_weaver/canvas/scroll_top_hint'
+require 'stream_weaver/university/artifacts'
+require 'stream_weaver/university/cleanup'
 require 'stream_weaver/university/course'
 require 'stream_weaver/university/progress'
 require 'stream_weaver/university/runner'
@@ -101,6 +103,19 @@ module StreamWeaver
             progress.expand_step!(step)
           end
           step
+        when /cleanup-ask-(docs|orgs|sessions|gist-\d+)\z/
+          # Asks only. Nothing is deleted until a second, separate click on
+          # the confirmation this writes -- which is why the delete surface
+          # on the canvas is two clicks and not one, and why this branch
+          # never reaches Cleanup at all.
+          cleanup_ask!(Regexp.last_match(1))
+          true
+        when /cleanup-confirm\z/
+          cleanup_confirm!
+          true
+        when /cleanup-keep\z/
+          Artifacts.clear_pending!
+          true
         when /reset-course\z/
           # Same effect as `streamweaver university-reset -y`: back up +
           # clear the ledger, close the demo sessions the course itself
@@ -110,6 +125,49 @@ module StreamWeaver
           close_demo_sessions!
           true
         end
+      end
+
+      # What each of the recap's delete buttons is asking about. Groups are
+      # named by artifact type; a gist is asked about ONE at a time, by
+      # index into the manifest's own gist list, because a gist is the one
+      # artifact here that leaves the machine and cannot be un-deleted.
+      CLEANUP_GROUPS = {
+        'docs' => { kind: 'doc', label: 'the saved docs' },
+        'orgs' => { kind: 'org', label: 'the exported .org files' },
+        'sessions' => { kind: 'session', label: 'the course canvas sessions' }
+      }.freeze
+
+      # Turns a delete button into the pending confirmation the next re-push
+      # renders. Resolves the target to REFS here, not at confirm time: the
+      # user is about to be shown exactly what will go, and what goes has to
+      # be that same list, not whatever an index points at a click later.
+      def self.cleanup_ask!(target)
+        if (group = CLEANUP_GROUPS[target])
+          refs = Artifacts.grouped[group[:kind]].to_a.map { |e| e['ref'] }
+          return nil if refs.empty?
+
+          Artifacts.request_delete!(label: group[:label], kind: group[:kind], refs: refs)
+        elsif (index = target[/\Agist-(\d+)\z/, 1])
+          entry = Artifacts.grouped['gist'].to_a[index.to_i] or return nil
+          Artifacts.request_delete!(label: entry['ref'], kind: 'gist', refs: [entry['ref']])
+        end
+      end
+
+      # Performs the pending delete through Cleanup -- the same module (and
+      # therefore the same allowlist) `streamweaver university-cleanup`
+      # uses, so nothing here re-implements what may be deleted. A refusal
+      # is reported rather than raised: this runs inside a background
+      # listener nobody is watching, and the user's own answer is the recap.
+      def self.cleanup_confirm!
+        pending = Artifacts.pending_delete or return nil
+        messages = pending['refs'].map do |ref|
+          begin
+            Cleanup.delete_entry!(pending['kind'], ref).message
+          rescue Cleanup::Refused => e
+            e.message
+          end
+        end
+        Artifacts.record_cleanup!(messages)
       end
 
       # The ledger write a "step is done" action makes: stamps `last_done`
@@ -181,7 +239,13 @@ module StreamWeaver
       # one just gets "Session not found" back, which is not a reason to
       # skip the rest. Shared by the canvas's own Reset button
       # (`handle_token`, above) and `streamweaver university-reset`.
-      def self.close_demo_sessions!
+      #
+      # `clear_state:` is what separates a reset from a stop.
+      # `university-stop` closes the same sessions but must NOT forget
+      # growing_doc's picks: stopping the course is "put it down", and the
+      # doc the user comes back to has to be the doc they left. Reset is the
+      # one that means "start over", so it keeps the default.
+      def self.close_demo_sessions!(clear_state: true)
         DEMO_SESSION_NAMES.each do |name|
           begin
             ::StreamWeaver::Canvas::Client.send_message(
@@ -194,7 +258,7 @@ module StreamWeaver
           # otherwise a reset course still remembers last run's picks the
           # next time its script runs. A no-op (FileUtils.rm_f) for every
           # name but doc-demo's, which never had state to begin with.
-          ::StreamWeaver::University::Scripts::GrowingDocState.clear(name)
+          ::StreamWeaver::University::Scripts::GrowingDocState.clear(name) if clear_state
         end
       end
 
@@ -220,6 +284,11 @@ module StreamWeaver
         ::StreamWeaver::Canvas::Client.send_message(
           ::StreamWeaver::Canvas::Protocol::Messages.create(demo.name, theme: demo.theme)
         )
+        # This create is the first moment the course owns that session, so
+        # it is where the artifact manifest learns about it -- before the
+        # worker's own push, and regardless of whether the worker ever
+        # reaches one.
+        Artifacts.record_session!(demo.name, step: step_number)
         ::StreamWeaver::Canvas::Client.send_message(
           ::StreamWeaver::Canvas::Protocol::Messages.push(demo.name, warm_up_dsl(step), source_dir: nil)
         )

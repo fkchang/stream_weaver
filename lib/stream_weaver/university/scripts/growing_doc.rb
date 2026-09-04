@@ -66,6 +66,7 @@
 # clobbered it back out.
 
 require 'stream_weaver/canvas/client'
+require 'stream_weaver/university/artifacts'
 require_relative 'growing_doc_state'
 
 module StreamWeaver
@@ -78,6 +79,11 @@ module StreamWeaver
         # name itself; the user's own manual save is a bonus lap, not the
         # dependency.
         DEFAULT_DOC_NAME = 'university-doc'
+
+        # Which course step this script IS, for the artifact manifest's
+        # per-step grouping. Named here rather than passed in: the script is
+        # step 4's demo and nothing else runs it.
+        STEP = 4
 
         OPENING = <<~RUBY
           doc_header(
@@ -491,6 +497,14 @@ module StreamWeaver
           ::StreamWeaver::Canvas::Client.send_message(
             ::StreamWeaver::Canvas::Protocol::Messages.create(session_name, layout: :fluid, theme: :doc)
           )
+          # Records itself in the course's artifact manifest as it goes, so
+          # `university-cleanup` can offer to close this session (and, below,
+          # delete the file this run saves) without anyone having to
+          # remember either one existed. Refused outright for a session name
+          # that isn't one of the course's own -- someone running this
+          # script against their own session has not created a course
+          # artifact (Artifacts.record_session!).
+          ::StreamWeaver::University::Artifacts.record_session!(session_name, step: STEP)
 
           toc = []
           body = +''
@@ -532,6 +546,11 @@ module StreamWeaver
                  "streamweaver canvas-wait #{session_name}"
           elsif save
             path = save_doc(bridge, session_name, doc_name)
+            # Recorded only for a save that actually reported a path -- an
+            # entry the manifest can't resolve to a file is one cleanup
+            # could never act on. Picks up the `.org` sibling too if step 5
+            # has already exported one beside it.
+            ::StreamWeaver::University::Artifacts.record_doc!(path, step: STEP) if path
             puts(save_message(path, doc_name, extend_ok))
           end
 

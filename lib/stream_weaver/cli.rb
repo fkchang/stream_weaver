@@ -115,6 +115,12 @@ module StreamWeaver
         university_demo(args)
       when 'university-done'
         university_done(args)
+      when 'university-artifact'
+        university_artifact(args)
+      when 'university-cleanup'
+        university_cleanup(args)
+      when 'university-stop'
+        university_stop(args)
       when 'focus-me'
         focus_me
       when 'get-started'
@@ -720,6 +726,17 @@ module StreamWeaver
           streamweaver university-done <N>        Mark step N done (same as clicking Mark done) and bring
                                                      the University window forward. What every step's own
                                                      closing ritual runs -- no click required from you.
+          streamweaver university-artifact        The course's record of what it created -- saved docs,
+                       [list | add <ref>]            exported .org files, gists, demo canvas sessions.
+                       [--step N] [--type T]         Docs and sessions record themselves; `add` is for a
+                                                     gist URL, which only your agent ever sees.
+          streamweaver university-cleanup         Offer to delete everything the course created, group by
+                       [--dry-run]                   group (gists one at a time, showing each URL). Only
+                                                     ever touches what the manifest above records.
+          streamweaver university-stop            Put the course down: stop the listener, close its demo
+                                                     canvas sessions and the two iTerm2 windows
+                                                     get-started opened. Keeps your progress and the
+                                                     artifact manifest.
           streamweaver focus-me                   Bring the calling terminal's own iTerm2 pane to the
                                                      front. Silent no-op outside iTerm2/darwin.
       HELP
@@ -2982,6 +2999,237 @@ module StreamWeaver
         puts "Re-pushed the course list at its zero-state."
       else
         puts "(canvas bridge not running -- nothing to close or re-push)"
+      end
+    end
+
+    # `streamweaver university-artifact add <ref>` / `list`: the manual door
+    # onto the course's artifact manifest, for the one artifact nothing can
+    # record on its own. A saved doc records itself (growing_doc) and a demo
+    # canvas session records itself (Listener.warm_up!), but a gist exists
+    # only inside the worker's own `gh gist create` output -- step 5's
+    # prompt has the worker run this the moment it has the URL.
+    #
+    # The manifest is what `university-cleanup` is allowed to delete, so
+    # `add` is deliberately narrow: a ref whose type can't be determined is
+    # refused rather than recorded under a guess.
+    def self.university_artifact(args)
+      require_relative 'university/artifacts'
+      case (args.first || 'list')
+      when 'list' then university_artifact_list
+      when 'add' then university_artifact_add(args.drop(1))
+      else
+        $stderr.puts "Usage: streamweaver university-artifact [list | add <ref> [--step N] [--type doc|org|gist|session]]"
+        exit 1
+      end
+    end
+
+    def self.university_artifact_list
+      grouped = University::Artifacts.grouped
+      if grouped.empty?
+        puts "No University artifacts recorded yet."
+        return
+      end
+
+      grouped.each do |type, entries|
+        puts "#{university_artifact_group_label(type)} (#{entries.size}):"
+        entries.each do |entry|
+          step = entry['step'] ? " [step #{entry['step']}]" : ''
+          puts "  #{entry['ref']}#{step}"
+        end
+      end
+    end
+
+    def self.university_artifact_group_label(type)
+      { 'doc' => 'Saved docs', 'org' => 'Exported .org files',
+        'gist' => 'Gists', 'session' => 'Course canvas sessions' }.fetch(type, type)
+    end
+
+    def self.university_artifact_add(args)
+      ref = args.find { |a| !a.start_with?('-') }
+      step = flag_value(args, '--step')
+      type = flag_value(args, '--type')
+
+      unless ref
+        $stderr.puts "Usage: streamweaver university-artifact add <ref> [--step N] [--type doc|org|gist|session]"
+        exit 1
+      end
+
+      entry = University::Artifacts.record!(ref, type: type, step: step)
+      unless entry
+        $stderr.puts "Not recorded: could not tell what kind of artifact #{ref} is."
+        $stderr.puts "Pass one explicitly: --type #{University::Artifacts::TYPES.join('|')}"
+        exit 1
+      end
+
+      puts "Recorded #{entry['type']}: #{entry['ref']}#{entry['step'] ? " (step #{entry['step']})" : ''}"
+    end
+
+    # `--flag value` or `--flag=value`, or nil. Local to the university
+    # artifact commands, which are the only ones here taking optional
+    # valued flags.
+    def self.flag_value(args, flag)
+      inline = args.grep(/\A#{Regexp.escape(flag)}=/) { |a| a.split('=', 2).last }.first
+      return inline if inline
+
+      idx = args.index(flag)
+      idx ? args[idx + 1] : nil
+    end
+
+    # `streamweaver university-cleanup`: the course offers to take back
+    # everything it left on the machine -- the docs it saved, the .org files
+    # exported from them, the gists published, the demo canvas sessions it
+    # opened, and its own state files.
+    #
+    # Confirmed per GROUP, except gists, which are confirmed one at a time
+    # showing the URL: a gist is the only artifact here that left the
+    # machine and cannot be undeleted. Every delete goes through
+    # University::Cleanup, the same module the canvas's own delete buttons
+    # use, so "what may be deleted" is answered in exactly one place.
+    def self.university_cleanup(args)
+      require_relative 'university/cleanup'
+      dry_run = args.include?('--dry-run')
+      inventory = University::Cleanup.inventory
+
+      if University::Cleanup.empty?(inventory)
+        puts "Nothing to clean up -- StreamWeaver University has not recorded any artifacts."
+        return
+      end
+
+      print_cleanup_inventory(inventory)
+
+      if dry_run
+        puts ""
+        puts "--dry-run: nothing was deleted."
+        return
+      end
+
+      puts ""
+      cleanup_group('doc', inventory[:docs], "Delete #{inventory[:docs].size} saved doc file(s)?")
+      cleanup_group('org', inventory[:orgs], "Delete #{inventory[:orgs].size} exported .org file(s)?")
+      cleanup_gists(inventory[:gists])
+      cleanup_group('session', inventory[:sessions],
+                    "Close #{inventory[:sessions].size} course canvas session(s)?")
+      cleanup_state_files(inventory[:state_files])
+      puts ""
+      puts "Cleanup done."
+    end
+
+    def self.print_cleanup_inventory(inventory)
+      puts "StreamWeaver University created these:"
+      print_cleanup_files("Saved docs", inventory[:docs])
+      print_cleanup_files("Exported .org files", inventory[:orgs])
+      print_cleanup_refs("Gists", inventory[:gists])
+      print_cleanup_refs("Course canvas sessions", inventory[:sessions])
+      print_cleanup_files("University state files", inventory[:state_files])
+    end
+
+    def self.print_cleanup_files(label, entries)
+      return if entries.empty?
+
+      puts ""
+      puts "#{label} (#{entries.size}):"
+      entries.each do |entry|
+        detail = entry[:exists] ? "#{entry[:size]} bytes" : "missing (already deleted)"
+        puts "  #{entry[:ref]} -- #{detail}"
+      end
+    end
+
+    def self.print_cleanup_refs(label, entries)
+      return if entries.empty?
+
+      puts ""
+      puts "#{label} (#{entries.size}):"
+      entries.each { |entry| puts "  #{entry[:ref]}" }
+    end
+
+    # One y/N for a whole group. Declining leaves every entry in the
+    # manifest, so a later run can still offer them.
+    def self.cleanup_group(type, entries, question)
+      return if entries.empty?
+      return puts("Kept: #{university_artifact_group_label(type).downcase}.") unless
+        get_started_confirm?(question, default: false)
+
+      entries.each { |entry| puts "  #{University::Cleanup.delete_entry!(type, entry[:ref]).message}" }
+    end
+
+    # Per ITEM, showing the URL. A gist is public, remote, and gone for
+    # good -- the one thing here worth asking about individually.
+    def self.cleanup_gists(entries)
+      return if entries.empty?
+
+      unless University::Cleanup.gh_available?
+        puts ""
+        puts "gh is not installed, so gists cannot be deleted from here. Delete these yourself:"
+        entries.each { |entry| puts "  #{entry[:ref]}" }
+        return
+      end
+
+      entries.each do |entry|
+        if get_started_confirm?("Delete gist #{entry[:ref]}?", default: false)
+          puts "  #{University::Cleanup.delete_entry!('gist', entry[:ref]).message}"
+        else
+          puts "  Kept #{entry[:ref]}"
+        end
+      end
+    end
+
+    def self.cleanup_state_files(entries)
+      return if entries.empty?
+
+      question = "Delete #{entries.size} University state file(s) " \
+                 "(progress, artifact manifest, worker/listener records)?"
+      return puts("Kept: University state files.") unless get_started_confirm?(question, default: false)
+
+      University::Cleanup.delete_state_files!.each { |outcome| puts "  #{outcome.message}" }
+    end
+
+    # `streamweaver university-stop`: put the course down without throwing
+    # any of it away. Stops the listener, closes the demo canvas sessions and
+    # the two iTerm2 surfaces `get-started` opened (the agent's worker tab
+    # and the controller window), and keeps every file -- progress and the
+    # artifact manifest both. Deleting is `university-cleanup`'s job;
+    # starting over is `university-reset`'s. This is neither.
+    #
+    # Never touches a session or window the course did not open: the canvas
+    # sessions come from the same allowlist `university-reset` closes by, and
+    # the two iTerm2 sessions are the exact ids `get-started` recorded in
+    # worker.json.
+    def self.university_stop(_args = [])
+      require_relative 'canvas/client'
+      require_relative 'university/artifacts'
+
+      puts(University::Listener.stop! ? "Stopped the University listener." : "University listener was not running.")
+
+      if Canvas::Client.bridge_running?
+        # clear_state: false -- stopping is not starting over, so step 4's
+        # growing doc must still remember what it had when the user returns.
+        University::Listener.close_demo_sessions!(clear_state: false)
+        puts "Closed the course demo canvas sessions: #{University::Listener::DEMO_SESSION_NAMES.join(', ')}"
+      else
+        puts "(canvas bridge not running -- no demo sessions to close)"
+      end
+
+      close_university_iterm_sessions
+      puts "Kept your progress (#{University::Progress.path})"
+      puts "Kept the artifact manifest (#{University::Artifacts.path}) -- `streamweaver university-cleanup` removes what the course created."
+    end
+
+    # Closes the worker tab and the controller window `get-started` recorded,
+    # and nothing else. A session that is already gone (or was never
+    # recorded, on the degraded path) is skipped silently -- both are the
+    # ordinary case, not a failure worth reporting.
+    def self.close_university_iterm_sessions
+      require_relative 'iterm'
+      recorded = University::Runner.worker or return
+
+      {
+        'session_id' => 'worker tab',
+        'controller_session_id' => 'University canvas window'
+      }.each do |key, label|
+        id = recorded[key]
+        next unless id && ITerm.session_alive?(id)
+
+        puts "Closed the #{label}." if ITerm.close_pane(id)
       end
     end
 
