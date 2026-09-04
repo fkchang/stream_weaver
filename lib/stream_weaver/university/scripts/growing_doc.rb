@@ -36,8 +36,13 @@
 #   --save-as NAME   doc name to save under (default "university-doc")
 #   --no-save        grow only; don't save
 #   --extend=a,b     append these canned extension sections before saving
+#   --add-custom <key> <file>   persist a hand-written section's DSL (read
+#                    from <file>) so it survives every later rebuild, the
+#                    same way a picked --extend key does; applies and saves
+#                    in this same invocation
 #   --picker         append the co-edit picker form and DON'T save
-#   --reset          forget this session's persisted --extend keys, do nothing else
+#   --reset          forget this session's persisted --extend keys AND
+#                    custom sections, do nothing else
 #
 # Pause between pushes is STREAMWEAVER_GROWING_DOC_PAUSE seconds (default 3;
 # specs override it to run fast).
@@ -45,7 +50,11 @@
 # Applied --extend keys persist per session (GrowingDocState, round-7 UAT)
 # so a second invocation -- another --picker round, a resumed course run --
 # rebuilds base + every key applied so far on its own; --extend only ever
-# ADDS to that set, and --reset is the only thing that clears it.
+# ADDS to that set, and --reset is the only thing that clears it. A
+# hand-written section from --add-custom persists the same way (round-8
+# UAT): a canned --extend pick already survived a rebuild, but a worker's
+# own free-text section had nowhere to persist and a later --picker round
+# clobbered it back out.
 
 require 'stream_weaver/canvas/client'
 require_relative 'growing_doc_state'
@@ -346,6 +355,38 @@ module StreamWeaver
           true
         end
 
+        # A worker-authored, free-text section's own header, for the toc
+        # entry it earns -- parsed out of its own `doc_section_header` call
+        # the same "title lives with the id" convention EXTENSIONS keeps by
+        # hand, because there's nowhere else for a hand-written section to
+        # declare either. An id that silently defaulted to the key alone
+        # (an earlier version of this) could point the sidebar at an
+        # anchor the section itself never declared, if the worker's
+        # snippet used a different `id:` -- a dead link in exactly the
+        # document step 5 exists to show the sidebar of. Falls back to the
+        # key itself, capitalized, with no id override, if the snippet
+        # somehow omits the call -- still buildable, just absent from the
+        # sidebar's own self-description.
+        def self.custom_toc_entry(key, dsl)
+          match = dsl.match(/doc_section_header\s+"[^"]*",\s*"([^"]*)"(?:,\s*id:\s*"([^"]*)")?/)
+          { id: (match && match[2]) || key, label: (match && match[1]) || key.capitalize }
+        end
+
+        # Applies every persisted custom section (round-8 UAT: a hand-
+        # written free-text section had nowhere to persist, so the next
+        # --picker rebuild clobbered it back out -- a live run lost a
+        # user's own Star Wars chart section exactly this way). `customs`
+        # is `{key => dsl}` from GrowingDocState.load_custom; unlike
+        # apply_extensions! there is no unknown-key case -- every entry
+        # here was already validated (as a snippet file that existed and
+        # parsed as Ruby) at the moment it was saved, see run! below.
+        def self.apply_custom_sections!(customs, toc, body)
+          customs.each do |key, dsl|
+            toc << custom_toc_entry(key, dsl)
+            body << dsl << "\n"
+          end
+        end
+
         # Persisted --extend keys (round-7 UAT) merged with any passed to
         # THIS invocation, so a second invocation for the same session --
         # another --picker round, a resumed course run -- rebuilds
@@ -366,8 +407,12 @@ module StreamWeaver
         # --extend round had persisted and silently skip step 4's own
         # payoff, the six-stage growing animation (caught in round-7 review
         # as the fix that broke this exact case).
+        # Flags that add content to the document -- a bare re-run with none
+        # of these present is what "start the demo over" means.
+        CONTENT_FLAGS = %w[--picker --add-custom].freeze
+
         def self.fresh_start?(argv)
-          !argv.include?('--picker') && argv.grep(/\A--extend=/).empty?
+          (argv & CONTENT_FLAGS).empty? && argv.grep(/\A--extend=/).empty?
         end
 
         def self.run!(argv = ARGV)
@@ -375,7 +420,7 @@ module StreamWeaver
 
           if argv.include?('--reset')
             GrowingDocState.clear(session_name)
-            puts "growing_doc: cleared persisted extensions for '#{session_name}'"
+            puts "growing_doc: cleared persisted extensions and custom sections for '#{session_name}'"
             return
           end
 
@@ -400,6 +445,31 @@ module StreamWeaver
           GrowingDocState.clear(session_name) if fresh_start?(argv)
           extend_keys = resolve_extend_keys(session_name, argv)
 
+          # --add-custom persists a hand-written section BEFORE this run
+          # builds anything, so it's already part of what load_custom
+          # returns below -- one persist-and-apply path, not two.
+          if (idx = argv.index('--add-custom'))
+            custom_key = argv[idx + 1]
+            custom_file = argv[idx + 2]
+            unless custom_key && custom_file
+              abort 'growing_doc: --add-custom needs a key and a snippet file: --add-custom <key> <file>'
+            end
+            abort "growing_doc: --add-custom snippet not found: #{custom_file}" unless File.exist?(custom_file)
+
+            custom_dsl = File.read(custom_file)
+            # Persisted state is sticky (every rebuild replays it, and the
+            # only way out is --reset, which throws away every OTHER
+            # persisted pick too) -- a syntax error here must not make it
+            # into the file, or the very next --picker round breaks with
+            # no working undo.
+            require 'ripper'
+            abort "growing_doc: --add-custom snippet is not valid Ruby: #{custom_file}" unless Ripper.sexp(custom_dsl)
+
+            GrowingDocState.save_custom(session_name, custom_key, custom_dsl)
+            puts "growing_doc: persisted custom section '#{custom_key}' for '#{session_name}'"
+          end
+          customs = GrowingDocState.load_custom(session_name)
+
           bridge = ::StreamWeaver::Canvas::Client.ensure_bridge_running
           ::StreamWeaver::Canvas::Client.send_message(
             ::StreamWeaver::Canvas::Protocol::Messages.create(session_name, layout: :fluid, theme: :doc)
@@ -410,10 +480,10 @@ module StreamWeaver
 
           # Growing the base document is skipped once extensions are in play
           # -- this call's own --extend, OR any persisted from an earlier
-          # invocation: a re-push during the co-edit loop must land in one
-          # beat, not re-run the whole six-push show the user already
-          # watched.
-          growing = extend_keys.empty? && !picker
+          # invocation, OR any persisted custom section: a re-push during
+          # the co-edit loop must land in one beat, not re-run the whole
+          # six-push show the user already watched.
+          growing = extend_keys.empty? && customs.empty? && !picker
           STAGES.each_with_index do |stage, i|
             toc << stage[:toc] if stage[:toc]
             body << stage[:dsl] << "\n"
@@ -430,6 +500,7 @@ module StreamWeaver
           # unknown key never applied anything, so it has no business
           # surviving into the NEXT invocation's rebuild.
           GrowingDocState.save(session_name, extend_keys & EXTENSIONS.keys)
+          apply_custom_sections!(customs, toc, body)
 
           document_body = document(toc, body)
           push(session_name, picker ? "#{document_body}\n#{picker_dsl}" : document_body)

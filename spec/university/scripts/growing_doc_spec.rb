@@ -368,6 +368,138 @@ RSpec.describe 'stream_weaver/university/scripts/growing_doc.rb' do
     end
   end
 
+  # Round-8 UAT: a hand-written free-text section (not a canned EXTENSIONS
+  # key) had nowhere to persist, so the next --picker round clobbered it
+  # back out -- a live run lost a user's own Star Wars chart section this
+  # way. custom_toc_entry/apply_custom_sections! are the extracted pieces,
+  # testable with no canvas bridge involved, same as apply_extensions!.
+  describe '.custom_toc_entry' do
+    it "parses the id and title out of the section's own doc_section_header call" do
+      dsl = 'doc_section_header "07", "Starwars — a custom chart", id: "starwars"'
+      expect(mod.custom_toc_entry('starwars', dsl)).to eq(id: 'starwars', label: 'Starwars — a custom chart')
+    end
+
+    # A silently key-defaulted id could point the sidebar at an anchor the
+    # section itself never declared, if the snippet used a DIFFERENT id --
+    # a dead sidebar link in exactly the doc step 5 exists to show off the
+    # nav of.
+    it "uses the snippet's own id, even when it differs from the persisted key" do
+      dsl = 'doc_section_header "07", "Starwars", id: "sw-chart"'
+      expect(mod.custom_toc_entry('starwars', dsl)[:id]).to eq('sw-chart')
+    end
+
+    it 'falls back to the key itself (and its capitalized form) when the snippet has no doc_section_header call' do
+      expect(mod.custom_toc_entry('starwars', 'md "just prose"')).to eq(id: 'starwars', label: 'Starwars')
+    end
+  end
+
+  describe '.apply_custom_sections!' do
+    it 'appends every custom section to the body and gives each a toc entry' do
+      toc = []
+      body = +''
+      customs = { 'starwars' => 'doc_section_header "07", "Starwars", id: "starwars"' }
+
+      mod.apply_custom_sections!(customs, toc, body)
+
+      expect(body).to include(customs['starwars'])
+      expect(toc).to eq([{ id: 'starwars', label: 'Starwars' }])
+    end
+
+    it 'applies multiple custom sections in order' do
+      toc = []
+      body = +''
+      customs = { 'a' => 'doc_section_header "07", "A", id: "a"', 'b' => 'doc_section_header "08", "B", id: "b"' }
+
+      mod.apply_custom_sections!(customs, toc, body)
+
+      expect(toc.map { |t| t[:id] }).to eq(%w[a b])
+    end
+  end
+
+  describe 'a custom section survives picker -> extend -> picker (round-8 UAT)' do
+    let(:state_session) { "growing-doc-custom-spec-#{Process.pid}" }
+
+    around do |example|
+      Dir.mktmpdir('growing_doc_custom') do |dir|
+        prev = ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR']
+        ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR'] = dir
+        example.run
+      ensure
+        ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR'] = prev
+      end
+    end
+
+    it 'keeps a persisted custom section through a later canned --extend and another bare --picker round' do
+      # Round 1: the user's free-text pick gets persisted via --add-custom.
+      StreamWeaver::University::Scripts::GrowingDocState.save_custom(
+        state_session, 'starwars', 'doc_section_header "07", "Starwars — a custom chart", id: "starwars"'
+      )
+
+      # Round 2: a canned --extend=tradeoffs pick, same session.
+      extend_keys = mod.resolve_extend_keys(state_session, ['--extend=tradeoffs'])
+      StreamWeaver::University::Scripts::GrowingDocState.save(state_session, extend_keys)
+
+      # Round 3: a bare --picker round, re-passing neither flag.
+      resolved_extend = mod.resolve_extend_keys(state_session, ['--picker'])
+      resolved_custom = StreamWeaver::University::Scripts::GrowingDocState.load_custom(state_session)
+      expect(resolved_extend).to eq(['tradeoffs'])
+      expect(resolved_custom).to have_key('starwars')
+
+      toc = []
+      body = +''
+      mod.apply_extensions!(resolved_extend, toc, body)
+      mod.apply_custom_sections!(resolved_custom, toc, body)
+
+      expect(body).to include('Starwars — a custom chart')
+      expect(toc.map { |t| t[:id] }).to contain_exactly('tradeoffs', 'starwars')
+    end
+  end
+
+  describe '.fresh_start? treats --add-custom like --extend (not a fresh start)' do
+    it 'is false when --add-custom is present' do
+      expect(mod.fresh_start?(['doc-demo', '--add-custom', 'starwars', '/tmp/snippet.rb'])).to be false
+    end
+  end
+
+  describe '--add-custom (run!)' do
+    let(:state_session) { "growing-doc-add-custom-spec-#{Process.pid}" }
+
+    around do |example|
+      Dir.mktmpdir('growing_doc_add_custom') do |dir|
+        prev = ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR']
+        ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR'] = dir
+        example.run
+      ensure
+        ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR'] = prev
+      end
+    end
+
+    it 'aborts loudly when the key or snippet file is missing' do
+      expect { mod.run!([state_session, '--add-custom', 'starwars']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).not_to eq(0) }
+    end
+
+    it 'aborts loudly when the snippet file does not exist' do
+      expect { mod.run!([state_session, '--add-custom', 'starwars', '/no/such/file.rb']) }
+        .to raise_error(SystemExit) { |e| expect(e.status).not_to eq(0) }
+    end
+
+    # Persisted state is sticky -- every rebuild replays it, and the only
+    # escape is --reset, which throws away every OTHER persisted pick too.
+    # A syntax error must never make it into the file.
+    it 'aborts loudly, and never persists, when the snippet is not valid Ruby' do
+      Dir.mktmpdir('growing_doc_add_custom_snippet') do |snippet_dir|
+        bad_snippet = File.join(snippet_dir, 'bad.rb')
+        File.write(bad_snippet, 'doc_section_header "07", "Oops", id: "oops" do |')
+
+        expect { mod.run!([state_session, '--add-custom', 'oops', bad_snippet]) }
+          .to raise_error(SystemExit) { |e| expect(e.status).not_to eq(0) }
+
+        expect(StreamWeaver::University::Scripts::GrowingDocState.load_custom(state_session)).to eq({})
+      end
+    end
+  end
+
   describe '--reset (run!)' do
     let(:state_session) { "growing-doc-reset-spec-#{Process.pid}" }
 

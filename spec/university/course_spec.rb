@@ -25,6 +25,13 @@ RSpec.describe StreamWeaver::University::Course do
       expect(numbers).to eq([1, 2, 3, 4, 5])
     end
 
+    # closing_ritual branches on TOTAL_STEPS (it can't reach into
+    # GETTING_STARTED_STEPS -- see the constant's own comment); this is
+    # what keeps that hand-maintained number from drifting.
+    it 'keeps TOTAL_STEPS in sync with the real step count' do
+      expect(described_class::TOTAL_STEPS).to eq(described_class::GETTING_STARTED_STEPS.size)
+    end
+
     it 'gives every step a title, payoff, why_it_matters, prompt, and what_you_should_see' do
       described_class::GETTING_STARTED_STEPS.each do |step|
         expect(step[:title].to_s.strip).not_to be_empty
@@ -151,12 +158,25 @@ RSpec.describe StreamWeaver::University::Course do
 
     # Live UAT (round-7): the worker took ages finding the app's port and
     # booted a SECOND instance to find it -- an orphaned duplicate server
-    # and a terrible first impression. The fix is prompt-level: read the
-    # port from your own captured stdout; never launch a second process.
-    it 'tells step 2 to read the port from its own stdout, never boot a second instance' do
-      expect(prompt(2)).to match(/read the `http:\/\/127\.0\.0\.1:<port>` line/i)
-      expect(prompt(2)).to match(/NEVER run a second `ruby \.\.\.` to "find" the port/)
-      expect(prompt(2)).to match(/duplicate, orphaned app/i)
+    # and a terrible first impression. Round-8 UAT went further: step 2 now
+    # pins one port instead of discovering anything, so there is nothing
+    # left to hunt for.
+    it 'pins step 2 to a single port instead of discovering one, and never boots a second instance' do
+      port = StreamWeaver::University::Course::STEP2_PORT
+      expect(prompt(2)).to include("PORT=#{port} ruby")
+      expect(prompt(2)).to match(/NEVER boot a second instance/i)
+      expect(prompt(2)).to match(/stale course app/i)
+      expect(prompt(2)).to include("lsof -i :#{port}")
+      expect(prompt(2)).to match(/orphaned duplicate/i)
+    end
+
+    # Setting PORT suppresses the app's own auto-open (server.rb), so the
+    # worker has to open the pinned URL itself rather than assuming the
+    # browser will appear on its own.
+    it 'tells step 2 that PORT suppresses auto-open, and to open the pinned URL itself' do
+      port = StreamWeaver::University::Course::STEP2_PORT
+      expect(prompt(2)).to match(/suppresses the app's own auto-open/i)
+      expect(prompt(2)).to include("open http://127.0.0.1:#{port}")
     end
 
     # Two independent worker sessions hit two different startup failures on
@@ -289,6 +309,28 @@ RSpec.describe StreamWeaver::University::Course do
       expect(prompt(4)).to match(/unrecognized placeholder/i)
     end
 
+    # Round-8 UAT: a free-text pick left the pane visibly stalled while the
+    # worker composed the section with no feedback. It now pushes a
+    # placeholder immediately, before writing a word of the real section.
+    it 'has step 4 push a "Building..." placeholder immediately on a free-text pick, before writing it' do
+      expect(prompt(4)).to match(/⏳ Building your.*hold on/i)
+      building_at = prompt(4).index(/⏳ Building your/i)
+      write_it_at = prompt(4).index(/THEN write the section itself/i)
+      expect(building_at).not_to be_nil
+      expect(write_it_at).not_to be_nil
+      expect(building_at).to be < write_it_at
+    end
+
+    # Round-8 UAT: a hand-written free-text section had nowhere to persist,
+    # so the next --picker round clobbered it back out -- a live run lost a
+    # user's own Star Wars chart section this way. growing_doc.rb gained
+    # --add-custom for exactly this.
+    it 'tells step 4 to persist a hand-written section with --add-custom, not push it directly' do
+      expect(prompt(4)).to include('--add-custom')
+      expect(prompt(4)).to match(/star wars chart section/i)
+      expect(prompt(4)).to match(/do not push a hand-written section any other way/i)
+    end
+
     # disc-094: `streamweaver export` drops Chart.js for the chart
     # shorthands, so anything that will be saved, org-exported and reopened
     # (step 4's doc, which step 5 carries out to a gist) must never name
@@ -325,6 +367,19 @@ RSpec.describe StreamWeaver::University::Course do
       expect(prompt(5)).to match(/outline/i)
       expect(prompt(5)).to match(/moves that nav to the top/i)
       expect(prompt(5)).to match(/popout/i)
+    end
+
+    # Round-8 UAT: step 5 used to point things out first and only end with
+    # a vague sense that something might run next. The plan and the CTA
+    # ("say 'go' ...") are now stated FIRST, before any pointing-out prose,
+    # so the user always knows exactly what they're waiting to be asked.
+    it 'states the plan and the CTA before pointing anything out (round-8 UAT)' do
+      expect(prompt(5)).to match(/say 'go' when you're done/i)
+      cta_at = prompt(5).index(/say 'go' when you're done/i)
+      point_at = prompt(5).index('The outline.')
+      expect(cta_at).not_to be_nil
+      expect(point_at).not_to be_nil
+      expect(cta_at).to be < point_at
     end
 
     # The real session discovered this live and improvised it well: name the
@@ -388,24 +443,37 @@ RSpec.describe StreamWeaver::University::Course do
 
     # Round-6 UAT: with no fixed sign-off, a worker either kept talking past
     # a finished demo or went quiet with the user unsure the step was done.
-    # Every prompt now ends on the same two lines -- the closing ritual --
-    # so "done" always reads the same and always names the one next action.
+    # Every prompt now ends on the same shape -- the closing ritual -- so
+    # "done" always reads the same.
+    #
+    # Round-8 UAT: the sign-off used to hand a "click Mark done yourself"
+    # click back to the user. The worker now runs `streamweaver
+    # university-done N` itself (same ledger write as the button, plus it
+    # brings the University window forward), and only then reports what it
+    # did -- no click required from the user.
     describe 'the closing ritual' do
-      it 'ends steps 1-4 with the standard sign-off, naming the next step' do
+      it 'ends steps 1-4 with the standard sign-off, running university-done itself, naming the next step' do
         (1..4).each do |n|
           expect(prompt(n)).to match(/Step #{n} demo complete -- play with it as long as you like/),
                                "step #{n} is missing the closing ritual's first line"
-          expect(prompt(n)).to match(/click Mark done -- that advances you to step #{n + 1}/),
-                               "step #{n} does not name step #{n + 1} as next"
-          expect(prompt(n)).to match(/then click Run on it/)
+          expect(prompt(n)).to include("streamweaver university-done #{n}"),
+                               "step #{n} does not run university-done itself"
+          expect(prompt(n)).to match(/marks step #{n} done/i)
+          expect(prompt(n)).to match(/brings the University window forward/i)
+          expect(prompt(n)).to match(
+            /I've marked step #{n} done and brought University forward -- click Run on step #{n + 1} when ready/
+          ), "step #{n} does not tell the user what it did and name step #{n + 1} as next"
         end
       end
 
-      it 'ends step 5 with the same sign-off, pointing at the recap instead of a next step' do
+      it 'ends step 5 with the same sign-off, running university-done itself, pointing at the recap' do
         expect(prompt(5)).to match(/Step 5 demo complete -- play with it as long as you like/)
-        expect(prompt(5)).to match(/click Mark done -- that closes out the course/)
+        expect(prompt(5)).to include('streamweaver university-done 5')
+        expect(prompt(5)).to match(
+          /I've marked step 5 done and brought University forward -- that's the whole course/
+        )
         expect(prompt(5)).to match(/recap/i)
-        expect(prompt(5)).not_to match(/advances you to step 6/)
+        expect(prompt(5)).not_to match(/click Run on step 6/)
       end
 
       it 'ends every prompt with the ritual, after the verify/present rules' do
@@ -414,6 +482,19 @@ RSpec.describe StreamWeaver::University::Course do
                                                         "step #{n}'s ritual is not the last thing in the prompt"
         end
       end
+    end
+
+    # Round-8 UAT: step 3 kept role-playing with the decision form after both
+    # surfaces were shown, leaving the user unsure whether the teaching was
+    # actually over. The step now declares it done, plainly, before any
+    # continued form-play -- which is offered as a pure, optional aside.
+    it 'declares step 3\'s teaching done before offering optional continued form-play' do
+      expect(prompt(3)).to match(/the teaching for this step is done/i)
+      expect(prompt(3)).to match(/the form still works -- keep playing if you like; the course has moved on/i)
+      done_at = prompt(3).index(/the teaching for this step is done/i)
+      ritual_at = prompt(3).index('demo complete')
+      expect(done_at).not_to be_nil
+      expect(done_at).to be < ritual_at
     end
 
     # Round-6 UAT: step 1 ended on the third mutation with no signal that it

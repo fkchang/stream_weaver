@@ -113,6 +113,8 @@ module StreamWeaver
         university_reset(args)
       when 'university-demo'
         university_demo(args)
+      when 'university-done'
+        university_done(args)
       when 'get-started'
         get_started(args)
       when '--help', '-h', 'help'
@@ -712,6 +714,9 @@ module StreamWeaver
           streamweaver university-demo [<name>]   Print the absolute path of a course demo file inside the
                                                      installed gem (no name: list them). The course prompts
                                                      run these; nothing is composed live.
+          streamweaver university-done <N>        Mark step N done (same as clicking Mark done) and bring
+                                                     the University window forward. What every step's own
+                                                     closing ritual runs -- no click required from you.
       HELP
     end
 
@@ -2968,6 +2973,50 @@ module StreamWeaver
       end
 
       puts path
+    end
+
+    # `streamweaver university-done <N>`: the terminal door onto exactly
+    # what the canvas's own Mark-done button does (University::Listener.
+    # university_done!, same ledger write + repush as the button), PLUS
+    # bringing the controller window forward -- so a worker's own closing
+    # ritual (course.rb's closing_ritual) never has to hand a click back to
+    # the user (round-8 UAT: "click Mark done yourself" cost real minutes of
+    # ambiguity about whether a step was actually finished). The manual
+    # button is untouched; this is a second door onto the same effect.
+    # Reuses `canvas_raise` for the "bring forward" half rather than a
+    # second copy of its pane-vs-browser fallback logic.
+    def self.university_done(args)
+      step_arg = args.find { |a| !a.start_with?('-') }
+      step_number = step_arg.to_i if step_arg&.match?(/\A\d+\z/)
+      unless step_number && University::Course.step(step_number)
+        $stderr.puts "Usage: streamweaver university-done <step-number> " \
+                     "(1-#{University::Course::GETTING_STARTED_STEPS.size})"
+        exit 1
+      end
+
+      require_relative 'canvas/client'
+      # mark_step_done! writes the ledger before the repush that follows it,
+      # so a bridge failure below still leaves the step recorded done --
+      # both rescues below report that honestly instead of implying nothing
+      # happened. The success line is printed BEFORE canvas_raise, not
+      # after -- canvas_raise prints its own confirmation ("Raised
+      # 'university' in its iTerm pane"), so this never claims the raise
+      # landed before finding out whether it did.
+      University::Listener.university_done!(step_number)
+      puts "Marked step #{step_number} done."
+      begin
+        canvas_raise(['university'])
+      rescue SystemExit
+        # canvas_raise exits 1 when the university session isn't in the
+        # bridge's session list -- routine right after a canvas-restart.
+        # The ledger write already landed, so that is not this command's
+        # failure to report. Rescued here, narrowly, rather than at the
+        # method level -- the args-validation `exit 1` above must still
+        # exit for real.
+        puts "Marked step #{step_number} done, but the University canvas isn't open to bring forward."
+      end
+    rescue Canvas::Client::NotRunningError, Canvas::Client::ConnectionError => e
+      puts "Marked step #{step_number} done (progress saved), but could not reach the canvas bridge to bring it forward (#{e.message})."
     end
 
     def self.university_reset_confirmed?

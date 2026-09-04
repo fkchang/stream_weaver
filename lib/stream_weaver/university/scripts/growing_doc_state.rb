@@ -39,24 +39,52 @@ module StreamWeaver
         end
 
         def self.load(session_name)
-          file = path(session_name)
-          return [] unless File.exist?(file)
-
-          loaded = YAML.safe_load(File.read(file))
-          loaded.is_a?(Hash) ? (loaded['extend_keys'] || []) : []
-        rescue Psych::SyntaxError
-          []
+          read(session_name)['extend_keys'] || []
         end
 
         def self.save(session_name, keys)
-          file = path(session_name)
-          FileUtils.mkdir_p(File.dirname(file))
-          File.write(file, YAML.dump('extend_keys' => keys))
+          write(session_name, read(session_name).merge('extend_keys' => keys))
+        end
+
+        # A worker-authored, free-text section (round-8 UAT: a picked
+        # EXTENSIONS key already survives a later rebuild via extend_keys
+        # above; a hand-written section had nowhere to persist, so the next
+        # --picker round silently clobbered it back out -- a live run lost a
+        # user's own Star Wars chart section exactly this way). Stored as
+        # `{key => dsl}` so a rebuild can replay every custom section applied
+        # so far, the same "everything so far, every time" contract
+        # extend_keys already keeps.
+        def self.load_custom(session_name)
+          read(session_name)['custom_sections'] || {}
+        end
+
+        def self.save_custom(session_name, key, dsl)
+          data = read(session_name)
+          customs = (data['custom_sections'] || {}).merge(key => dsl)
+          write(session_name, data.merge('custom_sections' => customs))
         end
 
         def self.clear(session_name)
           FileUtils.rm_f(path(session_name))
         end
+
+        def self.read(session_name)
+          file = path(session_name)
+          return {} unless File.exist?(file)
+
+          loaded = YAML.safe_load(File.read(file))
+          loaded.is_a?(Hash) ? loaded : {}
+        rescue Psych::SyntaxError
+          {}
+        end
+        private_class_method :read
+
+        def self.write(session_name, data)
+          file = path(session_name)
+          FileUtils.mkdir_p(File.dirname(file))
+          File.write(file, YAML.dump(data))
+        end
+        private_class_method :write
       end
     end
   end

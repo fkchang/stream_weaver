@@ -73,5 +73,53 @@ RSpec.describe StreamWeaver::University::Scripts::GrowingDocState do
     it 'is a no-op, not an error, when nothing was ever saved' do
       expect { described_class.clear('doc-demo') }.not_to raise_error
     end
+
+    it 'also clears any persisted custom sections' do
+      described_class.save_custom('doc-demo', 'starwars', 'doc_section_header "07", "Star Wars", id: "starwars"')
+
+      described_class.clear('doc-demo')
+
+      expect(described_class.load_custom('doc-demo')).to eq({})
+    end
+  end
+
+  # Round-8 UAT: a worker-authored free-text section (not a canned
+  # EXTENSIONS key) had nowhere to persist, so the next --picker round
+  # clobbered it back out -- a live run lost a user's own Star Wars chart
+  # section this way.
+  describe '.load_custom / .save_custom' do
+    it 'is empty when nothing has ever been saved' do
+      expect(described_class.load_custom('doc-demo')).to eq({})
+    end
+
+    it 'round-trips a saved custom section by key' do
+      described_class.save_custom('doc-demo', 'starwars', 'doc_section_header "07", "Star Wars", id: "starwars"')
+
+      expect(described_class.load_custom('doc-demo')).to eq(
+        'starwars' => 'doc_section_header "07", "Star Wars", id: "starwars"'
+      )
+    end
+
+    it 'accumulates multiple custom sections rather than replacing the previous one' do
+      described_class.save_custom('doc-demo', 'starwars', 'section A')
+      described_class.save_custom('doc-demo', 'lotr', 'section B')
+
+      expect(described_class.load_custom('doc-demo')).to eq('starwars' => 'section A', 'lotr' => 'section B')
+    end
+
+    it 'does not disturb persisted --extend keys, and vice versa' do
+      described_class.save('doc-demo', %w[tradeoffs])
+      described_class.save_custom('doc-demo', 'starwars', 'section A')
+
+      expect(described_class.load('doc-demo')).to eq(['tradeoffs'])
+      expect(described_class.load_custom('doc-demo')).to eq('starwars' => 'section A')
+    end
+
+    it 'overwrites a custom section saved twice under the same key' do
+      described_class.save_custom('doc-demo', 'starwars', 'first draft')
+      described_class.save_custom('doc-demo', 'starwars', 'second draft')
+
+      expect(described_class.load_custom('doc-demo')).to eq('starwars' => 'second draft')
+    end
   end
 end

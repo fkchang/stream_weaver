@@ -72,14 +72,7 @@ module StreamWeaver
         case token.to_s
         when /mark-done-(\d+)\z/
           step = Regexp.last_match(1).to_i
-          # progress.mark_done! stamps `last_done`, which the re-push below
-          # renders as an inline confirmation band. collapse! is what
-          # closes that row's expansion regardless of which of the two
-          # Mark-done buttons was clicked (the row's own, or its expanded
-          # body's) -- a stale expansion left open under the confirmation
-          # band would read as though nothing happened.
-          progress.mark_done!(step)
-          progress.collapse!
+          mark_step_done!(progress, step)
           step
         when /(?:run|repeat)-(\d+)\z/ # also catches hero-run-N / hero-repeat-N
           step = Regexp.last_match(1).to_i
@@ -116,6 +109,33 @@ module StreamWeaver
           close_demo_sessions!
           true
         end
+      end
+
+      # The ledger write a "step is done" action makes: stamps `last_done`
+      # (rendered as an inline confirmation band) and collapses whichever
+      # row was expanded, so a stale expansion never sits open under the
+      # confirmation. Shared by handle_token's mark-done branch above
+      # (whose own caller, handle_event, does its own repush after every
+      # token) and `university_done!` below (which has no such caller and
+      # does its own repush) -- one write, two callers, so neither can drift
+      # from what "a step just got marked done" actually means.
+      def self.mark_step_done!(progress, step_number)
+        progress.mark_done!(step_number)
+        progress.collapse!
+      end
+
+      # The terminal door onto exactly what a Mark-done click does, for
+      # `streamweaver university-done` (CLI): the same ledger write plus the
+      # same repush, with no button event in the loop. Round-8 UAT: every
+      # step's closing ritual used to hand the "click Mark done" click back
+      # to the user; asking a worker to run this instead removes that
+      # hand-off entirely -- the manual button still works exactly as
+      # before, this is just a second door onto the same effect.
+      def self.university_done!(step_number, session_name: SESSION)
+        progress = Progress.load
+        mark_step_done!(progress, step_number)
+        repush(session_name: session_name)
+        step_number
       end
 
       # Applies one event to the ledger and re-pushes the app so the

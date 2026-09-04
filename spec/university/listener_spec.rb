@@ -312,6 +312,43 @@ RSpec.describe StreamWeaver::University::Listener do
     end
   end
 
+  # Round-8 UAT: every step's closing ritual used to hand a "click Mark
+  # done" click back to the user. `university_done!` is what
+  # `streamweaver university-done` (cli.rb) calls instead -- same ledger
+  # write as a mark-done-N click, plus a repush, with no button event.
+  describe '.university_done!' do
+    it 'marks the step done in the ledger the same way a mark-done-N click does' do
+      allow(described_class).to receive(:repush)
+
+      described_class.university_done!(3)
+
+      expect(progress.done?(3)).to be(true)
+    end
+
+    it 'collapses whichever row was expanded' do
+      progress.expand_step!(2)
+      allow(described_class).to receive(:repush)
+
+      described_class.university_done!(2)
+
+      expect(progress.expanded_step).to be_nil
+    end
+
+    it 'repushes the given session_name' do
+      allow(described_class).to receive(:repush)
+
+      described_class.university_done!(1, session_name: 'demo-session')
+
+      expect(described_class).to have_received(:repush).with(session_name: 'demo-session')
+    end
+
+    it 'returns the step number' do
+      allow(described_class).to receive(:repush)
+
+      expect(described_class.university_done!(4)).to eq(4)
+    end
+  end
+
   describe '.handle_event' do
     it 'repushes to the given session_name after applying the token' do
       allow(described_class).to receive(:repush)

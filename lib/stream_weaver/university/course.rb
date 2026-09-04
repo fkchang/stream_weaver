@@ -92,23 +92,49 @@ module StreamWeaver
       # plain methods/constants rather than reaching into the array.
       TOTAL_STEPS = 5
 
+      # Round-8 UAT: even with the port-discovery advice llms.txt already
+      # carries, a worker still spent real time hunting for the port a
+      # plain launch picked, then booted a SECOND instance trying to "find"
+      # it. Step 2 now pins one port instead of discovering anything --
+      # env-overridable so a machine with 4570 already taken doesn't block
+      # the course. Falls back to the default rather than raising on a
+      # malformed override -- this loads on every `streamweaver` command
+      # (cli.rb requires the university listener, which requires this
+      # file), so a typo'd env var must not break the whole CLI.
+      STEP2_PORT = begin
+        Integer(ENV.fetch('SW_UNIVERSITY_APP_PORT', 4570))
+      rescue ArgumentError
+        4570
+      end
+
       # Round-6 UAT: with no fixed sign-off, a worker either kept talking
       # past a finished demo or went quiet with the user unsure the step was
-      # actually done. Every prompt now ends on the exact same two lines, so
-      # "done" always looks the same and always names the one next action --
-      # click Mark done -- rather than the worker inventing its own closing
-      # line. Step 5 has no next step to advance to, so its own variant below
-      # points at the course recap instead of "step N+1".
+      # actually done. Every prompt now ends on the exact same shape, so
+      # "done" always looks the same.
+      #
+      # Round-8 UAT: the sign-off used to hand a "click Mark done yourself"
+      # click back to the user -- real minutes of ambiguity about whether a
+      # step had actually finished. The worker now closes the loop itself:
+      # run `streamweaver university-done N` (same ledger write as the
+      # button, plus it brings the University window forward on its own),
+      # THEN tell the user in one line what just happened. The manual
+      # Mark-done button still works exactly as before; this just means the
+      # worker never has to ask for a click. Step 5 has no next step to
+      # advance to, so its own variant below points at the course recap
+      # instead of "step N+1".
       def self.closing_ritual(number)
         intro = "✅ Step #{number} demo complete -- play with it as long as you like."
-        next_hint = if number >= TOTAL_STEPS
-                      "When ready: go to the StreamWeaver University window and click Mark done -- " \
-                      "that closes out the course and shows you the recap of everything you just ran."
-                    else
-                      "When ready: go to the StreamWeaver University window and click Mark done -- " \
-                      "that advances you to step #{number + 1} (then click Run on it)."
-                    end
-        "#{intro}\n\n#{next_hint}"
+        run_it = "Then run `streamweaver university-done #{number}` yourself -- it marks step " \
+                 "#{number} done (same as clicking Mark done) and brings the University window " \
+                 "forward so I see it, with no click required from me."
+        report = if number >= TOTAL_STEPS
+                   "Tell me: \"I've marked step #{number} done and brought University forward -- " \
+                   "that's the whole course; take a look at the recap.\""
+                 else
+                   "Tell me: \"I've marked step #{number} done and brought University forward -- " \
+                   "click Run on step #{number + 1} when ready.\""
+                 end
+        "#{intro}\n\n#{run_it}\n\n#{report}"
       end
 
       GETTING_STARTED_STEPS = [
@@ -190,24 +216,25 @@ module StreamWeaver
             #{cleanup_line('dashboard')}
 
             Then start the app immediately, as a BACKGROUND task, before explaining
-            anything:
+            anything, on a PINNED port -- no discovery, no guessing:
 
-            ruby "$(streamweaver university-demo counter)"
+            PORT=#{STEP2_PORT} ruby "$(streamweaver university-demo counter)"
 
             That is a finished eight-line file inside the stream_weaver gem. Do not write
-            your own version and do not go looking for a source checkout. Do NOT set
-            SW_NO_OPEN -- this app is meant to open in MY browser, and it opens itself.
+            your own version and do not go looking for a source checkout. NEVER boot a
+            second instance of it for any reason -- if port #{STEP2_PORT} is already bound,
+            it is always a stale course app left over from an earlier run, never something
+            else worth investigating: find and kill it first (`lsof -i :#{STEP2_PORT}
+            -sTCP:LISTEN`), then start this one. StreamWeaver's own port-scan means
+            launching a second instance on a busy port just starts an orphaned duplicate on
+            the NEXT free port -- a terrible first impression that tells you nothing about
+            the one already running.
 
-            The browser should already be up, but confirm it yourself: read the
-            `http://127.0.0.1:<port>` line your own captured stdout just printed -- that
-            line IS the port, nothing to search for. NEVER run a second `ruby ...` to
-            "find" the port; StreamWeaver's own port-scan means a second launch just
-            starts a duplicate, orphaned app on the NEXT free port, which is a terrible
-            first impression and tells you nothing about the one already running. If the
-            banner genuinely did not reach your captured output, find the live port
-            against the process you already started with `lsof -i :4567-4620
-            -sTCP:LISTEN` rather than sleeping on the log or launching another one, and
-            open that URL for me the way the PRESENT rule below says.
+            Setting PORT suppresses the app's own auto-open, by design -- so confirm it is
+            up (curl it, or check your captured stdout for the app booting), then open it
+            for me yourself:
+
+            open http://127.0.0.1:#{STEP2_PORT}
 
             NOW narrate. Print the file -- nine lines now, `streamweaver university-demo
             counter` prints its path -- and walk me through it:
@@ -243,7 +270,7 @@ module StreamWeaver
             #{closing_ritual(2)}
           PROMPT
           what_you_should_see: [
-            "The browser opens on its own within seconds -- no port to guess, no URL to type, and your agent did not quietly verify it with curl and move on without showing you.",
+            "The app comes up on a pinned port -- no port to guess, no second instance booted to \"find\" one -- and your agent opens it for you within seconds instead of quietly verifying it with curl and moving on without showing you.",
             "Each click updates the count immediately, with no page reload or spinner.",
             "The Ruby block ran again on every click; nothing else touched the page.",
             "Your agent printed all nine lines of the file it actually ran, and named `require 'stream_weaver'` and `end.run!` as the two the \"six-line app\" framing hides -- the two that cost real sessions a debug cycle each.",
@@ -317,6 +344,14 @@ module StreamWeaver
             Close on one beat: the same form left live with no `canvas-wait` behind it
             keeps its state in the pane, and you can read my answer back whenever you need
             it. Blocking is a choice, not a limitation.
+
+            Once you have said that, the teaching for this step is DONE -- both surfaces
+            are demonstrated, full stop. Declare it plainly and move straight to the
+            closing ritual below; do not keep role-playing with the form as though there
+            is more to teach. If I want to keep clicking around in it afterward, that is
+            fine -- offer it as a pure aside, optional, in words like "the form still
+            works -- keep playing if you like; the course has moved on", never folded in
+            as more of the lesson.
 
             #{VERIFY_RULE}
 
@@ -416,12 +451,30 @@ module StreamWeaver
             Still VERIFY before telling me anything landed: curl the `doc-demo` session
             (or read the command's own OK/FAILED output) and grep for that exact header
             text. Only then say it is there -- a push that silently no-op'd once looked
-            identical to a successful one. If I typed a description instead, write that section yourself
-            -- and keep it to `doc_section_header`, `md`, `table headers:/rows:`,
+            identical to a successful one.
+
+            If I typed a description instead, IMMEDIATELY -- before you write a word of
+            the real section -- push a placeholder to the `doc-demo` session so the pane
+            never just sits there while you work: a bare `callout` reading "⏳ Building
+            your <my request, verbatim> -- hold on" is enough. THEN write the section
+            itself, and keep it to `doc_section_header`, `md`, `table headers:/rows:`,
             `comparison`, `code_block`, `callout` and `mermaid`. Those are exactly the
             components `streamweaver org-export` recognizes; anything else looks right in
             the pane and then leaves as an unrecognized placeholder, silently, which is
             the failure step 5 exists to disprove.
+
+            A hand-written section is not a canned `--extend` key, so on its own it has
+            nowhere to persist -- the NEXT `--picker` round would clobber it right back
+            out. (A live run lost a user's own Star Wars chart section exactly this way.)
+            Save your finished DSL to a scratch file and hand it to the script instead of
+            pushing it yourself:
+
+            ruby "$(streamweaver university-demo doc)" doc-demo --add-custom <a-short-key> <path-to-your-snippet-file>
+
+            That persists the section alongside everything else already in the doc, so
+            every later rebuild includes it automatically, and pushes + re-saves the
+            finished document in one command -- do not push a hand-written section any
+            other way, or the persistence never happens.
 
             Then push the picker again and loop, until I choose "done". Say the saved path
             once more at the end.
@@ -462,8 +515,14 @@ module StreamWeaver
             Then stop and wait for me. Do not fake the gist half of this step, and do not
             press on hoping it works.
 
-            Then, with the doc still open in the `doc-demo` pane, show me what it grew
-            into before it leaves. Point at two things I would otherwise walk past:
+            Then, with the doc still open in the `doc-demo` pane, state the plan before you
+            point at anything -- one breath, up front: "Look at two things -- the outline
+            nav and the mermaid popout. Say 'go' when you're done and I'll export it and
+            push it to a gist." That is the whole CTA, said FIRST, not stitched on after
+            you've already started pointing things out -- so I always know exactly what
+            you are waiting on me for and that nothing is running yet.
+
+            THEN point at the two things themselves, the ones I would otherwise walk past:
 
             - The outline. Six-plus sections is what earns a sidebar; in a pane this
               narrow the doc theme moves that nav to the top instead of the side, and it
@@ -471,7 +530,8 @@ module StreamWeaver
             - The mermaid diagram's popout control -- a rendered diagram in a 750px pane
               is a thumbnail until you open it full size.
 
-            Now take it with you. Step 4's script saved the doc under the deterministic
+            Wait for me to say "go" (or the same in other words). Only then take it with
+            you. Step 4's script saved the doc under the deterministic
             name `university-doc` and printed the path; use that path. If you no longer
             have it, look in `docs/streamweaver_canvas/` AND `~/.streamweaver/canvas/`
             (the bridge's working directory is often not this shell's) and tell me where
