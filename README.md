@@ -15,6 +15,24 @@ That's it. No HTML. No CSS. No JavaScript. No webpack.
 
 ---
 
+## Platform support
+
+| Tier | Platforms | What you get |
+|---|---|---|
+| Tested & supported | macOS + iTerm2 + Chrome + gh | The full `get-started` course: a controller canvas window, an agent worker tab, live demo panes, one-click sharing |
+| Expected to work, untested | macOS plain terminal, Linux, WSL | The degraded path: `canvas-read` plus a browser-tab canvas, no panel/worker automation |
+| Known degraded path | Any of the above | `streamweaver get-started --degraded` |
+| Future | Windows native, other terminals/multiplexers | Not yet built |
+
+A few things worth being explicit about:
+
+- `streamweaver panel` and the worker-tab automation it drives are **macOS + iTerm2 only** — they script iTerm2's Python API.
+- `canvas-read` is a plain local web server. It's the most portable piece of StreamWeaver and doesn't need iTerm2, Chrome, or `gh` — see [docs/canvas-read.md](docs/canvas-read.md).
+- The Chrome extension and the `gh` CLI are enhancers for *sharing* docs (Gist links that render nicely), not requirements for reading them locally.
+- Never assume a port. Every command that starts a server prints the URL it actually bound — StreamWeaver auto-increments past busy ports.
+
+---
+
 ## Why StreamWeaver?
 
 **TL;DR:** I want a quick UI. What do I need? Some text, a few inputs, a button. Why isn't *that* the interface? Instead: HTML, CSS, JavaScript, backend wiring... Streamlit showed me the interface *can* just be "text, inputs, button." StreamWeaver brings that to Ruby - and it turns out this minimal approach is perfect for AI agents too.
@@ -110,9 +128,22 @@ For quick local work, the defaults are perfect — auto-find a port, open the br
 
 ## Quick Start
 
+Three steps to awesome:
+
 ```bash
 gem install stream_weaver
+streamweaver install
+streamweaver get-started
+```
 
+`install` wires StreamWeaver into Claude Code (permissions + skills); `get-started` walks you
+through a short interactive course, next to your own terminal. On macOS + iTerm2 you get the full
+experience; anywhere else it falls back to a browser tab automatically (or jump straight there with
+`streamweaver get-started --degraded`). See [Platform support](#platform-support) above.
+
+Prefer to explore on your own first?
+
+```bash
 # Interactive tutorial
 streamweaver tutorial
 
@@ -517,6 +548,7 @@ end
 ## More Resources
 
 - [Canvas Mode Documentation](docs/canvas-roadmap.md)
+- [canvas-read: the document shelf](docs/canvas-read.md) — the most portable way to read StreamWeaver docs, no iTerm2 required
 - [Templates Reference](docs/templates.md)
 - [Components Reference](docs/components_reference.md)
 - [Service Mode](docs/SERVICE_MODE.md)
