@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **University artifact lifecycle — the course cleans up after itself** - StreamWeaver University now keeps a manifest of everything it creates (saved docs, exported `.org` files, gists, demo canvas sessions) and can take it all back. `streamweaver university-cleanup` prints the grouped inventory and confirms per group — gists one at a time, showing each URL, since a gist is the only artifact that left your machine — with `--dry-run` to look without being asked anything; the completion recap grew the same offer as buttons, where a delete always takes two clicks (the first only asks, and the confirmation names exactly what will go). `streamweaver university-stop` puts the course down without throwing anything away: it stops the listener, closes the demo canvas sessions and the two iTerm2 windows `get-started` opened, and keeps your progress. Recording is invisible — docs and sessions record themselves; `streamweaver university-artifact add <ref>` is the one manual door, for the gist URL only your agent ever sees. Nothing outside the manifest is ever deleted: a ref it does not record is refused, sessions are re-checked against the same allowlist `university-reset` closes by, and the course's own state files are matched by exact name rather than swept out of a directory in your home.
+
 ## [0.3.1] - 2026-09-04
 
 ### Added

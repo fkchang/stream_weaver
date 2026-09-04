@@ -61,6 +61,19 @@ RSpec.describe StreamWeaver::University::Artifacts do
       expect(described_class.infer_type('/etc/passwd')).to be_nil
       expect(described_class.infer_type('some-session-i-opened-myself')).to be_nil
     end
+
+    it 'refuses a gist.github.com URL with no id in it -- Cleanup could never delete one' do
+      expect(described_class.infer_type('https://gist.github.com/someone')).to be_nil
+      expect(described_class.infer_type('https://gist.github.com/')).to be_nil
+    end
+  end
+
+  describe '.gist_id' do
+    it 'is the single definition of "a gist URL" that both doors use' do
+      expect(described_class.gist_id('https://gist.github.com/me/abc123def')).to eq('abc123def')
+      expect(described_class.gist_id('https://gist.github.com/abc123def')).to eq('abc123def')
+      expect(described_class.gist_id('https://gist.github.com/me')).to be_nil
+    end
   end
 
   describe '.record!' do
@@ -87,6 +100,23 @@ RSpec.describe StreamWeaver::University::Artifacts do
 
     it 'refuses a type outside TYPES' do
       expect(described_class.record!('/tmp/a.rb', type: 'command')).to be_nil
+      expect(described_class.all).to eq([])
+    end
+
+    it 'stores a file ref absolute -- the process that deletes it has a different cwd' do
+      Dir.chdir(@dir) { described_class.record!('notes.rb') }
+
+      ref = described_class.all.first['ref']
+      # Compared by realpath, not by string: macOS resolves the tmpdir's
+      # /var -> /private/var symlink on chdir, which is exactly the kind of
+      # difference storing an expanded path exists to settle.
+      expect(ref).to start_with('/')
+      expect(File.realpath(File.dirname(ref))).to eq(File.realpath(@dir))
+      expect(File.basename(ref)).to eq('notes.rb')
+    end
+
+    it 'refuses a gist URL it could never resolve to an id' do
+      expect(described_class.record!('https://gist.github.com/someone', type: 'gist')).to be_nil
       expect(described_class.all).to eq([])
     end
 

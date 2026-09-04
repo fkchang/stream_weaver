@@ -153,21 +153,17 @@ module StreamWeaver
         end
       end
 
-      # Performs the pending delete through Cleanup -- the same module (and
-      # therefore the same allowlist) `streamweaver university-cleanup`
-      # uses, so nothing here re-implements what may be deleted. A refusal
-      # is reported rather than raised: this runs inside a background
-      # listener nobody is watching, and the user's own answer is the recap.
+      # Performs the pending delete through Cleanup's own batch entry point
+      # -- the same module, allowlist AND refusal behavior
+      # `streamweaver university-cleanup` gets, so nothing here
+      # re-implements what may be deleted or what happens when something
+      # may not be. The messages go in the ledger for the next re-push to
+      # render: this runs inside a background listener nobody is watching,
+      # so the recap is the only place an answer can appear.
       def self.cleanup_confirm!
         pending = Artifacts.pending_delete or return nil
-        messages = pending['refs'].map do |ref|
-          begin
-            Cleanup.delete_entry!(pending['kind'], ref).message
-          rescue Cleanup::Refused => e
-            e.message
-          end
-        end
-        Artifacts.record_cleanup!(messages)
+        outcomes = Cleanup.delete_refs!(pending['kind'], pending['refs'])
+        Artifacts.record_cleanup!(outcomes.map(&:message))
       end
 
       # The ledger write a "step is done" action makes: stamps `last_done`

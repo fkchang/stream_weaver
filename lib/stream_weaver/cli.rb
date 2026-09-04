@@ -3031,7 +3031,7 @@ module StreamWeaver
       end
 
       grouped.each do |type, entries|
-        puts "#{university_artifact_group_label(type)} (#{entries.size}):"
+        puts "#{University::Artifacts.label(type)} (#{entries.size}):"
         entries.each do |entry|
           step = entry['step'] ? " [step #{entry['step']}]" : ''
           puts "  #{entry['ref']}#{step}"
@@ -3039,15 +3039,10 @@ module StreamWeaver
       end
     end
 
-    def self.university_artifact_group_label(type)
-      { 'doc' => 'Saved docs', 'org' => 'Exported .org files',
-        'gist' => 'Gists', 'session' => 'Course canvas sessions' }.fetch(type, type)
-    end
-
     def self.university_artifact_add(args)
-      ref = args.find { |a| !a.start_with?('-') }
       step = flag_value(args, '--step')
       type = flag_value(args, '--type')
+      ref = positional(args, valued_flags: %w[--step --type])
 
       unless ref
         $stderr.puts "Usage: streamweaver university-artifact add <ref> [--step N] [--type doc|org|gist|session]"
@@ -3073,6 +3068,25 @@ module StreamWeaver
 
       idx = args.index(flag)
       idx ? args[idx + 1] : nil
+    end
+
+    # The first real argument, with flags AND the values of the separated
+    # `--flag value` forms skipped. Not just "the first thing not starting
+    # with a dash": `university-artifact add --type doc /tmp/a.rb` would
+    # otherwise record the literal ref "doc", and a relative ref like that
+    # is precisely what cleanup would later resolve against some other
+    # process's working directory. Flags-before-positional is exactly the
+    # shape an agent produces, and step 5's prompt hands this command to one.
+    def self.positional(args, valued_flags: [])
+      skip_next = false
+      args.find do |arg|
+        if skip_next
+          skip_next = false
+          next false
+        end
+        skip_next = valued_flags.include?(arg)
+        !arg.start_with?('-')
+      end
     end
 
     # `streamweaver university-cleanup`: the course offers to take back
@@ -3104,23 +3118,28 @@ module StreamWeaver
       end
 
       puts ""
-      cleanup_group('doc', inventory[:docs], "Delete #{inventory[:docs].size} saved doc file(s)?")
-      cleanup_group('org', inventory[:orgs], "Delete #{inventory[:orgs].size} exported .org file(s)?")
-      cleanup_gists(inventory[:gists])
-      cleanup_group('session', inventory[:sessions],
-                    "Close #{inventory[:sessions].size} course canvas session(s)?")
-      cleanup_state_files(inventory[:state_files])
+      # get_started_confirm? answers "no" for every question when there is
+      # no tty to ask at, which is the right default for a destructive
+      # command and a baffling transcript without this line -- every group
+      # comes back "Kept" for no visible reason.
+      puts "(no terminal to confirm at -- everything will be kept)" unless $stdin.tty?
+      cleanup_group('doc', inventory['doc'], "Delete #{inventory['doc'].size} saved doc file(s)?")
+      cleanup_group('org', inventory['org'], "Delete #{inventory['org'].size} exported .org file(s)?")
+      cleanup_gists(inventory['gist'])
+      cleanup_group('session', inventory['session'],
+                    "Close #{inventory['session'].size} course canvas session(s)?")
+      cleanup_state_files(inventory[University::Cleanup::STATE])
       puts ""
       puts "Cleanup done."
     end
 
     def self.print_cleanup_inventory(inventory)
       puts "StreamWeaver University created these:"
-      print_cleanup_files("Saved docs", inventory[:docs])
-      print_cleanup_files("Exported .org files", inventory[:orgs])
-      print_cleanup_refs("Gists", inventory[:gists])
-      print_cleanup_refs("Course canvas sessions", inventory[:sessions])
-      print_cleanup_files("University state files", inventory[:state_files])
+      print_cleanup_files(University::Artifacts.label('doc'), inventory['doc'])
+      print_cleanup_files(University::Artifacts.label('org'), inventory['org'])
+      print_cleanup_refs(University::Artifacts.label('gist'), inventory['gist'])
+      print_cleanup_refs(University::Artifacts.label('session'), inventory['session'])
+      print_cleanup_files("University state files", inventory[University::Cleanup::STATE])
     end
 
     def self.print_cleanup_files(label, entries)
@@ -3143,13 +3162,19 @@ module StreamWeaver
     end
 
     # One y/N for a whole group. Declining leaves every entry in the
-    # manifest, so a later run can still offer them.
+    # manifest, so a later run can still offer them. Deletes through
+    # `delete_refs!` rather than looping `delete_entry!` here: that is where
+    # a refusal becomes a reported outcome instead of an exception, and a
+    # backtrace halfway through a destructive command -- with some files
+    # already gone and the remaining groups never offered -- is the one
+    # failure mode this command must not have.
     def self.cleanup_group(type, entries, question)
       return if entries.empty?
-      return puts("Kept: #{university_artifact_group_label(type).downcase}.") unless
+      return puts("Kept: #{University::Artifacts.label(type).downcase}.") unless
         get_started_confirm?(question, default: false)
 
-      entries.each { |entry| puts "  #{University::Cleanup.delete_entry!(type, entry[:ref]).message}" }
+      University::Cleanup.delete_refs!(type, entries.map { |entry| entry[:ref] })
+                         .each { |outcome| puts "  #{outcome.message}" }
     end
 
     # Per ITEM, showing the URL. A gist is public, remote, and gone for
@@ -3166,7 +3191,8 @@ module StreamWeaver
 
       entries.each do |entry|
         if get_started_confirm?("Delete gist #{entry[:ref]}?", default: false)
-          puts "  #{University::Cleanup.delete_entry!('gist', entry[:ref]).message}"
+          University::Cleanup.delete_refs!('gist', [entry[:ref]])
+                             .each { |outcome| puts "  #{outcome.message}" }
         else
           puts "  Kept #{entry[:ref]}"
         end

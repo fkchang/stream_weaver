@@ -116,22 +116,13 @@ module StreamWeaver::University::Canvas
     ever_sent ? "Re-run" : "Run"
   end
 
-  # Human name for one artifact type, in the recap's Artifacts section and
-  # in its confirmation copy.
-  def self.artifact_group_label(type)
-    {
-      'doc' => 'Saved docs',
-      'org' => 'Exported .org files',
-      'gist' => 'Gists',
-      'session' => 'Course canvas sessions'
-    }.fetch(type.to_s, type.to_s)
-  end
-
   # Which `cleanup-ask-<target>` button a whole-group delete uses, read
   # back out of Listener::CLEANUP_GROUPS rather than repeated here -- the
   # button this renders and the branch that handles it have to agree, and
-  # the handler is the one that decides what a target means. nil for `gist`,
-  # which is never deleted as a group.
+  # the handler is the one that decides what a target means. nil for `gist`
+  # (never deleted as a group) and for any type nobody wired a group button
+  # for, which the caller must treat as "render no button" rather than
+  # rendering a dead one.
   def self.artifact_group_target(type)
     StreamWeaver::University::Listener::CLEANUP_GROUPS
       .find { |_target, group| group[:kind] == type.to_s }&.first
@@ -845,7 +836,9 @@ _body = proc do
               end
 
               artifacts.each do |type, entries|
-                phrase StreamWeaver::University::Canvas.artifact_group_label(type), class: "uni-label"
+                label = StreamWeaver::University::Artifacts.label(type)
+                target = StreamWeaver::University::Canvas.artifact_group_target(type)
+                phrase label, class: "uni-label"
                 md StreamWeaver::University::Canvas.bullets(entries.map { |e| e['ref'] }),
                    class: "uni-payoff"
                 div(class: "uni-actions") do
@@ -854,10 +847,13 @@ _body = proc do
                       button "Delete #{entry['ref']}", id: "cleanup-ask-gist-#{index}",
                              class: "uni-btn uni-btn--outline"
                     end
-                  else
-                    target = StreamWeaver::University::Canvas.artifact_group_target(type)
-                    button "Delete #{StreamWeaver::University::Canvas.artifact_group_label(type).downcase}",
-                           id: "cleanup-ask-#{target}", class: "uni-btn uni-btn--outline"
+                  # No group button for a type nobody wired one for -- a
+                  # `cleanup-ask-` id with no target in it matches no
+                  # listener branch, so rendering it would be a button that
+                  # silently does nothing.
+                  elsif target
+                    button "Delete #{label.downcase}", id: "cleanup-ask-#{target}",
+                           class: "uni-btn uni-btn--outline"
                   end
                 end
               end

@@ -23,7 +23,8 @@ RSpec.describe StreamWeaver::University::Cleanup do
       FileUtils.mkdir_p(@state_dir)
       with_env(
         'STREAMWEAVER_UNIVERSITY_ARTIFACTS' => File.join(@state_dir, 'artifacts.yml'),
-        'STREAMWEAVER_UNIVERSITY_PROGRESS' => File.join(@state_dir, 'progress.yml')
+        'STREAMWEAVER_UNIVERSITY_PROGRESS' => File.join(@state_dir, 'progress.yml'),
+        'STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR' => @state_dir
       ) do
         example.run
       end
@@ -202,6 +203,23 @@ RSpec.describe StreamWeaver::University::Cleanup do
     end
   end
 
+  describe '.delete_refs!' do
+    it 'reports a refusal as its own outcome instead of raising through the batch' do
+      kept = recorded_file('kept.rb')
+      outsider = File.join(@dir, 'not-mine.rb')
+      File.write(outsider, 'not mine')
+
+      outcomes = described_class.delete_refs!('doc', [outsider, kept])
+
+      expect(outcomes.first.ok).to be(false)
+      expect(outcomes.first.message).to match(/refusing to delete/)
+      expect(File.exist?(outsider)).to be(true)
+      # The refusal must not cost the rest of the batch its turn.
+      expect(outcomes.last.ok).to be(true)
+      expect(File.exist?(kept)).to be(false)
+    end
+  end
+
   describe '.delete_type!' do
     it 'deletes every entry of one type and nothing of another' do
       doc = recorded_file('a.rb')
@@ -226,6 +244,20 @@ RSpec.describe StreamWeaver::University::Cleanup do
         .to contain_exactly('progress.yml', 'worker.json', 'listener.log', 'doc-demo_state.yml')
     end
 
+    it 'never reaches outside the state dir when only some env overrides are set' do
+      # A partially-redirected environment: the ledger is redirected here,
+      # growing_doc's own state dir is somewhere else entirely. That other
+      # directory is not this course's state dir, so nothing in it is ours
+      # to delete.
+      Dir.mktmpdir('elsewhere') do |elsewhere|
+        File.write(File.join(elsewhere, 'doc-demo_state.yml'), 'x')
+        with_env('STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR' => elsewhere) do
+          expect(described_class.state_files).to eq([])
+        end
+        expect(File.exist?(File.join(elsewhere, 'doc-demo_state.yml'))).to be(true)
+      end
+    end
+
     it 'deletes them and leaves everything else in the directory alone' do
       File.write(File.join(@state_dir, 'progress.yml'), 'x')
       keeper = File.join(@state_dir, 'unrelated.yml')
@@ -247,19 +279,26 @@ RSpec.describe StreamWeaver::University::Cleanup do
 
       inv = described_class.inventory
 
-      expect(inv[:docs].first).to include(ref: doc, exists: true)
-      expect(inv[:docs].first[:size]).to be > 0
-      expect(inv[:gists].map { |g| g[:ref] }).to eq(['https://gist.github.com/me/abc123'])
-      expect(inv[:sessions].map { |s| s[:ref] }).to eq(['dashboard'])
-      expect(inv[:state_files].map { |s| File.basename(s[:ref]) }).to include('worker.json', 'artifacts.yml')
+      expect(inv['doc'].first).to include(ref: doc, exists: true)
+      expect(inv['doc'].first[:size]).to be > 0
+      expect(inv['gist'].map { |g| g[:ref] }).to eq(['https://gist.github.com/me/abc123'])
+      expect(inv['session'].map { |s| s[:ref] }).to eq(['dashboard'])
+      expect(inv[described_class::STATE].map { |s| File.basename(s[:ref]) })
+        .to include('worker.json', 'artifacts.yml')
       expect(File.exist?(doc)).to be(true)
+    end
+
+    it 'is keyed by artifact type, with every group present even when empty' do
+      expect(described_class.inventory.keys)
+        .to eq(StreamWeaver::University::Artifacts::TYPES + [described_class::STATE])
+      expect(described_class.inventory['gist']).to eq([])
     end
 
     it 'reports a recorded doc the user has already deleted themselves' do
       path = recorded_file('a.rb')
       FileUtils.rm_f(path)
 
-      expect(described_class.inventory[:docs].first).to include(exists: false, size: nil)
+      expect(described_class.inventory['doc'].first).to include(exists: false, size: nil)
     end
 
     it 'is empty? at the zero-state' do

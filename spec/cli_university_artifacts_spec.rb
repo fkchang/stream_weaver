@@ -76,6 +76,15 @@ RSpec.describe StreamWeaver::CLI do
       expect(artifacts.all.first['type']).to eq('org')
     end
 
+    it 'finds the ref with flags in front of it, not the flag value' do
+      # An agent runs the command this way readily, and taking "doc" as the
+      # ref would record a RELATIVE path that cleanup later resolves against
+      # some other process's working directory.
+      capture_io { described_class.university_artifact(['add', '--type', 'doc', '--step', '4', '/tmp/a.rb']) }
+
+      expect(artifacts.all.first).to include('type' => 'doc', 'ref' => '/tmp/a.rb', 'step' => 4)
+    end
+
     it 'refuses a ref it cannot classify rather than guessing' do
       out, err = capture_io do
         expect { described_class.university_artifact(['add', '/etc/passwd']) }
@@ -141,6 +150,28 @@ RSpec.describe StreamWeaver::CLI do
       expect(File.exist?(path)).to be(true)
       expect(artifacts.all.size).to eq(2)
       expect(out).to include('Kept: saved docs.')
+    end
+
+    it 'reports a refusal and keeps going, rather than a backtrace mid-delete' do
+      # The shape a hand-edited manifest produces: an entry the allowlist
+      # will refuse. It must not abort the run with files already gone and
+      # the remaining groups never offered.
+      outsider = File.join(@dir, 'not-mine.rb')
+      File.write(outsider, 'not mine')
+      File.write(artifacts.path, YAML.dump('entries' => [
+                                             { 'type' => 'doc', 'ref' => outsider, 'step' => 4 }
+                                           ]))
+      # Refused is raised by delete_entry!'s fresh manifest read, so make
+      # the manifest disagree with what cleanup was handed.
+      allow(StreamWeaver::University::Cleanup).to receive(:delete_entry!)
+        .and_raise(StreamWeaver::University::Cleanup::Refused, 'refusing to delete: test')
+      answering(true)
+
+      out, = capture_io { expect { described_class.university_cleanup([]) }.not_to raise_error }
+
+      expect(out).to include('refusing to delete: test')
+      expect(out).to include('Cleanup done.')
+      expect(File.exist?(outsider)).to be(true)
     end
 
     it 'reports a doc the user already deleted themselves instead of erroring' do

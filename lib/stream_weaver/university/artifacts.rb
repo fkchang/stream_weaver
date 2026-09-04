@@ -33,6 +33,22 @@ module StreamWeaver
       # session -- a course demo canvas session, by name
       TYPES = %w[doc org gist session].freeze
 
+      # Human names for the types, in one place: both surfaces show these
+      # (the CLI's inventory headings and "Kept: ..." lines, the canvas's
+      # group headings and delete-button labels), and two copies would let
+      # the same group be called two different things depending on where
+      # the user was standing.
+      LABELS = {
+        'doc' => 'Saved docs',
+        'org' => 'Exported .org files',
+        'gist' => 'Gists',
+        'session' => 'Course canvas sessions'
+      }.freeze
+
+      def self.label(type)
+        LABELS.fetch(type.to_s, type.to_s)
+      end
+
       # Expanded per call, not at the constant, so a spec that redirects
       # HOME is redirected here too -- same reasoning as Progress.path.
       def self.path
@@ -54,6 +70,18 @@ module StreamWeaver
         ref = ref.to_s
         type = (type || infer_type(ref))&.to_s
         return nil unless TYPES.include?(type)
+
+        # A file ref is stored absolute, always. The process that records
+        # one (a worker's shell, the bridge) is not the process that later
+        # deletes it, so a relative path would be resolved against a
+        # different working directory than the one it meant -- and the
+        # thing resolved would be deleted without anyone noticing the
+        # difference. Refuse a gist ref that the deleter could not resolve
+        # for the same reason: `Cleanup` shells `gh` with the id this
+        # parses out, so a URL with no id in it is a manifest entry that
+        # can only ever fail.
+        ref = File.expand_path(ref) if %w[doc org].include?(type)
+        return nil if type == 'gist' && gist_id(ref).nil?
 
         data = read
         entries = data['entries'] || []
@@ -120,12 +148,23 @@ module StreamWeaver
         all.select { |e| e['step'].to_i == step_number.to_i }
       end
 
+      # The gist id `gh gist delete` wants, or nil if this is not a gist URL
+      # this course could act on. Lives here, beside the recording door,
+      # rather than in Cleanup: "is this a gist?" must have exactly ONE
+      # definition, or a URL loose enough to record can be too vague to
+      # delete -- a manifest entry that is permanently stuck. Cleanup calls
+      # this again on the way out as its second guard.
+      def self.gist_id(url)
+        match = url.to_s.match(%r{\Ahttps?://gist\.github\.com/(?:[^/]+/)?([0-9a-f]{6,})/?\z}i)
+        match && match[1]
+      end
+
       # gist URL > .org path > .rb path > an allowlisted demo session name.
       # Deliberately narrow: an unrecognized ref returns nil and `record!`
       # refuses it rather than guessing a type Cleanup would later act on.
       def self.infer_type(ref)
         ref = ref.to_s
-        return 'gist' if ref.match?(%r{\Ahttps?://}i) && ref.include?('gist.github.com')
+        return 'gist' if gist_id(ref)
         return 'org' if ref.end_with?('.org')
         return 'doc' if ref.end_with?('.rb')
         return 'session' if demo_session_names.include?(ref)
@@ -171,13 +210,6 @@ module StreamWeaver
         write(read.merge('last_cleanup' => Array(messages).map(&:to_s), 'pending' => nil))
       end
 
-      # Forgets every artifact AND any pending confirmation. Deletes
-      # nothing on disk or in the bridge -- that is Cleanup's job, and this
-      # is only the record of it.
-      def self.clear!
-        FileUtils.rm_f(path)
-      end
-
       # Resolved lazily rather than by a top-level require: Listener records
       # sessions through this module, so requiring it from here at load time
       # would be a cycle. `require` is idempotent, so the cost is one hash
@@ -197,9 +229,20 @@ module StreamWeaver
       end
       private_class_method :read
 
+      # Locked, because two live processes write this file: the background
+      # listener records a session the moment a Run click warms one up,
+      # while a foreground `university-cleanup` is forgetting entries it
+      # just deleted. Both rewrite the whole document, so without the lock
+      # the loser's change is dropped -- worst case a deleted artifact's
+      # entry comes back, which is a confusing offer to delete it again
+      # rather than a wrong deletion, but not something to leave to luck.
       def self.write(data)
         FileUtils.mkdir_p(File.dirname(path))
-        File.write(path, YAML.dump(data))
+        File.open(path, File::RDWR | File::CREAT, 0o644) do |file|
+          file.flock(File::LOCK_EX)
+          file.truncate(0)
+          file.write(YAML.dump(data))
+        end
       end
       private_class_method :write
     end
