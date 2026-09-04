@@ -1,6 +1,17 @@
 # Send this to a coworker
 
-Two versions, depending on who's getting it. Pick one and paste it as-is.
+The pitch, verbatim:
+
+```bash
+gem install stream_weaver
+streamweaver install
+streamweaver get-started
+```
+
+3 steps to awesome. Full experience is macOS + iTerm2; anywhere else, `get-started`
+falls back to a browser tab automatically -- same course, no surprises.
+
+Two versions below, depending on who's getting it. Pick one and paste it as-is.
 
 ## Developer version
 

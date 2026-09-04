@@ -105,7 +105,7 @@ module StreamWeaver
         opal_build(args)
       when 'install-skill'
         install_skill(args)
-      when 'setup'
+      when 'setup', 'install'
         setup
       when 'university-listener'
         university_listener(args)
@@ -690,7 +690,8 @@ module StreamWeaver
         Panel (iTerm2 Split + Canvas):
           streamweaver panel [name]               Split iTerm2, open canvas in right pane
           streamweaver panel [name] --fresh       Close existing session first, then open
-          streamweaver setup                      Configure Claude Code (permissions + skills)
+          streamweaver install                    Configure Claude Code (permissions + skills)
+                                                     (alias: setup)
           streamweaver install-skill [--global]   Install Claude Code skills only
 
         Panel Example (iTerm2):

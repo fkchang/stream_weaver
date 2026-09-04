@@ -18,6 +18,11 @@ Gem::Specification.new do |spec|
   spec.metadata["source_code_uri"] = "https://github.com/fkchang/stream_weaver"
   spec.metadata["changelog_uri"] = "https://github.com/fkchang/stream_weaver/blob/main/CHANGELOG.md"
 
+  spec.post_install_message = <<~MSG
+    Get started: streamweaver install && streamweaver get-started
+    macOS + iTerm2 for the full experience; see README for other platforms.
+  MSG
+
   # Specify which files should be added to the gem when it is released.
   # The `git ls-files -z` loads the files in the RubyGem that have been added into git.
   gemspec = File.basename(__FILE__)
