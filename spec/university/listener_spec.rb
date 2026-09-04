@@ -339,13 +339,120 @@ RSpec.describe StreamWeaver::University::Listener do
 
       described_class.university_done!(1, session_name: 'demo-session')
 
-      expect(described_class).to have_received(:repush).with(session_name: 'demo-session')
+      expect(described_class).to have_received(:repush).with(session_name: 'demo-session', scroll_top: false)
     end
 
     it 'returns the step number' do
       allow(described_class).to receive(:repush)
 
       expect(described_class.university_done!(4)).to eq(4)
+    end
+
+    # Round-9 UAT: the raise this method triggers brings the University
+    # window forward, often after the user's attention was elsewhere. The
+    # completion recap that appears the moment the ledger FIRST reads "all
+    # steps done" sits above the step list, so only the write that actually
+    # produces that transition asks for a top-of-page landing -- every other
+    # write keeps the ordinary follow-the-viewer's-own-scroll behavior.
+    #
+    # A first pass computed this off the STEP NUMBER argument
+    # (`step_number >= TOTAL_STEPS`) instead of the ledger -- wrong for a
+    # course finished out of order, and wired into `university_done!` only,
+    # so the canvas's own manual Mark-done button reproduced the exact "recap
+    # appears below where you're looking" bug this exists to fix (code
+    # review). `course_just_completed?` is the fix: the same ledger-based
+    # question, asked the same way by both doors.
+    describe 'scroll_top wiring' do
+      it 'requests scroll_top on the write that first completes the course, in order' do
+        (1...StreamWeaver::University::Course::TOTAL_STEPS).each { |n| progress.mark_done!(n) }
+        allow(described_class).to receive(:repush)
+
+        described_class.university_done!(StreamWeaver::University::Course::TOTAL_STEPS)
+
+        expect(described_class).to have_received(:repush).with(
+          session_name: described_class::SESSION,
+          scroll_top: true
+        )
+      end
+
+      it 'requests scroll_top on the write that completes the course OUT of order' do
+        [1, 2, 4, 5].each { |n| progress.mark_done!(n) }
+        allow(described_class).to receive(:repush)
+
+        described_class.university_done!(3)
+
+        expect(described_class).to have_received(:repush).with(
+          session_name: described_class::SESSION,
+          scroll_top: true
+        )
+      end
+
+      it 'does not request scroll_top for a write that leaves the course incomplete' do
+        allow(described_class).to receive(:repush)
+
+        described_class.university_done!(1)
+
+        expect(described_class).to have_received(:repush).with(
+          session_name: described_class::SESSION,
+          scroll_top: false
+        )
+      end
+
+      it 'does not request scroll_top for a re-done step once the course was already complete' do
+        StreamWeaver::University::Course::GETTING_STARTED_STEPS.each { |s| progress.mark_done!(s[:number]) }
+        allow(described_class).to receive(:repush)
+
+        described_class.university_done!(StreamWeaver::University::Course::TOTAL_STEPS)
+
+        expect(described_class).to have_received(:repush).with(
+          session_name: described_class::SESSION,
+          scroll_top: false
+        )
+      end
+
+      # The manual Mark-done button (canvas.rb's mark-done-N, handled here
+      # via handle_event) is the path the first pass missed entirely.
+      it 'also requests scroll_top from a manual Mark-done click that completes the course' do
+        (1...StreamWeaver::University::Course::TOTAL_STEPS).each { |n| progress.mark_done!(n) }
+        allow(described_class).to receive(:repush)
+        last_step = StreamWeaver::University::Course::TOTAL_STEPS
+
+        described_class.handle_event({ data: { button: "btn_mark_done_mark-done-#{last_step}" } })
+
+        expect(described_class).to have_received(:repush).with(
+          session_name: described_class::SESSION,
+          scroll_top: true
+        )
+      end
+    end
+  end
+
+  describe '.repush' do
+    # Both examples read the marker id off the same constant
+    # SCROLL_TOP_HINT_DSL itself interpolates (Canvas::SCROLL_TOP_HINT_ID)
+    # rather than a second literal, so a renamed id fails here instead of
+    # leaving this spec silently agreeing with a Ruby/JS pair that has
+    # drifted apart.
+    it 'pushes canvas.rb verbatim by default, with no scroll-top marker' do
+      pushed_dsl = nil
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+        pushed_dsl = msg[:dsl] if msg[:type] == 'push'
+      end
+
+      described_class.repush
+
+      expect(pushed_dsl).not_to include(StreamWeaver::Canvas::SCROLL_TOP_HINT_ID)
+    end
+
+    it 'appends the scroll-top marker when scroll_top: true' do
+      pushed_dsl = nil
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+        pushed_dsl = msg[:dsl] if msg[:type] == 'push'
+      end
+
+      described_class.repush(scroll_top: true)
+
+      expect(pushed_dsl).to include(StreamWeaver::Canvas::SCROLL_TOP_HINT_ID)
     end
   end
 
@@ -355,7 +462,7 @@ RSpec.describe StreamWeaver::University::Listener do
 
       described_class.handle_event({ data: { button: 'btn_mark_done_mark-done-1' } }, session_name: 'demo-session')
 
-      expect(described_class).to have_received(:repush).with(session_name: 'demo-session')
+      expect(described_class).to have_received(:repush).with(session_name: 'demo-session', scroll_top: false)
     end
   end
 end

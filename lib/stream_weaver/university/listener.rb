@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'rbconfig'
 require 'stream_weaver/canvas/client'
+require 'stream_weaver/canvas/scroll_top_hint'
 require 'stream_weaver/university/course'
 require 'stream_weaver/university/progress'
 require 'stream_weaver/university/runner'
@@ -124,6 +125,24 @@ module StreamWeaver
         progress.collapse!
       end
 
+      # True when `progress`'s ledger flips from "not all done" to "all
+      # done" somewhere inside the block -- the exact moment canvas.rb's
+      # completion recap (`all_done`) first appears in the very next
+      # repush, regardless of which step's write did it or whether the
+      # steps finished in order. Shared by `handle_event` (every canvas
+      # click, including a manual Mark-done) and `university_done!` (the
+      # CLI door a worker's closing ritual runs) so BOTH doors ask the same
+      # question the same way -- round-9 UAT first wired the scroll-to-top
+      # decision off the step-NUMBER argument, scoped to the CLI door alone,
+      # and missed the manual-click path: clicking Mark done on the last
+      # step from partway down the page reproduces the exact "recap appears
+      # below where you're looking" bug this exists to fix (code review).
+      def self.course_just_completed?(progress)
+        was_complete = progress.done_count >= Course::TOTAL_STEPS
+        yield
+        !was_complete && progress.done_count >= Course::TOTAL_STEPS
+      end
+
       # The terminal door onto exactly what a Mark-done click does, for
       # `streamweaver university-done` (CLI): the same ledger write plus the
       # same repush, with no button event in the loop. Round-8 UAT: every
@@ -133,8 +152,8 @@ module StreamWeaver
       # before, this is just a second door onto the same effect.
       def self.university_done!(step_number, session_name: SESSION)
         progress = Progress.load
-        mark_step_done!(progress, step_number)
-        repush(session_name: session_name)
+        just_completed = course_just_completed?(progress) { mark_step_done!(progress, step_number) }
+        repush(session_name: session_name, scroll_top: just_completed)
         step_number
       end
 
@@ -150,8 +169,9 @@ module StreamWeaver
         token = event.dig(:data, :button)
         return nil unless token
 
-        handle_token(token, Progress.load)
-        repush(session_name: session_name)
+        progress = Progress.load
+        just_completed = course_just_completed?(progress) { handle_token(token, progress) }
+        repush(session_name: session_name, scroll_top: just_completed)
         token
       end
 
@@ -231,10 +251,33 @@ module StreamWeaver
         RUBY
       end
 
-      def self.repush(session_name: SESSION)
+      # An invisible marker element, appended to canvas.rb's own pushed text
+      # only when `scroll_top:` is true -- never part of the file itself.
+      # bridge_server.rb's polling script looks for this element's id in the
+      # HTML a poll just swapped in and, when present, scrolls the viewer to
+      # the TOP of the new page instead of running its ordinary "follow the
+      # viewer's own near-bottom scroll position" logic (built for a growing
+      # doc continuing in place, not a full page reshape -- round-9 UAT).
+      # Carries no ledger state and needs no cleanup: it only exists in the
+      # one push's HTML that asked for it, and the very next poll response
+      # replaces the whole DOM regardless, so "honored once" is true by
+      # construction rather than something this code has to enforce.
+      #
+      # The id itself is interpolated from Canvas::SCROLL_TOP_HINT_ID (a
+      # tiny standalone file both this module and BridgeServer require --
+      # see its own comment for why it isn't just defined on BridgeServer)
+      # rather than repeated here as a second literal -- two copies of the
+      # same string is exactly the drift this marker's own contract cannot
+      # survive.
+      SCROLL_TOP_HINT_DSL =
+        %(div(id: #{Canvas::SCROLL_TOP_HINT_ID.inspect}, style: "display:none") {})
+
+      def self.repush(session_name: SESSION, scroll_top: false)
         canvas_path = File.expand_path('canvas.rb', __dir__)
+        dsl = File.read(canvas_path)
+        dsl = "#{dsl}\n\n#{SCROLL_TOP_HINT_DSL}" if scroll_top
         ::StreamWeaver::Canvas::Client.send_message(
-          ::StreamWeaver::Canvas::Protocol::Messages.push(session_name, File.read(canvas_path), source_dir: nil)
+          ::StreamWeaver::Canvas::Protocol::Messages.push(session_name, dsl, source_dir: nil)
         )
       end
 

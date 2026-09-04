@@ -5,6 +5,7 @@ require 'json'
 require 'socket'
 require 'fileutils'
 require_relative 'protocol'
+require_relative 'scroll_top_hint'
 require_relative 'session'
 require_relative 'bridge'
 require_relative 'doc_store'
@@ -464,6 +465,17 @@ module StreamWeaver
 
                   container.innerHTML = data.html;
 
+                  // Scroll-to-top hint (round-9 UAT): a push that reshapes
+                  // the whole page -- e.g. the completion recap that
+                  // appears the moment the last step is marked done -- is
+                  // not a growing doc continuing in place, so it must not
+                  // inherit the wasNearBottom follow-the-viewer logic below.
+                  // A one-shot marker element in the SWAPPED-IN html (see
+                  // Listener::SCROLL_TOP_HINT_DSL) means "land at the top of
+                  // this page"; it needs no cleanup because the very next
+                  // poll swap replaces the whole DOM regardless.
+                  const scrollToTop = !!container.querySelector('##{SCROLL_TOP_HINT_ID}');
+
                   // Remove toast when new content arrives (unless persistent)
                   const existingToast = document.querySelector('.sw-toast');
                   if (existingToast) existingToast.remove();
@@ -491,7 +503,9 @@ module StreamWeaver
                     // and is already covered by Alpine.initTree(container) above.
                     if (window.swChartInit) window.swChartInit();
 
-                    if (wasNearBottom) {
+                    if (scrollToTop) {
+                      window.scrollTo({ top: 0, behavior: 'auto' });
+                    } else if (wasNearBottom) {
                       window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
                     }
                   }, 10);
