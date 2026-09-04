@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-04
+
+### Added
+- **Canvas bridge auto-heal** - every canvas command now detects a bridge left running on older code (after a gem upgrade or a dev `rake install`) and transparently restarts it, preserving all sessions via snapshot/restore. One line on stderr says it happened; `SW_NO_AUTO_RESTART=1` opts out. Ends the "stale bridge" class of 500s.
+
 ## [0.3.0] - 2026-09-04
 
 First published RubyGems release.
