@@ -1,7 +1,7 @@
 require 'stream_weaver'
 
 app "Counter" do
-  callout "This whole app is the file your agent just ran -- nothing hidden. Click +1 -- the whole block re-runs on the server and the count updates.", variant: :info
+  callout "This whole app is the file your agent just ran -- nothing hidden. Click +1 -- the whole block re-runs on the server and the count updates. When you're done playing: come back to your Claude session and say \"done\".", variant: :info
   state[:count] ||= 0
   header1 "Six lines of Ruby"
   text "Count: #{state[:count]}"

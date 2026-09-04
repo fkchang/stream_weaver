@@ -31,8 +31,20 @@ module StreamWeaver
         @available = check_availability
       end
 
+      # iTerm2's real value always has the shape "w0t0p0:<UUID>" -- the part
+      # after the colon is the session id every RPC in this file actually
+      # wants. A value with no colon at all (missing entirely, or garbled by
+      # something outside iTerm2) is never that shape, so it returns nil
+      # rather than passing the raw, meaningless string through as if it
+      # were a real session id (code review, round-9 UAT: `focus-me` calls
+      # this blind on every course prompt and must never mistake garbage
+      # for a target).
       def current_session_guid
-        ENV["ITERM_SESSION_ID"]&.split(":", 2)&.last&.then { |g| g.empty? ? nil : g }
+        raw = ENV["ITERM_SESSION_ID"]
+        return nil unless raw&.include?(":")
+
+        guid = raw.split(":", 2).last
+        guid.empty? ? nil : guid
       end
 
       # True only when the user is inside iTerm2 on macOS but the optional gem

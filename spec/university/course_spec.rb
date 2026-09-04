@@ -205,6 +205,14 @@ RSpec.describe StreamWeaver::University::Course do
       expect(prompt(2)).to match(/do not dispatch a search agent/i)
     end
 
+    # Round-9 UAT: step 2's app already tells the user, on screen, to come
+    # back and say "done" when they're finished -- but a real session never
+    # said it out loud while handing the URL over, leaving the user with no
+    # spoken cue that "done" is what the course is waiting for.
+    it 'has step 2 tell the user to come back and say "done" when handing over the URL' do
+      expect(prompt(2)).to match(/come back to this Claude session and say "done"/i)
+    end
+
     # Round-5 UAT: step 3's standalone half was "puny", and the user had to
     # open the page themselves and then tell the agent they were done. Part
     # one is now a founding loop -- run_once! finds the port, opens the
@@ -217,6 +225,20 @@ RSpec.describe StreamWeaver::University::Course do
       expect(prompt(3)).to match(/do not ask me to open anything/i)
       expect(prompt(3)).to match(/do not ask me to tell you when I am done/i)
       expect(prompt(3)).to include('JSON')
+    end
+
+    # Round-9 UAT: PART ONE's blocking form opens its OWN browser tab, which
+    # pulls the user's attention there -- and nothing raises the worker's
+    # own tab back to front once that process exits, so the reaction to its
+    # JSON printed into a pane nobody was looking at. `focus-me` has to run
+    # BEFORE the JSON is even read, let alone printed.
+    it 'runs focus-me the instant PART ONE\'s blocking form exits, before reading its JSON' do
+      expect(prompt(3)).to include('`streamweaver focus-me`')
+      focus_at = prompt(3).index('streamweaver focus-me')
+      json_at = prompt(3).index('Only THEN print my submitted state as JSON')
+      expect(focus_at).not_to be_nil
+      expect(json_at).not_to be_nil
+      expect(focus_at).to be < json_at
     end
 
     it 'has step 3 push the SAME file to the canvas and say so' do
@@ -331,6 +353,26 @@ RSpec.describe StreamWeaver::University::Course do
       expect(prompt(4)).to match(/do not push a hand-written section any other way/i)
     end
 
+    # Round-9 UAT: a live custom-section build hit "wrong number of
+    # arguments" -- a runtime failure a syntax check alone would never have
+    # caught -- and the user stared at a bare error for minutes with no
+    # sign anything was happening. The worker must now render the section
+    # locally BEFORE pushing it anywhere, and push an honest status card the
+    # moment a build errors.
+    it 'has step 4 validate a custom section by rendering it locally before any push' do
+      expect(prompt(4)).to include('StreamWeaver::CLI.render_dsl_to_html')
+      validate_at = prompt(4).index('StreamWeaver::CLI.render_dsl_to_html')
+      add_custom_at = prompt(4).index('--add-custom <a-short-key>')
+      expect(validate_at).not_to be_nil
+      expect(add_custom_at).not_to be_nil
+      expect(validate_at).to be < add_custom_at
+    end
+
+    it 'has step 4 push an honest error status card the moment a custom build errors' do
+      expect(prompt(4)).to match(/⚠️ Hit an error building/i)
+      expect(prompt(4)).to match(/fixing it now/i)
+    end
+
     # disc-094: `streamweaver export` drops Chart.js for the chart
     # shorthands, so anything that will be saved, org-exported and reopened
     # (step 4's doc, which step 5 carries out to a gist) must never name
@@ -348,6 +390,22 @@ RSpec.describe StreamWeaver::University::Course do
       expect(prompt(5)).to include('org-export')
       expect(prompt(5)).to include('gh gist create --public')
       expect(prompt(5)).to include('StreamWeaver Doc Viewer')
+    end
+
+    # Round-9 UAT: gist creation takes real time with nothing on screen to
+    # say so. A small status card, pushed before the work starts and
+    # replaced the moment the URL is ready, keeps the pane honest the same
+    # way step 4's error card does.
+    it 'has step 5 push a pending status before gist work starts, and replace it once the URL is ready' do
+      expect(prompt(5)).to include('streamweaver canvas-toast doc-demo "⏳ pushing to gist...')
+      pending_at = prompt(5).index('pushing to gist')
+      gist_create_at = prompt(5).index('gh gist create --public')
+      replace_at = prompt(5).index('canvas-toast doc-demo "✅ Pushed:')
+      expect(pending_at).not_to be_nil
+      expect(gist_create_at).not_to be_nil
+      expect(replace_at).not_to be_nil
+      expect(pending_at).to be < gist_create_at
+      expect(gist_create_at).to be < replace_at
     end
 
     # Env portability: `gh` present but short the gist scope is its own
@@ -480,6 +538,40 @@ RSpec.describe StreamWeaver::University::Course do
         (1..5).each do |n|
           expect(prompt(n).index('demo complete')).to be > prompt(n).index('PRESENT (for me)'),
                                                         "step #{n}'s ritual is not the last thing in the prompt"
+        end
+      end
+
+      # Round-9 UAT: the round-8 ritual ran university-done the INSTANT the
+      # demo ended -- too abrupt, with the user still reading the worker's
+      # closing words when the window jumped forward. Every step now waits
+      # for the user's own explicit signal before running university-done.
+      it 'waits for an explicit user signal before running university-done, on every step' do
+        (1..5).each do |n|
+          expect(prompt(n)).to match(/WAIT here for my explicit signal/i),
+                               "step #{n} does not wait for a signal before advancing"
+          wait_at = prompt(n).index(/WAIT here for my explicit signal/i)
+          done_at = prompt(n).index("streamweaver university-done #{n}")
+          expect(wait_at).not_to be_nil
+          expect(done_at).not_to be_nil
+          expect(wait_at).to be < done_at, "step #{n} runs university-done before waiting for the signal"
+        end
+      end
+
+      # Step 4's picker already has its own "done, move on" choice -- that
+      # submission IS the signal, and the worker must not also wait for the
+      # user to type "done" a second time here.
+      it 'treats a canvas form\'s own done option as the signal, not a second ask' do
+        expect(prompt(4)).to match(/"done, move on".*already IS that signal/i)
+        expect(prompt(4)).to match(/the wait is already over/i)
+      end
+
+      # Code review: the first pass named step 4's picker inside every
+      # step's own wait paragraph -- step 1's worker was told about a form
+      # that doesn't exist in that step. Only step 4 gets the exception.
+      it 'names step 4\'s picker only in step 4\'s own ritual, not the other four' do
+        [1, 2, 3, 5].each do |n|
+          expect(prompt(n)).not_to match(/done, move on/i),
+                                    "step #{n} should not mention step 4's picker"
         end
       end
     end

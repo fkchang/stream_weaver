@@ -115,6 +115,8 @@ module StreamWeaver
         university_demo(args)
       when 'university-done'
         university_done(args)
+      when 'focus-me'
+        focus_me
       when 'get-started'
         get_started(args)
       when '--help', '-h', 'help'
@@ -717,6 +719,8 @@ module StreamWeaver
           streamweaver university-done <N>        Mark step N done (same as clicking Mark done) and bring
                                                      the University window forward. What every step's own
                                                      closing ritual runs -- no click required from you.
+          streamweaver focus-me                   Bring the calling terminal's own iTerm2 pane to the
+                                                     front. Silent no-op outside iTerm2/darwin.
       HELP
     end
 
@@ -3017,6 +3021,31 @@ module StreamWeaver
       end
     rescue Canvas::Client::NotRunningError, Canvas::Client::ConnectionError => e
       puts "Marked step #{step_number} done (progress saved), but could not reach the canvas bridge to bring it forward (#{e.message})."
+    end
+
+    # `streamweaver focus-me`: activates the CALLING terminal's own iTerm2
+    # pane -- round-9 UAT's fix for step 3's blocking standalone form
+    # (`run_once!`), which opens ITS OWN browser tab and pulls the user's
+    # attention there. The instant that process returns, the worker's own
+    # tab has nothing that raises it back to front on its own (unlike a Run
+    # submit, which ITerm.send_to_session already raises), so the worker's
+    # reaction to the JSON prints into a pane nobody is looking at. This is
+    # the one-liner for that gap: reuse ITerm.current_session_guid's own
+    # parsing of ITERM_SESSION_ID ("w0t0p0:<UUID>" -- the UUID half is the
+    # session id the iTerm2 API actually wants) and activate it directly.
+    #
+    # Deliberately ONE expression, nothing before it: `available?` inside
+    # `activate_session` is the only check that runs first, and it's a
+    # cheap env/gem check, not an RPC -- the raise itself is meant to be the
+    # very first side effect this command has (Forrest, live UAT: "the
+    # pause between raise is long"). Silent no-op with no session id (env
+    # missing or garbled -- current_session_guid already returns nil for
+    # both) and outside iTerm2/darwin (available? already gates on both):
+    # every course prompt calls this blind, so a case that is entirely
+    # normal off a Mac must never surface as an error.
+    def self.focus_me
+      require_relative 'iterm'
+      ITerm.activate_session(ITerm.current_session_guid)
     end
 
     def self.university_reset_confirmed?

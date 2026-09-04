@@ -116,6 +116,16 @@ RSpec.describe StreamWeaver::University::Demos do
     it 'parses' do
       expect { RubyVM::InstructionSequence.compile(source) }.not_to raise_error
     end
+
+    # Round-9 UAT: the callout is the source of truth for the "come back and
+    # say done" signal -- course.rb's step 2 prompt tells the worker to say
+    # "exactly what the app's own callout already tells me on screen"
+    # rather than repeating the sentence itself. If it ever drops out of the
+    # callout, that instruction points at nothing.
+    it 'tells the user in the callout to come back and say "done" when finished' do
+      expect(source).to match(/come back to your Claude session and say/i)
+      expect(source).to match(/done/i)
+    end
   end
 
   # Step 3. ONE artifact, two surfaces -- that identity is the lesson, so a

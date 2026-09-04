@@ -114,19 +114,41 @@ module StreamWeaver
       #
       # Round-8 UAT: the sign-off used to hand a "click Mark done yourself"
       # click back to the user -- real minutes of ambiguity about whether a
-      # step had actually finished. The worker now closes the loop itself:
-      # run `streamweaver university-done N` (same ledger write as the
-      # button, plus it brings the University window forward on its own),
-      # THEN tell the user in one line what just happened. The manual
-      # Mark-done button still works exactly as before; this just means the
-      # worker never has to ask for a click. Step 5 has no next step to
-      # advance to, so its own variant below points at the course recap
-      # instead of "step N+1".
-      def self.closing_ritual(number)
+      # step had actually finished. The worker closes the loop itself: run
+      # `streamweaver university-done N` (same ledger write as the button,
+      # plus it brings the University window forward on its own), THEN tell
+      # the user in one line what just happened. The manual Mark-done button
+      # still works exactly as before; this just means the worker never has
+      # to ask for a click. Step 5 has no next step to advance to, so its
+      # own variant below points at the course recap instead of "step N+1".
+      #
+      # Round-9 UAT: that hand-off used to fire the INSTANT the demo ended --
+      # too abrupt, with the user still reading the worker's closing words
+      # when the window jumped forward under them. The ritual now has an
+      # explicit middle step: print the closing words, then WAIT for the
+      # user's own typed "done" (or the same in other words), and only THEN
+      # run university-done.
+      #
+      # `done_signal:` is the one per-step exception to that generic wait --
+      # a step whose own canvas form already has a "done" option (step 4's
+      # picker "done, move on" choice) can already be holding that signal by
+      # the time it reaches this ritual, and must not ask the user to type
+      # "done" a second time. Kept as a parameter, not baked into the
+      # shared text, because only ONE of the five steps has such a form:
+      # code review caught the first pass naming step 4's picker inside
+      # every step's own wait paragraph, including steps that have no
+      # picker to be talking about.
+      def self.closing_ritual(number, done_signal: nil)
         intro = "✅ Step #{number} demo complete -- play with it as long as you like."
-        run_it = "Then run `streamweaver university-done #{number}` yourself -- it marks step " \
-                 "#{number} done (same as clicking Mark done) and brings the University window " \
-                 "forward so I see it, with no click required from me."
+        generic_wait = "Do not run the next line yet -- WAIT here for my explicit signal that " \
+                        "I am done: me typing \"done\" (or the same in other words) here in " \
+                        "this Claude session. No signal yet means no next line: keep waiting, " \
+                        "and keep answering whatever I ask about this step in the meantime."
+        wait_for_signal = done_signal ? "#{generic_wait} #{done_signal}" : generic_wait
+        run_it = "The MOMENT that signal lands, run `streamweaver university-done #{number}` " \
+                 "yourself -- it marks step #{number} done (same as clicking Mark done) and " \
+                 "brings the University window forward so I see it, with no click required " \
+                 "from me."
         report = if number >= TOTAL_STEPS
                    "Tell me: \"I've marked step #{number} done and brought University forward -- " \
                    "that's the whole course; take a look at the recap.\""
@@ -134,8 +156,17 @@ module StreamWeaver
                    "Tell me: \"I've marked step #{number} done and brought University forward -- " \
                    "click Run on step #{number + 1} when ready.\""
                  end
-        "#{intro}\n\n#{run_it}\n\n#{report}"
+        "#{intro}\n\n#{wait_for_signal}\n\n#{run_it}\n\n#{report}"
       end
+
+      # Step 4's own exception to the generic wait-for-"done" text above --
+      # its picker already has a "done, move on" choice, so submitting that
+      # already IS the signal; asking the worker to also wait for a typed
+      # "done" here would be a second ask for the one thing already in hand.
+      STEP4_DONE_SIGNAL = "But on THIS step, my picking \"done, move on\" on the doc's own " \
+                           "picker form already IS that signal -- if that is how you got here, " \
+                           "the wait is already over, so continue immediately without also " \
+                           "waiting for me to type \"done\" here."
 
       GETTING_STARTED_STEPS = [
         {
@@ -236,6 +267,11 @@ module StreamWeaver
 
             open http://127.0.0.1:#{STEP2_PORT}
 
+            Say out loud, as part of handing it over, exactly what the app's own callout
+            already tells me on screen: when I'm done playing, I come back to this Claude
+            session and say "done" -- that is the signal the closing ritual below is waiting
+            for, so say it now, not only leave it for me to notice in the callout.
+
             NOW narrate. Print the file -- nine lines now, `streamweaver university-demo
             counter` prints its path -- and walk me through it:
 
@@ -310,11 +346,17 @@ module StreamWeaver
             page is already in front of me. Say one line -- "answer that, I am waiting" --
             and then wait for the process to exit.
 
-            The moment it exits it prints my submitted state as JSON on stdout. Print that
-            JSON verbatim and REACT to it: name the option I picked, quote the rationale I
-            typed, and say what you would actually do differently because of it. That
-            round trip -- your process blocked on a human, and resumed with their answer
-            in hand -- is the whole step.
+            The INSTANT that process exits -- before you read its output, before you print
+            anything -- run `streamweaver focus-me`. It brings your own terminal tab back in
+            front of me (a fire-and-forget iTerm2 activate, silent everywhere else), and it
+            has to be the very first thing you do, because my attention is still on the
+            browser tab that form just closed; run it after your reaction and I would already
+            be looking at the reaction I never saw land.
+
+            Only THEN print my submitted state as JSON on stdout, verbatim, and REACT to it:
+            name the option I picked, quote the rationale I typed, and say what you would
+            actually do differently because of it. That round trip -- your process blocked
+            on a human, and resumed with their answer in hand -- is the whole step.
 
             PART TWO -- the same file, a second surface. Say that plainly, because it is
             the lesson: not a second form, the same one.
@@ -463,11 +505,26 @@ module StreamWeaver
             the pane and then leaves as an unrecognized placeholder, silently, which is
             the failure step 5 exists to disprove.
 
+            Before you push that section anywhere, VALIDATE it locally by actually
+            rendering it -- a syntax check is not enough. A live run once hit "wrong number
+            of arguments" from a component call that was perfectly valid Ruby and only
+            failed at render time, and I sat looking at that bare error for minutes with no
+            sign anything was happening:
+
+            ruby -e "require 'stream_weaver'; StreamWeaver::CLI.render_dsl_to_html(File.read(ARGV[0]))" /path/to/your/snippet.rb
+
+            If that errors, do not leave the placeholder sitting there unexplained --
+            immediately push an updated callout to `doc-demo`: "⚠️ Hit an error building
+            <my request, verbatim> -- fixing it now", then fix the section and re-validate.
+            Once your `--add-custom` push below lands, the real section replaces whatever
+            placeholder or error callout was showing -- that IS the success update, nothing
+            further to push.
+
             A hand-written section is not a canned `--extend` key, so on its own it has
             nowhere to persist -- the NEXT `--picker` round would clobber it right back
             out. (A live run lost a user's own Star Wars chart section exactly this way.)
-            Save your finished DSL to a scratch file and hand it to the script instead of
-            pushing it yourself:
+            Save your finished, validated DSL to a scratch file and hand it to the script
+            instead of pushing it yourself:
 
             ruby "$(streamweaver university-demo doc)" doc-demo --add-custom <a-short-key> <path-to-your-snippet-file>
 
@@ -483,7 +540,7 @@ module StreamWeaver
 
             #{PRESENT_RULE}
 
-            #{closing_ritual(4)}
+            #{closing_ritual(4, done_signal: STEP4_DONE_SIGNAL)}
           PROMPT
           what_you_should_see: [
             "The pane grows a new section every few seconds -- you watch it happen, you don't just see the end state.",
@@ -537,11 +594,22 @@ module StreamWeaver
             (the bridge's working directory is often not this shell's) and tell me where
             it actually is -- but do not make me name it.
 
+            Before you touch org-export or gh, push a small status so the doc-demo pane
+            says something is happening instead of just sitting there while gist creation
+            runs: `streamweaver canvas-toast doc-demo "⏳ pushing to gist..." --variant info`.
+
             Run `streamweaver org-export <that file>` to write the sibling `.org`, and show
             me the first few lines so I can see it is plain text with no server behind it.
             Then `gh gist create --public <that .org file>` -- public on purpose, because
             this step ends with the file being opened and compared in a browser -- and give
-            me the gist URL. Open it in MY browser, not yours.
+            me the gist URL. Open it in MY browser, not yours. The moment you have that URL,
+            replace the status: `streamweaver canvas-toast doc-demo "✅ Pushed: <gist URL>"
+            --variant success` -- the pending toast never lingers once the real work is
+            actually done. If either command fails instead, replace it the same way with
+            what actually happened: `streamweaver canvas-toast doc-demo "⚠️ <what failed> --
+            fixing it now" --variant warning`, same honesty rule as step 4's error card --
+            never leave "pushing to gist..." sitting there past the point where it stopped
+            being true.
 
             The last beat is NOT yours. Stop and hand it to me, and say why in plain words:
             no automated or headless browser can install a Chrome Web Store extension or
