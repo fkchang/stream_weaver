@@ -533,8 +533,19 @@ module StreamWeaver
             finished document in one command -- do not push a hand-written section any
             other way, or the persistence never happens.
 
-            Then push the picker again and loop, until I choose "done". Say the saved path
-            once more at the end.
+            Then push the picker again and loop, until I choose "done".
+
+            The MOMENT I choose "done", before saying anything else, run:
+
+            ruby "$(streamweaver university-demo doc)" doc-demo --finish
+
+            That re-pushes the finished document -- base plus every section you added,
+            with NO picker form this time -- and saves it. Skipping this leaves the pane
+            showing whatever the canvas-wait adapter puts up the instant a form is
+            submitted (a plain "Submitted -- you can close this window" screen, not the
+            document) -- nothing else re-pushes on its own once I pick "done", so this
+            command is the only thing that puts the doc back on screen. Then say the saved
+            path once more at the end.
 
             #{VERIFY_RULE}
 
@@ -578,6 +589,15 @@ module StreamWeaver
             push it to a gist." That is the whole CTA, said FIRST, not stitched on after
             you've already started pointing things out -- so I always know exactly what
             you are waiting on me for and that nothing is running yet.
+
+            Before you point at anything, VERIFY the pane actually shows the document:
+            `curl` the `doc-demo` session and grep for a heading you know is in it (e.g.
+            "Terminal vs canvas", the first section's title). If it is missing -- the
+            picker's own submitted-form screen is showing instead, or anything else that
+            isn't the doc -- restore it first: `ruby "$(streamweaver university-demo
+            doc)" doc-demo --finish` re-pushes the finished document with no picker. Only
+            once the heading actually greps do you move on. Never narrate UI I cannot see
+            on my screen.
 
             THEN point at the two things themselves, the ones I would otherwise walk past:
 

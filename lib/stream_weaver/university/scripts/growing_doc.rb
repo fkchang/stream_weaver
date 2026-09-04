@@ -41,6 +41,15 @@
 #                    same way a picked --extend key does; applies and saves
 #                    in this same invocation
 #   --picker         append the co-edit picker form and DON'T save
+#   --finish         re-push the finished document, base + every persisted
+#                    extend/custom, WITHOUT the picker form, and save --
+#                    the co-edit loop's own exit: the picker's last-pushed
+#                    HTML has a submitted form in it (round-10 UAT: nothing
+#                    else re-pushes after "done" is chosen, so the pane is
+#                    left showing the canvas-wait adapter's own terminal
+#                    "Submitted" screen instead of the document). Never
+#                    replays the six-stage growing animation, even on a
+#                    "done" picked before anything was ever extended.
 #   --reset          forget this session's persisted --extend keys AND
 #                    custom sections, do nothing else
 #
@@ -412,6 +421,13 @@ module StreamWeaver
         CONTENT_FLAGS = %w[--picker --add-custom].freeze
 
         def self.fresh_start?(argv)
+          # --finish means the OPPOSITE of starting over -- "wrap up with
+          # everything accumulated so far" -- so it must never trigger the
+          # persisted-state wipe below, even though (like a truly fresh
+          # re-run) it can arrive with no --picker/--add-custom/--extend= of
+          # its own (round-10 UAT: the "done" case is exactly this shape).
+          return false if argv.include?('--finish')
+
           (argv & CONTENT_FLAGS).empty? && argv.grep(/\A--extend=/).empty?
         end
 
@@ -426,6 +442,7 @@ module StreamWeaver
 
           pause = Float(ENV.fetch('STREAMWEAVER_GROWING_DOC_PAUSE', 3))
           picker = argv.include?('--picker')
+          finish = argv.include?('--finish')
           save = !picker && !argv.include?('--no-save')
           doc_name = argv.grep(/\A--save-as=/) { |a| a.split('=', 2).last }.first ||
                      (argv.include?('--save-as') ? argv[argv.index('--save-as') + 1] : nil) ||
@@ -482,8 +499,12 @@ module StreamWeaver
           # -- this call's own --extend, OR any persisted from an earlier
           # invocation, OR any persisted custom section: a re-push during
           # the co-edit loop must land in one beat, not re-run the whole
-          # six-push show the user already watched.
-          growing = extend_keys.empty? && customs.empty? && !picker
+          # six-push show the user already watched. --finish forces this
+          # false unconditionally, even with nothing ever extended -- "done"
+          # picked on the very first picker offer must still land the
+          # finished (here, un-extended) document in one beat, not replay
+          # the six-stage animation a second time.
+          growing = extend_keys.empty? && customs.empty? && !picker && !finish
           STAGES.each_with_index do |stage, i|
             toc << stage[:toc] if stage[:toc]
             body << stage[:dsl] << "\n"

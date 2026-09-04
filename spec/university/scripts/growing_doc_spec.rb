@@ -2,6 +2,7 @@
 
 require 'spec_helper'
 require 'timeout'
+require 'stringio'
 require 'stream_weaver'
 require 'stream_weaver/org/writer'
 require 'stream_weaver/org/reader'
@@ -497,6 +498,81 @@ RSpec.describe 'stream_weaver/university/scripts/growing_doc.rb' do
 
         expect(StreamWeaver::University::Scripts::GrowingDocState.load_custom(state_session)).to eq({})
       end
+    end
+  end
+
+  describe '.fresh_start? treats --finish as NOT a fresh start' do
+    it 'is false when --finish is present, even with no other flag' do
+      expect(mod.fresh_start?(['doc-demo', '--finish'])).to be false
+    end
+  end
+
+  # Round-10 UAT: the co-edit picker's own last-pushed html has a submitted
+  # form in it, and nothing re-pushes once "done" is chosen -- the pane is
+  # left showing the canvas-wait adapter's own terminal "Submitted -- you
+  # can close this window" screen instead of the document. --finish is the
+  # loop's exit: one push of the finished document, no picker form, saved.
+  describe '--finish (run!)' do
+    let(:state_session) { "growing-doc-finish-spec-#{Process.pid}" }
+
+    around do |example|
+      Dir.mktmpdir('growing_doc_finish') do |dir|
+        prev = ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR']
+        ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR'] = dir
+        example.run
+      ensure
+        ENV['STREAMWEAVER_UNIVERSITY_DOC_STATE_DIR'] = prev
+      end
+    end
+
+    def stub_bridge!(pushes)
+      allow(StreamWeaver::Canvas::Client).to receive(:ensure_bridge_running).and_return(port: nil)
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+        pushes << msg if msg[:type] == 'push'
+        {}
+      end
+    end
+
+    def capture_stdout
+      original = $stdout
+      $stdout = StringIO.new
+      yield
+      $stdout.string
+    ensure
+      $stdout = original
+    end
+
+    it 'pushes the finished document exactly once, with no picker form -- even with nothing ever extended' do
+      pushes = []
+      stub_bridge!(pushes)
+
+      mod.run!([state_session, '--finish'])
+
+      # A single push proves growing did NOT replay -- a wrongly-true
+      # `growing` would push once per stage (STAGES.length times) instead.
+      expect(pushes.length).to eq(1)
+      expect(pushes.first[:dsl]).to include('Terminal vs canvas') # section 01's own heading (COMPARE)
+      expect(pushes.first[:dsl]).not_to include('radio_group')
+    end
+
+    it 'reaches the save branch, not the picker branch' do
+      stub_bridge!([])
+
+      captured = capture_stdout { mod.run!([state_session, '--finish']) }
+
+      expect(captured).to match(/Saved/)
+      expect(captured).not_to match(/canvas-wait/) # the picker branch's own message names it
+    end
+
+    it 'keeps everything already persisted -- does not wipe state the way a truly fresh run would' do
+      StreamWeaver::University::Scripts::GrowingDocState.save(state_session, ['tradeoffs'])
+      pushes = []
+      stub_bridge!(pushes)
+
+      mod.run!([state_session, '--finish'])
+
+      expect(pushes.first[:dsl]).to include(mod::EXTENSIONS['tradeoffs'][:header])
+      expect(StreamWeaver::University::Scripts::GrowingDocState.load(state_session)).to eq(['tradeoffs'])
     end
   end
 

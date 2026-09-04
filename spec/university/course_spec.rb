@@ -320,6 +320,21 @@ RSpec.describe StreamWeaver::University::Course do
       expect(prompt(4)).to match(/until I choose "done"/i)
     end
 
+    # Round-10 UAT: nothing re-pushes after "done" is chosen, so the pane
+    # was left showing the canvas-wait adapter's own terminal "Submitted"
+    # screen instead of the document. --finish is the fix -- it must run
+    # the MOMENT "done" is chosen, after the loop line, before the saved
+    # path is reported.
+    it 'has step 4 restore the finished document with --finish the moment "done" is chosen' do
+      expect(prompt(4)).to include('doc-demo --finish')
+      expect(prompt(4)).to match(/Submitted -- you can close this window/i)
+      done_at = prompt(4).index(/until I choose "done"/i)
+      finish_at = prompt(4).index('doc-demo --finish')
+      expect(done_at).not_to be_nil
+      expect(finish_at).not_to be_nil
+      expect(done_at).to be < finish_at
+    end
+
     # A free-text request is authored live, so the prompt has to name the
     # org-export-safe component set or the section the agent writes silently
     # falls out of step 5's gist as a placeholder.
@@ -438,6 +453,21 @@ RSpec.describe StreamWeaver::University::Course do
       expect(cta_at).not_to be_nil
       expect(point_at).not_to be_nil
       expect(cta_at).to be < point_at
+    end
+
+    # Round-10 UAT: step 4's picker can leave the doc-demo pane showing the
+    # canvas-wait adapter's own terminal "Submitted" screen (see growing_doc
+    # --finish, above) -- if step 5 narrates the outline/mermaid popout
+    # without checking, it points at UI the user cannot actually see.
+    it 'verifies the pane shows the doc, and restores it if not, before pointing at anything' do
+      expect(prompt(5)).to match(/VERIFY the pane actually shows the document/i)
+      expect(prompt(5)).to include('doc-demo --finish')
+      expect(prompt(5)).to match(/never narrate ui i cannot see/i)
+      verify_at = prompt(5).index(/VERIFY the pane actually shows the document/i)
+      point_at = prompt(5).index('THEN point at the two things themselves')
+      expect(verify_at).not_to be_nil
+      expect(point_at).not_to be_nil
+      expect(verify_at).to be < point_at
     end
 
     # The real session discovered this live and improvised it well: name the
