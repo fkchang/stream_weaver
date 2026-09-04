@@ -17,7 +17,7 @@ module StreamWeaver
 
       def initialize(dsl_text)
         @dsl_text = dsl_text
-        @coverage_counts = { total: 0, passthrough_verbatim: 0, passthrough_lossy: 0 }
+        @coverage_counts = { total: 0, passthrough_verbatim: 0, passthrough_lossy: 0, omitted: 0 }
         @called = false
         @nesting_depth = 0
       end
@@ -29,8 +29,23 @@ module StreamWeaver
       # of these prepended by DocStore.dsl_with_metadata.
       NO_OP_STATEMENT_RE = /\Ause_(?:theme|layout)\b/
 
+      # A saved .org is a static document and cannot hold a live control, so
+      # these are DROPPED rather than passed through as dead source (see
+      # #omitted_control). Two shapes reach that decision: a real component
+      # DisplayDSL knows how to build (button, select), and an
+      # UnsupportedCall placeholder for App's form vocabulary, which
+      # RecordingContext has no implementation for at all. Both are answered
+      # here, in the one place, so "is X a live control?" has a single
+      # source of truth.
+      OMITTED_COMPONENTS = [Components::Button, Components::Select].freeze
+      INTERACTIVE_CALLS = %i[
+        form form_for submit cancel submit_label cancel_label validate
+        text_field text_area date_field code_editor
+        checkbox checkbox_group radio_group tag_buttons chip_group item
+        clickable model_selector confirmation_bar
+      ].freeze
+
       def call
-        @called = true
         ctx = RecordingContext.new
         ctx.instance_eval(@dsl_text)
         components = ctx.components
@@ -42,28 +57,26 @@ module StreamWeaver
         header = components.find { |c| c.is_a?(Components::DocHeader) }
         body_components = components.reject { |c| c.is_a?(Components::SidebarToc) || c.is_a?(Components::DocHeader) }
 
-        [preamble(header), sections_and_body(body_components, toc_by_id)].join("\n").rstrip + "\n"
+        out = [preamble(header), sections_and_body(body_components, toc_by_id)].join("\n").rstrip + "\n"
+        @called = true
+        out
       end
 
-      # Recognized vs. raw-passthrough accounting for the single conversion
-      # pass #call just ran. Must be called after #call. `recognized` is
-      # derived (total - passthrough_verbatim - passthrough_lossy) rather
-      # than tracked directly, so the three numbers can never disagree with
-      # each other by construction -- see raw_passthrough for where the
-      # passthrough counts are actually incremented. `total` only reflects
-      # body_components (everything sections_and_body walks) -- DocHeader
-      # and SidebarToc are metadata, filtered out before that walk starts
-      # (see #call), and never contribute to any of these four numbers.
+      # Accounting for the single conversion pass #call just ran, one bucket
+      # per escape hatch: `passthrough_verbatim`/`passthrough_lossy` (raw
+      # source kept, styled or not) and `omitted` (interactive controls
+      # dropped on purpose -- the .org reader gets a document with the form
+      # missing, and the save UI says so). `recognized` is DERIVED from the
+      # rest rather than tracked, so the numbers cannot disagree by
+      # construction. `total` only reflects body_components (everything
+      # sections_and_body walks) -- DocHeader and SidebarToc are metadata,
+      # filtered out before that walk starts (see #call), and never
+      # contribute to any of these five numbers.
       def coverage
         raise "call #call before #coverage" unless @called
 
-        total = @coverage_counts[:total]
-        passthrough_verbatim = @coverage_counts[:passthrough_verbatim]
-        passthrough_lossy = @coverage_counts[:passthrough_lossy]
-        recognized = total - passthrough_verbatim - passthrough_lossy
-
-        { total: total, recognized: recognized,
-          passthrough_verbatim: passthrough_verbatim, passthrough_lossy: passthrough_lossy }
+        escaped = @coverage_counts.values_at(:passthrough_verbatim, :passthrough_lossy, :omitted).sum
+        @coverage_counts.merge(recognized: @coverage_counts[:total] - escaped)
       end
 
       private
@@ -93,7 +106,7 @@ module StreamWeaver
       def sections_and_body(components, toc_by_id)
         out = +""
         components.each do |c|
-          @coverage_counts[:total] += 1
+          count(:total)
           out << if c.is_a?(Components::DocSectionHeader)
             section_headline(c, toc_by_id)
           else
@@ -112,14 +125,14 @@ module StreamWeaver
         headline << ":END:\n"
       end
 
-      # WARNING for future editors: raw_passthrough's coverage counting is
-      # guarded by @nesting_depth, which only render_quote's recursive call
-      # (below) currently increments. If you add ANOTHER path that calls
+      # WARNING for future editors: #count (below) only counts at
+      # @nesting_depth zero, and only render_quote's recursive call currently
+      # increments that depth. If you add ANOTHER path that calls
       # render_component recursively (not via render_quote), wrap it in the
       # same @nesting_depth += 1 / ensure @nesting_depth -= 1 pattern --
-      # otherwise a nested raw_passthrough there will silently be miscounted
-      # as top-level, reintroducing the negative-`recognized` bug this guard
-      # exists to prevent (see raw_passthrough's own comment for the story).
+      # otherwise a nested escape hatch there is silently counted as
+      # top-level, reintroducing the negative-`recognized` bug the guard
+      # exists to prevent (see #count for the story).
       def render_component(component)
         case component
         when Components::Markdown
@@ -139,8 +152,35 @@ module StreamWeaver
         when Components::CodeBlock
           "\n#+begin_src #{component.lang}\n#{component.code.to_s.rstrip}\n#+end_src\n"
         else
-          raw_passthrough(component)
+          live_control?(component) ? omitted_control(component) : raw_passthrough(component)
         end
+      end
+
+      def live_control?(component)
+        return INTERACTIVE_CALLS.include?(component.name) if component.is_a?(RecordingContext::UnsupportedCall)
+
+        OMITTED_COMPONENTS.any? { |klass| component.is_a?(klass) }
+      end
+
+      # The third escape hatch, for live controls (see OMITTED_COMPONENTS /
+      # INTERACTIVE_CALLS). Raw-passthrough would "preserve" them as dead
+      # source in a document that has no server behind it; a static org doc
+      # simply cannot hold a form. So they are DROPPED from the body, marked
+      # by an org keyword line -- invisible in any org viewer and already
+      # ignored by Org::Reader's PREAMBLE_RE, so the breadcrumb never
+      # reappears as prose on the way back -- and counted separately in
+      # #coverage so the Save-as-doc UI can tell the user what the .org left
+      # behind. The .rb sibling is untouched by any of this and remains the
+      # full-fidelity format.
+      def omitted_control(component)
+        count(:omitted)
+        "\n#+STREAMWEAVER_OMITTED: #{control_name(component)}\n"
+      end
+
+      def control_name(component)
+        return component.name if component.is_a?(RecordingContext::UnsupportedCall)
+
+        component.class.name.split("::").last.gsub(/(?<!\A)([A-Z])/, '_\1').downcase
       end
 
       def render_table(table)
@@ -210,22 +250,36 @@ module StreamWeaver
         {}
       end
 
-      # Coverage only counts TOP-LEVEL statements (see #coverage) -- but
-      # raw_passthrough is also reachable for a component nested inside an
+      # Coverage only counts TOP-LEVEL statements (see #coverage) -- but the
+      # escape hatches are also reachable for a component nested inside an
       # already-recognized container (e.g. an unrecognized type inside a
       # callout/card/comparison body, via render_quote's recursive
-      # render_component calls below). Without this guard, such a nested
-      # passthrough would increment passthrough_verbatim/lossy with no
-      # matching #total increment (only sections_and_body's top-level loop
-      # increments #total), making recognized go negative. @nesting_depth
-      # (incremented/decremented around render_quote's recursive walk)
-      # tracks whether we're inside such a nested render; only a top-level
-      # (depth-0) raw_passthrough counts toward coverage.
+      # render_component calls below). Counting one of those would increment
+      # passthrough_verbatim/lossy/omitted with no matching #total increment
+      # (only sections_and_body's top-level loop increments #total), making
+      # recognized go negative. @nesting_depth (incremented/decremented
+      # around render_quote's recursive walk) tracks whether we're inside
+      # such a nested render, and every hatch counts through here.
+      def count(bucket)
+        @coverage_counts[bucket] += 1 if @nesting_depth.zero?
+      end
+
       def raw_passthrough(component)
         source = @raw_sources[component.object_id]
-        @coverage_counts[source ? :passthrough_verbatim : :passthrough_lossy] += 1 if @nesting_depth.zero?
-        content = source || "# unrecognized component: #{component.class}"
+        count(source ? :passthrough_verbatim : :passthrough_lossy)
+        content = source || "# unrecognized component: #{unrecognized_label(component)}"
         "\n#+begin_src ruby :streamweaver-raw t\n#{content.rstrip}\n#+end_src\n"
+      end
+
+      # The placeholder names what the DOC said, not how this class modelled
+      # it: for a call RecordingContext had no component for, the struct's
+      # own class name ("...::UnsupportedCall") tells the reader nothing,
+      # while the call it stands in for (`app_shell`, `bar_chart`) is exactly
+      # what was lost.
+      def unrecognized_label(component)
+        return "#{component.name} (unsupported call)" if component.is_a?(RecordingContext::UnsupportedCall)
+
+        component.class
       end
 
       def render_comparison(comparison)

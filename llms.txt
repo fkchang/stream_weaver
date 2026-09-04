@@ -953,6 +953,8 @@ History entries also show a 💾 button so the user can promote any past snapsho
 
 The reader also discovers docs roots across the whole machine (scan of `$STREAMWEAVER_DOCS_SCAN_ROOTS`, default `~/work`, unioned with an auto-written registry at `~/.streamweaver/docs_roots.log`), grouped by repo with a repo filter — and it renders StreamWeaver-flavored `.org` docs (`#+STREAMWEAVER_DSL:` marker) everywhere `.rb` docs work.
 
+**`.rb` vs `.org` when saving** (`"format":"org"` in the POST body, or the dialog's Org toggle): `.rb` is the full-fidelity format and keeps everything. `.org` is a document — it leaves out live controls (`button`, `radio_group`, `text_field`, `form`, ...), one `#+STREAMWEAVER_OMITTED: <call>` keyword line each, reported as `omitted` in the response's `coverage` alongside `recognized`/`passthrough_verbatim`/`passthrough_lossy`. Saving a session that carries a form is therefore fine in both formats; only `.rb` brings the form back.
+
 ## Agent Skills (Install These Before Hand-Rolling the Above)
 
 If you are Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, or another agent that uses the `SKILL.md` convention, StreamWeaver ships three skills that already encode the workflows in this doc as trained procedure — check whether they're loaded before building UI from this doc's raw examples:

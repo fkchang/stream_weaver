@@ -287,15 +287,26 @@ module StreamWeaver
             // coverage null so this stays hidden.
             orgNotice() {
               if (!this.coverage) return null;
-              const { total, recognized, passthrough_verbatim, passthrough_lossy } = this.coverage;
+              const { total, recognized, passthrough_verbatim, passthrough_lossy, omitted } = this.coverage;
               if (recognized === total) return null;
               let body;
               if (passthrough_verbatim > 0 && passthrough_lossy > 0) {
                 body = `${passthrough_verbatim} element(s) will show as raw code in a plain org viewer (nothing lost); ${passthrough_lossy} more can't be verbatim-recovered and will be replaced with a placeholder comment instead — those specific parts won't survive the round trip.`;
               } else if (passthrough_lossy > 0) {
                 body = `${passthrough_lossy} element(s) can't be verbatim-recovered and will be replaced with a placeholder comment — those specific parts won't survive the round trip.`;
-              } else {
+              } else if (passthrough_verbatim > 0) {
                 body = `${passthrough_verbatim} element(s) will show as raw code in a plain org viewer — nothing is lost, just not styled.`;
+              } else {
+                body = '';
+              }
+              // Interactive controls are DROPPED, not passed through: an org
+              // document is static and cannot hold a live form (Org::Writer
+              // #omitted_control). Say so plainly and point at the format
+              // that does keep them, rather than folding them into the
+              // raw-code copy above, which would be a lie about where they went.
+              if (omitted > 0) {
+                const dropped = `${omitted} interactive control(s) (form fields, buttons) are left out — an org document can't hold a live form; save as .rb to keep them.`;
+                body = body ? `${dropped} ${body}` : dropped;
               }
               return recognized / total < 0.5
                 ? `This looks like an app, not a document — Org format won't add much here. ${body}`

@@ -194,7 +194,7 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'promote-from-history' do
       body = JSON.parse(last_response.body)
       expect(body['ok']).to be true
       expect(body['coverage']).to eq(
-        { 'total' => 1, 'recognized' => 0, 'passthrough_verbatim' => 1, 'passthrough_lossy' => 0 }
+        { 'total' => 1, 'recognized' => 0, 'passthrough_verbatim' => 1, 'passthrough_lossy' => 0, 'omitted' => 0 }
       )
       saved_path = File.join(StreamWeaver::Canvas::DocStore.path, 'my-snapshot.org')
       expect(body['path']).to eq(saved_path)
