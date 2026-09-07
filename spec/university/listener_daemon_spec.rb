@@ -134,20 +134,26 @@ RSpec.describe StreamWeaver::University::Listener, :unstubbed_listener_start do
       described_class.start!(session_name: 'university-alt')
 
       expect(Process).to have_received(:spawn).with(
-        RbConfig.ruby, a_string_matching(/\A-I/), '-r', anything,
+        anything, RbConfig.ruby, '-E', 'UTF-8', a_string_matching(/\A-I/), '-r', anything,
         '-e', a_string_including('"university-alt"'),
         anything
       )
     end
 
+    # -E and the ENCODING_PREAMBLE line ahead of run! are the fix for a
+    # bridge/listener spawned detached from an env lacking LANG/LC_ALL
+    # (Encoding.default_external falls back to US-ASCII and multibyte
+    # content 500s -- see bridge_encoding_spec.rb).
     it 'spawns a detached ruby that requires the listener and calls run!' do
       described_class.start!
 
       expect(Process).to have_received(:spawn).with(
+        StreamWeaver::Canvas::Client.utf8_locale_env,
         RbConfig.ruby,
+        '-E', 'UTF-8',
         a_string_matching(/\A-I/),
         '-r', 'stream_weaver/university/listener',
-        '-e', 'StreamWeaver::University::Listener.run!(session_name: "university")',
+        '-e', "#{StreamWeaver::Canvas::Client::ENCODING_PREAMBLE}\nStreamWeaver::University::Listener.run!(session_name: \"university\")",
         hash_including(out: [@log_path, 'a'], err: %i[child out], pgroup: true)
       )
       expect(Process).to have_received(:detach).with(9001)

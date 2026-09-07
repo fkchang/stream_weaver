@@ -19,7 +19,37 @@ module StreamWeaver
       PID_FILE_PATH = File.expand_path('~/.streamweaver/canvas.pid')
       DEFAULT_TIMEOUT = 300 # 5 minutes
 
+      # A bridge spawned detached (e.g. the staleness heal's restart) inherits
+      # whatever LANG/LC_ALL its parent process happened to have. When those
+      # are missing -- true for some launchers -- Ruby's Encoding.default_external
+      # falls back to US-ASCII, and any push containing multibyte characters
+      # blows up render_canvas_page with Encoding::CompatibilityError, 500ing
+      # every request for that session. This preamble is the entry-level fix:
+      # force UTF-8 before the bridge does its first read, independent of the
+      # env it was spawned with. Shared with the university listener's spawn
+      # (also detached, also multibyte-capable), so it lives here once.
+      ENCODING_PREAMBLE = <<~RUBY
+        Encoding.default_external = Encoding::UTF_8
+        Encoding.default_internal = nil
+      RUBY
+
       class << self
+        UTF8_LOCALE = 'en_US.UTF-8'
+
+        # Belt-and-suspenders alongside ENCODING_PREAMBLE: forces the child
+        # LANG/LC_ALL to a UTF-8 locale so shelled-out tools (e.g. gist
+        # publishing's `gh` calls) inherit sane behavior too. Only preserves
+        # the caller's own value when it's already UTF-8 -- a caller running
+        # under LANG=C is exactly the case this exists to fix, so passing
+        # that through unchanged would defeat the point.
+        def utf8_locale_env
+          %w[LANG LC_ALL].to_h { |key| [key, utf8_locale?(ENV[key]) ? ENV[key] : UTF8_LOCALE] }
+        end
+
+        def utf8_locale?(locale)
+          locale.to_s.match?(/utf-?8\z/i)
+        end
+
         # STREAMWEAVER_CANVAS_SOCKET / _PID redirect the whole bridge --
         # socket, pid file, and (because the bridge is spawned with the
         # environment it inherits) the server half too. This exists so a
@@ -213,8 +243,11 @@ module StreamWeaver
           # Get the lib path
           lib_path = File.expand_path('../..', __dir__)
 
-          # Create startup script
+          # Create startup script. ENCODING_PREAMBLE goes first, before the
+          # requires, so nothing the bridge loads or renders can run under
+          # the wrong default_external.
           script = <<~RUBY
+            #{ENCODING_PREAMBLE}
             $LOAD_PATH.unshift('#{lib_path}')
             require 'stream_weaver'
             require 'stream_weaver/canvas/bridge_server'
@@ -228,9 +261,11 @@ module StreamWeaver
           # Log file
           log_file = File.join(File.dirname(pid_file_path), 'canvas.log')
 
-          # Spawn the bridge process
-          pid = spawn(
-            RbConfig.ruby, script_file,
+          # Spawn the bridge process. -E fixes the interpreter's own default
+          # encodings before ENCODING_PREAMBLE even runs; utf8_locale_env
+          # fixes the locale for anything the bridge shells out to.
+          pid = Process.spawn(
+            *bridge_spawn_command(script_file),
             out: [log_file, 'a'],
             err: [log_file, 'a'],
             pgroup: true
@@ -258,6 +293,13 @@ module StreamWeaver
 
           # Fallback - return what we have
           read_bridge_info || { pid: pid, port: BridgeServer::DEFAULT_PORT }
+        end
+
+        # The argv (env hash + command) start_bridge hands to Process.spawn.
+        # Broken out so a spec can assert on it directly instead of stubbing
+        # Process.spawn and waiting out the readiness poll above.
+        def bridge_spawn_command(script_file)
+          [utf8_locale_env, RbConfig.ruby, '-E', 'UTF-8', script_file]
         end
 
         # Read bridge info from PID file

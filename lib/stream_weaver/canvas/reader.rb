@@ -200,7 +200,11 @@ module StreamWeaver
         end
       end
 
-      MERMAID_ZOOM_JS = File.read(File.expand_path('../assets/js/sw-mermaid-zoom.js', __dir__))
+      # Explicit encoding rather than relying on default_external: this loads
+      # at class-load time in whatever process requires reader.rb, not just
+      # a bridge booted via Client.start_bridge's UTF-8 fix, and the file
+      # itself is always UTF-8 regardless of the host process's locale.
+      MERMAID_ZOOM_JS = File.read(File.expand_path('../assets/js/sw-mermaid-zoom.js', __dir__), encoding: 'UTF-8')
       private_constant :MERMAID_ZOOM_JS
 
       configure do

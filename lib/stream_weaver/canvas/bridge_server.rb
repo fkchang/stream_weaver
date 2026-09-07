@@ -289,7 +289,7 @@ module StreamWeaver
             <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
             <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
             <!-- Mermaid zoom/pan engine — always present so canvas-push with mermaid works on first push -->
-            <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-mermaid-zoom.js'))}</script>
+            <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-mermaid-zoom.js'), encoding: 'UTF-8')}</script>
             <!-- Kick off CDN fetch immediately so mermaid is ready before first push arrives -->
             <script>if (window.swMermaidPreload) window.swMermaidPreload();</script>
           </head>

@@ -468,11 +468,20 @@ module StreamWeaver
         FileUtils.mkdir_p(File.dirname(log_path))
         FileUtils.mkdir_p(File.dirname(pid_path))
 
+        # Detached the same way the canvas bridge is (client.rb's
+        # start_bridge), and vulnerable to the same encoding hole: spawned
+        # from a parent whose env lacks LANG/LC_ALL, Ruby's default_external
+        # falls back to US-ASCII and a multibyte canvas doc blows up the
+        # first read. Same two-part fix -- ::Canvas::Client::ENCODING_PREAMBLE
+        # ahead of the entry point, -E for the interpreter itself, and a
+        # sane locale for anything this process shells out to.
         pid = Process.spawn(
+          ::StreamWeaver::Canvas::Client.utf8_locale_env,
           RbConfig.ruby,
+          '-E', 'UTF-8',
           "-I#{File.expand_path('../..', __dir__)}",
           '-r', 'stream_weaver/university/listener',
-          '-e', "StreamWeaver::University::Listener.run!(session_name: #{session_name.inspect})",
+          '-e', "#{::StreamWeaver::Canvas::Client::ENCODING_PREAMBLE}\nStreamWeaver::University::Listener.run!(session_name: #{session_name.inspect})",
           out: [log_path, 'a'], err: %i[child out], pgroup: true
         )
         Process.detach(pid)
