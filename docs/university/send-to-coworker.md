@@ -75,3 +75,25 @@ The gist link already renders as readable text without the extension -- the exte
 look exactly like it did in the original canvas: sidebar navigation, callouts, cards, tables, and
 live Mermaid diagrams, all in the browser, no install beyond the one-click extension. The extension
 is Chrome/Chromium only -- other browsers just see the plain org text, which is still readable.
+
+## Cleaning up afterwards
+
+The course tracks everything it creates -- saved docs, exported `.org` files, published gists, and
+the demo canvas sessions it opens -- so you never have to remember what a run left behind:
+
+```bash
+streamweaver university-artifact list      # what the course has created
+streamweaver university-cleanup            # offer to take it all back
+streamweaver university-cleanup --dry-run  # show the same inventory, delete nothing
+streamweaver university-cleanup --scan     # also adopt artifacts from a run before the manifest existed
+streamweaver university-artifact remove <ref>   # drop one from the list, leaving the file itself alone
+```
+
+Cleanup confirms group by group, and gists **one at a time showing each URL** -- a gist is the only
+thing here that left your machine. Mind this page's own subject when you answer: the link you sent
+your coworker IS one of those gists, and deleting it breaks the link for them. Keep it until they've
+read it.
+
+`university-cleanup` and `university-reset` compose and do different jobs: cleanup deletes what the
+course created, reset starts the course over (progress and demo sessions). Run both, in either
+order, and nothing of the course is left on the machine.

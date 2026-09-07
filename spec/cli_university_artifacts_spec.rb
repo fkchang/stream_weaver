@@ -105,6 +105,40 @@ RSpec.describe StreamWeaver::CLI do
       expect(out).to include('Saved docs (1):', 'Gists (1):', 'https://gist.github.com/me/abc123')
     end
 
+    describe 'remove' do
+      it 'drops the entry without touching the file it names' do
+        path = recorded_doc
+
+        out, = capture_io { described_class.university_artifact(['remove', path]) }
+
+        expect(out).to include('Removed doc from the manifest', 'untouched on disk')
+        expect(artifacts.all).to eq([])
+        expect(File.exist?(path)).to be(true)
+      end
+
+      it 'removes a doc named by the relative path the user can see' do
+        path = recorded_doc
+        Dir.chdir(@dir) do
+          capture_io { described_class.university_artifact(['remove', File.basename(path)]) }
+        end
+
+        expect(artifacts.all).to eq([])
+      end
+
+      it 'refuses a ref the manifest does not hold' do
+        recorded_doc
+
+        out, err = capture_io do
+          expect { described_class.university_artifact(['remove', '/tmp/never-recorded.rb']) }
+            .to raise_error(SystemExit)
+        end
+
+        expect(err).to include('Not in the manifest')
+        expect(out).to eq('')
+        expect(artifacts.all.size).to eq(1)
+      end
+    end
+
     it 'says so plainly when nothing is recorded' do
       out, = capture_io { described_class.university_artifact(['list']) }
       expect(out).to include('No University artifacts recorded yet.')
@@ -224,6 +258,61 @@ RSpec.describe StreamWeaver::CLI do
         expect(out).to include('gh is not installed', url)
         expect(StreamWeaver::University::Cleanup).not_to have_received(:system)
         expect(artifacts.grouped['gist'].size).to eq(1)
+      end
+    end
+
+    describe '--scan' do
+      before do
+        allow(StreamWeaver::University::Cleanup).to receive(:scan_roots).and_return([@dir])
+        allow(StreamWeaver::University::Cleanup).to receive(:gist_list_lines).and_return([])
+        allow(StreamWeaver::University::Cleanup).to receive(:open_demo_sessions).and_return([])
+        allow(StreamWeaver::University::Cleanup).to receive(:gh_available?).and_return(false)
+      end
+
+      it 'adopts a pre-manifest doc and then offers it like any other' do
+        path = File.join(@dir, 'university-doc.rb')
+        File.write(path, '# from a run before the manifest existed')
+        answering(true)
+
+        out, = capture_io { described_class.university_cleanup(['--scan']) }
+
+        expect(out).to include('--scan adopted 1 artifact(s)', path)
+        expect(File.exist?(path)).to be(false)
+      end
+
+      it 'leaves a file the course did not name completely alone' do
+        stranger = File.join(@dir, 'university-notes.rb')
+        File.write(stranger, 'mine, not the course-s')
+        answering(true)
+
+        out, = capture_io { described_class.university_cleanup(['--scan']) }
+
+        expect(out).to include("nothing on this machine matches")
+        expect(File.exist?(stranger)).to be(true)
+        expect(artifacts.all).to eq([])
+      end
+
+      it '--dry-run reports what it would adopt without writing the manifest' do
+        path = File.join(@dir, 'university-doc.rb')
+        File.write(path, '# doc')
+        allow(described_class).to receive(:get_started_confirm?)
+
+        out, = capture_io { described_class.university_cleanup(['--scan', '--dry-run']) }
+
+        expect(out).to include('--scan found 1 artifact(s)', path, 'nothing was deleted')
+        expect(artifacts.all).to eq([])
+        expect(File.exist?(path)).to be(true)
+        expect(described_class).not_to have_received(:get_started_confirm?)
+      end
+
+      it 'does not re-announce something the manifest already records' do
+        recorded_doc('university-doc.rb')
+        answering(false)
+
+        out, = capture_io { described_class.university_cleanup(['--scan']) }
+
+        expect(out).to include('nothing on this machine matches')
+        expect(artifacts.all.size).to eq(1)
       end
     end
 

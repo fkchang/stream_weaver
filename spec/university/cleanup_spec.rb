@@ -270,6 +270,226 @@ RSpec.describe StreamWeaver::University::Cleanup do
     end
   end
 
+  # `--scan` is the one door that names an artifact nobody recorded, so it is
+  # the one door where a naming mistake turns into deleting a stranger's
+  # file. Every case here is about what scan must NEVER return: a name it
+  # merely resembles, a file in a directory it was not pointed at, a session
+  # outside the demo allowlist, a gist that is simply the user's own.
+  describe '.scan' do
+    let(:root) { @dir }
+
+    before do
+      allow(described_class).to receive(:scan_roots).and_return([root])
+      allow(described_class).to receive(:gist_list_lines).and_return([])
+      allow(described_class).to receive(:open_demo_sessions).and_return([])
+    end
+
+    def touch(name, in_dir: root)
+      path = File.join(in_dir, name)
+      FileUtils.mkdir_p(File.dirname(path))
+      File.write(path, "# #{name}\n")
+      path
+    end
+
+    it 'finds the course doc names, expanded, and records nothing by reading' do
+      doc = touch('university-doc.rb')
+      org = touch('university-doc.org')
+      stamped = touch('doc-demo-20260903-1503.org')
+
+      found = described_class.scan
+
+      expect(found['doc']).to contain_exactly(doc)
+      expect(found['org']).to contain_exactly(org, stamped)
+      expect(artifacts.all).to eq([])
+      [doc, org, stamped].each { |p| expect(File.exist?(p)).to be(true) }
+    end
+
+    it 'never selects a file that merely resembles a course name' do
+      strangers = [
+        touch('my-university-doc.rb'),      # anchored: no prefix may precede it
+        touch('university-doc.rb.bak'),     # anchored: no suffix may follow it
+        touch('university-notes.rb'),
+        touch('doc-demo.rb'),               # the bare session name is not a save
+        touch('notes.org'),
+        touch('app.rb')
+      ]
+
+      found = described_class.scan
+
+      expect(found['doc']).to eq([])
+      expect(found['org']).to eq([])
+      strangers.each { |p| expect(File.exist?(p)).to be(true) }
+    end
+
+    it 'does not descend into subdirectories of a scan root' do
+      buried = touch('university-doc.rb', in_dir: File.join(root, 'nested'))
+
+      expect(described_class.scan.values.flatten).not_to include(buried)
+      expect(File.exist?(buried)).to be(true)
+    end
+
+    it 'only ever returns paths directly inside a scan root' do
+      touch('university-doc.rb')
+      touch('doc-demo-1.org')
+
+      paths = described_class.scan.values_at('doc', 'org').flatten
+
+      expect(paths).not_to be_empty
+      paths.each do |path|
+        expect(File.dirname(path)).to eq(File.expand_path(root))
+        expect(path).not_to include('..')
+      end
+    end
+
+    it 'ignores a scan root that does not exist' do
+      allow(described_class).to receive(:scan_roots)
+        .and_return([File.join(@dir, 'nope'), root])
+      doc = touch('university-doc.rb')
+
+      expect(described_class.scan['doc']).to eq([doc])
+    end
+
+    it 'scans the canvas doc store and the global canvas root' do
+      allow(described_class).to receive(:scan_roots).and_call_original
+
+      expect(described_class.scan_roots)
+        .to include(File.expand_path(StreamWeaver::Canvas::DocStore::DEFAULT_ROOT))
+    end
+
+    describe 'gists' do
+      # `gh gist list` is id<TAB>description<TAB>..., and for a gist created
+      # from a file the description IS the filename. Only the course's own
+      # doc names qualify; everything else in the list is the user's.
+      let(:listing) do
+        [
+          "3885c378187897a236ee1a03a307f3b0\tuniversity-doc.org\t1 file\tpublic\t2026-09-04T04:10:46Z",
+          "31a438b2d06a3f1f91b312f7e331a7ff\tdoc-demo-20260903-1503.org\t1 file\tpublic\t2026-09-03T22:05:37Z",
+          "ce2a5bb058d123065baf97bb42bd7e09\tDiDX redesign review packet\t7 files\tsecret\t2026-09-03T21:37:06Z",
+          "2b3a121aa0609eec65c3158f4d868edb\tsf_steps.rb\t1 file\tsecret\t2024-02-16T02:49:52Z"
+        ]
+      end
+
+      it 'selects only gists whose file is one the course publishes' do
+        allow(described_class).to receive(:gist_list_lines).and_return(listing)
+
+        expect(described_class.scan['gist']).to eq(
+          %w[
+            https://gist.github.com/3885c378187897a236ee1a03a307f3b0
+            https://gist.github.com/31a438b2d06a3f1f91b312f7e331a7ff
+          ]
+        )
+      end
+
+      it 'produces URLs the deleter can actually resolve' do
+        allow(described_class).to receive(:gist_list_lines).and_return(listing)
+
+        described_class.scan['gist'].each do |url|
+          expect(artifacts.gist_id(url)).not_to be_nil
+        end
+      end
+
+      it 'skips a listing line whose id is not a gist id' do
+        allow(described_class).to receive(:gist_list_lines)
+          .and_return(["not-an-id\tuniversity-doc.org\t1 file\tpublic\t2026-09-04T04:10:46Z"])
+
+        expect(described_class.scan['gist']).to eq([])
+      end
+
+      it 'finds no gists when gh is not installed' do
+        allow(described_class).to receive(:gh_available?).and_return(false)
+        allow(described_class).to receive(:gist_list_lines).and_call_original
+
+        expect(described_class.scan['gist']).to eq([])
+      end
+    end
+
+    describe 'sessions' do
+      # Only the transport is stubbed. The decision -- which of the names
+      # the bridge is serving this course may claim -- is the real code, so
+      # these fail if the intersection is ever loosened.
+      before { allow(described_class).to receive(:open_demo_sessions).and_call_original }
+
+      it 'claims only the demo sessions, never the controller canvas or the user-s own' do
+        allow(described_class).to receive(:bridge_session_names)
+          .and_return(%w[university doc-demo firstreads pm-discount-policy dashboard])
+
+        expect(described_class.scan['session']).to eq(%w[dashboard doc-demo])
+      end
+
+      it 'does not claim a demo session the bridge is not serving' do
+        allow(described_class).to receive(:bridge_session_names).and_return(['doc-demo'])
+
+        expect(described_class.scan['session']).to eq(['doc-demo'])
+      end
+
+      it 'finds no sessions when there is no bridge to ask' do
+        allow(described_class).to receive(:bridge_session_names).and_call_original
+        allow(StreamWeaver::Canvas::Client).to receive(:read_bridge_info).and_return(nil)
+
+        expect(described_class.scan['session']).to eq([])
+      end
+
+      # The bug this replaced: discovery fetched `/canvas/:name`, which is
+      # `create_session` -- so it CREATED the sessions it claimed to find,
+      # on a live bridge, under --dry-run. It must ask the read-only list
+      # endpoint and nothing else.
+      it 'asks the bridge for its session list, never for a session page' do
+        allow(described_class).to receive(:bridge_session_names).and_call_original
+        allow(StreamWeaver::Canvas::Client).to receive(:read_bridge_info).and_return({ port: 4700 })
+        http = instance_double(Net::HTTP)
+        requested = []
+        allow(http).to receive(:get) { |path| requested << path and instance_double(Net::HTTPOK, body: '[]') }
+        allow(Net::HTTP).to receive(:start).and_yield(http)
+
+        described_class.scan
+
+        expect(requested).to eq(['/sessions'])
+        expect(requested.grep(%r{/canvas/})).to be_empty
+      end
+    end
+  end
+
+  describe '.adopt_scan!' do
+    before do
+      allow(described_class).to receive(:scan_roots).and_return([@dir])
+      allow(described_class).to receive(:gist_list_lines).and_return([])
+      allow(described_class).to receive(:open_demo_sessions).and_return([])
+    end
+
+    it 'records what scan found so the ordinary deletion path can offer it' do
+      path = File.join(@dir, 'university-doc.rb')
+      File.write(path, '# doc')
+
+      adopted = described_class.adopt_scan!
+
+      expect(adopted.map { |e| e['ref'] }).to eq([path])
+      expect(described_class.inventory['doc'].map { |e| e[:ref] }).to eq([path])
+      expect(File.exist?(path)).to be(true)
+    end
+
+    it 'adopts nothing twice' do
+      File.write(File.join(@dir, 'university-doc.rb'), '# doc')
+
+      described_class.adopt_scan!
+
+      expect(described_class.adopt_scan!).to eq([])
+      expect(artifacts.all.size).to eq(1)
+    end
+
+    it 'leaves a scan-adopted file subject to the same allowlist as any other' do
+      path = File.join(@dir, 'university-doc.rb')
+      File.write(path, '# doc')
+      described_class.adopt_scan!
+      neighbour = File.join(@dir, 'university-notes.rb')
+      File.write(neighbour, '# not adopted')
+
+      expect { described_class.delete_entry!('doc', neighbour) }
+        .to raise_error(described_class::Refused)
+      expect(described_class.delete_entry!('doc', path).ok).to be(true)
+      expect(File.exist?(neighbour)).to be(true)
+    end
+  end
+
   describe '.inventory' do
     it 'groups everything cleanup could remove, and deletes nothing by reading it' do
       doc = recorded_file('a.rb')

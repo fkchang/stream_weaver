@@ -141,6 +141,14 @@ through a short interactive course, next to your own terminal. On macOS + iTerm2
 experience; anywhere else it falls back to a browser tab automatically (or jump straight there with
 `streamweaver get-started --degraded`). See [Platform support](#platform-support) above.
 
+The course tracks everything it creates -- the docs it saves, the `.org` files exported from them,
+the gists published, the demo canvas sessions it opens -- and takes it all back on request:
+
+```bash
+streamweaver university-cleanup            # confirm group by group; gists one at a time
+streamweaver university-cleanup --scan     # also adopt artifacts from a run before the manifest
+```
+
 Prefer to explore on your own first?
 
 ```bash

@@ -196,3 +196,70 @@ Also from that round: `inventory` is keyed by `Artifacts::TYPES` (plus `Cleanup:
 **spec_helper now redirects `STREAMWEAVER_UNIVERSITY_ARTIFACTS`** alongside the other three University state files, and this one is not theoretical: the first full-suite run of this work wrote two real `session` entries into the developer's own `~/.streamweaver/university/artifacts.yml` (via `Listener.warm_up!`), which a later real `university-cleanup` would then have offered to delete. Same silent-leak shape as the progress/worker redirects, sharper consequence.
 
 Full suite: `bundle exec rspec` -> 4247 examples, 0 failures, 1 pending (pre-existing browser-only).
+
+## `--scan`: adopting artifacts from a run that predates the manifest (2026-09-07)
+
+The manifest only knows what it was there to see. Anyone who ran the course before it existed --
+which, at release, is everyone -- has docs, `.org` files, gists and demo sessions on their machine
+that `university-cleanup` would swear were never created. `--scan` closes that gap without widening
+what cleanup is *allowed* to do, and the mechanism is the whole point: **scan discovers and adopts;
+it never deletes.** A scanned artifact becomes deletable only by becoming an ordinary manifest
+entry, so the single manifest-allowlisted deletion path is still the only code that destroys
+anything, and every guard already proven about it holds for scanned artifacts unchanged.
+
+What it will claim is deterministic and narrow (`Cleanup::COURSE_DOC_BASENAME`): `university-doc.rb`
+(growing_doc's `DEFAULT_DOC_NAME`) and `doc-demo-<stamp>.{rb,org}`, anchored at BOTH ends, in the two
+`DocStore` roots only; the demo sessions the bridge is currently serving, intersected with
+`DEMO_SESSION_NAMES` so the allowlist rather than the bridge decides what may be offered; and gists
+whose `gh gist list` description is one of those same filenames. The user's own
+`my-university-doc.rb`, a `university-doc.rb.bak` they made before editing, and every unrelated gist
+in their account are all outside it by construction.
+
+Traversal safety here is structural, not checked: candidates come from `Dir.children`, which yields
+bare basenames (no `.`, no `..`, and no separator), each matched whole against the anchored pattern
+and then joined onto the root it came from. There is no glob, so there is no pattern for a crafted
+filename to be interpreted BY, and no recursion, so a nested checkout of someone else's docs is out
+of reach. Specced as such: a subdirectory is not descended, every returned path's `dirname` is a
+scan root, a lookalike name is never selected, and a bridge serving the controller canvas and the
+user's own work still yields only demo sessions.
+
+**The review round caught the one that mattered, and it is worth remembering as a shape.** Session
+discovery was written as a probe: `GET /canvas/<name>`, 200 means open. That route is
+`create_session` (`bridge_server.rb:120`), so the probe *created* the session it claimed to be
+asking about -- it could never return false, every run claimed all three demo names whether the
+course had opened them or not, and `--dry-run` conjured empty sessions onto a live bridge. It cost
+the developer's own bridge two phantom sessions before it was caught. The spec had stubbed
+`session_open?` and asserted the intersection, so it was green over a live defect: stubbing the
+method that makes the decision tests `Enumerable`, not the code. Now `open_demo_sessions` is
+`DEMO_SESSION_NAMES & bridge_session_names` reading the genuinely read-only `GET /sessions`, and
+the specs stub the transport instead, so they fail against the old implementation. The invariant is
+in the module header now, because it was not written down anywhere before: **discovery only ever
+reads.**
+
+Also from that round: `adopt_scan!` routes sessions through `record_session!` so the manifest's own
+guard still gets its say on the way in; `gh gist list` is bounded by a timeout (it runs inside a
+command someone is waiting to answer); and `university-artifact remove` now exists, because
+adoption without an undo is a one-way door -- a mistakenly adopted ref would otherwise be offered
+by every future cleanup run with no escape but hand-editing the YAML. A gist published by the
+canvas's Save-as-gist button is described by its `#+TITLE:`, not a filename, so scan cannot find
+it; that fails safe and the comment says so, so nobody later "fixes" it by loosening the match.
+
+`--scan --dry-run` previews without adopting -- adoption is a write, and a flag promising to change
+nothing must not quietly change the manifest. That split produced the one real bug of the round:
+the dry-run preview listed what it found and the (still empty) manifest then printed "Nothing to
+clean up" in the same breath. `university_cleanup` now carries the scanned refs so the two can't
+contradict each other.
+
+On the developer's own machine `--scan --dry-run` found 15 real pre-manifest artifacts (4 `.rb`,
+4 `.org`, 6 gists, 1 live demo session) and correctly passed over every unrelated gist in the
+account -- the first evidence that the patterns are tight enough to point at a home directory. The
+same run before the session fix reported 17, the two extra being sessions its own probe had just
+created: the count is now stable across repeated runs, and the live session list is unchanged after
+a scan, which is the property to re-check if this code is ever touched again.
+
+Docs: `docs/university/send-to-coworker.md` gained a "Cleaning up afterwards" section (including the
+warning that the gist you sent your coworker is one of the things cleanup offers to delete), and the
+README's get-started blurb names the command. Help text states the composition rule: cleanup takes
+back what the course made, reset starts it over, both in either order leave nothing behind.
+
+Full suite: `bundle exec rspec` -> 4271 examples, 0 failures, 1 pending (pre-existing browser-only).

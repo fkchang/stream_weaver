@@ -731,8 +731,16 @@ module StreamWeaver
                        [--step N] [--type T]         Docs and sessions record themselves; `add` is for a
                                                      gist URL, which only your agent ever sees.
           streamweaver university-cleanup         Offer to delete everything the course created, group by
-                       [--dry-run]                   group (gists one at a time, showing each URL). Only
-                                                     ever touches what the manifest above records.
+                       [--scan] [--dry-run]          group (gists one at a time, showing each URL). Only
+                                                     ever touches what the manifest above records; --scan
+                                                     first adopts artifacts from a run that predates it,
+                                                     found by the course's own file, gist and session
+                                                     names (and adoption sticks, even if you then decline
+                                                     every delete -- `university-artifact remove` undoes
+                                                     one).
+                                                     Composes with reset: cleanup takes back what the
+                                                     course made, reset starts it over -- both, in either
+                                                     order, leave nothing behind.
           streamweaver university-stop            Put the course down: stop the listener, close its demo
                                                      canvas sessions and the two iTerm2 windows
                                                      get-started opened. Keeps your progress and the
@@ -3017,8 +3025,10 @@ module StreamWeaver
       case (args.first || 'list')
       when 'list' then university_artifact_list
       when 'add' then university_artifact_add(args.drop(1))
+      when 'remove' then university_artifact_remove(args.drop(1))
       else
-        $stderr.puts "Usage: streamweaver university-artifact [list | add <ref> [--step N] [--type doc|org|gist|session]]"
+        $stderr.puts "Usage: streamweaver university-artifact " \
+                     "[list | add <ref> [--step N] [--type doc|org|gist|session] | remove <ref> [--type T]]"
         exit 1
       end
     end
@@ -3057,6 +3067,46 @@ module StreamWeaver
       end
 
       puts "Recorded #{entry['type']}: #{entry['ref']}#{entry['step'] ? " (step #{entry['step']})" : ''}"
+    end
+
+    # Drops one entry from the manifest WITHOUT deleting the thing it names
+    # -- the counterweight to `add` and to `--scan`'s adoption. Recording is
+    # what makes an artifact destroyable, so "I did not mean to record that"
+    # needs an answer that isn't hand-editing artifacts.yml; without one, a
+    # mistaken adoption is offered by every cleanup run forever.
+    def self.university_artifact_remove(args)
+      type = flag_value(args, '--type')
+      ref = positional(args, valued_flags: %w[--type])
+
+      unless ref
+        $stderr.puts "Usage: streamweaver university-artifact remove <ref> [--type doc|org|gist|session]"
+        exit 1
+      end
+
+      # A doc/org ref is stored expanded, so match what the user typed AND
+      # what it resolves to from here -- otherwise a relative path they can
+      # see in `list` is one they cannot remove. File.identical? is the last
+      # of the three because it is the only one that sees through a symlink
+      # (on macOS `Dir.pwd` reports /private/var where the recorded path
+      # says /var, and string comparison alone misses that).
+      candidates = [ref, File.expand_path(ref)].uniq
+      matches = University::Artifacts.all.select do |entry|
+        next false unless type.nil? || entry['type'] == type
+
+        candidates.include?(entry['ref']) ||
+          (File.exist?(entry['ref']) && File.exist?(ref) && File.identical?(entry['ref'], ref))
+      end
+
+      if matches.empty?
+        $stderr.puts "Not in the manifest: #{ref}"
+        exit 1
+      end
+
+      matches.each do |entry|
+        University::Artifacts.forget!(entry['type'], entry['ref'])
+        puts "Removed #{entry['type']} from the manifest: #{entry['ref']}"
+      end
+      puts "(the #{matches.size == 1 ? 'artifact itself is' : 'artifacts themselves are'} untouched on disk)"
     end
 
     # `--flag value` or `--flag=value`, or nil. Local to the university
@@ -3102,14 +3152,19 @@ module StreamWeaver
     def self.university_cleanup(args)
       require_relative 'university/cleanup'
       dry_run = args.include?('--dry-run')
+      # A dry-run scan previews without adopting, so what it found is NOT in
+      # the inventory below. Carried here so the two can't contradict each
+      # other -- listing a found artifact and then saying there is nothing to
+      # clean up is the one transcript this command must never print.
+      scanned = args.include?('--scan') ? print_cleanup_scan(dry_run) : []
       inventory = University::Cleanup.inventory
 
       if University::Cleanup.empty?(inventory)
-        puts "Nothing to clean up -- StreamWeaver University has not recorded any artifacts."
-        return
+        return puts("Nothing to clean up -- StreamWeaver University has not recorded any artifacts.") if
+          scanned.empty?
+      else
+        print_cleanup_inventory(inventory)
       end
-
-      print_cleanup_inventory(inventory)
 
       if dry_run
         puts ""
@@ -3131,6 +3186,28 @@ module StreamWeaver
       cleanup_state_files(inventory[University::Cleanup::STATE])
       puts ""
       puts "Cleanup done."
+    end
+
+    # `--scan`: find artifacts from a run that predates the manifest, by the
+    # course's own deterministic names, and adopt them into it so the
+    # ordinary grouped confirm can offer them. Adoption is a write, so
+    # `--dry-run` reports the same findings and records nothing -- a flag
+    # that promises to change nothing must not quietly change the manifest.
+    def self.print_cleanup_scan(dry_run)
+      refs = if dry_run
+               University::Cleanup.scan_unrecorded.values.flatten
+             else
+               University::Cleanup.adopt_scan!.map { |entry| entry['ref'] }
+             end
+
+      if refs.empty?
+        puts "--scan: nothing on this machine matches the course's own file, session or gist names."
+      else
+        puts "--scan #{dry_run ? 'found' : 'adopted'} #{refs.size} artifact(s) the manifest did not record:"
+        refs.each { |ref| puts "  #{ref}" }
+      end
+      puts ""
+      refs
     end
 
     def self.print_cleanup_inventory(inventory)

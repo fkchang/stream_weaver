@@ -29,6 +29,18 @@ module StreamWeaver
     # itself, which stores them expanded and only ever records a path
     # something actually produced, so keep it that way.
     #
+    # `--scan` (`scan` / `adopt_scan!`) is the one door that WIDENS that
+    # allowlist without a human having named the artifact, for the course
+    # runs that predate the manifest. It is bounded two ways. It claims only
+    # deterministic course-owned names (COURSE_DOC_BASENAME, the demo
+    # session allowlist), and it does not delete: it ADOPTS, so a scanned
+    # artifact becomes destroyable only by becoming an ordinary manifest
+    # entry, and everything proven about the path above holds for it
+    # unchanged. Two invariants go with it, both learned the hard way:
+    # discovery only ever READS (a "probe" that fetches `/canvas/:name`
+    # creates the session it claims to find), and `--dry-run` writes
+    # nothing at all -- not the manifest, not the bridge.
+    #
     # Nothing here prompts. Confirmation belongs to the surface (the CLI's
     # per-group y/N and per-gist y/N; the canvas's confirm re-push), because
     # the two surfaces confirm in completely different ways and only one of
@@ -87,6 +99,164 @@ module StreamWeaver
       # surfaces confirm exactly like the others, so they are keyed the
       # same way.
       STATE = 'state'
+
+      # The only names `--scan` will ever claim. `university-doc` is
+      # growing_doc's DEFAULT_DOC_NAME; `doc-demo-<stamp>` is what a save out
+      # of the step-4 demo session is named after its session. Anchored at
+      # both ends on purpose: the user's own `my-university-doc.rb` and a
+      # `university-doc.rb.bak` they made before editing are NOT the course's
+      # to delete, and a scan is the one door here with no human confirmation
+      # behind the naming.
+      COURSE_DOC_BASENAME = /\A(?:university-doc|doc-demo-[A-Za-z0-9._-]+)\.(rb|org)\z/
+
+      # Extension -> artifact type. Total by construction: the only source
+      # of a key here is COURSE_DOC_BASENAME's own capture group.
+      DOC_TYPE_BY_EXT = { 'rb' => 'doc', 'org' => 'org' }.freeze
+
+      # Where a course doc can have been saved: the canvas doc store for this
+      # checkout and the global fallback store. Both come from DocStore
+      # rather than from literals, so a redirected store is scanned and a
+      # directory the course never writes to is not.
+      def self.scan_roots
+        require 'stream_weaver/canvas/doc_store'
+        [::StreamWeaver::Canvas::DocStore.path,
+         ::StreamWeaver::Canvas::DocStore::DEFAULT_ROOT].compact.map { |r| File.expand_path(r) }.uniq
+      end
+
+      # Artifacts from a run that predates the manifest, found by
+      # deterministic course names ONLY. Finds; records nothing; deletes
+      # nothing -- `adopt_scan!` is the door that writes, and the ordinary
+      # manifest-allowlisted deletion path is still the only door that
+      # destroys.
+      #
+      # The traversal safety here is structural rather than checked: file
+      # candidates come from `Dir.children`, which yields bare basenames (no
+      # `.`, no `..`, and on this platform a basename cannot contain a
+      # separator), each matched whole against COURSE_DOC_BASENAME and then
+      # joined onto the root it came from. There is no glob, so there is no
+      # pattern for a crafted filename to be interpreted BY, and no recursion,
+      # so a nested checkout of someone else's docs is out of reach.
+      def self.scan
+        found = Artifacts::TYPES.to_h { |type| [type, []] }
+                                .merge('gist' => scan_gists, 'session' => open_demo_sessions)
+
+        scan_roots.each do |root|
+          next unless File.directory?(root)
+
+          Dir.children(root).sort.each do |name|
+            next unless (ext = COURSE_DOC_BASENAME.match(name)&.[](1))
+
+            path = File.join(root, name)
+            found[DOC_TYPE_BY_EXT.fetch(ext)] << path if File.file?(path)
+          end
+        end
+        found
+      end
+
+      # Records everything `scan` found, returning only the entries that were
+      # new. Adoption is the whole mechanism: a scanned artifact becomes
+      # deletable by becoming a manifest entry like any other, so `--scan`
+      # widens what cleanup KNOWS about without widening what it is allowed
+      # to do.
+      def self.adopt_scan!
+        scan_unrecorded.flat_map do |type, refs|
+          refs.filter_map do |ref|
+            # Sessions go through record_session!, not record!, so the
+            # manifest's own demo-allowlist guard still gets its say on the
+            # way in. `open_demo_sessions` already intersects that list, so
+            # this is a second layer rather than the only one -- which is
+            # the point: the recording door is where the manifest gets to
+            # refuse, and no path should walk past it.
+            type == 'session' ? Artifacts.record_session!(ref) : Artifacts.record!(ref, type: type)
+          end
+        end
+      end
+
+      # What `scan` found that is not already in the manifest -- what a
+      # `--scan` run is actually offering to adopt, and what `--dry-run`
+      # reports. One definition, so the preview and the adoption cannot
+      # disagree about what is new.
+      def self.scan_unrecorded
+        recorded = Artifacts.all.map { |e| [e['type'], e['ref']] }
+        scan.each_with_object({}) do |(type, refs), out|
+          out[type] = refs.reject { |ref| recorded.include?([type, ref]) }
+        end
+      end
+
+      # Course gists, by the filename `gh` reports as a file-created gist's
+      # description -- the same names COURSE_DOC_BASENAME allows, so the
+      # user's own gists are never proposed. The id is re-checked through
+      # Artifacts so a URL that gets recorded is one Cleanup could later
+      # resolve.
+      #
+      # Deliberately misses one case, and it must stay missed: a gist made
+      # by the canvas's own Save-as-gist button is described by the doc's
+      # `#+TITLE:` (GistPublisher.description_for), not its filename, so no
+      # deterministic name identifies it. That fails SAFE -- an unfound gist
+      # is one the user still has -- and the fix is never to loosen this
+      # match, which is the only thing standing between a scan and someone's
+      # unrelated gists. Those get recorded the way step 5's already are:
+      # by `university-artifact add`, at the moment something creates them.
+      def self.scan_gists
+        gist_list_lines.filter_map do |line|
+          id, description = line.split("\t", 3)
+          next unless description.to_s.strip.match?(COURSE_DOC_BASENAME)
+
+          url = "https://gist.github.com/#{id.to_s.strip}"
+          url if Artifacts.gist_id(url)
+        end
+      end
+
+      # Bounded, because this runs inside a command the user is sitting in
+      # front of waiting to answer a prompt: a stalled network must not hang
+      # cleanup, it must just mean "no gists found this run".
+      GIST_LIST_TIMEOUT = 10
+
+      def self.gist_list_lines
+        return [] unless gh_available?
+
+        require 'open3'
+        require 'timeout'
+        out, status = Timeout.timeout(GIST_LIST_TIMEOUT) do
+          Open3.capture2('gh', 'gist', 'list', '--limit', '100')
+        end
+        status.success? ? out.lines.map(&:chomp).reject(&:empty?) : []
+      rescue SystemCallError, IOError, Timeout::Error
+        []
+      end
+
+      # The course demo sessions the bridge is currently serving.
+      #
+      # Read from the bridge's session LIST, never by fetching
+      # `/canvas/:name`: that route is `create_session` (bridge_server.rb),
+      # so "probing" a session that way CREATES it -- it can never answer
+      # false, and it would have scan conjuring empty sessions onto a live
+      # bridge, under `--dry-run` included. Discovery has to be a read.
+      #
+      # Intersected with the allowlist, receiver-first so the allowlist and
+      # not the bridge decides both what may be offered and in what order:
+      # whatever else the bridge is serving -- the controller canvas, the
+      # user's own work -- cannot come through here.
+      def self.open_demo_sessions
+        Artifacts.demo_session_names & bridge_session_names
+      end
+
+      # Every session name the bridge currently holds, or [] if there is no
+      # bridge to ask. A pure read: no session is created by asking.
+      def self.bridge_session_names
+        require 'stream_weaver/canvas/client'
+        require 'net/http'
+        require 'json'
+        info = ::StreamWeaver::Canvas::Client.read_bridge_info or return []
+
+        uri = URI("http://127.0.0.1:#{info[:port]}/sessions")
+        body = Net::HTTP.start(uri.host, uri.port, open_timeout: 1, read_timeout: 2) do |http|
+          http.get(uri.path).body
+        end
+        JSON.parse(body).filter_map { |session| session['name'] }
+      rescue StandardError
+        []
+      end
 
       # Everything cleanup can offer to remove, keyed by artifact type (plus
       # STATE), every group always present so an empty one is `[]` rather
