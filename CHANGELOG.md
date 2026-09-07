@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Canvas bridge auto-heal** - every canvas command now detects a bridge left running on older code (after a gem upgrade or a dev `rake install`) and transparently restarts it, preserving all sessions via snapshot/restore. One line on stderr says it happened; `SW_NO_AUTO_RESTART=1` opts out. Ends the "stale bridge" class of 500s.
+- **University artifact ledger + cleanup** - the course records every artifact it creates (saved docs, gists, canvas sessions, state) in a manifest; `streamweaver university-artifacts` lists them, `streamweaver university-cleanup [--scan]` deletes them with grouped confirmation (gists always confirmed individually; `--scan` adopts artifacts from runs predating the manifest). The same inventory appears on each course step row and the completion recap, with cleanup available right from the canvas.
+- **`streamweaver university-stop`** - dismiss the course: stops the listener, closes course demo sessions and the windows get-started opened, keeps your progress for next time.
 
 ## [0.3.0] - 2026-09-04
 
