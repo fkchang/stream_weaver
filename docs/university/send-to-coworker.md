@@ -28,9 +28,9 @@ gem install iterm2_ruby
 ```
 
 Then in iTerm2: **Settings → General → Magic → Enable Python API**. iTerm2 3.6.0 (September 2025)
-is the version that added the built-in "Web Browser" profile the canvas window is rendered in --
-`get-started`'s dependency check flags it by name if it's missing (an older iTerm2, or one where
-that profile was renamed/removed) and falls back to a browser tab automatically either way.
+is the version that added native browser panes, which is what the canvas window renders in --
+no profile setup needed, StreamWeaver turns any pane into a browser pane itself. An older iTerm2
+without that support just falls back to a browser tab automatically.
 
 **2. Install the gem:**
 

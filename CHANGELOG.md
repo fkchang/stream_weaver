@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **No more "Web Browser" profile dependency for the iTerm2 canvas window** - a fresh macOS/iTerm2 install (only the "Default" profile present) previously failed `open_browser_window`/`panel`'s split with `INVALID_PROFILE_NAME`, and the old remediation text wrongly told a tester on iTerm2 3.6+ to "update iTerm2" when the real fix was to manually create a profile. StreamWeaver no longer needs a saved profile at all: it turns any pane into a browser pane itself by overriding `"Custom Command" => "Browser"` in the split's `profile_customizations` (the exact property iTerm2's own built-in "Web Browser" profile is defined with). The `browser_profile` dependency probe, its dependency-report row, and the "profile not found" remediation hints are removed as no longer applicable.
+
 ## [0.3.1] - 2026-09-04
 
 ### Added

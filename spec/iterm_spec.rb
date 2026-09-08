@@ -583,8 +583,8 @@ RSpec.describe StreamWeaver::ITerm do
       described_class.open_browser_window('http://example/canvas/university')
 
       expect(client).to have_received(:split_pane).with(
-        'shell-1', vertical: true, profile_name: 'Web Browser',
-        profile_customizations: { 'Initial URL' => 'http://example/canvas/university' }
+        'shell-1', vertical: true,
+        profile_customizations: { 'Custom Command' => 'Browser', 'Initial URL' => 'http://example/canvas/university' }
       )
     end
 
@@ -704,46 +704,6 @@ RSpec.describe StreamWeaver::ITerm do
     end
   end
 
-  # get-started's dependency report probes this up front rather than
-  # leaving a missing profile to surface as a silent browser-window
-  # fallback (field report: a fresh macOS install with an older/customized
-  # iTerm2 lacking the built-in "Web Browser" profile).
-  describe '.browser_profile_available?' do
-    let(:client) { instance_double(ITerm2::Client) }
-
-    before do
-      allow(described_class).to receive(:available?).and_return(true)
-      allow(ITerm2).to receive(:connect).and_yield(client)
-    end
-
-    it 'is true when a profile named "Web Browser" is installed' do
-      allow(client).to receive(:list_profiles).with(properties: ['Name'])
-        .and_return([{ 'Name' => 'Default' }, { 'Name' => 'Web Browser' }])
-
-      expect(described_class.browser_profile_available?).to be(true)
-    end
-
-    it 'is false when no profile is named "Web Browser"' do
-      allow(client).to receive(:list_profiles).with(properties: ['Name'])
-        .and_return([{ 'Name' => 'Default' }])
-
-      expect(described_class.browser_profile_available?).to be(false)
-    end
-
-    it 'is false without connecting when the gem is unavailable' do
-      allow(described_class).to receive(:available?).and_return(false)
-
-      expect(described_class.browser_profile_available?).to be(false)
-      expect(ITerm2).not_to have_received(:connect)
-    end
-
-    it 'is false rather than raising when the RPC blows up' do
-      allow(client).to receive(:list_profiles).and_raise(ITerm2::Error, 'boom')
-
-      expect(described_class.browser_profile_available?).to be(false)
-    end
-  end
-
   describe '.split_vertical_with_url (target_session)' do
     # Product design: get-started's premier path splits the canvas into the
     # NEW worker tab's session, not the calling terminal's session -- so
@@ -765,8 +725,8 @@ RSpec.describe StreamWeaver::ITerm do
       )
 
       expect(client).to have_received(:split_pane).with(
-        'worker-session-guid', vertical: true, profile_name: 'Web Browser',
-        profile_customizations: { 'Initial URL' => 'http://example/canvas' }
+        'worker-session-guid', vertical: true,
+        profile_customizations: { 'Custom Command' => 'Browser', 'Initial URL' => 'http://example/canvas' }
       )
       expect(result).to eq(type: :browser, pane_id: 'canvas-pane-1')
     end
@@ -778,8 +738,8 @@ RSpec.describe StreamWeaver::ITerm do
       described_class.split_vertical_with_url('http://example/canvas', open_browser: false)
 
       expect(client).to have_received(:split_pane).with(
-        'calling-session-guid', vertical: true, profile_name: 'Web Browser',
-        profile_customizations: { 'Initial URL' => 'http://example/canvas' }
+        'calling-session-guid', vertical: true,
+        profile_customizations: { 'Custom Command' => 'Browser', 'Initial URL' => 'http://example/canvas' }
       )
     end
   end

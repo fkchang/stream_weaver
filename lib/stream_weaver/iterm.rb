@@ -8,8 +8,17 @@ module StreamWeaver
   # (`gem install iterm2_ruby` — https://rubygems.org/gems/iterm2_ruby).
   # Falls back to system browser when iTerm2 API is unavailable.
   class ITerm
-    # iTerm2's built-in profile that renders a web view instead of a shell.
-    BROWSER_PROFILE = "Web Browser"
+    # A pane renders a web view instead of a shell when its profile's
+    # "Custom Command" property is the literal string "Browser" -- this is
+    # exactly how iTerm2's own built-in "Web Browser" profile is defined
+    # (confirmed by reading it out of `defaults read com.googlecode.iterm2
+    # "New Bookmarks"`). Passing it as a profile_customizations override on
+    # split_pane/create_tab produces a genuine browser pane from ANY base
+    # profile -- verified live (title came back as the loaded page's own
+    # <title>, not a shell prompt) -- so nothing here depends on a
+    # "Web Browser" profile actually being installed. A fresh macOS/iTerm2
+    # install with only "Default" in its profile list works identically.
+    BROWSER_TYPE_PROPERTY = { "Custom Command" => "Browser" }.freeze
 
     # Default window frames (points) for the two windows this class ever
     # creates from scratch -- the University controller (narrow, tall) and a
@@ -134,25 +143,6 @@ module StreamWeaver
       # rather than parse it out of a swallowed rescue.
       def last_error
         @last_error
-      end
-
-      # True when iTerm2 currently has BROWSER_PROFILE installed -- the
-      # one profile every browser-pane split in this file relies on
-      # (browser_pane_in and split_browser_pane below). A fresh macOS
-      # install, or one with a heavily customized iTerm2, can have the
-      # Python API working fine and still lack this profile -- exactly
-      # the case get-started's dependency report wants to catch up front
-      # rather than leave to surface as a silent browser-window fallback.
-      # False on any doubt (gem missing, API unreachable, RPC error), same
-      # as every other probe in this file.
-      def browser_profile_available?
-        return false unless available?
-
-        with_timeout(5, default: false) do
-          connect { |c| c.list_profiles(properties: ["Name"]).any? { |p| p["Name"] == BROWSER_PROFILE } }
-        end
-      rescue StandardError
-        false
       end
 
       def close_pane(pane_id)
@@ -330,13 +320,14 @@ module StreamWeaver
       # The browser pane for `url`, or nil. The real client raises on a
       # failed split (and returns nil only for an OK response with no
       # session), so both spellings of failure are caught here rather than
-      # unwinding past the shell cleanup above.
+      # unwinding past the shell cleanup above. No profile_name: the split
+      # inherits whatever profile `shell` already has, and BROWSER_TYPE_PROPERTY
+      # overrides it into a browser pane regardless (see that constant).
       def browser_pane_in(client, shell, url)
         client.split_pane(
           shell,
           vertical: true,
-          profile_name: BROWSER_PROFILE,
-          profile_customizations: { "Initial URL" => url }
+          profile_customizations: BROWSER_TYPE_PROPERTY.merge("Initial URL" => url)
         )
       rescue StandardError => e
         @last_error = e
@@ -474,8 +465,7 @@ module StreamWeaver
             c.split_pane(
               guid,
               vertical: !horizontal,
-              profile_name: BROWSER_PROFILE,
-              profile_customizations: { "Initial URL" => url }
+              profile_customizations: BROWSER_TYPE_PROPERTY.merge("Initial URL" => url)
             )
           end
         end

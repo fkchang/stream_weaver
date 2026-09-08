@@ -2350,8 +2350,8 @@ module StreamWeaver
     # Usage: streamweaver panel [session-name] [--fresh]
     #
     # Panel never opens an external browser - the point is to have the browser
-    # inline in a split pane. If iTerm2 Web Browser profile isn't available,
-    # we just print the URL for the user to open manually.
+    # inline in a split pane. If the split itself couldn't be made, we just
+    # print the URL for the user to open manually.
     def self.panel(args)
       # See canvas_session for why this require comes before the guard.
       require_relative 'iterm'
@@ -2821,16 +2821,6 @@ module StreamWeaver
       ITerm.python_api_reachable?
     end
 
-    # Advisory, not blocking: a missing "Web Browser" profile still lets
-    # get-started run, it just falls back to opening the canvas in a
-    # regular browser tab instead of an iTerm2 window (get_started_premier
-    # does that fallback itself). Kept out of get_started_premier_ok?'s
-    # gate on purpose -- see there.
-    def self.get_started_premier_browser_profile?
-      require_relative 'iterm'
-      ITerm.browser_profile_available?
-    end
-
     # `gh` is only needed by course step 5 (pushing a doc to a gist), long
     # after get-started has already opened the door -- advisory, never a
     # blocker, same spirit as the "no agent CLI" warning above.
@@ -2877,18 +2867,14 @@ module StreamWeaver
             darwin: get_started_premier_darwin?,
             in_iterm: get_started_premier_in_iterm?,
             gem_loadable: get_started_premier_gem_loadable?,
-            python_api: get_started_premier_python_api?,
-            browser_profile: get_started_premier_browser_profile?
+            python_api: get_started_premier_python_api?
           }
         else
-          { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil, browser_profile: nil }
+          { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil }
         end
       }
     end
 
-    # browser_profile is deliberately excluded: it's advisory (see
-    # get_started_premier_browser_profile?), never a reason to fall back
-    # to the fully degraded (non-iTerm2) experience.
     def self.get_started_premier_ok?(report)
       %i[darwin in_iterm gem_loadable python_api].all? { |k| report[:premier][k] }
     end
@@ -2920,13 +2906,6 @@ module StreamWeaver
       puts "    #{get_started_check_mark(report[:premier][:in_iterm])} running inside iTerm2"
       puts "    #{get_started_check_mark(report[:premier][:gem_loadable])} iterm2_ruby gem installed"
       puts "    #{get_started_check_mark(report[:premier][:python_api])} iTerm2 Python API reachable"
-      if report[:premier][:browser_profile] == false
-        puts "    ❌ iTerm2 'Web Browser' profile"
-        puts "        Not found — update iTerm2 (3.6.0+) or check Settings → Profiles. Never blocks: " \
-             "get-started falls back to opening the canvas in your regular browser tab."
-      else
-        puts "    #{get_started_check_mark(report[:premier][:browser_profile])} iTerm2 'Web Browser' profile"
-      end
       # `.dig` -- :course is absent from a hand-built report (a caller that
       # only wants the premier-tier printing, e.g. an old/partial report),
       # and neither entry here ever blocks get-started. Distinguished from
@@ -3504,20 +3483,12 @@ module StreamWeaver
         # path already opens the browser itself; do the same here.
         $stderr.puts "Could not open the canvas window in iTerm2 — opening it in your browser instead."
         # Print WHY, honestly -- ITerm.open_browser_window used to swallow
-        # its exception entirely (rescue StandardError; nil), which is what
-        # left a fresh-macOS tester (missing "Web Browser" profile, field
-        # report) with no way to tell what went wrong. last_error surfaces
-        # the underlying exception; browser_profile_available? gives the
-        # one targeted hint worth naming explicitly, since it's the
-        # failure this path is most likely to hit and has a known fix --
-        # guarded on `available?` so a broader connectivity failure
-        # (already explained by last_error above) doesn't get misreported
-        # as a missing profile.
+        # its exception entirely (rescue StandardError; nil), which left a
+        # tester with no way to tell what went wrong. last_error surfaces
+        # the underlying exception so this path never goes back to that
+        # silent nil.
         if (err = ITerm.last_error)
           $stderr.puts "    (#{err.class}: #{err.message})"
-        end
-        if ITerm.available? && !ITerm.browser_profile_available?
-          $stderr.puts "    iTerm2's built-in 'Web Browser' profile was not found — update iTerm2 (3.6.0+) or check Settings → Profiles."
         end
         open_browser(canvas_url)
       end
