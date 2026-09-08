@@ -2821,6 +2821,28 @@ module StreamWeaver
       ITerm.python_api_reachable?
     end
 
+    # Advisory, not blocking: a missing Browser Plugin still lets get-started
+    # run, it just falls back to opening the canvas in a regular browser tab
+    # instead of an iTerm2 window (get_started_premier does that fallback
+    # itself). Kept out of get_started_premier_ok?'s gate on purpose -- see
+    # there. Field report: a fresh macOS tester who'd installed the plugin
+    # but still lacked a saved "Web Browser" profile is no longer relevant
+    # to whether panes render (StreamWeaver never needs that saved profile
+    # -- see BROWSER_TYPE_PROPERTY in iterm.rb) but the plugin itself is a
+    # real, separate download this cannot substitute for.
+    def self.get_started_premier_browser_plugin?
+      require_relative 'iterm'
+      ITerm.browser_plugin_available?
+    end
+
+    # Advisory, same reasoning as browser_plugin above. Ships enabled, so
+    # this only ever fails for someone who went looking in Settings →
+    # Advanced and switched it off.
+    def self.get_started_premier_browser_style_enabled?
+      require_relative 'iterm'
+      ITerm.browser_style_profiles_enabled?
+    end
+
     # `gh` is only needed by course step 5 (pushing a doc to a gist), long
     # after get-started has already opened the door -- advisory, never a
     # blocker, same spirit as the "no agent CLI" warning above.
@@ -2867,14 +2889,21 @@ module StreamWeaver
             darwin: get_started_premier_darwin?,
             in_iterm: get_started_premier_in_iterm?,
             gem_loadable: get_started_premier_gem_loadable?,
-            python_api: get_started_premier_python_api?
+            python_api: get_started_premier_python_api?,
+            browser_plugin: get_started_premier_browser_plugin?,
+            browser_style_enabled: get_started_premier_browser_style_enabled?
           }
         else
-          { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil }
+          { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil,
+            browser_plugin: nil, browser_style_enabled: nil }
         end
       }
     end
 
+    # browser_plugin / browser_style_enabled are deliberately excluded: both
+    # are advisory (see get_started_premier_browser_plugin? and its sibling),
+    # never a reason to fall back to the fully degraded (non-iTerm2)
+    # experience.
     def self.get_started_premier_ok?(report)
       %i[darwin in_iterm gem_loadable python_api].all? { |k| report[:premier][k] }
     end
@@ -2906,6 +2935,21 @@ module StreamWeaver
       puts "    #{get_started_check_mark(report[:premier][:in_iterm])} running inside iTerm2"
       puts "    #{get_started_check_mark(report[:premier][:gem_loadable])} iterm2_ruby gem installed"
       puts "    #{get_started_check_mark(report[:premier][:python_api])} iTerm2 Python API reachable"
+      if report[:premier][:browser_plugin] == false
+        puts "    ❌ iTerm2 Browser Plugin"
+        puts "        Not installed — download from https://iterm2.com/browser-plugin.html and unzip " \
+             "into /Applications (no need to run it). Never blocks: get-started falls back to opening " \
+             "the canvas in your regular browser tab."
+      else
+        puts "    #{get_started_check_mark(report[:premier][:browser_plugin])} iTerm2 Browser Plugin"
+      end
+      if report[:premier][:browser_style_enabled] == false
+        puts "    ❌ iTerm2 \"Enable browser-style profiles\" (Settings → Advanced, Experimental Features)"
+        puts "        Off — turn it on and restart iTerm2. Never blocks: same browser-tab fallback as above."
+      else
+        puts "    #{get_started_check_mark(report[:premier][:browser_style_enabled])} " \
+             "iTerm2 \"Enable browser-style profiles\" (Advanced setting)"
+      end
       # `.dig` -- :course is absent from a hand-built report (a caller that
       # only wants the premier-tier printing, e.g. an old/partial report),
       # and neither entry here ever blocks get-started. Distinguished from
@@ -3485,10 +3529,18 @@ module StreamWeaver
         # Print WHY, honestly -- ITerm.open_browser_window used to swallow
         # its exception entirely (rescue StandardError; nil), which left a
         # tester with no way to tell what went wrong. last_error surfaces
-        # the underlying exception so this path never goes back to that
-        # silent nil.
+        # the underlying exception; browser_plugin_available? gives the one
+        # targeted hint worth naming explicitly, since a missing Browser
+        # Plugin is the failure this path is most likely to hit and has a
+        # known fix -- guarded on `available?` so a broader connectivity
+        # failure (already explained by last_error above) doesn't get
+        # misreported as a missing plugin.
         if (err = ITerm.last_error)
           $stderr.puts "    (#{err.class}: #{err.message})"
+        end
+        if ITerm.available? && !ITerm.browser_plugin_available?
+          $stderr.puts "    iTerm2's Browser Plugin isn't installed — download it from " \
+                       "https://iterm2.com/browser-plugin.html and unzip into /Applications."
         end
         open_browser(canvas_url)
       end

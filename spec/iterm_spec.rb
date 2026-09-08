@@ -53,6 +53,65 @@ RSpec.describe StreamWeaver::ITerm do
     end
   end
 
+  # Checked the same way iTerm2 itself locates the plugin (bundle
+  # identifier via Launch Services/Spotlight), not a fixed path -- no
+  # Python API connection involved at all.
+  describe '.browser_plugin_available?' do
+    it 'is true when mdfind finds the plugin by bundle identifier' do
+      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'darwin23'))
+      allow(described_class).to receive(:`).and_return("/Applications/iTermBrowserPlugin.app\n")
+
+      expect(described_class.browser_plugin_available?).to be(true)
+    end
+
+    it 'is false when mdfind finds nothing' do
+      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'darwin23'))
+      allow(described_class).to receive(:`).and_return("")
+
+      expect(described_class.browser_plugin_available?).to be(false)
+    end
+
+    it 'is false on non-macOS hosts, without even shelling out' do
+      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'linux-gnu'))
+      allow(described_class).to receive(:`)
+
+      expect(described_class.browser_plugin_available?).to be(false)
+      expect(described_class).not_to have_received(:`)
+    end
+
+    it 'is false rather than raising when mdfind blows up' do
+      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'darwin23'))
+      allow(described_class).to receive(:`).and_raise(Errno::ENOENT)
+
+      expect(described_class.browser_plugin_available?).to be(false)
+    end
+  end
+
+  # "Enable browser-style profiles" (Settings -> Advanced -> Experimental
+  # Features) ships enabled -- an unset preference (the common case) must
+  # read as enabled, not disabled.
+  describe '.browser_style_profiles_enabled?' do
+    it 'is true when the preference is unset (the default, common case)' do
+      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'darwin23'))
+      allow(described_class).to receive(:`).and_return("")
+
+      expect(described_class.browser_style_profiles_enabled?).to be(true)
+    end
+
+    it 'is false only when the preference is explicitly "0"' do
+      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'darwin23'))
+      allow(described_class).to receive(:`).and_return("0\n")
+
+      expect(described_class.browser_style_profiles_enabled?).to be(false)
+    end
+
+    it 'is false on non-macOS hosts' do
+      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'linux-gnu'))
+
+      expect(described_class.browser_style_profiles_enabled?).to be(false)
+    end
+  end
+
   describe '.open_worker_tab' do
     # A new iTerm2 tab starts in $HOME, not the caller's cwd -- regression
     # coverage for streamweaver get-started's worker tab opening at ~

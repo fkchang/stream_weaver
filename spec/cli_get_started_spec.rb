@@ -42,7 +42,9 @@ RSpec.describe StreamWeaver::CLI do
     get_started_premier_darwin?: true,
     get_started_premier_in_iterm?: true,
     get_started_premier_gem_loadable?: true,
-    get_started_premier_python_api?: true
+    get_started_premier_python_api?: true,
+    get_started_premier_browser_plugin?: true,
+    get_started_premier_browser_style_enabled?: true
   }.freeze
 
   def stub_probes(overrides = {})
@@ -65,6 +67,20 @@ RSpec.describe StreamWeaver::CLI do
       allow(described_class).to receive(:require).with('iterm2').and_raise(LoadError)
 
       expect(described_class.get_started_premier_gem_loadable?).to be(false)
+    end
+  end
+
+  describe '.get_started_premier_browser_plugin?' do
+    it 'delegates to ITerm.browser_plugin_available?' do
+      allow(StreamWeaver::ITerm).to receive(:browser_plugin_available?).and_return(true)
+      expect(described_class.get_started_premier_browser_plugin?).to be(true)
+    end
+  end
+
+  describe '.get_started_premier_browser_style_enabled?' do
+    it 'delegates to ITerm.browser_style_profiles_enabled?' do
+      allow(StreamWeaver::ITerm).to receive(:browser_style_profiles_enabled?).and_return(false)
+      expect(described_class.get_started_premier_browser_style_enabled?).to be(false)
     end
   end
 
@@ -151,7 +167,8 @@ RSpec.describe StreamWeaver::CLI do
 
       expect(report[:core]).to include(ruby_ok: true, bridge_ok: true)
       expect(report[:skills]).to eq(claude_root: true, agents_root: true, agent_cli: true)
-      expect(report[:premier]).to eq(darwin: true, in_iterm: true, gem_loadable: true, python_api: true)
+      expect(report[:premier]).to eq(darwin: true, in_iterm: true, gem_loadable: true, python_api: true,
+                                      browser_plugin: true, browser_style_enabled: true)
     end
 
     it 'reflects a failing state per-tier without touching the other tiers' do
@@ -188,6 +205,8 @@ RSpec.describe StreamWeaver::CLI do
       expect(out).to include('✅ running inside iTerm2')
       expect(out).to include('✅ iterm2_ruby gem installed')
       expect(out).to include('✅ iTerm2 Python API reachable')
+      expect(out).to include('✅ iTerm2 Browser Plugin')
+      expect(out).to include('✅ iTerm2 "Enable browser-style profiles"')
       expect(out).to include('✅ gh CLI authenticated')
     end
 
@@ -203,12 +222,17 @@ RSpec.describe StreamWeaver::CLI do
       expect(out).to include('❌ running inside iTerm2')
       expect(out).to include('❌ iterm2_ruby gem installed')
       expect(out).to include('❌ iTerm2 Python API reachable')
+      expect(out).to include('❌ iTerm2 Browser Plugin')
+      expect(out).to include('https://iterm2.com/browser-plugin.html')
+      expect(out).to include('❌ iTerm2 "Enable browser-style profiles"')
+      expect(out).to include('turn it on and restart iTerm2')
       expect(out).to include('⚠️  gh CLI not found')
       expect(out).to include('https://cli.github.com')
     end
 
     it 'prints a skipped mark, not a fail mark, for a premier tier that was never probed' do
-      report = { premier: { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil },
+      report = { premier: { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil,
+                             browser_plugin: nil, browser_style_enabled: nil },
                  course: { gh_cli: true, gh_authed: true } }
       out, _err = capture_io { described_class.print_get_started_report(report.merge(
         core: { ruby_ok: true, ruby_version: RUBY_VERSION, bridge_ok: true },
@@ -216,11 +240,12 @@ RSpec.describe StreamWeaver::CLI do
       )) }
 
       expect(out).not_to include('❌ macOS')
-      expect(out.scan('⏭ ').size).to eq(4)
+      expect(out.scan('⏭ ').size).to eq(6)
     end
 
     it 'does not raise, and prints a skipped mark rather than a false "not found", when the report has no course tier at all (a hand-built partial report)' do
-      report = { premier: { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil },
+      report = { premier: { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil,
+                             browser_plugin: nil, browser_style_enabled: nil },
                  core: { ruby_ok: true, ruby_version: RUBY_VERSION, bridge_ok: true },
                  skills: { claude_root: true, agents_root: true, agent_cli: true } }
 
@@ -258,6 +283,21 @@ RSpec.describe StreamWeaver::CLI do
     it 'is false when the premier tier was skipped (all nil)' do
       report = { premier: { darwin: nil, in_iterm: nil, gem_loadable: nil, python_api: nil } }
       expect(described_class.get_started_premier_ok?(report)).to be(false)
+    end
+
+    # Advisory, never a blocker: a missing Browser Plugin or a disabled
+    # "Enable browser-style profiles" setting just means the controller
+    # window falls back to a plain browser tab.
+    it 'stays true when only browser_plugin fails' do
+      stub_probes(get_started_premier_browser_plugin?: false)
+      report = described_class.get_started_dependency_report
+      expect(described_class.get_started_premier_ok?(report)).to be(true)
+    end
+
+    it 'stays true when only browser_style_enabled fails' do
+      stub_probes(get_started_premier_browser_style_enabled?: false)
+      report = described_class.get_started_dependency_report
+      expect(described_class.get_started_premier_ok?(report)).to be(true)
     end
   end
 
@@ -509,8 +549,9 @@ RSpec.describe StreamWeaver::CLI do
     # Field report: ITerm.open_browser_window used to swallow its exception
     # entirely (rescue StandardError; nil), leaving a fresh-macOS tester with
     # no way to tell why the controller window didn't open. The fallback
-    # message must now report the real reason.
-    it 'prints the underlying exception when the controller window could not be opened' do
+    # message must now report the real reason, plus the targeted Browser
+    # Plugin hint when that specifically is what's missing.
+    it 'prints the underlying exception and the missing-plugin hint when the controller window could not be opened' do
       allow(described_class).to receive(:get_started_create_university_canvas).and_return(canvas_url)
       allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return('w-session-1')
       allow(described_class).to receive(:get_started_open_controller_window).and_return(nil)
@@ -519,10 +560,30 @@ RSpec.describe StreamWeaver::CLI do
       allow(described_class).to receive(:open_browser)
       allow(StreamWeaver::ITerm).to receive(:last_error).and_return(RuntimeError.new('SplitPane failed: BAD_REQUEST'))
       allow(StreamWeaver::ITerm).to receive(:available?).and_return(true)
+      allow(StreamWeaver::ITerm).to receive(:browser_plugin_available?).and_return(false)
 
       _out, err = capture_io { described_class.get_started_premier('claude') }
 
       expect(err).to include('RuntimeError: SplitPane failed: BAD_REQUEST')
+      expect(err).to include("iTerm2's Browser Plugin isn't installed")
+      expect(err).to include('https://iterm2.com/browser-plugin.html')
+    end
+
+    it 'omits the missing-plugin hint when the plugin is actually there (some other failure)' do
+      allow(described_class).to receive(:get_started_create_university_canvas).and_return(canvas_url)
+      allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return('w-session-1')
+      allow(described_class).to receive(:get_started_open_controller_window).and_return(nil)
+      allow(described_class).to receive(:write_get_started_worker_json)
+      allow(described_class).to receive(:push_get_started_placeholder_canvas)
+      allow(described_class).to receive(:open_browser)
+      allow(StreamWeaver::ITerm).to receive(:last_error).and_return(RuntimeError.new('connection reset'))
+      allow(StreamWeaver::ITerm).to receive(:available?).and_return(true)
+      allow(StreamWeaver::ITerm).to receive(:browser_plugin_available?).and_return(true)
+
+      _out, err = capture_io { described_class.get_started_premier('claude') }
+
+      expect(err).to include('RuntimeError: connection reset')
+      expect(err).not_to include('Browser Plugin')
     end
 
     it 'still pushes the canvas even when no worker tab could be opened, and never opens a controller window' do

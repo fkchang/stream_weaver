@@ -18,7 +18,30 @@ module StreamWeaver
     # <title>, not a shell prompt) -- so nothing here depends on a
     # "Web Browser" profile actually being installed. A fresh macOS/iTerm2
     # install with only "Default" in its profile list works identically.
+    #
+    # This still needs iTerm2's own browser feature to be usable, which
+    # (per iterm2.com/documentation-preferences-profiles-general.html) is
+    # gated on TWO things this override cannot bypass: the separately
+    # downloaded Browser Plugin (browser_plugin_available? below), and the
+    # "Enable browser-style profiles" Advanced setting (enabled by default;
+    # browser_style_profiles_enabled? below). The live verification above
+    # ran on a machine with both already satisfied -- a fresh install
+    # lacking the plugin needs it installed regardless of this override.
     BROWSER_TYPE_PROPERTY = { "Custom Command" => "Browser" }.freeze
+
+    # iTerm2's bundle identifier for its own separately-downloaded Browser
+    # Plugin (iterm2.com/browser-plugin.html: unzip into /Applications,
+    # "you don't need to run it; iTerm2 will locate it automatically").
+    # Matches the plugin's own Info.plist CFBundleIdentifier, confirmed on
+    # a machine that has it installed.
+    BROWSER_PLUGIN_BUNDLE_ID = "com.googlecode.iterm2.iTermBrowserPlugin"
+
+    # The Advanced setting's persisted preference key (found in the app
+    # binary's strings: "advancedSettingsModelDictionary_browserProfiles" /
+    # "browserProfilesUserDefaultsKey", labeled in Settings → Advanced as
+    # "Experimental Features: Enable browser-style profiles?"). Unset on a
+    # machine that has never touched it -- iTerm2 defaults it to enabled.
+    BROWSER_STYLE_PROFILES_PREF_KEY = "browserProfiles"
 
     # Default window frames (points) for the two windows this class ever
     # creates from scratch -- the University controller (narrow, tall) and a
@@ -63,6 +86,41 @@ module StreamWeaver
         !available? &&
           RbConfig::CONFIG["host_os"].match?(/darwin/) &&
           !ENV["ITERM_SESSION_ID"].to_s.empty?
+      end
+
+      # True when iTerm2's Browser Plugin is installed -- checked the same
+      # way iTerm2 itself locates it (by bundle identifier via Launch
+      # Services/Spotlight, not a fixed path), so this is accurate
+      # regardless of which folder the user unzipped it into. Needs no
+      # Python API connection at all -- darwin-only, since mdfind is a
+      # macOS tool. False on any doubt (not darwin, mdfind missing/erroring,
+      # timeout), same spirit as every other probe in this file.
+      def browser_plugin_available?
+        return false unless RbConfig::CONFIG["host_os"].match?(/darwin/)
+
+        with_timeout(5, default: false) do
+          out = `mdfind "kMDItemCFBundleIdentifier == '#{BROWSER_PLUGIN_BUNDLE_ID}'" 2>/dev/null`
+          !out.strip.empty?
+        end
+      rescue StandardError
+        false
+      end
+
+      # True unless the user has explicitly turned off iTerm2's "Enable
+      # browser-style profiles" Advanced setting -- an "Experimental
+      # Features" toggle that ships enabled, so an unset preference (the
+      # common case) reads as enabled rather than disabled. Reads the
+      # plist directly via `defaults`, not the Python API -- this is a
+      # plain macOS preference, no RPC involved.
+      def browser_style_profiles_enabled?
+        return false unless RbConfig::CONFIG["host_os"].match?(/darwin/)
+
+        with_timeout(5, default: true) do
+          out = `defaults read com.googlecode.iterm2 #{BROWSER_STYLE_PROFILES_PREF_KEY} 2>/dev/null`.strip
+          out != "0"
+        end
+      rescue StandardError
+        true
       end
 
       # Split a browser pane with the URL into `target_session` (any session
