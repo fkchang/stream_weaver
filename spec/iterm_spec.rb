@@ -635,6 +635,38 @@ RSpec.describe StreamWeaver::ITerm do
       expect(described_class.open_browser_window('http://example/canvas')).to be_nil
     end
 
+    # last_error is what lets a caller committed to an honest fallback
+    # message (get-started's premier path) report WHY, instead of the
+    # silent nil this method returned before -- regression coverage for
+    # the swallowed-exception bug a fresh-macOS field report surfaced.
+    it 'records the underlying exception in last_error when the browser split raises' do
+      allow(client).to receive(:split_pane).and_raise(ITerm2::RPCError, 'SplitPane failed: BAD_REQUEST')
+
+      described_class.open_browser_window('http://example/canvas')
+
+      expect(described_class.last_error).to be_a(ITerm2::RPCError)
+      expect(described_class.last_error.message).to eq('SplitPane failed: BAD_REQUEST')
+    end
+
+    it 'records the underlying exception in last_error when the RPC blows up outside the split (e.g. create_tab)' do
+      allow(client).to receive(:create_tab).and_raise(ITerm2::Error, 'connect boom')
+
+      described_class.open_browser_window('http://example/canvas')
+
+      expect(described_class.last_error).to be_a(ITerm2::Error)
+    end
+
+    it 'clears last_error on a call that succeeds' do
+      allow(client).to receive(:split_pane).and_raise(ITerm2::Error, 'boom')
+      described_class.open_browser_window('http://example/canvas')
+      expect(described_class.last_error).not_to be_nil
+
+      allow(client).to receive(:split_pane).and_return('browser-1')
+      described_class.open_browser_window('http://example/canvas')
+
+      expect(described_class.last_error).to be_nil
+    end
+
     # window-frame sizing (driver-worker-runner): the controller always gets
     # its own new window, so it always sizes it (unlike open_worker_tab,
     # which only sizes on the no-window-to-inherit path).
@@ -669,6 +701,46 @@ RSpec.describe StreamWeaver::ITerm do
         expect { described_class.open_browser_window('http://example/canvas') }.not_to raise_error
         expect(client).not_to have_received(:set_window_frame)
       end
+    end
+  end
+
+  # get-started's dependency report probes this up front rather than
+  # leaving a missing profile to surface as a silent browser-window
+  # fallback (field report: a fresh macOS install with an older/customized
+  # iTerm2 lacking the built-in "Web Browser" profile).
+  describe '.browser_profile_available?' do
+    let(:client) { instance_double(ITerm2::Client) }
+
+    before do
+      allow(described_class).to receive(:available?).and_return(true)
+      allow(ITerm2).to receive(:connect).and_yield(client)
+    end
+
+    it 'is true when a profile named "Web Browser" is installed' do
+      allow(client).to receive(:list_profiles).with(properties: ['Name'])
+        .and_return([{ 'Name' => 'Default' }, { 'Name' => 'Web Browser' }])
+
+      expect(described_class.browser_profile_available?).to be(true)
+    end
+
+    it 'is false when no profile is named "Web Browser"' do
+      allow(client).to receive(:list_profiles).with(properties: ['Name'])
+        .and_return([{ 'Name' => 'Default' }])
+
+      expect(described_class.browser_profile_available?).to be(false)
+    end
+
+    it 'is false without connecting when the gem is unavailable' do
+      allow(described_class).to receive(:available?).and_return(false)
+
+      expect(described_class.browser_profile_available?).to be(false)
+      expect(ITerm2).not_to have_received(:connect)
+    end
+
+    it 'is false rather than raising when the RPC blows up' do
+      allow(client).to receive(:list_profiles).and_raise(ITerm2::Error, 'boom')
+
+      expect(described_class.browser_profile_available?).to be(false)
     end
   end
 

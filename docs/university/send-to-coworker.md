@@ -20,14 +20,17 @@ Two versions below, depending on who's getting it. Pick one and paste it as-is.
 > The full experience puts the course in an iTerm2 window of its own and your agent in a fresh tab
 > beside your work -- set iTerm2 up first, then install the gem and run the door command.
 
-**1. Prerequisites** (macOS + iTerm2 only -- skip if you're on another OS or terminal, you'll just
-get a browser tab instead):
+**1. Prerequisites** (macOS + iTerm2 3.6.0+ only -- skip if you're on another OS, terminal, or an
+older iTerm2, you'll just get a browser tab instead):
 
 ```bash
 gem install iterm2_ruby
 ```
 
-Then in iTerm2: **Settings → General → Magic → Enable Python API**.
+Then in iTerm2: **Settings → General → Magic → Enable Python API**. iTerm2 3.6.0 (September 2025)
+is the version that added the built-in "Web Browser" profile the canvas window is rendered in --
+`get-started`'s dependency check flags it by name if it's missing (an older iTerm2, or one where
+that profile was renamed/removed) and falls back to a browser tab automatically either way.
 
 **2. Install the gem:**
 

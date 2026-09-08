@@ -99,6 +99,7 @@ module StreamWeaver
       def open_browser_window(url)
         return nil unless available?
 
+        @last_error = nil
         with_timeout(10, default: nil) do
           connect do |c|
             created = c.create_tab
@@ -119,8 +120,39 @@ module StreamWeaver
             pane
           end
         end
-      rescue StandardError
+      rescue StandardError => e
+        @last_error = e
         nil
+      end
+
+      # The exception that made the most recent open_browser_window call
+      # fall back to nil, or nil if that call succeeded (or hasn't run
+      # yet). Reset at the start of every open_browser_window call, so a
+      # caller committed to the honest-fallback message (get-started's
+      # premier path, cli.rb) can report WHY the canvas window couldn't
+      # open instead of the silent nil this class returned before --
+      # rather than parse it out of a swallowed rescue.
+      def last_error
+        @last_error
+      end
+
+      # True when iTerm2 currently has BROWSER_PROFILE installed -- the
+      # one profile every browser-pane split in this file relies on
+      # (browser_pane_in and split_browser_pane below). A fresh macOS
+      # install, or one with a heavily customized iTerm2, can have the
+      # Python API working fine and still lack this profile -- exactly
+      # the case get-started's dependency report wants to catch up front
+      # rather than leave to surface as a silent browser-window fallback.
+      # False on any doubt (gem missing, API unreachable, RPC error), same
+      # as every other probe in this file.
+      def browser_profile_available?
+        return false unless available?
+
+        with_timeout(5, default: false) do
+          connect { |c| c.list_profiles(properties: ["Name"]).any? { |p| p["Name"] == BROWSER_PROFILE } }
+        end
+      rescue StandardError
+        false
       end
 
       def close_pane(pane_id)
@@ -306,7 +338,8 @@ module StreamWeaver
           profile_name: BROWSER_PROFILE,
           profile_customizations: { "Initial URL" => url }
         )
-      rescue StandardError
+      rescue StandardError => e
+        @last_error = e
         nil
       end
 

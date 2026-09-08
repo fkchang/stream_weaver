@@ -27,6 +27,7 @@ That's it. No HTML. No CSS. No JavaScript. No webpack.
 A few things worth being explicit about:
 
 - `streamweaver panel` and the worker-tab automation it drives are **macOS + iTerm2 only** — they script iTerm2's Python API.
+- The premier `get-started` experience also needs iTerm2 3.6.0 or newer — that's the release that added the built-in "Web Browser" profile the canvas window renders in. An older or heavily customized iTerm2 missing that profile still runs `get-started`; the canvas window just falls back to a plain browser tab (the dependency check flags this by name so it's never a silent surprise).
 - `canvas-read` is a plain local web server. It's the most portable piece of StreamWeaver and doesn't need iTerm2, Chrome, or `gh` — see [docs/canvas-read.md](docs/canvas-read.md).
 - The Chrome extension and the `gh` CLI are enhancers for *sharing* docs (Gist links that render nicely), not requirements for reading them locally.
 - Never assume a port. Every command that starts a server prints the URL it actually bound — StreamWeaver auto-increments past busy ports.
