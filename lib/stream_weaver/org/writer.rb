@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "../components"
 require_relative "recording_context"
 require_relative "inline"
 require_relative "source_splitter"
