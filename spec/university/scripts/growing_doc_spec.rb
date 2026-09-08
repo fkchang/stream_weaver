@@ -3,6 +3,7 @@
 require 'spec_helper'
 require 'timeout'
 require 'stringio'
+require 'tempfile'
 require 'stream_weaver'
 require 'stream_weaver/org/writer'
 require 'stream_weaver/org/reader'
@@ -42,10 +43,11 @@ RSpec.describe 'stream_weaver/university/scripts/growing_doc.rb' do
   end
 
   it 'boots under SW_NO_OPEN=1 without raising, and can be killed by PID' do
+    err_file = Tempfile.new('growing_doc_smoke_stderr')
     pid = Process.spawn(
       { 'SW_NO_OPEN' => '1', 'STREAMWEAVER_GROWING_DOC_PAUSE' => '5' },
       Gem.ruby, '-I', File.expand_path('../../../lib', __dir__), script_path, session_name,
-      out: File::NULL, err: File::NULL
+      out: File::NULL, err: err_file.path
     )
 
     killed_mid_run = false
@@ -61,7 +63,14 @@ RSpec.describe 'stream_weaver/university/scripts/growing_doc.rb' do
     # Either it finished fast (no bridge reachable -- the rescued warning
     # path exits 0) or it was still mid-run against a live bridge and we
     # killed it by PID; both mean the script loaded and ran, not crashed.
-    expect(killed_mid_run || status.success?).to be(true)
+    # Captures the subprocess's own stderr into the failure message -- a
+    # fast, unsuccessful exit is otherwise a silent "expected true, got
+    # false" with no clue which line of the script raised.
+    stderr_output = File.read(err_file.path)
+    expect(killed_mid_run || status.success?).to be(true),
+      "subprocess exited #{status&.exitstatus.inspect} without being killed; stderr:\n#{stderr_output}"
+  ensure
+    err_file&.close!
   end
 
   # Step 4's payoff is a document, and step 5 carries that same document out

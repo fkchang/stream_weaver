@@ -515,6 +515,7 @@ RSpec.describe StreamWeaver::CLI do
 
     it 'creates the canvas, opens the agent-only worker tab in the invoking directory, opens the controller window, records worker.json, then pushes the canvas last' do
       order = []
+      allow(described_class).to receive(:command_on_path?).with('claude').and_return(true)
       allow(described_class).to receive(:get_started_create_university_canvas) { order << :create_canvas; canvas_url }
       allow(Dir).to receive(:pwd).and_return('/invoking/dir')
       allow(StreamWeaver::ITerm).to receive(:open_worker_tab).with('claude', dir: '/invoking/dir') { order << :worker; 'w-session-1' }
@@ -532,6 +533,7 @@ RSpec.describe StreamWeaver::CLI do
     # 4701). The controller window must be pointed at whatever the bridge
     # just said it was listening on, never a remembered or default port.
     it 'points the controller window at the URL the live bridge just returned' do
+      allow(described_class).to receive(:command_on_path?).with('claude').and_return(true)
       allow(described_class).to receive(:get_started_create_university_canvas)
         .and_return('http://127.0.0.1:4701/canvas/university')
       allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return('w-session-1')
@@ -552,6 +554,7 @@ RSpec.describe StreamWeaver::CLI do
     # message must now report the real reason, plus the targeted Browser
     # Plugin hint when that specifically is what's missing.
     it 'prints the underlying exception and the missing-plugin hint when the controller window could not be opened' do
+      allow(described_class).to receive(:command_on_path?).with('claude').and_return(true)
       allow(described_class).to receive(:get_started_create_university_canvas).and_return(canvas_url)
       allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return('w-session-1')
       allow(described_class).to receive(:get_started_open_controller_window).and_return(nil)
@@ -570,6 +573,7 @@ RSpec.describe StreamWeaver::CLI do
     end
 
     it 'omits the missing-plugin hint when the plugin is actually there (some other failure)' do
+      allow(described_class).to receive(:command_on_path?).with('claude').and_return(true)
       allow(described_class).to receive(:get_started_create_university_canvas).and_return(canvas_url)
       allow(StreamWeaver::ITerm).to receive(:open_worker_tab).and_return('w-session-1')
       allow(described_class).to receive(:get_started_open_controller_window).and_return(nil)
