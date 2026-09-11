@@ -80,7 +80,7 @@ RSpec.describe StreamWeaver::Org::Reader do
 
   it "converts a paragraph chunk to an md call with markdown inline syntax restored" do
     dsl = described_class.to_dsl("hello *world*\n")
-    expect(dsl).to include('md <<~MD')
+    expect(dsl).to include('md <<~\'MD\'')
     expect(dsl).to include("hello **world**")
   end
 
@@ -235,7 +235,7 @@ RSpec.describe StreamWeaver::Org::Reader do
       This is paragraph two.
     ORG
     dsl = described_class.to_dsl(org)
-    expect(dsl.scan(/md <<~MD/).length).to eq(1)
+    expect(dsl.scan(/md <<~'MD'/).length).to eq(1)
     expect(dsl).to include("This is paragraph one.")
     expect(dsl).to include("This is paragraph two.")
   end
@@ -252,7 +252,7 @@ RSpec.describe StreamWeaver::Org::Reader do
       Second paragraph after a real section boundary.
     ORG
     dsl = described_class.to_dsl(org)
-    expect(dsl.scan(/md <<~MD/).length).to eq(2)
+    expect(dsl.scan(/md <<~'MD'/).length).to eq(2)
   end
 
   it "preserves markdown: false on a table marked with #+ATTR_STREAMWEAVER: :markdown nil, without reinterpreting literal characters as emphasis" do
@@ -318,7 +318,7 @@ RSpec.describe StreamWeaver::Org::Reader do
       #+end_quote
     ORG
     dsl = described_class.to_dsl(org)
-    expect(dsl).to include("mermaid <<~MERMAID")
+    expect(dsl).to include("mermaid <<~'MERMAID'")
     expect(dsl).to include("A --> B")
     expect(dsl).to include("Some intro text")
     expect(dsl).to include("Some trailing text")
@@ -359,14 +359,23 @@ RSpec.describe StreamWeaver::Org::Reader do
     org = "#+begin_src mermaid :zoom t\ngraph LR\n  A --> B\n#+end_src\n"
     dsl = described_class.to_dsl(org)
     expect { RubyVM::InstructionSequence.compile(dsl) }.not_to raise_error
-    expect(dsl).to match(/mermaid <<~MERMAID, zoom: true\n/)
+    expect(dsl).to match(/mermaid <<~'MERMAID', zoom: true\n/)
   end
 
   it "converts a plain src block to a valid code_block call" do
     org = "#+begin_src text\nlib/foo.rb:1-10\n#+end_src\n"
     dsl = described_class.to_dsl(org)
     expect { RubyVM::InstructionSequence.compile(dsl) }.not_to raise_error
-    expect(dsl).to include('code_block(<<~TXT, lang: "text")')
+    expect(dsl).to include('code_block(<<~\'TXT\', lang: "text")')
+  end
+
+  it "quotes the heredoc tag so a code sample's own Ruby interpolation/escapes are never re-evaluated (regression: a real-world RCA gist with \#{symbol} in a code_block crashed rendering with 'undefined method `symbol')" do
+    org = "#+begin_src ruby\nREDIS_DB.set(\"key:\#{symbol}\", 1)\n#+end_src\n"
+    dsl = described_class.to_dsl(org)
+    expect { RubyVM::InstructionSequence.compile(dsl) }.not_to raise_error
+
+    mini_app = StreamWeaver::App.new("spec")
+    expect { mini_app.instance_eval(dsl) }.not_to raise_error
   end
 
   it "splices a :streamweaver-raw t block's content back in verbatim, NOT wrapped in a code_block(...) call (Writer's raw-passthrough escape hatch)" do
@@ -414,8 +423,8 @@ RSpec.describe StreamWeaver::Org::Reader do
     end
 
     expect(dsl.scan(/doc_header\(/).length).to eq(1)
-    expect(dsl.scan(/mermaid <<~MERMAID/).length).to eq(1)
+    expect(dsl.scan(/mermaid <<~'MERMAID'/).length).to eq(1)
     expect(dsl.scan(/callout\(/).length).to eq(1)
-    expect(dsl.scan(/md <<~MD/).length).to eq(1) # only the callout body -- no stray preamble md
+    expect(dsl.scan(/md <<~'MD'/).length).to eq(1) # only the callout body -- no stray preamble md
   end
 end

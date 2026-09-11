@@ -532,13 +532,26 @@ module StreamWeaver
       # closing tag -- get this backwards and the emitted Ruby won't parse.
       # Also guards against a body line that happens to equal the tag itself
       # (which would terminate the heredoc early) by picking a fresh tag.
+      #
+      # The opening tag is single-quoted (`<<~'TAG'`), NOT bare -- md/mermaid/
+      # code_block content is verbatim prose or source code being displayed,
+      # never something that should be re-interpreted as Ruby. A bare `<<~TAG`
+      # heredoc still performs string interpolation and backslash escapes, so
+      # a code sample showing real Ruby string interpolation (e.g.
+      # `"key:#{symbol}"`) got that `#{symbol}` actually evaluated against the
+      # rendering App instance at instance_eval time, raising a NameError
+      # instead of displaying the snippet (reported: a real-world RCA gist
+      # with `"corporate-actions-catch-up:#{symbol}"` in a code_block
+      # wouldn't render -- "undefined method `symbol'"). Quoting the tag
+      # disables both, matching the "preserve literal text" behavior emit_table
+      # already relies on for markdown: false tables.
       def heredoc(prefix, text, base_tag, suffix: "")
         tag = unique_heredoc_tag(base_tag, text)
         content = text.split("\n", -1)
         content.pop if content.last == ""
         content = [""] if content.empty?
 
-        "#{prefix}<<~#{tag}#{suffix}\n#{content.map { |line| line.empty? ? line : "  #{line}" }.join("\n")}\n#{tag}"
+        "#{prefix}<<~'#{tag}'#{suffix}\n#{content.map { |line| line.empty? ? line : "  #{line}" }.join("\n")}\n#{tag}"
       end
 
       def unique_heredoc_tag(base_tag, text)

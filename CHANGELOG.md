@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-09-11
+
+### Fixed
+- **`Org::Reader` code samples containing real Ruby interpolation crashed rendering** - a `code_block`/`md`/`mermaid` heredoc opened with an unquoted tag (`<<~TXT`), so a code sample legitimately showing Ruby string interpolation (e.g. `"key:#{symbol}"`) got that `#{symbol}` actually evaluated against the rendering `App` instance instead of displayed as text -- `NameError: undefined method 'symbol'`, doc fails to render entirely, both server-side (`canvas-read`, the canvas bridge) and in the Chrome extension (whose JS heredoc rewriter mirrors the same interpolation semantics for the Opal-compiled path). Heredoc tags are now single-quoted (`<<~'TXT'`), so code/prose content is always treated as literal text, matching `emit_table`'s existing `markdown: false` philosophy. Reported via a real Gist RCA doc that wouldn't render.
+
 ## [0.3.1] - 2026-09-11
 
 ### Added
