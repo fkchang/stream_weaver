@@ -1,0 +1,90 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# One-time setup: mints a refresh token for the Chrome Web Store Publish API.
+#
+# Run this once (or again if the token is ever revoked). It never touches
+# the extension itself -- it only produces a credential bin/publish_extension
+# uses later. Needs a Google Cloud project with the Chrome Web Store API
+# enabled and an OAuth client of type "Desktop app":
+#
+#   1. https://console.cloud.google.com -> select/create a project
+#   2. APIs & Services -> Library -> "Chrome Web Store API" -> Enable
+#   3. APIs & Services -> Credentials -> Create Credentials -> OAuth client ID
+#      -> Application type: Desktop app -> note the Client ID + Client Secret
+#
+# Usage: bin/webstore_get_refresh_token <client_id> <client_secret>
+#
+# Uses the loopback-redirect installed-app flow (Google retired the old
+# copy-paste "oob" flow in 2022) -- this script starts a one-shot local
+# server, you approve access in your own browser, Google redirects back to
+# it with the code, and it exchanges that for a refresh token itself. Has to
+# be run interactively by a human: the consent screen can only be approved
+# by the Chrome Web Store developer account holder.
+
+require "socket"
+require "net/http"
+require "uri"
+require "json"
+
+CLIENT_ID, CLIENT_SECRET = ARGV
+unless CLIENT_ID && CLIENT_SECRET
+  abort "Usage: bin/webstore_get_refresh_token <client_id> <client_secret>"
+end
+
+SCOPE = "https://www.googleapis.com/auth/chromewebstore"
+
+server = TCPServer.new("127.0.0.1", 0)
+port = server.addr[1]
+redirect_uri = "http://127.0.0.1:#{port}"
+
+auth_url = "https://accounts.google.com/o/oauth2/auth?" + URI.encode_www_form(
+  client_id: CLIENT_ID,
+  redirect_uri: redirect_uri,
+  scope: SCOPE,
+  response_type: "code",
+  access_type: "offline",
+  prompt: "consent" # forces a refresh_token even if this app was authorized before
+)
+
+puts <<~MSG
+  Open this URL in a browser signed in as the Chrome Web Store developer account,
+  and approve access. This script is already listening for the redirect.
+
+  #{auth_url}
+
+MSG
+
+client = server.accept
+request_line = client.gets
+code = request_line[/[?&]code=([^&\s]+)/, 1]
+# Drain the rest of the request so the browser doesn't hang waiting on us.
+client.gets until client.eof? || (line = client.gets).nil? || line == "\r\n"
+client.print "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
+client.print(code ? "<h3>Done -- you can close this tab.</h3>" : "<h3>No code received -- check the terminal.</h3>")
+client.close
+server.close
+
+abort "No authorization code found in the redirect." unless code
+
+code = URI.decode_www_form_component(code)
+
+response = Net::HTTP.post_form(URI("https://oauth2.googleapis.com/token"), {
+  "client_id" => CLIENT_ID,
+  "client_secret" => CLIENT_SECRET,
+  "code" => code,
+  "grant_type" => "authorization_code",
+  "redirect_uri" => redirect_uri
+})
+
+body = JSON.parse(response.body)
+if body["refresh_token"]
+  puts "\nSuccess. Refresh token (save this somewhere safe -- it does not expire, and Google won't show it again):\n\n"
+  puts body["refresh_token"]
+  puts "\nSet it as CHROME_WEBSTORE_REFRESH_TOKEN for bin/publish_extension, along with"
+  puts "CHROME_WEBSTORE_CLIENT_ID and CHROME_WEBSTORE_CLIENT_SECRET."
+else
+  warn "No refresh_token in response -- full response:"
+  warn JSON.pretty_generate(body)
+  exit 1
+end

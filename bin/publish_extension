@@ -1,0 +1,86 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Uploads (and optionally publishes) a packaged extension zip via the Chrome
+# Web Store Publish API -- the automation stream_weaver-cdb5 tracked as
+# deferred until real OAuth credentials existed (see
+# .claude/skills/streamweaver-extension-ship.md). One-time setup:
+# bin/webstore_get_refresh_token.
+#
+# Usage:
+#   bin/publish_extension extension/dist/streamweaver-doc-viewer-1.0.2.zip [--publish]
+#
+# Without --publish, the zip is uploaded as a draft only (matches "Save
+# draft" in the console) -- nothing goes live until you pass --publish or
+# click Publish yourself in the dashboard. Requires env vars:
+#   CHROME_WEBSTORE_CLIENT_ID
+#   CHROME_WEBSTORE_CLIENT_SECRET
+#   CHROME_WEBSTORE_REFRESH_TOKEN
+
+require "net/http"
+require "uri"
+require "json"
+
+EXTENSION_ID = "odjjednfpfiagefgpcfdlelldphmpcgj" # StreamWeaver Doc Viewer
+
+zip_path = ARGV.find { |a| !a.start_with?("--") }
+do_publish = ARGV.include?("--publish")
+abort "Usage: bin/publish_extension <zip_path> [--publish]" unless zip_path
+abort "No such file: #{zip_path}" unless File.exist?(zip_path)
+
+%w[CHROME_WEBSTORE_CLIENT_ID CHROME_WEBSTORE_CLIENT_SECRET CHROME_WEBSTORE_REFRESH_TOKEN].each do |var|
+  abort "Missing env var #{var} -- run bin/webstore_get_refresh_token first." if ENV[var].to_s.empty?
+end
+
+def access_token
+  response = Net::HTTP.post_form(URI("https://oauth2.googleapis.com/token"), {
+    "client_id" => ENV.fetch("CHROME_WEBSTORE_CLIENT_ID"),
+    "client_secret" => ENV.fetch("CHROME_WEBSTORE_CLIENT_SECRET"),
+    "refresh_token" => ENV.fetch("CHROME_WEBSTORE_REFRESH_TOKEN"),
+    "grant_type" => "refresh_token"
+  })
+  body = JSON.parse(response.body)
+  body.fetch("access_token") { abort "Could not get access token: #{response.body}" }
+end
+
+token = access_token
+puts "Got access token."
+
+upload_uri = URI("https://www.googleapis.com/upload/chromewebstore/v1.1/items/#{EXTENSION_ID}?uploadType=media")
+upload_request = Net::HTTP::Put.new(upload_uri)
+upload_request["Authorization"] = "Bearer #{token}"
+upload_request["x-goog-api-version"] = "2"
+upload_request.body = File.binread(zip_path)
+
+puts "Uploading #{zip_path} (#{File.size(zip_path) / 1024} KB)..."
+upload_response = Net::HTTP.start(upload_uri.host, upload_uri.port, use_ssl: true) { |http| http.request(upload_request) }
+upload_body = JSON.parse(upload_response.body)
+
+if upload_body["uploadState"] != "SUCCESS"
+  warn "Upload did not succeed:"
+  warn JSON.pretty_generate(upload_body)
+  exit 1
+end
+puts "Upload succeeded (draft saved)."
+
+if do_publish
+  publish_uri = URI("https://www.googleapis.com/chromewebstore/v1.1/items/#{EXTENSION_ID}/publish")
+  publish_request = Net::HTTP::Post.new(publish_uri)
+  publish_request["Authorization"] = "Bearer #{token}"
+  publish_request["x-goog-api-version"] = "2"
+  publish_request["Content-Length"] = "0"
+
+  puts "Submitting for review..."
+  publish_response = Net::HTTP.start(publish_uri.host, publish_uri.port, use_ssl: true) { |http| http.request(publish_request) }
+  publish_body = JSON.parse(publish_response.body)
+
+  if Array(publish_body["status"]).include?("OK")
+    puts "Submitted for review."
+  else
+    warn "Publish did not report OK:"
+    warn JSON.pretty_generate(publish_body)
+    exit 1
+  end
+else
+  puts "Draft only -- pass --publish to submit for review, or do it from the dashboard."
+end
