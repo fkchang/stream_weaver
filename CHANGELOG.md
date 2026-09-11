@@ -5,13 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Fixed
-- **No more "Web Browser" profile dependency for the iTerm2 canvas window** - a fresh macOS/iTerm2 install (only the "Default" profile present) previously failed `open_browser_window`/`panel`'s split with `INVALID_PROFILE_NAME`, and the old remediation text wrongly told a tester on iTerm2 3.6+ to "update iTerm2" when the real fix was to manually create a profile. StreamWeaver no longer needs a saved profile at all: it turns any pane into a browser pane itself by overriding `"Custom Command" => "Browser"` in the split's `profile_customizations` (the exact property iTerm2's own built-in "Web Browser" profile is defined with). The `browser_profile` dependency probe, its dependency-report row, and the "profile not found" remediation hints are removed as no longer applicable.
-- **Dependency check now names iTerm2's Browser Plugin and its Advanced setting, the two prerequisites the profile override can't bypass** - a second field report showed a tester who'd installed the plugin still couldn't get browser panes: iTerm2's own docs confirm the Profile Type / browser feature is gated on the separately-downloaded Browser Plugin (`iterm2.com/browser-plugin.html`) and an "Enable browser-style profiles" Advanced setting (ships enabled). `get-started`'s dependency report gained two more advisory probes (`ITerm.browser_plugin_available?`, detected the same way iTerm2 itself locates the plugin, by bundle identifier via `mdfind`; `ITerm.browser_style_profiles_enabled?`, reading the Advanced setting's preference key directly) plus matching remediation text and a targeted fallback hint when the controller window can't open.
-
-## [0.3.1] - 2026-09-04
+## [0.3.1] - 2026-09-11
 
 ### Added
 - **Canvas bridge auto-heal** - every canvas command now detects a bridge left running on older code (after a gem upgrade or a dev `rake install`) and transparently restarts it, preserving all sessions via snapshot/restore. One line on stderr says it happened; `SW_NO_AUTO_RESTART=1` opts out. Ends the "stale bridge" class of 500s.
@@ -19,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Canvas bridge 500s on multibyte content when spawned from a locale-less env** - a bridge (or the University listener) spawned detached from a parent process whose env lacked `LANG`/`LC_ALL`/`LC_CTYPE` — e.g. the staleness auto-heal's restart — booted with `Encoding.default_external` falling back to `US-ASCII`, so any push containing an em-dash, checkmark, or other multibyte text raised `Encoding::CompatibilityError` on every render. Both spawn paths now force UTF-8 at boot (`-E UTF-8` plus an explicit encoding preamble) and pass a sane locale to anything they shell out to.
+- **No more "Web Browser" profile dependency for the iTerm2 canvas window** - a fresh macOS/iTerm2 install (only the "Default" profile present) previously failed `open_browser_window`/`panel`'s split with `INVALID_PROFILE_NAME`, and the old remediation text wrongly told a tester on iTerm2 3.6+ to "update iTerm2" when the real fix was to manually create a profile. StreamWeaver no longer needs a saved profile at all: it turns any pane into a browser pane itself by overriding `"Custom Command" => "Browser"` in the split's `profile_customizations` (the exact property iTerm2's own built-in "Web Browser" profile is defined with). The `browser_profile` dependency probe, its dependency-report row, and the "profile not found" remediation hints are removed as no longer applicable.
+- **Dependency check now names iTerm2's Browser Plugin and its Advanced setting, the two prerequisites the profile override can't bypass** - a second field report showed a tester who'd installed the plugin still couldn't get browser panes: iTerm2's own docs confirm the Profile Type / browser feature is gated on the separately-downloaded Browser Plugin (`iterm2.com/browser-plugin.html`) and an "Enable browser-style profiles" Advanced setting (ships enabled). `get-started`'s dependency report gained two more advisory probes (`ITerm.browser_plugin_available?`, detected the same way iTerm2 itself locates the plugin, by bundle identifier via `mdfind`; `ITerm.browser_style_profiles_enabled?`, reading the Advanced setting's preference key directly) plus matching remediation text and a targeted fallback hint when the controller window can't open.
 
 ## [0.3.0] - 2026-09-04
 
