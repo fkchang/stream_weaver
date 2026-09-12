@@ -13,14 +13,23 @@
 #   3. APIs & Services -> Credentials -> Create Credentials -> OAuth client ID
 #      -> Application type: Desktop app -> note the Client ID + Client Secret
 #
-# Usage: bin/webstore_get_refresh_token <client_id> <client_secret>
+# Usage: bin/webstore_get_refresh_token [client_id client_secret]
+#
+# With no arguments, reads the client id/secret from the same OAuth client
+# the "creator" secretary already uses for Blogger publishing
+# (~/.config/cultiv/blogger_credentials.json's "AI whisperer publish" client)
+# -- reusing an OAuth client across scopes is fine, only the *token* is
+# scope-bound, so this still mints a fresh chromewebstore-scoped refresh
+# token via its own consent screen. Pass client_id/client_secret explicitly
+# to use a different client instead.
 #
 # Uses the loopback-redirect installed-app flow (Google retired the old
 # copy-paste "oob" flow in 2022) -- this script starts a one-shot local
-# server, you approve access in your own browser, Google redirects back to
-# it with the code, and it exchanges that for a refresh token itself. Has to
-# be run interactively by a human: the consent screen can only be approved
-# by the Chrome Web Store developer account holder.
+# server, opens your default browser to the consent screen (falls back to
+# printing the URL if that fails), Google redirects back to the local
+# server with the code, and it exchanges that for a refresh token itself.
+# Has to be run interactively by a human: the consent screen can only be
+# approved by the Chrome Web Store developer account holder.
 
 require "socket"
 require "net/http"
@@ -35,9 +44,21 @@ require "timeout"
 # exactly like a silent hang with nothing to act on. Force it.
 $stdout.sync = true
 
-CLIENT_ID, CLIENT_SECRET = ARGV
+BLOGGER_CREDENTIALS = File.expand_path("~/.config/cultiv/blogger_credentials.json")
+
+CLIENT_ID, CLIENT_SECRET =
+  if ARGV[0] && ARGV[1]
+    ARGV
+  elsif File.exist?(BLOGGER_CREDENTIALS)
+    creds = JSON.parse(File.read(BLOGGER_CREDENTIALS))
+    inner = creds["installed"] || creds["web"] || creds
+    puts "No client_id/secret given -- reusing the existing OAuth client from #{BLOGGER_CREDENTIALS}."
+    [inner["client_id"], inner["client_secret"]]
+  end
+
 unless CLIENT_ID && CLIENT_SECRET
-  abort "Usage: bin/webstore_get_refresh_token <client_id> <client_secret>"
+  abort "Usage: bin/webstore_get_refresh_token [client_id client_secret]\n" \
+        "(no Blogger credentials found at #{BLOGGER_CREDENTIALS} to default from)"
 end
 
 SCOPE = "https://www.googleapis.com/auth/chromewebstore"
@@ -62,6 +83,15 @@ puts <<~MSG
   #{auth_url}
 
 MSG
+
+# Best-effort: `open` is macOS-only and this only ever runs on Forrest's
+# Mac, but a failure here (or a headless box) must not stop the flow --
+# the URL is already printed above regardless.
+begin
+  system("open", auth_url, out: File::NULL, err: File::NULL)
+rescue StandardError
+  nil
+end
 
 client =
   begin
