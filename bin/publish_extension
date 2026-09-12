@@ -12,31 +12,49 @@
 #
 # Without --publish, the zip is uploaded as a draft only (matches "Save
 # draft" in the console) -- nothing goes live until you pass --publish or
-# click Publish yourself in the dashboard. Requires env vars:
-#   CHROME_WEBSTORE_CLIENT_ID
-#   CHROME_WEBSTORE_CLIENT_SECRET
-#   CHROME_WEBSTORE_REFRESH_TOKEN
+# click Publish yourself in the dashboard.
+#
+# Credentials: reads ~/.config/cultiv/chromewebstore_token.yaml (written by
+# bin/webstore_get_refresh_token) if present, otherwise falls back to env
+# vars CHROME_WEBSTORE_CLIENT_ID / CHROME_WEBSTORE_CLIENT_SECRET /
+# CHROME_WEBSTORE_REFRESH_TOKEN.
 
 require "net/http"
 require "uri"
 require "json"
+require "yaml"
 
 EXTENSION_ID = "odjjednfpfiagefgpcfdlelldphmpcgj" # StreamWeaver Doc Viewer
+TOKEN_FILE = File.expand_path("~/.config/cultiv/chromewebstore_token.yaml")
 
 zip_path = ARGV.find { |a| !a.start_with?("--") }
 do_publish = ARGV.include?("--publish")
 abort "Usage: bin/publish_extension <zip_path> [--publish]" unless zip_path
 abort "No such file: #{zip_path}" unless File.exist?(zip_path)
 
-%w[CHROME_WEBSTORE_CLIENT_ID CHROME_WEBSTORE_CLIENT_SECRET CHROME_WEBSTORE_REFRESH_TOKEN].each do |var|
-  abort "Missing env var #{var} -- run bin/webstore_get_refresh_token first." if ENV[var].to_s.empty?
+CREDENTIALS =
+  if File.exist?(TOKEN_FILE)
+    YAML.load_file(TOKEN_FILE)
+  else
+    {
+      "client_id" => ENV["CHROME_WEBSTORE_CLIENT_ID"],
+      "client_secret" => ENV["CHROME_WEBSTORE_CLIENT_SECRET"],
+      "refresh_token" => ENV["CHROME_WEBSTORE_REFRESH_TOKEN"]
+    }
+  end
+
+%w[client_id client_secret refresh_token].each do |key|
+  next unless CREDENTIALS[key].to_s.empty?
+
+  abort "Missing #{key} -- no #{TOKEN_FILE} and no CHROME_WEBSTORE_#{key.upcase} env var. " \
+        "Run bin/webstore_get_refresh_token first."
 end
 
 def access_token
   response = Net::HTTP.post_form(URI("https://oauth2.googleapis.com/token"), {
-    "client_id" => ENV.fetch("CHROME_WEBSTORE_CLIENT_ID"),
-    "client_secret" => ENV.fetch("CHROME_WEBSTORE_CLIENT_SECRET"),
-    "refresh_token" => ENV.fetch("CHROME_WEBSTORE_REFRESH_TOKEN"),
+    "client_id" => CREDENTIALS.fetch("client_id"),
+    "client_secret" => CREDENTIALS.fetch("client_secret"),
+    "refresh_token" => CREDENTIALS.fetch("refresh_token"),
     "grant_type" => "refresh_token"
   })
   body = JSON.parse(response.body)

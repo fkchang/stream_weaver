@@ -36,6 +36,8 @@ require "net/http"
 require "uri"
 require "json"
 require "timeout"
+require "yaml"
+require "fileutils"
 
 # Ruby only line-buffers STDOUT when it's a live TTY; piped or backgrounded
 # (e.g. run via a harness that captures output to a file) it's fully
@@ -45,6 +47,7 @@ require "timeout"
 $stdout.sync = true
 
 BLOGGER_CREDENTIALS = File.expand_path("~/.config/cultiv/blogger_credentials.json")
+TOKEN_FILE = File.expand_path("~/.config/cultiv/chromewebstore_token.yaml")
 
 CLIENT_ID, CLIENT_SECRET =
   if ARGV[0] && ARGV[1]
@@ -122,10 +125,15 @@ response = Net::HTTP.post_form(URI("https://oauth2.googleapis.com/token"), {
 
 body = JSON.parse(response.body)
 if body["refresh_token"]
-  puts "\nSuccess. Refresh token (save this somewhere safe -- it does not expire, and Google won't show it again):\n\n"
-  puts body["refresh_token"]
-  puts "\nSet it as CHROME_WEBSTORE_REFRESH_TOKEN for bin/publish_extension, along with"
-  puts "CHROME_WEBSTORE_CLIENT_ID and CHROME_WEBSTORE_CLIENT_SECRET."
+  FileUtils.mkdir_p(File.dirname(TOKEN_FILE))
+  File.write(TOKEN_FILE, YAML.dump(
+    "client_id" => CLIENT_ID,
+    "client_secret" => CLIENT_SECRET,
+    "refresh_token" => body["refresh_token"]
+  ))
+  File.chmod(0o600, TOKEN_FILE)
+  puts "\nSuccess. Saved to #{TOKEN_FILE} (mode 600) -- bin/publish_extension reads it automatically."
+  puts "It does not expire and Google won't show it again, so keep that file around."
 else
   warn "No refresh_token in response -- full response:"
   warn JSON.pretty_generate(body)
