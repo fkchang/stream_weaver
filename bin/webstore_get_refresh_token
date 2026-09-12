@@ -26,6 +26,14 @@ require "socket"
 require "net/http"
 require "uri"
 require "json"
+require "timeout"
+
+# Ruby only line-buffers STDOUT when it's a live TTY; piped or backgrounded
+# (e.g. run via a harness that captures output to a file) it's fully
+# buffered instead, so the "open this URL" message below could sit
+# unflushed while the very next line blocks on TCPServer#accept -- looking
+# exactly like a silent hang with nothing to act on. Force it.
+$stdout.sync = true
 
 CLIENT_ID, CLIENT_SECRET = ARGV
 unless CLIENT_ID && CLIENT_SECRET
@@ -55,7 +63,12 @@ puts <<~MSG
 
 MSG
 
-client = server.accept
+client =
+  begin
+    Timeout.timeout(300) { server.accept }
+  rescue Timeout::Error
+    abort "\nNo redirect received within 5 minutes -- did you open the URL above? Re-run to try again."
+  end
 request_line = client.gets
 code = request_line[/[?&]code=([^&\s]+)/, 1]
 # Drain the rest of the request so the browser doesn't hang waiting on us.
