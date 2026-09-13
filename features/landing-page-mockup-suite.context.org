@@ -1,0 +1,42 @@
+#+TITLE: landing-page-mockup-suite: epic wiki (read FIRST via `tyrion epic-context show --story <slug>`)
+#+DATE: 2026-09-13
+
+* Where the knowledge already is
+- Baalda visual reference: https://www.baalda.com/
+- Existing editorial DSL: examples/components/prd_dsl.rb
+- Existing review DSL: examples/components/design_review_dsl.rb
+- Existing visual companion example: examples/visual_skills/explainer_demo.rb
+- Backend-less component guidance: docs/frontend-only.md
+- Org conversion implementation and coverage: lib/stream_weaver/org/reader.rb, lib/stream_weaver/org/writer.rb, spec/cli_org_spec.rb, spec/org/
+- Canonical TLPS definition was retrieved through UKF from the registered research-results wiki.
+
+* Verified facts
+- The current committed base is aa86d59c49145b669d163598f1e4100df0b9522e on 2026-09-13.
+- The primary checkout is dirty and main is six commits ahead of origin/main; implementation belongs on the isolated codex/streamweaver-landing-pages branch.
+- StreamWeaver already has editorial document, visual companion, and plan/code-review examples; this epic composes them and adds no framework capability.
+- Canonical TLPS means Triumvirate-Law Pareto SDRD: build the minimum useful experiment with Matt's, Forrest's, and Gloria's laws as hard constraints; prove one end-to-end loop before funding more.
+- Baalda's inspected landing page uses near-white/gray surfaces, oversized black uppercase editorial sans headlines, mono eyebrow text, thin rules, restrained pill links, and generous whitespace.
+
+* Gotchas already paid for
+- Do not launch one server per page. Use one app/server or one canvas shelf with shared navigation.
+- Static/exported surfaces must avoid controls that appear interactive but require a live bridge or server. Prefer the canvas-safe component set.
+- The product claim is qualitative. Do not invent token, cost, speed, or percentage savings.
+- Org expressiveness work is a parallel lane. Preserve a clean extension seam and record findings; do not change Org or framework code here.
+- Keep the experiment quick: one visual system, six linked pages, no animation clone or elaborate design tournament.
+- Static demo panels must not look actionable when they are inert, and navigation targets must truly work.
+
+- Discovery recall: disc-093 is folded into the canvas-safe/export criteria; disc-138 overlaps through Codex Visual Companion distribution but remains open and out of scope for these local mockups.
+
+* Lanes
+| Lane | Stories | Builder | Why one lane |
+|---+---+---+---|
+| Mockup suite | build-six-page-landing-suite | one isolated builder, then independent copy review | Shared CSS, navigation, and preview wiring make the six pages one cohesive deliverable. |
+
+* Instrument
+| Story | Builder | Start | End | Wall-clock | Gate attempts | Rediscoveries |
+|---+---+---+---+---+---+---|
+
+* Learnings
+#+BEGIN_COMMENT
+Append only via: tyrion epic-context append --story <slug> "<what you learned> (file:line)"
+#+END_COMMENT
