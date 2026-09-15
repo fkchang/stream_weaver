@@ -801,7 +801,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
       expect(mock_view).to receive(:input).with(
         hash_including(
           type: "checkbox",
-          name: "selected",
+          name: "selected[]",
           value: "email_1",
           "x-model" => "selected"
         )
@@ -809,7 +809,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
       expect(mock_view).to receive(:input).with(
         hash_including(
           type: "checkbox",
-          name: "selected",
+          name: "selected[]",
           value: "email_2",
           "x-model" => "selected"
         )

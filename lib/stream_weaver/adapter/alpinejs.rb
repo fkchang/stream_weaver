@@ -700,7 +700,13 @@ module StreamWeaver
             view.label(class: "checkbox-item") do
               view.input(
                 type: "checkbox",
-                name: key.to_s,
+                # Bracketed name is load-bearing: hx-include="[x-model]" submits every
+                # checked box in the group under this one shared name. Without "[]",
+                # Rack::Utils.parse_nested_query keeps only the LAST duplicate key
+                # ("a=1&a=2" -> {"a"=>"2"}), so checking two boxes collapsed the whole
+                # group down to one value server-side (2026-09-14, cultiv-ai daily-checkin
+                # people-to-touch/now-tasks selection -- confirmed via Rack::Utils repro).
+                name: "#{key}[]",
                 value: item.value,
                 checked: current_values.include?(item.value),
                 "x-model" => key.to_s,
