@@ -36,13 +36,23 @@ module StreamWeaver
       # modular loader cannot become a false success on a later require.
       # Restart the process after correcting an installed extension.
       #
-      # `specifications` and `requireer` are injectable so callers can verify
-      # extension behavior without changing the process-wide RubyGems state.
-      def discover(specifications: Gem::Specification.each, requireer: Kernel.method(:require))
+      # `specifications`, `loaded_specs`, `resolver`, and `requireer` are
+      # injectable so callers can verify extension behavior without changing
+      # the process-wide RubyGems state.
+      def discover(
+        specifications: Gem::Specification.each,
+        loaded_specs: Gem.loaded_specs,
+        resolver: nil,
+        requireer: Kernel.method(:require)
+      )
         loaded = []
         failures = []
 
-        metadata_loaders(specifications).each do |gem_name, loader|
+        metadata_loaders(
+          specifications,
+          loaded_specs: loaded_specs,
+          resolver: resolver
+        ).each do |specification, gem_name, loader|
           key = [gem_name, loader].freeze
           if (cached_result = @loader_results[key])
             append_cached_result(cached_result, loaded, failures)
@@ -55,6 +65,7 @@ module StreamWeaver
           @staged_extensions = {}
 
           begin
+            activate_specification!(specification)
             requireer.call(loader)
             commit_staged_extensions!
             result = Loader.new(gem_name: gem_name, loader: loader).freeze
@@ -121,13 +132,62 @@ module StreamWeaver
 
       private
 
-      def metadata_loaders(specifications)
-        specifications.filter_map do |specification|
+      def metadata_loaders(specifications, loaded_specs:, resolver:)
+        specifications.group_by(&:name).filter_map do |gem_name, candidates|
+          specification = selected_specification(
+            gem_name,
+            candidates,
+            loaded_specs: loaded_specs,
+            resolver: resolver
+          )
           loader = specification.metadata&.fetch(METADATA_KEY, nil)
           next unless loader.is_a?(String) && !loader.empty?
 
-          [immutable_string(specification.name), immutable_string(loader)]
-        end.sort_by { |gem_name, loader| [gem_name, loader] }
+          [specification, immutable_string(specification.name), immutable_string(loader)]
+        end.sort_by { |_specification, gem_name, loader| [gem_name, loader] }
+      end
+
+      # A gem can be installed at multiple versions. Requiring a loader from
+      # one version while RubyGems has activated another creates an accidental
+      # mixed dependency tree, so select exactly one specification first.
+      def selected_specification(gem_name, candidates, loaded_specs:, resolver:)
+        active = loaded_specs[gem_name]
+        return active if active && candidates.any? { |candidate| same_specification?(candidate, active) }
+
+        resolved = resolver ? resolver.call(gem_name) : resolve_installed_specification(gem_name)
+        return resolved if resolved && candidates.any? { |candidate| same_specification?(candidate, resolved) }
+
+        candidates.max_by { |candidate| [specification_version(candidate), specification_identity(candidate)] }
+      end
+
+      def resolve_installed_specification(gem_name)
+        Gem::Specification.find_by_name(gem_name)
+      rescue Gem::LoadError
+        nil
+      end
+
+      def same_specification?(left, right)
+        left.equal?(right) || specification_identity(left) == specification_identity(right)
+      end
+
+      def specification_version(specification)
+        return specification.version if specification.respond_to?(:version)
+
+        Gem::Version.new('0')
+      end
+
+      def specification_identity(specification)
+        return specification.full_name.to_s if specification.respond_to?(:full_name)
+
+        specification.name.to_s
+      end
+
+      # Gem::Specification.each enumerates installed gems, including gems Ruby
+      # has not activated yet. Activating the contributing gem first puts its
+      # lib directory on the require path before Zeitwerk delegates the loader
+      # to Kernel#require. Test fixtures need not emulate RubyGems activation.
+      def activate_specification!(specification)
+        specification.activate if specification.respond_to?(:activate)
       end
 
       def commit_staged_extensions!

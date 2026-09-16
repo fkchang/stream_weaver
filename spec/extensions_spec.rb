@@ -6,6 +6,15 @@ require 'tmpdir'
 
 RSpec.describe StreamWeaver::Extensions do
   FakeSpecification = Struct.new(:name, :metadata, keyword_init: true)
+  ActivatableSpecification = Struct.new(:name, :metadata, :version, :activations, keyword_init: true) do
+    def activate
+      activations << full_name
+    end
+
+    def full_name
+      "#{name}-#{version}"
+    end
+  end
 
   around do |example|
     described_class.reset!
@@ -20,6 +29,93 @@ RSpec.describe StreamWeaver::Extensions do
   end
 
   describe '.discover' do
+    it 'activates an installed gem before requiring its metadata-declared loader' do
+      activated = []
+      specification = Class.new do
+        attr_reader :name, :metadata
+
+        define_method(:initialize) do
+          @name = 'installed_extension'
+          @metadata = { 'stream_weaver.extensions.v1' => 'installed_extension/stream_weaver' }
+        end
+
+        define_method(:activate) { activated << name }
+      end.new
+
+      2.times do
+        described_class.discover(
+          specifications: [specification],
+          requireer: lambda { |_loader|
+            expect(activated).to eq(['installed_extension'])
+            described_class.register(:installed_extension)
+          }
+        )
+      end
+
+      expect(activated).to eq(['installed_extension'])
+      expect(described_class).to be_registered(:installed_extension)
+    end
+
+    it 'uses the already active version when a newer installed version advertises another loader' do
+      activations = []
+      active = ActivatableSpecification.new(
+        name: 'diagram_intent',
+        version: Gem::Version.new('1.0.0'),
+        activations: activations,
+        metadata: { 'stream_weaver.extensions.v1' => 'diagram_intent/v1_extension' }
+      )
+      newer = ActivatableSpecification.new(
+        name: 'diagram_intent',
+        version: Gem::Version.new('2.0.0'),
+        activations: activations,
+        metadata: { 'stream_weaver.extensions.v1' => 'diagram_intent/v2_extension' }
+      )
+      required = []
+
+      described_class.discover(
+        specifications: [newer, active],
+        loaded_specs: { 'diagram_intent' => active },
+        resolver: ->(_gem_name) { raise 'the active version should win' },
+        requireer: lambda { |loader|
+          required << loader
+          described_class.register(:diagram_intent)
+        }
+      )
+
+      expect(required).to eq(['diagram_intent/v1_extension'])
+      expect(activations).to eq(['diagram_intent-1.0.0'])
+    end
+
+    it 'uses RubyGems resolved version when installed versions advertise different loaders' do
+      activations = []
+      older = ActivatableSpecification.new(
+        name: 'diagram_intent',
+        version: Gem::Version.new('1.0.0'),
+        activations: activations,
+        metadata: { 'stream_weaver.extensions.v1' => 'diagram_intent/v1_extension' }
+      )
+      resolved = ActivatableSpecification.new(
+        name: 'diagram_intent',
+        version: Gem::Version.new('2.0.0'),
+        activations: activations,
+        metadata: { 'stream_weaver.extensions.v1' => 'diagram_intent/v2_extension' }
+      )
+      required = []
+
+      described_class.discover(
+        specifications: [resolved, older],
+        loaded_specs: {},
+        resolver: ->(gem_name) { gem_name == 'diagram_intent' ? resolved : nil },
+        requireer: lambda { |loader|
+          required << loader
+          described_class.register(:diagram_intent)
+        }
+      )
+
+      expect(required).to eq(['diagram_intent/v2_extension'])
+      expect(activations).to eq(['diagram_intent-2.0.0'])
+    end
+
     it 'requires only metadata-declared loaders in deterministic gem-name order' do
       required = []
 
