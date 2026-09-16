@@ -554,6 +554,30 @@ end
 
 ---
 
+## Gem extensions
+
+Installed gems can opt into StreamWeaver through one versioned gemspec metadata entry:
+
+```ruby
+spec.metadata['stream_weaver.extensions.v1'] = 'my_gem/stream_weaver'
+```
+
+The loader gives its contribution a stable ID:
+
+```ruby
+StreamWeaver.register_extension(:my_gem)
+```
+
+`StreamWeaver.discover_extensions` loads only gems that declare that metadata, in gem-name
+order. Each loader is attempted once per process. A broken loader is returned as a structured
+failure without preventing other extensions or built-in features from loading; restart the
+process after correcting or installing a broken extension. Duplicate or blank IDs fail loudly.
+
+This hook is intentionally generic. StreamWeaver does not depend on integration gems, and an
+integration gem can keep its adapter behind an explicit optional require.
+
+---
+
 ## More Resources
 
 - [Canvas Mode Documentation](docs/canvas-roadmap.md)

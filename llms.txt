@@ -1215,6 +1215,15 @@ end.run!
 - **State**: Server-side, persisted in session cookies
 - **Updates**: HTMX swaps `#app-container` innerHTML on state changes; SSE pushes for `every` timers
 
+### Optional gem extensions
+
+An integration gem opts in with gemspec metadata
+`stream_weaver.extensions.v1 = "my_gem/stream_weaver"`. Its loader calls
+`StreamWeaver.register_extension(:stable_id)`. Call `StreamWeaver.discover_extensions` once at
+the host boundary; discovery is deterministic by gem name and never scans arbitrary load-path
+files. Loader successes and structured failures are cached once per process, so restart after
+fixing a broken extension. StreamWeaver itself must not depend on the integration gem.
+
 ## Common Mistakes
 
 1. **Forgetting state is a hash** - Use `state[:key]`, not `state.key`

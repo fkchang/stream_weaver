@@ -48,6 +48,8 @@ require_relative "stream_weaver/cli"
 module StreamWeaver
   class Error < StandardError; end
 
+  require_relative "stream_weaver/extensions"
+
   # Stores the last generated app for service mode to capture
   class << self
     attr_accessor :last_generated_app

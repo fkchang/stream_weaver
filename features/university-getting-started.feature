@@ -132,3 +132,45 @@ Feature: University Getting Started — one door, premier iTerm experience, driv
     When the developer blurb is followed verbatim
     Then every step reaches its payoff and progress resumes after closing and reopening
     And any friction hit is filed as a story or discovery before the epic closes
+
+  Scenario: university-extension-registry
+    # Intent: Let installed gems explicitly contribute StreamWeaver capabilities without hard-coded dependencies.
+    # RIGOR: strict — loader ordering, isolation, and duplicate identity can fail silently
+    Given an installed gem declares a versioned StreamWeaver extension loader in gem metadata
+    When StreamWeaver discovers extensions
+    Then only metadata-declared loaders are required in deterministic gem-name order
+    And repeated discovery is idempotent
+    And duplicate extension IDs raise an actionable duplicate-registration error
+    And a broken extension is reported without preventing built-in University courses from loading
+
+  Scenario: university-course-catalog
+    # Intent: Let University display built-in and integration-owned courses through one validated contract.
+    # RIGOR: strict — provider normalization and validation define a new public extension contract
+    Given StreamWeaver has its built-in course and zero or more registered course providers
+    When University builds its course catalog
+    Then every course has a unique ID, title, blurb, ordered steps, and demo resolver
+    And the existing Getting Started course remains behavior-compatible
+    And registered courses appear on the course shelf
+    And absent integrations leave no dead or placeholder course
+    And invalid provider data is rejected with the provider ID and failing field
+
+  Scenario: university-multi-course-execution
+    # Intent: Run, resume, complete, reset, and resolve demos independently for each course.
+    # RIGOR: strict — course identity must survive every CLI, progress, runner, and listener path
+    Given the catalog contains more than one course
+    When a user runs University commands for a selected course
+    Then progress is persisted under that course ID without changing another course
+    And the runner sends the selected course step prompt
+    And university-demo resolves that course's packaged demo
+    And commands without a course ID retain the current Getting Started behavior
+
+  Scenario: slim-graph-r-university-provider
+    # Intent: Teach diagram intent through installed SlimGraphR demos while keeping both gems independent.
+    # RIGOR: strict — cross-gem packaging and discovery need isolated-install evidence
+    Given StreamWeaver and SlimGraphR are installed
+    When StreamWeaver discovers declared extensions
+    Then University lists "Diagram Intent with SlimGraphR"
+    And its packaged steps demonstrate standalone rendering, semantic diagram choices, and StreamWeaver composition and export
+    And each demo resolves from the installed SlimGraphR gem without a source checkout
+    And SlimGraphR still installs and renders without StreamWeaver
+    And StreamWeaver still installs and runs University without SlimGraphR
