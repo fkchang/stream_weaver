@@ -11,11 +11,13 @@ module StreamWeaver
     # deliberately outside this catalog: this layer only validates and lists.
     module CourseCatalog
       class InvalidProviderError < StreamWeaver::Error; end
+      class UnknownCourseError < StreamWeaver::Error; end
 
       class << self
         # Returns built-ins first, then provider courses ordered by extension
         # ID. A provider's own course sequence stays meaningful and is kept.
-        def build(extensions: Extensions.all)
+        def build(extensions: nil)
+          extensions ||= discovered_extensions
           courses = [built_in_course]
           extensions.sort_by(&:id).each do |extension|
             provider = extension.course_provider
@@ -29,7 +31,29 @@ module StreamWeaver
           courses.freeze
         end
 
+        # Resolves a stable course identifier to its normalized definition.
+        # Omitting the identifier is the compatibility door for every
+        # pre-catalog caller: it continues to select Getting Started.
+        def fetch(course_id = nil, extensions: nil)
+          courses = build(extensions: extensions)
+          selected_id = course_id.nil? ? 'getting-started' : course_id.to_s
+          courses.find { |course| course.id == selected_id } ||
+            raise(
+              UnknownCourseError,
+              "Unknown University course: #{selected_id}. " \
+              "Available courses: #{courses.map(&:id).join(', ')}."
+            )
+        end
+
         private
+
+        # CourseCatalog is the single read boundary for University courses.
+        # Discover before taking the registry snapshot so fresh CLI, listener,
+        # and canvas processes see installed metadata-declared providers.
+        def discovered_extensions
+          StreamWeaver.discover_extensions
+          Extensions.all
+        end
 
         def built_in_course
           Course::Definition.new(
@@ -61,7 +85,7 @@ module StreamWeaver
           invalid!(provider_id, :course, 'must be a Hash') unless raw_course.is_a?(Hash)
           raw = raw_course
 
-          id = normalized_text(raw, :id, provider_id)
+          id = normalized_id(raw, provider_id)
           title = normalized_text(raw, :title, provider_id)
           blurb = normalized_text(raw, :blurb, provider_id)
           steps = raw_value(raw, :steps)
@@ -99,6 +123,16 @@ module StreamWeaver
           end
 
           value.to_s.strip.dup.freeze
+        end
+
+        def normalized_id(raw, provider_id)
+          value = raw_value(raw, :id)
+          unless (value.is_a?(String) || value.is_a?(Symbol)) &&
+                 /\A[a-z][a-z0-9]*(?:-[a-z0-9]+)*\z/.match?(value.to_s)
+            invalid!(provider_id, :id, 'must be a lowercase kebab slug beginning with a letter')
+          end
+
+          value.to_s.dup.freeze
         end
 
         def raw_value(raw, field)

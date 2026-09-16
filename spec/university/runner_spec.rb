@@ -3,9 +3,12 @@
 require 'spec_helper'
 require 'tmpdir'
 require 'json'
+require 'open3'
+require 'rbconfig'
 require 'stream_weaver/iterm'
 require 'stream_weaver/university/runner'
 require 'stream_weaver/university/course'
+require 'stream_weaver/university/course_catalog'
 require 'stream_weaver/university/progress'
 require_relative '../support/env_helper'
 
@@ -45,6 +48,17 @@ RSpec.describe StreamWeaver::University::Runner do
 
   def step_1_prompt
     StreamWeaver::University::Course::GETTING_STARTED_STEPS.first[:prompt]
+  end
+
+  it 'does not introduce a circular load when the public entrypoint is required' do
+    lib_dir = File.expand_path('../../lib', __dir__)
+    _stdout, stderr, status = Open3.capture3(
+      RbConfig.ruby,
+      '-I', lib_dir,
+      '-e', "require 'stream_weaver'"
+    )
+
+    expect(status).to be_success, stderr
   end
 
   describe '.worker' do
@@ -153,6 +167,53 @@ RSpec.describe StreamWeaver::University::Runner do
       expect(result.status).to eq(:send_failed)
       expect(result.prompt).to eq(step_1_prompt)
       expect(progress.requested_at(1)).to be_nil
+    end
+  end
+
+  describe '.run_step! — selected provider course' do
+    let(:provider_course) do
+      {
+        id: 'diagram-intent',
+        title: 'Diagram Intent',
+        blurb: 'Choose diagrams by intent.',
+        steps: [
+          { number: 1, title: 'Choose a diagram', prompt: 'Run the provider prompt.' }
+        ],
+        demo_resolver: ->(name) { name }
+      }
+    end
+
+    before do
+      earlier_course = provider_course.merge(
+        id: 'first-course',
+        title: 'First Course',
+        steps: [{ number: 1, title: 'First step', prompt: 'Do not dispatch this prompt.' }]
+      )
+      StreamWeaver.register_extension(
+        :slim_graph_r,
+        course_provider: Struct.new(:courses).new([earlier_course, provider_course])
+      )
+      write_worker(session_id: 'worker-session-1')
+      allow(StreamWeaver::ITerm).to receive(:session_alive?).and_return(true)
+      allow(StreamWeaver::ITerm).to receive(:send_to_session).and_return(true)
+    end
+
+    after { StreamWeaver::Extensions.reset! }
+
+    it 'dispatches by stable course ID rather than provider position' do
+      selected_progress = StreamWeaver::University::Progress.load(course_id: 'diagram-intent')
+
+      result = described_class.run_step!(1, course_id: 'diagram-intent', progress: selected_progress)
+
+      expect(StreamWeaver::ITerm).to have_received(:send_to_session)
+        .with('worker-session-1', 'Run the provider prompt.')
+      expect(result.course_id).to eq('diagram-intent')
+    end
+
+    it 'raises an actionable error for an unknown selected course' do
+      expect do
+        described_class.run_step!(1, course_id: 'missing-course')
+      end.to raise_error(StreamWeaver::University::CourseCatalog::UnknownCourseError, /missing-course/)
     end
   end
 

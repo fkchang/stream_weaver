@@ -11,6 +11,8 @@ require 'stream_weaver/university/demos'
 # worker session ever needs a checkout of this repo (round-5 UAT,
 # 2026-09-03 -- one real session went looking for the source directory).
 RSpec.describe StreamWeaver::CLI do
+  DemoProvider = Struct.new(:courses)
+
   def capture_io
     old_stdout = $stdout
     old_stderr = $stderr
@@ -23,7 +25,31 @@ RSpec.describe StreamWeaver::CLI do
     $stderr = old_stderr
   end
 
+  def capture_exit
+    old_stdout = $stdout
+    old_stderr = $stderr
+    $stdout = StringIO.new
+    $stderr = StringIO.new
+    status = nil
+    begin
+      yield
+    rescue SystemExit => error
+      status = error.status
+    end
+    [$stdout.string, $stderr.string, status]
+  ensure
+    $stdout = old_stdout
+    $stderr = old_stderr
+  end
+
   describe '.university_demo' do
+    around do |example|
+      StreamWeaver::Extensions.reset!
+      example.run
+    ensure
+      StreamWeaver::Extensions.reset!
+    end
+
     it 'prints the absolute path of a demo inside the gem' do
       out, = capture_io { described_class.university_demo(['dashboard']) }
       path = out.strip
@@ -64,6 +90,66 @@ RSpec.describe StreamWeaver::CLI do
         out, = capture_io { described_class.university_demo([name]) }
         expect(File.exist?(out.strip)).to be(true), "#{name} is registered but missing"
       end
+    end
+
+    it 'resolves a demo through the explicitly selected course definition' do
+      demo = File.expand_path(__FILE__)
+      resolver = ->(_name) { demo }
+      StreamWeaver.register_extension(
+        :slim_graph_r,
+        course_provider: DemoProvider.new([
+          { id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
+            steps: [{ number: 1, title: 'Choose' }], demo_resolver: resolver }
+        ])
+      )
+      out, = capture_io do
+        described_class.run(['university-demo', 'dashboard', '--course', 'diagram-intent'])
+      end
+
+      expect(out.strip).to eq(demo)
+    end
+
+    it 'accepts the equals form of explicit course selection' do
+      demo = File.expand_path(__FILE__)
+      StreamWeaver.register_extension(
+        :slim_graph_r,
+        course_provider: DemoProvider.new([
+          { id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
+            steps: [{ number: 1, title: 'Choose' }], demo_resolver: ->(_name) { demo } }
+        ])
+      )
+      out, = capture_io do
+        described_class.run(['university-demo', 'dashboard', '--course=diagram-intent'])
+      end
+
+      expect(out.strip).to eq(demo)
+    end
+
+    it 'reports an unknown course ID and the available IDs' do
+      _out, err, status = capture_exit do
+        described_class.run(['university-demo', 'dashboard', '--course', 'missing'])
+      end
+      expect(status).to eq(1)
+      expect(err).to match(/Unknown University course: ["']?missing/)
+      expect(err).to include('getting-started')
+    end
+
+    it 'reports the selected provider and demo when its resolver fails' do
+      StreamWeaver.register_extension(
+        :slim_graph_r,
+        course_provider: DemoProvider.new([
+          { id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
+            steps: [{ number: 1, title: 'Choose' }],
+            demo_resolver: ->(_name) { raise LoadError, 'packaged data unavailable' } }
+        ])
+      )
+
+      out, err, status = capture_exit do
+        described_class.run(['university-demo', 'dashboard', '--course', 'diagram-intent'])
+      end
+      expect(status).to eq(1)
+      expect(out).to eq('')
+      expect(err).to include('slim_graph_r', 'diagram-intent', 'diagram', 'packaged data unavailable')
     end
   end
 end

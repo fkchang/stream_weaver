@@ -718,14 +718,17 @@ module StreamWeaver
           streamweaver university-listener        Background process that makes the University
                        [start|stop|status]           canvas buttons work (get-started starts it)
           streamweaver university-reset [--yes]   Reset course progress (backed up to progress.yml.bak),
-                                                     close its demo canvas sessions, re-push the zero-state
-                                                     course list. Same as the canvas's own Reset button.
+                       [--course COURSE_ID]          selecting Getting Started when omitted,
+                                                     close Getting Started's demo sessions when selected,
+                                                     and re-push the zero-state course list.
           streamweaver university-demo [<name>]   Print the absolute path of a course demo file inside the
-                                                     installed gem (no name: list them). The course prompts
+                       [--course COURSE_ID]          selected course (Getting Started when omitted),
+                                                     installed gem (no name: list Getting Started demos). The prompts
                                                      run these; nothing is composed live.
           streamweaver university-done <N>        Mark step N done (same as clicking Mark done) and bring
-                                                     the University window forward. What every step's own
-                                                     closing ritual runs -- no click required from you.
+                       [--course COURSE_ID]          that course's University view forward,
+                                                     as every step's own closing ritual does -- no click
+                                                     required from you.
           streamweaver university-artifact        The course's record of what it created -- saved docs,
                        [list | add <ref>]            exported .org files, gists, demo canvas sessions.
                        [--step N] [--type T]         Docs and sessions record themselves; `add` is for a
@@ -3032,26 +3035,34 @@ module StreamWeaver
     # require one, and there would be nothing to close or re-push into.
     def self.university_reset(args)
       yes_flag = args.any? { |a| %w[-y --yes].include?(a) }
-      return puts("Aborted. No changes made.") unless yes_flag || university_reset_confirmed?
+      course_id = university_course_id(args)
+      university_course_definition(course_id) if course_id
+      return puts("Aborted. No changes made.") unless yes_flag || university_reset_confirmed?(course_id: course_id)
 
       progress_path = University::Progress.path
       had_progress = File.exist?(progress_path)
-      University::Progress.load.reset!
+      University::Progress.load(course_id: course_id).reset!
       puts(had_progress ? "Progress reset (backup: #{progress_path}.bak)" : "Progress reset (there was nothing to back up)")
 
       require_relative 'canvas/client'
       if Canvas::Client.bridge_running?
-        University::Listener.close_demo_sessions!
-        puts "Closed demo canvas sessions: #{University::Listener::DEMO_SESSION_NAMES.join(', ')}"
+        if course_id.nil? || course_id == University::Progress::DEFAULT_COURSE_ID
+          University::Listener.close_demo_sessions!
+          puts "Closed demo canvas sessions: #{University::Listener::DEMO_SESSION_NAMES.join(', ')}"
+        end
         # Listener.repush, not push_get_started_placeholder_canvas -- same
         # push, but this reuses the exact call the canvas's own Reset
         # button already makes instead of a second implementation of "read
         # canvas.rb, push it to the university session."
-        University::Listener.repush
+        course_id ? University::Listener.repush(course_id: course_id) : University::Listener.repush
         puts "Re-pushed the course list at its zero-state."
       else
         puts "(canvas bridge not running -- nothing to close or re-push)"
       end
+    rescue University::CourseCatalog::UnknownCourseError,
+           University::CourseCatalog::InvalidProviderError => error
+      $stderr.puts error.message
+      exit 1
     end
 
     # `streamweaver university-artifact add <ref>` / `list`: the manual door
@@ -3181,6 +3192,27 @@ module StreamWeaver
         skip_next = valued_flags.include?(arg)
         !arg.start_with?('-')
       end
+    end
+
+    # Returns the stable course identifier selected by either `--course ID`
+    # or `--course=ID`. A missing/blank value is a CLI error rather than an
+    # accidental fallback to Getting Started.
+    def self.university_course_id(args)
+      selected = flag_value(args, '--course')
+      course_flag_present = args.any? { |arg| arg == '--course' || arg.start_with?('--course=') }
+      return nil unless course_flag_present
+
+      if selected.nil? || selected.strip.empty? || selected.start_with?('-')
+        $stderr.puts 'Usage: --course COURSE_ID requires a course identifier.'
+        exit 1
+      end
+
+      selected
+    end
+
+    def self.university_course_definition(course_id)
+      require_relative 'university/course_catalog'
+      University::CourseCatalog.fetch(course_id)
     end
 
     # `streamweaver university-cleanup`: the course offers to take back
@@ -3387,27 +3419,51 @@ module StreamWeaver
     # looking for the source repo (round-5 UAT, 2026-09-03).
     def self.university_demo(args)
       require_relative 'university/demos'
-      name = args.find { |a| !a.start_with?('-') }
+      require_relative 'university/course_catalog'
+      course_id = university_course_id(args)
+      name = positional(args, valued_flags: %w[--course])
 
       unless name
+        if course_id
+          $stderr.puts "Usage: streamweaver university-demo <name> --course #{course_id}"
+          exit 1
+        end
         puts "Course demos (streamweaver university-demo <name> prints the path):"
         University::Demos::NAMES.each { |n| puts "  #{n}" }
         return
       end
 
-      path = University::Demos.path(name)
+      path = University::Demos.path(name, course_id: course_id)
       unless path
-        $stderr.puts "Unknown demo: #{name}"
-        $stderr.puts "Known demos: #{University::Demos::NAMES.join(', ')}"
+        if course_id
+          require_relative 'university/course_catalog'
+          course = University::CourseCatalog.fetch(course_id)
+          $stderr.puts "Course #{course.id.inspect} (provider #{course.provider_id.inspect}) does not provide demo #{name.inspect}."
+        else
+          $stderr.puts "Unknown demo: #{name}"
+          $stderr.puts "Known demos: #{University::Demos::NAMES.join(', ')}"
+        end
         exit 1
       end
 
       unless File.exist?(path)
-        $stderr.puts "Demo #{name} is registered but missing from the gem at #{path}"
+        if course_id
+          require_relative 'university/course_catalog'
+          course = University::CourseCatalog.fetch(course_id)
+          $stderr.puts "Course #{course.id.inspect} (provider #{course.provider_id.inspect}) resolved demo " \
+                       "#{name.inspect}, but its packaged file is missing at #{path}."
+        else
+          $stderr.puts "Demo #{name} is registered but missing from the gem at #{path}"
+        end
         exit 1
       end
 
       puts path
+    rescue University::CourseCatalog::UnknownCourseError,
+           University::CourseCatalog::InvalidProviderError,
+           University::Demos::ResolutionError => error
+      $stderr.puts error.message
+      exit 1
     end
 
     # `streamweaver university-done <N>`: the terminal door onto exactly
@@ -3421,11 +3477,23 @@ module StreamWeaver
     # Reuses `canvas_raise` for the "bring forward" half rather than a
     # second copy of its pane-vs-browser fallback logic.
     def self.university_done(args)
-      step_arg = args.find { |a| !a.start_with?('-') }
+      course_id = university_course_id(args)
+      step_arg = positional(args, valued_flags: %w[--course])
       step_number = step_arg.to_i if step_arg&.match?(/\A\d+\z/)
-      unless step_number && University::Course.step(step_number)
-        $stderr.puts "Usage: streamweaver university-done <step-number> " \
-                     "(1-#{University::Course::GETTING_STARTED_STEPS.size})"
+      if course_id
+        course = university_course_definition(course_id)
+        valid_steps = course.steps.map { |step| step[:number] || step['number'] }.compact.map(&:to_i)
+        valid_step = step_number && valid_steps.include?(step_number)
+      else
+        valid_step = step_number && University::Course.step(step_number)
+      end
+      unless valid_step
+        usage = if course_id
+          "Usage: streamweaver university-done <step-number> --course #{course_id} (#{valid_steps.join(', ')})"
+        else
+          "Usage: streamweaver university-done <step-number> (1-#{University::Course::GETTING_STARTED_STEPS.size})"
+        end
+        $stderr.puts usage
         exit 1
       end
 
@@ -3437,7 +3505,11 @@ module StreamWeaver
       # after -- canvas_raise prints its own confirmation ("Raised
       # 'university' in its iTerm pane"), so this never claims the raise
       # landed before finding out whether it did.
-      University::Listener.university_done!(step_number)
+      if course_id
+        University::Listener.university_done!(step_number, course_id: course_id)
+      else
+        University::Listener.university_done!(step_number)
+      end
       puts "Marked step #{step_number} done."
       begin
         canvas_raise(['university'])
@@ -3452,6 +3524,10 @@ module StreamWeaver
       end
     rescue Canvas::Client::NotRunningError, Canvas::Client::ConnectionError => e
       puts "Marked step #{step_number} done (progress saved), but could not reach the canvas bridge to bring it forward (#{e.message})."
+    rescue University::CourseCatalog::UnknownCourseError,
+           University::CourseCatalog::InvalidProviderError => error
+      $stderr.puts error.message
+      exit 1
     end
 
     # `streamweaver focus-me`: activates the CALLING terminal's own iTerm2
@@ -3479,10 +3555,10 @@ module StreamWeaver
       ITerm.activate_session(ITerm.current_session_guid)
     end
 
-    def self.university_reset_confirmed?
+    def self.university_reset_confirmed?(course_id: nil)
+      course_label = course_id ? "course #{course_id.inspect}" : 'University'
       get_started_confirm?(
-        "Reset University progress and close its demo canvas sessions " \
-        "(#{University::Listener::DEMO_SESSION_NAMES.join(', ')})? " \
+        "Reset #{course_label} progress#{course_id ? '' : " and close its demo canvas sessions (#{University::Listener::DEMO_SESSION_NAMES.join(', ')})"}? " \
         "Your current progress is backed up to progress.yml.bak.",
         default: false
       )

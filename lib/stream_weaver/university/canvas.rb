@@ -970,7 +970,7 @@ _body = proc do
     end
   end
 
-  # ---- Integration shelf: registered courses only, no execution yet --------
+  # ---- Integration courses --------------------------------------------------
   unless extension_courses.empty?
     div(class: "uni-divider") do
       phrase "More courses", class: "uni-divider__label"
@@ -978,15 +978,76 @@ _body = proc do
     end
 
     extension_courses.each do |course|
-      card(depth: :recessed, class: "uni-course uni-course--dormant") do
+      course_progress = StreamWeaver::University::Progress.load(course_id: course.id)
+      course_states = StreamWeaver::University::Canvas.step_states(course_progress, steps: course.steps)
+      course_done_count = course.steps.count { |step| course_progress.done?(step[:number]) }
+      course_complete = course_done_count == course.steps.size
+      course_last_run = course_progress.last_run
+
+      card(depth: :elevated, class: "uni-course") do
         card_header(class: "uni-course__bar") do
           div(class: "uni-course__dot") {}
           header2 course.title, class: "uni-course__name"
-          div(class: "uni-chip") do
-            phrase "Course"
+          chip_text = course_complete ? "Complete" : "Course"
+          phrase chip_text, class: "uni-chip#{' uni-chip--done' if course_complete}"
+        end
+
+        card_body(class: "uni-course__body") do
+          div(class: "uni-resume") do
+            phrase course.blurb, class: "uni-resume__lead"
+            phrase "#{course_done_count} of #{course.steps.size} done", class: "uni-resume__sub"
+          end
+
+          if course_last_run
+            run_status = course_last_run['status'].to_s
+            run_number = course_last_run['step'].to_i
+            run_sent = StreamWeaver::University::Runner.sent?(run_status)
+            run_step = course.steps.find { |step| step[:number].to_i == run_number }
+            div(class: "uni-run-notice uni-run-notice--#{run_sent ? 'sent' : 'degraded'}") do
+              phrase StreamWeaver::University::Runner.message_for(run_status, run_number),
+                     class: "uni-run-notice__msg"
+              if !run_sent && run_step && run_step[:prompt]
+                code_block run_step[:prompt], lang: "text", copy: true
+                phrase "Copy it, then paste it into the terminal where your agent is running and press Enter.",
+                       class: "uni-run-notice__hint"
+              end
+            end
+          end
+
+          course.steps.each do |step|
+            number = step[:number]
+            state = course_states[number]
+            label = StreamWeaver::University::Canvas.run_label(
+              course_progress,
+              course_last_run,
+              number
+            )
+            div(class: "uni-step uni-step--#{state}") do
+              div(class: "uni-step__mark") { phrase(state == :done ? "Done" : number.to_s) }
+              div do
+                header3 step[:title], class: "uni-step__title"
+                phrase (step[:payoff] || step[:title]), class: "uni-step__payoff"
+              end
+              div(class: "uni-step__actions") do
+                if state == :done
+                  button "Repeat", id: "repeat-course-#{course.id}-#{number}",
+                         class: "uni-btn uni-btn--quiet"
+                else
+                  button label, id: "run-course-#{course.id}-#{number}",
+                         class: "uni-btn #{state == :current ? 'uni-btn--outline' : 'uni-btn--quiet'}"
+                  if state == :current
+                    button "Mark done", id: "mark-done-course-#{course.id}-#{number}",
+                           class: "uni-btn uni-btn--quiet"
+                  end
+                end
+              end
+            end
+          end
+
+          div(class: "uni-reset") do
+            button "Reset course", id: "reset-course-#{course.id}", class: "uni-btn uni-btn--quiet"
           end
         end
-        phrase course.blurb, class: "uni-course__blurb"
       end
     end
   end

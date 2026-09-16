@@ -117,5 +117,45 @@ RSpec.describe StreamWeaver::CLI do
         expect(progress.done?(1)).to be(true)
       end
     end
+
+
+    it 'resets only the explicitly selected course through direct CLI dispatch' do
+      definition = StreamWeaver::University::Course::Definition.new(
+        id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
+        steps: [{ number: 1, title: 'Choose' }], demo_resolver: ->(_name) {}, provider_id: 'spec'
+      )
+      allow(described_class).to receive(:university_course_definition).and_return(definition)
+      getting_started = StreamWeaver::University::Progress.load(course_id: 'getting-started')
+      diagram_intent = StreamWeaver::University::Progress.load(course_id: 'diagram-intent')
+      getting_started.mark_done!(1)
+      diagram_intent.mark_done!(1)
+      allow(StreamWeaver::Canvas::Client).to receive(:bridge_running?).and_return(false)
+
+      capture_io do
+        described_class.run(['university-reset', '--course', 'diagram-intent', '--yes'])
+      end
+
+      expect(StreamWeaver::University::Progress.load(course_id: 'diagram-intent').done_steps).to eq([])
+      expect(StreamWeaver::University::Progress.load(course_id: 'getting-started').done_steps).to eq([1])
+    end
+
+    it 'keeps Getting Started demo cleanup when that course is selected explicitly' do
+      definition = StreamWeaver::University::Course::Definition.new(
+        id: 'getting-started', title: 'Getting Started', blurb: 'Learn StreamWeaver.',
+        steps: [{ number: 1, title: 'Choose' }], demo_resolver: ->(_name) {}, provider_id: 'stream_weaver'
+      )
+      allow(described_class).to receive(:university_course_definition).and_return(definition)
+      allow(StreamWeaver::Canvas::Client).to receive(:bridge_running?).and_return(true)
+      allow(StreamWeaver::University::Listener).to receive(:close_demo_sessions!)
+      allow(StreamWeaver::University::Listener).to receive(:repush)
+
+      capture_io do
+        described_class.run(['university-reset', '--course=getting-started', '--yes'])
+      end
+
+      expect(StreamWeaver::University::Listener).to have_received(:close_demo_sessions!)
+      expect(StreamWeaver::University::Listener).to have_received(:repush)
+        .with(course_id: 'getting-started')
+    end
   end
 end

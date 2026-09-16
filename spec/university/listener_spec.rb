@@ -81,6 +81,25 @@ RSpec.describe StreamWeaver::University::Listener do
       expect(StreamWeaver::University::Runner).to have_received(:run_step!).with(1, progress: p)
     end
 
+    it 'dispatches a course-qualified run token with the selected course ID' do
+      allow(StreamWeaver::University::Runner).to receive(:run_step!)
+      selected = StreamWeaver::University::Progress.load(course_id: 'diagram-intent')
+
+      described_class.handle_token('btn_run_run-course-diagram-intent-2', selected)
+
+      expect(StreamWeaver::University::Runner).to have_received(:run_step!)
+        .with(2, course_id: 'diagram-intent', progress: selected)
+    end
+
+    it 'marks done only in the course named by a course-qualified token' do
+      selected = StreamWeaver::University::Progress.load(course_id: 'diagram-intent')
+
+      described_class.handle_token('btn_mark_done_mark-done-course-diagram-intent-1', selected)
+
+      expect(StreamWeaver::University::Progress.load(course_id: 'diagram-intent').done?(1)).to be(true)
+      expect(StreamWeaver::University::Progress.load.done?(1)).to be(false)
+    end
+
     it 'never dispatches to the runner for a mark-done button id' do
       allow(StreamWeaver::University::Runner).to receive(:run_step!)
 
@@ -463,6 +482,38 @@ RSpec.describe StreamWeaver::University::Listener do
       described_class.handle_event({ data: { button: 'btn_mark_done_mark-done-1' } }, session_name: 'demo-session')
 
       expect(described_class).to have_received(:repush).with(session_name: 'demo-session', scroll_top: false)
+    end
+
+
+    it 'loads and repushes the course selected by the event token' do
+      provider = Struct.new(:courses).new([
+        {
+          id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose diagrams.',
+          steps: [{ number: 1, title: 'Choose', prompt: 'Choose a diagram.' }],
+          demo_resolver: ->(name) { name }
+        }
+      ])
+      StreamWeaver.register_extension(:slim_graph_r, course_provider: provider)
+      allow(StreamWeaver::University::Runner).to receive(:run_step!)
+      allow(described_class).to receive(:repush)
+
+      described_class.handle_event(
+        { data: { button: 'btn_run_run-course-diagram-intent-1' } },
+        session_name: 'demo-session'
+      )
+
+      expect(StreamWeaver::University::Runner).to have_received(:run_step!).with(
+        1,
+        course_id: 'diagram-intent',
+        progress: have_attributes(course_id: 'diagram-intent')
+      )
+      expect(described_class).to have_received(:repush).with(
+        session_name: 'demo-session',
+        scroll_top: false,
+        course_id: 'diagram-intent'
+      )
+    ensure
+      StreamWeaver::Extensions.reset!
     end
   end
 end

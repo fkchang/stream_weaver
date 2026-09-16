@@ -19,8 +19,14 @@ RSpec.describe StreamWeaver::University::Progress do
     end
   end
 
-  def new_progress
-    described_class.new(@path)
+  def new_progress(course_id: nil)
+    described_class.new(@path, course_id: course_id)
+  end
+
+  def a_temporary_ledger_path
+    satisfy do |temporary|
+      File.dirname(temporary) == File.dirname(@path) && temporary.start_with?("#{@path}.tmp.")
+    end
   end
 
   describe '.path' do
@@ -248,6 +254,181 @@ RSpec.describe StreamWeaver::University::Progress do
       progress.reset!
 
       expect(File.read("#{@path}.bak")).not_to eq(first_backup)
+    end
+
+    it 'atomically replaces a namespaced ledger while preserving another course' do
+      new_progress(course_id: 'course-one').mark_done!(1)
+      new_progress(course_id: 'course-two').mark_done!(2)
+
+      expect(File).to receive(:rename).with(
+        a_temporary_ledger_path,
+        @path
+      ).and_call_original
+
+      new_progress(course_id: 'course-one').reset!
+      expect(new_progress(course_id: 'course-two').done_steps).to eq([2])
+    end
+  end
+
+  describe 'course-namespaced progress' do
+    it 'persists each selected course under its course ID without changing another course' do
+      first = new_progress(course_id: 'course-one')
+      second = new_progress(course_id: 'course-two')
+
+      first.mark_done!(1)
+      first.record_run!(2, status: :sent)
+      first.expand_step!(3)
+
+      expect(new_progress(course_id: 'course-one').done_steps).to eq([1])
+      expect(new_progress(course_id: 'course-one').requested_at(2)).to be_a(String)
+      expect(new_progress(course_id: 'course-one').expanded_step).to eq(3)
+      expect(new_progress(course_id: 'course-two').done_steps).to eq([])
+      expect(new_progress(course_id: 'course-two').requested_at(2)).to be_nil
+      expect(new_progress(course_id: 'course-two').expanded_step).to be_nil
+
+      stored = YAML.safe_load(File.read(@path))
+      expect(stored.fetch('courses').keys).to contain_exactly('course-one')
+    end
+
+    it 'preserves other courses when separate instances write in sequence' do
+      new_progress(course_id: 'course-one').mark_done!(1)
+      new_progress(course_id: 'course-two').mark_done!(2)
+
+      expect(new_progress(course_id: 'course-one').done_steps).to eq([1])
+      expect(new_progress(course_id: 'course-two').done_steps).to eq([2])
+    end
+
+    it 'merges marks from two stale instances of the same course' do
+      first = new_progress(course_id: 'course-one')
+      second = new_progress(course_id: 'course-one')
+
+      first.mark_done!(1)
+      second.mark_done!(2)
+
+      expect(new_progress(course_id: 'course-one').done_steps).to eq([1, 2])
+    end
+
+    it 'atomically replaces the ledger for a course mutation' do
+      expect(File).to receive(:rename).with(
+        a_temporary_ledger_path,
+        @path
+      ).and_call_original
+
+      new_progress(course_id: 'course-one').mark_done!(1)
+      expect(new_progress(course_id: 'course-one').done_steps).to eq([1])
+    end
+
+    it 'merges requests from two stale instances of the same course' do
+      first = new_progress(course_id: 'course-one')
+      second = new_progress(course_id: 'course-one')
+
+      first.record_run!(1, status: :sent)
+      second.record_run!(2, status: :sent)
+
+      reloaded = new_progress(course_id: 'course-one')
+      expect(reloaded.requested_at(1)).to be_a(String)
+      expect(reloaded.requested_at(2)).to be_a(String)
+      expect(reloaded.last_run).to include('step' => 2, 'status' => 'sent')
+    end
+
+    it 'preserves a stale instance mark when another instance changes the expanded step' do
+      first = new_progress(course_id: 'course-one')
+      second = new_progress(course_id: 'course-one')
+
+      first.mark_done!(1)
+      second.expand_step!(3)
+
+      reloaded = new_progress(course_id: 'course-one')
+      expect(reloaded.done_steps).to eq([1])
+      expect(reloaded.expanded_step).to eq(3)
+    end
+
+    it 'does not resurrect state cleared by reset when a stale instance later mutates the course' do
+      original = new_progress(course_id: 'course-one')
+      original.mark_done!(1)
+      stale = new_progress(course_id: 'course-one')
+
+      original.reset!
+      stale.mark_done!(2)
+
+      expect(new_progress(course_id: 'course-one').done_steps).to eq([2])
+    end
+
+    it 'resets only the selected course and backs up the complete ledger' do
+      new_progress(course_id: 'course-one').mark_done!(1)
+      new_progress(course_id: 'course-two').mark_done!(2)
+      before_reset = File.read(@path)
+
+      new_progress(course_id: 'course-one').reset!
+
+      expect(File.read("#{@path}.bak")).to eq(before_reset)
+      expect(new_progress(course_id: 'course-one').done_steps).to eq([])
+      expect(new_progress(course_id: 'course-two').done_steps).to eq([2])
+    end
+
+    it 'exposes the selected course identifier' do
+      expect(new_progress(course_id: 'course-one').course_id).to eq('course-one')
+      expect(new_progress.course_id).to be_nil
+    end
+  end
+
+  describe 'legacy progress.yml compatibility and migration' do
+    it 'keeps no-course writes in the legacy top-level shape' do
+      new_progress.mark_done!(2)
+
+      stored = YAML.safe_load(File.read(@path))
+      expect(stored).to include('done' => { '2' => true })
+      expect(stored).not_to have_key('courses')
+    end
+
+    it 'reads legacy state as Getting Started when that course is selected explicitly' do
+      new_progress.mark_done!(2)
+
+      expect(new_progress(course_id: 'getting-started').done_steps).to eq([2])
+    end
+
+    it 'migrates legacy state without loss when another course first writes' do
+      legacy = new_progress
+      legacy.mark_done!(2)
+      legacy.record_run!(3, status: :sent)
+
+      new_progress(course_id: 'course-two').mark_done!(1)
+
+      stored = YAML.safe_load(File.read(@path))
+      expect(stored.dig('courses', 'getting-started', 'done')).to eq('2' => true)
+      expect(stored.dig('courses', 'getting-started', 'requested', '3')).to be_a(String)
+      expect(stored.dig('courses', 'course-two', 'done')).to eq('1' => true)
+      expect(new_progress.done_steps).to eq([2])
+    end
+
+    it 'keeps namespaced courses intact when a no-course command later writes Getting Started' do
+      new_progress(course_id: 'course-two').mark_done!(2)
+
+      new_progress.mark_done!(1)
+
+      expect(new_progress.done_steps).to eq([1])
+      expect(new_progress(course_id: 'course-two').done_steps).to eq([2])
+    end
+
+    it 'keeps a later course write when an already-loaded no-course instance writes' do
+      getting_started = new_progress
+      new_progress(course_id: 'course-two').mark_done!(2)
+
+      getting_started.mark_done!(1)
+
+      expect(new_progress.done_steps).to eq([1])
+      expect(new_progress(course_id: 'course-two').done_steps).to eq([2])
+    end
+
+    it 'keeps other courses when an already-loaded no-course instance resets' do
+      getting_started = new_progress
+      getting_started.mark_done!(1)
+      new_progress(course_id: 'course-two').mark_done!(2)
+
+      getting_started.reset!
+
+      expect(new_progress.done_steps).to eq([])
+      expect(new_progress(course_id: 'course-two').done_steps).to eq([2])
     end
   end
 end

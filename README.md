@@ -586,8 +586,10 @@ StreamWeaver.register_extension(:my_gem, course_provider: MyCourseProvider.new)
 
 University lists built-in Getting Started first, then providers by extension ID. It
 validates and freezes this catalog before rendering; malformed entries raise an error
-that names the provider and field. Provider courses are shelf-only until multi-course
-execution is available.
+that names the provider and field. Provider courses render their own Run, Repeat,
+Mark done, and Reset controls, with progress isolated by course ID. The terminal doors
+accept the same stable ID through `--course COURSE_ID`, including
+`university-demo`, `university-done`, and `university-reset`.
 
 ---
 

@@ -141,7 +141,14 @@ RSpec.describe StreamWeaver::University::Canvas do
           id: 'diagram-intent',
           title: 'Diagram Intent',
           blurb: 'Choose diagrams by intent.',
-          steps: [{ number: 1, title: 'Choose a diagram' }],
+          steps: [{
+            number: 1,
+            title: 'Choose a diagram',
+            payoff: 'Match the visual to the question.',
+            prompt: 'Show me how to choose a diagram.',
+            why_it_matters: 'A clear intent prevents misleading diagrams.',
+            what_you_should_see: ['A diagram chosen by intent.']
+          }],
           demo_resolver: ->(name) { name }
         }
       ])
@@ -150,14 +157,17 @@ RSpec.describe StreamWeaver::University::Canvas do
 
     after { StreamWeaver::Extensions.reset! }
 
-    it 'renders registered courses on a shelf without execution controls' do
+    it 'renders registered courses with course-qualified execution controls' do
       html = render
 
       expect(html).to include('More courses')
       expect(html).to include('Diagram Intent')
       expect(html).to include('Choose diagrams by intent.')
       expect(html).to include('>Course<')
-      expect(html).not_to include('run-diagram-intent')
+      expect(html).not_to include('uni-course--dormant')
+      expect(html).to include('id="btn_run_run-course-diagram-intent-1"')
+      expect(html).to include('id="btn_mark_done_mark-done-course-diagram-intent-1"')
+      expect(html).to include('id="btn_reset_course_reset-course-diagram-intent"')
     end
   end
 

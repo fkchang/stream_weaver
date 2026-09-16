@@ -1,8 +1,11 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'open3'
+require 'rbconfig'
 require 'stream_weaver'
 require 'stream_weaver/university/demos'
+require 'stream_weaver/university/course_catalog'
 require 'stream_weaver/org/writer'
 
 # The canned-artifacts rule (round-5 UAT, 2026-09-03): every course demo
@@ -10,6 +13,18 @@ require 'stream_weaver/org/writer'
 # composing one live and never needs a checkout of this repo. These specs
 # are the standing proof that each one still parses and renders.
 RSpec.describe StreamWeaver::University::Demos do
+  DemosProvider = Struct.new(:courses)
+
+  it 'can be required directly without loading the full StreamWeaver entry point first' do
+    script = "require 'stream_weaver/university/demos'; puts StreamWeaver::University::Demos::NAMES.first"
+    stdout, stderr, status = Open3.capture3(
+      RbConfig.ruby, '-I', File.expand_path('../../lib', __dir__), '-e', script
+    )
+
+    expect(status).to be_success, stderr
+    expect(stdout).to eq("dashboard\n")
+  end
+
   describe '.path' do
     it 'resolves every registered name to a file that exists in the gem' do
       described_class::NAMES.each do |name|
@@ -31,6 +46,23 @@ RSpec.describe StreamWeaver::University::Demos do
 
     it 'covers the four steps that have a canned artifact' do
       expect(described_class::NAMES).to contain_exactly('dashboard', 'counter', 'decision-form', 'doc')
+    end
+
+    it 'uses the selected course definition resolver when a course ID is supplied' do
+      StreamWeaver::Extensions.reset!
+      StreamWeaver.register_extension(
+        :slim_graph_r,
+        course_provider: DemosProvider.new([
+          { id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
+            steps: [{ number: 1, title: 'Choose' }],
+            demo_resolver: ->(name) { "/gem/demos/#{name}.rb" } }
+        ])
+      )
+
+      expect(described_class.path('semantic', course_id: 'diagram-intent'))
+        .to eq('/gem/demos/semantic.rb')
+    ensure
+      StreamWeaver::Extensions.reset!
     end
   end
 

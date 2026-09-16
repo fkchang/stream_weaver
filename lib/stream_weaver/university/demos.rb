@@ -21,6 +21,8 @@ module StreamWeaver
     # demo) so a prompt, a spec and a human can each spell it the way that
     # reads best where they are.
     module Demos
+      class ResolutionError < StandardError; end
+
       ROOT = File.expand_path('demos', __dir__)
 
       # name => path, relative to this file's directory. `doc` deliberately
@@ -42,8 +44,18 @@ module StreamWeaver
       end
 
       # @return [String, nil] absolute path, or nil for an unknown name
-      def self.path(name)
-        PATHS[normalize(name)]
+      def self.path(name, course_id: nil)
+        return PATHS[normalize(name)] unless course_id
+
+        require_relative 'course_catalog'
+        course = CourseCatalog.fetch(course_id)
+        course.demo_resolver.call(name)
+      rescue CourseCatalog::UnknownCourseError, CourseCatalog::InvalidProviderError
+        raise
+      rescue StandardError, LoadError => error
+        raise ResolutionError,
+              "Course #{course.id.inspect} (provider #{course.provider_id.inspect}) could not resolve " \
+              "demo #{name.inspect}: #{error.class}: #{error.message}"
       end
     end
   end

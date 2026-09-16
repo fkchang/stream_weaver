@@ -51,7 +51,7 @@ module StreamWeaver
       # What happened, in a shape both the ledger and the canvas can read.
       # :status is one of :sent, :session_missing, :send_failed,
       # :no_worker, :unknown_step.
-      Result = Struct.new(:status, :step, :prompt, :session_id, :message, keyword_init: true)
+      Result = Struct.new(:status, :step, :prompt, :session_id, :message, :course_id, keyword_init: true)
 
       MESSAGES = {
         sent: 'Sent step %<step>d to the worker pane.',
@@ -93,23 +93,27 @@ module StreamWeaver
       # told a send is inbound when it wasn't (Listener.warm_up! uses this
       # to push its placeholder card only on a confirmed :sent, never on a
       # send that turned out refused or degraded).
-      def self.run_step!(step_number, progress: Progress.load)
-        prompt = Course.prompt_for(step_number)
+      def self.run_step!(step_number, course_id: nil, progress: nil)
+        require 'stream_weaver/university/course_catalog' unless defined?(CourseCatalog)
+        course = CourseCatalog.fetch(course_id)
+        progress ||= Progress.load(course_id: course_id)
+        step = course.steps.find { |candidate| candidate[:number].to_i == step_number.to_i }
+        prompt = step && step[:prompt]
         # Recorded like any other outcome: a click on a step the course no
         # longer has must supersede the previous notice, not leave it
         # pinned and attributed to a different step.
-        return finish(:unknown_step, step_number, nil, nil, progress: progress) unless prompt
+        return finish(:unknown_step, step_number, nil, nil, progress: progress, course_id: course.id) unless prompt
 
         recorded = worker
-        return finish(:no_worker, step_number, prompt, nil, progress: progress) unless recorded
+        return finish(:no_worker, step_number, prompt, nil, progress: progress, course_id: course.id) unless recorded
 
         session_id = recorded['session_id']
-        return finish(:session_missing, step_number, prompt, session_id, progress: progress) unless
+        return finish(:session_missing, step_number, prompt, session_id, progress: progress, course_id: course.id) unless
           ITerm.session_alive?(session_id)
 
         status = ITerm.send_to_session(session_id, one_line(prompt)) ? :sent : :send_failed
         yield if status == :sent && block_given?
-        finish(status, step_number, prompt, session_id, progress: progress)
+        finish(status, step_number, prompt, session_id, progress: progress, course_id: course.id)
       end
 
       # The course prompts are multi-line heredocs, which read well on the
@@ -122,14 +126,15 @@ module StreamWeaver
         prompt.gsub(/\s*\n\s*/, ' ').strip
       end
 
-      def self.finish(status, step_number, prompt, session_id, progress:)
+      def self.finish(status, step_number, prompt, session_id, progress:, course_id:)
         progress.record_run!(step_number, status: status)
         Result.new(
           status: status,
           step: step_number.to_i,
           prompt: prompt,
           session_id: session_id,
-          message: message_for(status, step_number)
+          message: message_for(status, step_number),
+          course_id: course_id
         )
       end
       private_class_method :finish

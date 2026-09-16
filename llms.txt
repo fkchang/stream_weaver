@@ -1228,8 +1228,12 @@ An extension may pass `course_provider:` to `register_extension`. The provider r
 `courses`, returning hashes with `id`, `title`, `blurb`, a nonempty ordered `steps` array, and
 a callable `demo_resolver`. University normalizes and freezes built-in Getting Started plus
 provider courses, orders providers by extension ID, and raises errors naming the provider and
-invalid field. Provider courses are currently rendered on the shelf only; their execution,
-progress, and demo dispatch are a later contract.
+invalid field. Provider execution, progress, and demo dispatch are course-scoped: each course
+renders Run, Repeat, Mark done, and
+Reset controls; progress is isolated by stable course ID; and `university-demo`,
+`university-done`, and `university-reset` accept `--course COURSE_ID`. Omitting `--course`
+preserves Getting Started behavior and its legacy progress file shape until another course is
+written.
 
 ## Common Mistakes
 

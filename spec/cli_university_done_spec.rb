@@ -99,5 +99,22 @@ RSpec.describe StreamWeaver::CLI do
       expect(progress.done?(1)).to be(true)
       expect(out).to match(/isn't open to bring forward/)
     end
+
+    it 'passes an explicit course ID through direct CLI dispatch' do
+      definition = StreamWeaver::University::Course::Definition.new(
+        id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
+        steps: [{ number: 1, title: 'Choose' }], demo_resolver: ->(_name) {}, provider_id: 'spec'
+      )
+      allow(described_class).to receive(:university_course_definition).and_return(definition)
+      allow(StreamWeaver::University::Listener).to receive(:university_done!)
+      allow(described_class).to receive(:canvas_raise)
+
+      capture_io do
+        described_class.run(['university-done', '1', '--course', 'diagram-intent'])
+      end
+
+      expect(StreamWeaver::University::Listener).to have_received(:university_done!)
+        .with(1, course_id: 'diagram-intent')
+    end
   end
 end

@@ -45,19 +45,30 @@ RSpec.describe StreamWeaver::University::CourseCatalog do
     expect(diagram_intent.steps.first).to be_frozen
   end
 
-  it 'strips text fields and rejects IDs that collide after canonicalization' do
-    StreamWeaver.register_extension(:alpha, course_provider: Provider.new([course(id: '  shared  ', title: '  Diagram Intent  ', blurb: '  Choose diagrams.  ')]))
-    StreamWeaver.register_extension(:beta, course_provider: Provider.new([course(id: 'shared')]))
-
-    expect { described_class.build }
-      .to raise_error(described_class::InvalidProviderError, /beta.*:id/i)
-
-    StreamWeaver::Extensions.reset!
-    StreamWeaver.register_extension(:alpha, course_provider: Provider.new([course(id: '  diagram-intent  ', title: '  Diagram Intent  ', blurb: '  Choose diagrams.  ')]))
+  it 'strips display text while preserving an already canonical ID' do
+    StreamWeaver.register_extension(:alpha, course_provider: Provider.new([course(id: 'diagram-intent', title: '  Diagram Intent  ', blurb: '  Choose diagrams.  ')]))
     normalized = described_class.build.last
     expect([normalized.id, normalized.title, normalized.blurb]).to eq(
       ['diagram-intent', 'Diagram Intent', 'Choose diagrams.']
     )
+  end
+
+  it 'rejects provider IDs that are not lowercase kebab slugs beginning with a letter' do
+    invalid_ids = [
+      'Diagram-Intent', 'diagram_intent', 'diagram.intent', 'diagram intent',
+      ' diagram-intent', 'diagram-intent ', '1', '1-diagram'
+    ]
+
+    invalid_ids.each do |id|
+      StreamWeaver::Extensions.reset!
+      StreamWeaver.register_extension(:slim_graph_r, course_provider: Provider.new([course(id: id)]))
+
+      expect { described_class.build }
+        .to raise_error(
+          described_class::InvalidProviderError,
+          /slim_graph_r.*:id.*lowercase kebab slug/i
+        ), "expected #{id.inspect} to be rejected"
+    end
   end
 
   it 'accepts only literal Hash course records without attempting conversion' do
@@ -126,6 +137,39 @@ RSpec.describe StreamWeaver::University::CourseCatalog do
     expect(described_class.build.map(&:id)).to eq(['getting-started'])
   end
 
+  describe '.fetch' do
+    before do
+      StreamWeaver.register_extension(
+        :slim_graph_r,
+        course_provider: Provider.new([course(id: 'diagram-intent')])
+      )
+    end
+
+    it 'resolves an explicit course identifier' do
+      expect(described_class.fetch('diagram-intent').id).to eq('diagram-intent')
+    end
+
+    it 'never treats a positional index as a course identifier' do
+      expect { described_class.fetch('1') }
+        .to raise_error(described_class::UnknownCourseError, /Unknown University course: 1/)
+    end
+
+    it 'keeps a missing identifier compatible with Getting Started' do
+      expect(described_class.fetch.id).to eq('getting-started')
+      expect(described_class.fetch(nil).steps).to eq(
+        StreamWeaver::University::Course::GETTING_STARTED_STEPS
+      )
+    end
+
+    it 'raises an actionable error naming the unknown and available course identifiers' do
+      expect { described_class.fetch('missing-course') }
+        .to raise_error(
+          described_class::UnknownCourseError,
+          /missing-course.*getting-started.*diagram-intent/i
+        )
+    end
+  end
+
   it 'rejects invalid provider data with the provider ID and failing field' do
     StreamWeaver.register_extension(:slim_graph_r, course_provider: Provider.new([course(title: '  ')]))
 
@@ -139,5 +183,15 @@ RSpec.describe StreamWeaver::University::CourseCatalog do
 
     expect { described_class.build }
       .to raise_error(described_class::InvalidProviderError, /beta.*id/i)
+  end
+
+  it 'rejects a provider course ID that collides with the built-in course' do
+    StreamWeaver.register_extension(
+      :slim_graph_r,
+      course_provider: Provider.new([course(id: 'getting-started')])
+    )
+
+    expect { described_class.build }
+      .to raise_error(described_class::InvalidProviderError, /slim_graph_r.*:id.*getting-started/i)
   end
 end

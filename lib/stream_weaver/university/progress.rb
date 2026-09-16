@@ -6,17 +6,19 @@ require 'time'
 
 module StreamWeaver
   module University
-    # Getting Started's per-step completion ledger, persisted as YAML at
-    # `~/.streamweaver/university/progress.yml`. A plain file, not in-memory
-    # session state, so "survives a bridge restart" just means every write
-    # hits disk immediately and a later re-push re-reads it (progress-ledger
-    # criterion 5).
+    # University's per-course, per-step completion ledger, persisted as YAML
+    # at `~/.streamweaver/university/progress.yml`. Explicit course selections
+    # are stored under their course IDs. The legacy top-level Getting Started
+    # shape remains readable and is migrated without loss when another course
+    # is first written. A plain file, not in-memory session state, so every
+    # write survives a bridge restart.
     #
     # STREAMWEAVER_UNIVERSITY_PROGRESS overrides the path -- used by specs
     # (never touch the developer's real ledger) and by anyone running a
     # second, isolated University instance.
     class Progress
       DEFAULT_PATH = '~/.streamweaver/university/progress.yml'
+      DEFAULT_COURSE_ID = 'getting-started'
 
       # Expanded per call, not at the constant, so a spec that redirects
       # HOME is redirected here too -- and so this mirrors
@@ -27,16 +29,18 @@ module StreamWeaver
 
       # Loads the ledger at the current path (honoring the env override at
       # call time, not at class-load time).
-      def self.load
-        new(path)
+      def self.load(course_id: nil)
+        new(path, course_id: course_id)
       end
 
-      def initialize(path = self.class.path)
+      def initialize(path = self.class.path, course_id: nil)
         @path = path
-        @data = read
+        @course_id = course_id&.to_s
+        loaded = read_file
+        @data = data_for(loaded)
       end
 
-      attr_reader :path
+      attr_reader :path, :course_id
 
       def done?(step_number)
         !!@data['done'][step_number.to_s]
@@ -56,10 +60,11 @@ module StreamWeaver
       # toast the instant new HTML arrives (bridge_server.rb's poll()).
       # Putting the message IN the re-pushed HTML has no such race.
       def mark_done!(step_number)
-        @data['done'][step_number.to_s] = true
-        @data['last_run'] = nil
-        @data['last_done'] = { 'step' => step_number.to_i, 'at' => Time.now.utc.iso8601 }
-        write
+        mutate do |data|
+          data['done'][step_number.to_s] = true
+          data['last_run'] = nil
+          data['last_done'] = { 'step' => step_number.to_i, 'at' => Time.now.utc.iso8601 }
+        end
         self
       end
 
@@ -68,10 +73,11 @@ module StreamWeaver
       # Clears `last_run`/`last_done` for the same reason mark_done! sets
       # them: this instance no longer reflects what either field claims.
       def unmark_done!(step_number)
-        @data['done'].delete(step_number.to_s)
-        @data['last_run'] = nil
-        @data['last_done'] = nil
-        write
+        mutate do |data|
+          data['done'].delete(step_number.to_s)
+          data['last_run'] = nil
+          data['last_done'] = nil
+        end
         self
       end
 
@@ -92,11 +98,12 @@ module StreamWeaver
       # next canvas render reads to report what happened, including the
       # failures that need a copy-the-prompt fallback.
       def record_run!(step_number, status:)
-        now = Time.now.utc.iso8601
-        @data['requested'][step_number.to_s] = now if status.to_s == 'sent'
-        @data['last_run'] = { 'step' => step_number.to_i, 'status' => status.to_s, 'at' => now }
-        @data['last_done'] = nil
-        write
+        mutate do |data|
+          now = Time.now.utc.iso8601
+          data['requested'][step_number.to_s] = now if status.to_s == 'sent'
+          data['last_run'] = { 'step' => step_number.to_i, 'status' => status.to_s, 'at' => now }
+          data['last_done'] = nil
+        end
         self
       end
 
@@ -142,8 +149,7 @@ module StreamWeaver
       # simply overwrites whichever was expanded before, which is what
       # makes "expanding one collapses others" true by construction.
       def expand_step!(step_number)
-        @data['viewing'] = step_number.to_i
-        write
+        mutate { |data| data['viewing'] = step_number.to_i }
         self
       end
 
@@ -151,32 +157,58 @@ module StreamWeaver
       # own Details button, and what mark_done! calls so a Mark-done click
       # never leaves a stale expansion open under the confirmation band.
       def collapse!
-        @data['viewing'] = nil
-        write
+        mutate { |data| data['viewing'] = nil }
         self
       end
 
       # "Reset course": backs up whatever was on disk to `<path>.bak`
       # (overwriting any earlier backup -- one reset's worth of undo, not a
-      # history) and returns to the zero-state. Deletes rather than
-      # rewrites the file, so this in-memory instance and a freshly loaded
-      # one agree the same way every other zero-state case already does
-      # (`#read`, below, and the "does not create the file just by reading
-      # it" contract) -- there is exactly one representation of "nothing
-      # done yet", not two that both mean it.
+      # history) and returns the selected course to the zero-state. A legacy
+      # ledger is deleted exactly as before. A namespaced ledger keeps every
+      # other course and is deleted only when no course state remains.
       def reset!
-        FileUtils.cp(@path, "#{@path}.bak") if File.exist?(@path)
-        FileUtils.rm_f(@path)
-        @data = blank_data
+        with_lock do
+          FileUtils.cp(@path, "#{@path}.bak") if File.exist?(@path)
+          loaded = read_file
+          if @course_id.nil? && !namespaced?(loaded)
+            FileUtils.rm_f(@path)
+          else
+            document = namespaced_document(loaded)
+            document['courses'].delete(selected_course_id)
+            if document['courses'].empty?
+              FileUtils.rm_f(@path)
+            else
+              write_document(document)
+            end
+          end
+          @data = blank_data
+        end
         self
       end
 
       private
 
-      def read
-        return blank_data unless File.exist?(@path)
+      def read_file
+        return {} unless File.exist?(@path)
 
         loaded = YAML.safe_load(File.read(@path)) || {}
+        loaded.is_a?(Hash) ? loaded : {}
+      rescue Psych::SyntaxError
+        {}
+      end
+
+      def data_for(loaded)
+        if namespaced?(loaded)
+          normalize_data(loaded['courses'][selected_course_id])
+        elsif @course_id.nil? || @course_id == DEFAULT_COURSE_ID
+          normalize_data(loaded)
+        else
+          blank_data
+        end
+      end
+
+      def normalize_data(loaded)
+        loaded = {} unless loaded.is_a?(Hash)
         {
           'done' => loaded['done'] || {},
           'requested' => loaded['requested'] || {},
@@ -184,17 +216,77 @@ module StreamWeaver
           'last_done' => loaded['last_done'],
           'viewing' => loaded['viewing']
         }
-      rescue Psych::SyntaxError
-        blank_data
       end
 
       def blank_data
         { 'done' => {}, 'requested' => {}, 'last_run' => nil, 'last_done' => nil, 'viewing' => nil }
       end
 
-      def write
+      # Every mutation reloads inside the ledger lock. This makes @data a
+      # read cache, never the source for a write, so two instances created
+      # from the same snapshot cannot overwrite one another's changes.
+      def mutate
+        with_lock do
+          loaded = read_file
+          data = data_for(loaded)
+          yield data
+
+          if @course_id.nil? && !namespaced?(loaded)
+            write_document(data)
+          else
+            document = namespaced_document(loaded)
+            document['courses'][selected_course_id] = data
+            write_document(document)
+          end
+
+          @data = data
+        end
+      end
+
+      def with_lock
         FileUtils.mkdir_p(File.dirname(@path))
-        File.write(@path, YAML.dump(@data))
+        File.open("#{@path}.lock", File::RDWR | File::CREAT, 0o644) do |lock|
+          lock.flock(File::LOCK_EX)
+          yield
+        end
+      end
+
+      def namespaced?(loaded)
+        loaded.is_a?(Hash) && loaded['courses'].is_a?(Hash)
+      end
+
+      def namespaced_document(loaded)
+        if namespaced?(loaded)
+          courses = loaded['courses'].each_with_object({}) do |(id, data), normalized|
+            normalized[id.to_s] = normalize_data(data)
+          end
+          { 'courses' => courses }
+        else
+          courses = {}
+          courses[DEFAULT_COURSE_ID] = normalize_data(loaded) if legacy_data?(loaded)
+          { 'courses' => courses }
+        end
+      end
+
+      def legacy_data?(loaded)
+        loaded.is_a?(Hash) && %w[done requested last_run last_done viewing].any? { |key| loaded.key?(key) }
+      end
+
+      def selected_course_id
+        @course_id || DEFAULT_COURSE_ID
+      end
+
+      def write_document(document)
+        FileUtils.mkdir_p(File.dirname(@path))
+        temporary_path = "#{@path}.tmp.#{$$}.#{Thread.current.object_id}"
+        File.open(temporary_path, 'w') do |file|
+          file.write(YAML.dump(document))
+          file.flush
+          file.fsync
+        end
+        File.rename(temporary_path, @path)
+      ensure
+        FileUtils.rm_f(temporary_path) if temporary_path
       end
     end
   end

@@ -71,8 +71,26 @@ module StreamWeaver
       # number acted on, true for a whole-course action with no step of its
       # own (reset-course), or nil if the token didn't match a known
       # action.
-      def self.handle_token(token, progress)
+      def self.handle_token(token, progress = nil, course_id: nil)
+        selected_course_id = course_id || course_id_from_token(token)
+        progress ||= Progress.load(course_id: selected_course_id)
+
         case token.to_s
+        when /mark-done-course-(.+)-(\d+)\z/
+          step = Regexp.last_match(2).to_i
+          mark_step_done!(progress, step)
+          step
+        when /(?:run|repeat)-course-(.+)-(\d+)\z/
+          step = Regexp.last_match(2).to_i
+          Runner.run_step!(step, course_id: selected_course_id, progress: progress)
+          step
+        when /view-course-(.+)-(\d+)\z/
+          step = Regexp.last_match(2).to_i
+          progress.expanded_step == step ? progress.collapse! : progress.expand_step!(step)
+          step
+        when /reset-course-(.+)\z/
+          progress.reset!
+          true
         when /mark-done-(\d+)\z/
           step = Regexp.last_match(1).to_i
           mark_step_done!(progress, step)
@@ -125,6 +143,15 @@ module StreamWeaver
           close_demo_sessions!
           true
         end
+      end
+
+      # Extracts the stable course identifier carried by provider-course
+      # controls. Legacy Getting Started tokens have no identifier and keep
+      # returning nil, which preserves their existing default selection.
+      def self.course_id_from_token(token)
+        text = token.to_s
+        text[/(?:mark-done|run|repeat|view)-course-(.+)-\d+\z/, 1] ||
+          text[/reset-course-(.+)\z/, 1]
       end
 
       # What each of the recap's delete buttons is asking about. Groups are
@@ -191,10 +218,10 @@ module StreamWeaver
       # and missed the manual-click path: clicking Mark done on the last
       # step from partway down the page reproduces the exact "recap appears
       # below where you're looking" bug this exists to fix (code review).
-      def self.course_just_completed?(progress)
-        was_complete = progress.done_count >= Course::TOTAL_STEPS
+      def self.course_just_completed?(progress, total: Course::TOTAL_STEPS)
+        was_complete = progress.done_count >= total
         yield
-        !was_complete && progress.done_count >= Course::TOTAL_STEPS
+        !was_complete && progress.done_count >= total
       end
 
       # The terminal door onto exactly what a Mark-done click does, for
@@ -204,10 +231,14 @@ module StreamWeaver
       # to the user; asking a worker to run this instead removes that
       # hand-off entirely -- the manual button still works exactly as
       # before, this is just a second door onto the same effect.
-      def self.university_done!(step_number, session_name: SESSION)
-        progress = Progress.load
-        just_completed = course_just_completed?(progress) { mark_step_done!(progress, step_number) }
-        repush(session_name: session_name, scroll_top: just_completed)
+      def self.university_done!(step_number, session_name: SESSION, course_id: nil)
+        require 'stream_weaver/university/course_catalog' unless defined?(CourseCatalog)
+        progress = Progress.load(course_id: course_id)
+        total = CourseCatalog.fetch(course_id).steps.size
+        just_completed = course_just_completed?(progress, total: total) { mark_step_done!(progress, step_number) }
+        repush_options = { session_name: session_name, scroll_top: just_completed }
+        repush_options[:course_id] = course_id if course_id
+        repush(**repush_options)
         step_number
       end
 
@@ -223,9 +254,16 @@ module StreamWeaver
         token = event.dig(:data, :button)
         return nil unless token
 
-        progress = Progress.load
-        just_completed = course_just_completed?(progress) { handle_token(token, progress) }
-        repush(session_name: session_name, scroll_top: just_completed)
+        course_id = course_id_from_token(token)
+        require 'stream_weaver/university/course_catalog' unless defined?(CourseCatalog)
+        progress = Progress.load(course_id: course_id)
+        total = CourseCatalog.fetch(course_id).steps.size
+        just_completed = course_just_completed?(progress, total: total) do
+          handle_token(token, progress, course_id: course_id)
+        end
+        repush_options = { session_name: session_name, scroll_top: just_completed }
+        repush_options[:course_id] = course_id if course_id
+        repush(**repush_options)
         token
       end
 
@@ -337,7 +375,7 @@ module StreamWeaver
       SCROLL_TOP_HINT_DSL =
         %(div(id: #{Canvas::SCROLL_TOP_HINT_ID.inspect}, style: "display:none") {})
 
-      def self.repush(session_name: SESSION, scroll_top: false)
+      def self.repush(session_name: SESSION, scroll_top: false, course_id: nil)
         canvas_path = File.expand_path('canvas.rb', __dir__)
         dsl = File.read(canvas_path)
         dsl = "#{dsl}\n\n#{SCROLL_TOP_HINT_DSL}" if scroll_top
