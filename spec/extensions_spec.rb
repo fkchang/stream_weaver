@@ -184,6 +184,15 @@ RSpec.describe StreamWeaver::Extensions do
   end
 
   describe '.register' do
+    it 'keeps a course provider with its extension registration' do
+      provider = Object.new
+
+      registration = StreamWeaver.register_extension(:diagram_intent, course_provider: provider)
+
+      expect(registration.course_provider).to equal(provider)
+      expect(described_class.all.first.course_provider).to equal(provider)
+    end
+
     it 'records frozen extension records through the public StreamWeaver API' do
       registration = StreamWeaver.register_extension(:diagram_intent)
 

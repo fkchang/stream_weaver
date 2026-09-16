@@ -1224,6 +1224,13 @@ the host boundary; discovery is deterministic by gem name and never scans arbitr
 files. Loader successes and structured failures are cached once per process, so restart after
 fixing a broken extension. StreamWeaver itself must not depend on the integration gem.
 
+An extension may pass `course_provider:` to `register_extension`. The provider responds to
+`courses`, returning hashes with `id`, `title`, `blurb`, a nonempty ordered `steps` array, and
+a callable `demo_resolver`. University normalizes and freezes built-in Getting Started plus
+provider courses, orders providers by extension ID, and raises errors naming the provider and
+invalid field. Provider courses are currently rendered on the shelf only; their execution,
+progress, and demo dispatch are a later contract.
+
 ## Common Mistakes
 
 1. **Forgetting state is a hash** - Use `state[:key]`, not `state.key`

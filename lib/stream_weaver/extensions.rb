@@ -19,7 +19,7 @@ module StreamWeaver
   module Extensions
     METADATA_KEY = 'stream_weaver.extensions.v1'
 
-    Extension = Struct.new(:id, :source, keyword_init: true)
+    Extension = Struct.new(:id, :source, :course_provider, keyword_init: true)
     Loader = Struct.new(:gem_name, :loader, keyword_init: true)
     Failure = Struct.new(:gem_name, :loader, :error, keyword_init: true)
     Discovery = Struct.new(:loaded, :failures, keyword_init: true)
@@ -82,7 +82,7 @@ module StreamWeaver
 
       # Registers an extension identity from a loader. IDs are global because
       # later extension points need one unambiguous owner for each provider.
-      def register(id)
+      def register(id, course_provider: nil)
         normalized_id = normalize_id(id)
         source = immutable_string(@current_source || 'application')
         existing = @extensions[normalized_id] || @staged_extensions&.fetch(normalized_id, nil)
@@ -94,7 +94,11 @@ module StreamWeaver
         end
 
         registrations = @staged_extensions || @extensions
-        registrations[normalized_id] = Extension.new(id: normalized_id, source: source).freeze
+        registrations[normalized_id] = Extension.new(
+          id: normalized_id,
+          source: source,
+          course_provider: course_provider
+        ).freeze
       end
 
       def registered?(id)
@@ -165,8 +169,8 @@ module StreamWeaver
       Extensions.discover
     end
 
-    def register_extension(id)
-      Extensions.register(id)
+    def register_extension(id, course_provider: nil)
+      Extensions.register(id, course_provider: course_provider)
     end
   end
 end

@@ -38,6 +38,22 @@ module StreamWeaver
     #    `university` is the controller canvas the user drives the course
     #    from and is never closed.
     module Course
+      # The immutable course record shared by built-in and integration-owned
+      # curriculum. The legacy methods and constants below remain the
+      # Getting Started execution facade.
+      Definition = Struct.new(:id, :title, :blurb, :steps, :demo_resolver, :provider_id, keyword_init: true)
+
+      class Definition::Resolver
+        def initialize(callable)
+          @callable = callable.dup.freeze
+          freeze
+        end
+
+        def call(...)
+          @callable.call(...)
+        end
+      end
+
       # Mined from the two real worker sessions
       # (docs/university/worker-session-mining.md): both reached for `curl`
       # and the app's own action log before any browser, and one burned a
@@ -685,22 +701,6 @@ module StreamWeaver
         step(number)&.fetch(:prompt)
       end
 
-      # Rendered dormant on the course-list shelf, no controls -- names and
-      # blurbs only, per docs/university/design-spec.md section 2.
-      FUTURE_COURSES = [
-        {
-          name: "Docs deep dive",
-          blurb: "Org export, gists, and the reader extension, end to end."
-        },
-        {
-          name: "Canvas modes",
-          blurb: "Stateful, blocking, and streaming — when to reach for each."
-        },
-        {
-          name: "Skills and panels",
-          blurb: "Teach your agent to drive the canvas without you."
-        }
-      ].freeze
     end
   end
 end

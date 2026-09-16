@@ -576,6 +576,19 @@ process after correcting or installing a broken extension. Duplicate or blank ID
 This hook is intentionally generic. StreamWeaver does not depend on integration gems, and an
 integration gem can keep its adapter behind an explicit optional require.
 
+An extension can also provide University shelf entries. Pass an object responding to
+`courses`; it returns course hashes with `id`, `title`, `blurb`, nonempty ordered
+`steps`, and a callable `demo_resolver`:
+
+```ruby
+StreamWeaver.register_extension(:my_gem, course_provider: MyCourseProvider.new)
+```
+
+University lists built-in Getting Started first, then providers by extension ID. It
+validates and freezes this catalog before rendering; malformed entries raise an error
+that names the provider and field. Provider courses are shelf-only until multi-course
+execution is available.
+
 ---
 
 ## More Resources

@@ -6,6 +6,7 @@ require 'tmpdir'
 require 'stream_weaver/cli'
 require 'stream_weaver/university/canvas'
 require 'stream_weaver/university/course'
+require 'stream_weaver/university/course_catalog'
 require 'stream_weaver/university/progress'
 require_relative '../support/env_helper'
 
@@ -89,7 +90,8 @@ RSpec.describe StreamWeaver::University::Canvas do
       html = render
       expect(html).to include('StreamWeaver University')
       expect(html).to include('Getting Started')
-      expect(html).to include('uni-course--dormant').and include('sw-card')
+      expect(html).to include('sw-card')
+      expect(html).not_to include('uni-course--dormant')
     end
 
     it 'renders all five step titles' do
@@ -120,18 +122,42 @@ RSpec.describe StreamWeaver::University::Canvas do
       expect(html).not_to include('btn_repeat_repeat-')
     end
 
-    it 'lists the three future courses as dormant, with their blurbs, and no controls' do
+    it 'does not render a dormant course shelf when no extension provides courses' do
       html = render
-      StreamWeaver::University::Course::FUTURE_COURSES.each do |course|
-        expect(html).to include(course[:name])
-        expect(html).to include(course[:blurb])
-      end
-      expect(html).to include('uni-chip--soon')
+      expect(html).not_to include('In the works')
+      expect(html).not_to include('uni-chip--soon')
     end
 
     it 'links the classic tutorial as the escape hatch' do
       html = render
       expect(html).to include('streamweaver tutorial')
+    end
+  end
+
+  describe 'rendered extension course shelf' do
+    before do
+      provider = Struct.new(:courses).new([
+        {
+          id: 'diagram-intent',
+          title: 'Diagram Intent',
+          blurb: 'Choose diagrams by intent.',
+          steps: [{ number: 1, title: 'Choose a diagram' }],
+          demo_resolver: ->(name) { name }
+        }
+      ])
+      StreamWeaver.register_extension(:slim_graph_r, course_provider: provider)
+    end
+
+    after { StreamWeaver::Extensions.reset! }
+
+    it 'renders registered courses on a shelf without execution controls' do
+      html = render
+
+      expect(html).to include('More courses')
+      expect(html).to include('Diagram Intent')
+      expect(html).to include('Choose diagrams by intent.')
+      expect(html).to include('>Course<')
+      expect(html).not_to include('run-diagram-intent')
     end
   end
 

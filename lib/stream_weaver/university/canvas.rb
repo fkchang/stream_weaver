@@ -45,6 +45,7 @@
 
 require 'stream_weaver/university/artifacts'
 require 'stream_weaver/university/course'
+require 'stream_weaver/university/course_catalog'
 require 'stream_weaver/university/listener'
 require 'stream_weaver/university/progress'
 require 'stream_weaver/university/runner'
@@ -654,6 +655,7 @@ _body = proc do
   canvas_continue message: "Working..."
 
   steps = StreamWeaver::University::Course::GETTING_STARTED_STEPS
+  extension_courses = StreamWeaver::University::CourseCatalog.build.drop(1)
   total = steps.size
   progress = StreamWeaver::University::Progress.load
   states = StreamWeaver::University::Canvas.step_states(progress, steps: steps)
@@ -968,23 +970,24 @@ _body = proc do
     end
   end
 
-  # ---- The shelf: closed, dormant, no controls ------------------------------
-  div(class: "uni-divider") do
-    phrase "In the works", class: "uni-divider__label"
-    div(class: "uni-divider__rule") {}
-  end
+  # ---- Integration shelf: registered courses only, no execution yet --------
+  unless extension_courses.empty?
+    div(class: "uni-divider") do
+      phrase "More courses", class: "uni-divider__label"
+      div(class: "uni-divider__rule") {}
+    end
 
-  StreamWeaver::University::Course::FUTURE_COURSES.each do |course|
-    card(depth: :recessed, class: "uni-course uni-course--dormant") do
-      card_header(class: "uni-course__bar") do
-        div(class: "uni-course__dot") {}
-        header2 course[:name], class: "uni-course__name"
-        div(class: "uni-chip uni-chip--soon") do
-          phrase "", class: "uni-i uni-i--lock"
-          phrase "Soon"
+    extension_courses.each do |course|
+      card(depth: :recessed, class: "uni-course uni-course--dormant") do
+        card_header(class: "uni-course__bar") do
+          div(class: "uni-course__dot") {}
+          header2 course.title, class: "uni-course__name"
+          div(class: "uni-chip") do
+            phrase "Course"
+          end
         end
+        phrase course.blurb, class: "uni-course__blurb"
       end
-      phrase course[:blurb], class: "uni-course__blurb"
     end
   end
 
