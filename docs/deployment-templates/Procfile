@@ -1,0 +1,11 @@
+# Procfile for Heroku-style deployments
+# Place this file in your repository root
+
+# Web process (required)
+web: bundle exec ruby app.rb -p $PORT
+
+# Optional: Worker process for background jobs
+# worker: bundle exec ruby worker.rb
+
+# Optional: Release command (runs before deployment)
+# release: bundle exec rake db:migrate
