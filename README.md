@@ -573,8 +573,9 @@ order. Each loader is attempted once per process. A broken loader is returned as
 failure without preventing other extensions or built-in features from loading; restart the
 process after correcting or installing a broken extension. Duplicate or blank IDs fail loudly.
 
-This hook is intentionally generic. StreamWeaver does not depend on integration gems, and an
-integration gem can keep its adapter behind an explicit optional require.
+This hook remains generic for third-party gems. SlimGraphR is StreamWeaver's built-in diagram
+engine, so `require 'stream_weaver'` also loads its `diagram` DSL. Other integration gems can
+keep their adapters behind explicit optional requires.
 
 An extension can also provide University shelf entries. Pass an object responding to
 `courses`; it returns course hashes with `id`, `title`, `blurb`, nonempty ordered

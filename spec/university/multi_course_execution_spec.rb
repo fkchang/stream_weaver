@@ -25,10 +25,10 @@ RSpec.describe 'University multi-course execution' do
 
       StreamWeaver::Extensions.reset!
       StreamWeaver.register_extension(
-        :slim_graph_r,
+        :fixture_provider,
         course_provider: provider_class.new([
           {
-            id: 'diagram-intent',
+            id: 'fixture-diagram-intent',
             title: 'Diagram Intent',
             blurb: 'Choose a diagram by intent.',
             steps: [
@@ -59,35 +59,35 @@ RSpec.describe 'University multi-course execution' do
     getting_started = StreamWeaver::University::Progress.load
     getting_started.mark_done!(2)
 
-    token = 'btn_run_course_diagram_intent_run-course-diagram-intent-1'
+    token = 'btn_run_course_fixture_diagram_intent_run-course-fixture-diagram-intent-1'
     StreamWeaver::University::Listener.handle_event({ data: { button: token } })
 
     expect(StreamWeaver::ITerm).to have_received(:send_to_session).with(
       'worker-1',
       'Run the selected Diagram Intent course prompt.'
     )
-    expect(StreamWeaver::University::Progress.load(course_id: 'diagram-intent').requested_at(1)).to be_a(String)
+    expect(StreamWeaver::University::Progress.load(course_id: 'fixture-diagram-intent').requested_at(1)).to be_a(String)
     expect(StreamWeaver::University::Progress.load.done_steps).to eq([2])
   end
 
   it 'marks and resets only the course identified by the control token' do
     StreamWeaver::University::Progress.load.mark_done!(2)
     StreamWeaver::University::Listener.handle_event(
-      { data: { button: 'btn_mark_done_course_diagram_intent_mark-done-course-diagram-intent-1' } }
+      { data: { button: 'btn_mark_done_course_fixture_diagram_intent_mark-done-course-fixture-diagram-intent-1' } }
     )
 
-    expect(StreamWeaver::University::Progress.load(course_id: 'diagram-intent').done_steps).to eq([1])
+    expect(StreamWeaver::University::Progress.load(course_id: 'fixture-diagram-intent').done_steps).to eq([1])
 
     StreamWeaver::University::Listener.handle_event(
-      { data: { button: 'btn_reset_course_diagram_intent_reset-course-diagram-intent' } }
+      { data: { button: 'btn_reset_course_fixture_diagram_intent_reset-course-fixture-diagram-intent' } }
     )
 
-    expect(StreamWeaver::University::Progress.load(course_id: 'diagram-intent').done_steps).to eq([])
+    expect(StreamWeaver::University::Progress.load(course_id: 'fixture-diagram-intent').done_steps).to eq([])
     expect(StreamWeaver::University::Progress.load.done_steps).to eq([2])
   end
 
   it 'resolves the selected course demo while omitted selection stays on Getting Started' do
-    expect(StreamWeaver::University::Demos.path('diagram', course_id: 'diagram-intent')).to eq(@provider_demo)
+    expect(StreamWeaver::University::Demos.path('diagram', course_id: 'fixture-diagram-intent')).to eq(@provider_demo)
     expect(StreamWeaver::University::Demos.path('dashboard')).to eq(
       StreamWeaver::University::Demos::PATHS.fetch('dashboard')
     )

@@ -96,14 +96,14 @@ RSpec.describe StreamWeaver::CLI do
       demo = File.expand_path(__FILE__)
       resolver = ->(_name) { demo }
       StreamWeaver.register_extension(
-        :slim_graph_r,
+        :fixture_provider,
         course_provider: DemoProvider.new([
-          { id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
+          { id: 'fixture-diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
             steps: [{ number: 1, title: 'Choose' }], demo_resolver: resolver }
         ])
       )
       out, = capture_io do
-        described_class.run(['university-demo', 'dashboard', '--course', 'diagram-intent'])
+        described_class.run(['university-demo', 'dashboard', '--course', 'fixture-diagram-intent'])
       end
 
       expect(out.strip).to eq(demo)
@@ -112,14 +112,14 @@ RSpec.describe StreamWeaver::CLI do
     it 'accepts the equals form of explicit course selection' do
       demo = File.expand_path(__FILE__)
       StreamWeaver.register_extension(
-        :slim_graph_r,
+        :fixture_provider,
         course_provider: DemoProvider.new([
-          { id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
+          { id: 'fixture-diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
             steps: [{ number: 1, title: 'Choose' }], demo_resolver: ->(_name) { demo } }
         ])
       )
       out, = capture_io do
-        described_class.run(['university-demo', 'dashboard', '--course=diagram-intent'])
+        described_class.run(['university-demo', 'dashboard', '--course=fixture-diagram-intent'])
       end
 
       expect(out.strip).to eq(demo)
@@ -136,20 +136,20 @@ RSpec.describe StreamWeaver::CLI do
 
     it 'reports the selected provider and demo when its resolver fails' do
       StreamWeaver.register_extension(
-        :slim_graph_r,
+        :fixture_provider,
         course_provider: DemoProvider.new([
-          { id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
+          { id: 'fixture-diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
             steps: [{ number: 1, title: 'Choose' }],
             demo_resolver: ->(_name) { raise LoadError, 'packaged data unavailable' } }
         ])
       )
 
       out, err, status = capture_exit do
-        described_class.run(['university-demo', 'dashboard', '--course', 'diagram-intent'])
+        described_class.run(['university-demo', 'dashboard', '--course', 'fixture-diagram-intent'])
       end
       expect(status).to eq(1)
       expect(out).to eq('')
-      expect(err).to include('slim_graph_r', 'diagram-intent', 'diagram', 'packaged data unavailable')
+      expect(err).to include('fixture_provider', 'fixture-diagram-intent', 'diagram', 'packaged data unavailable')
     end
   end
 end

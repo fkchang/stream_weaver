@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.description = "StreamWeaver enables GenAI agents and developers to rapidly build interactive web UIs using a declarative Ruby DSL. Features single-file execution, automatic state management, and agentic mode for AI-driven workflows."
   spec.homepage = "https://github.com/fkchang/stream_weaver"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.0.0"
+  spec.required_ruby_version = ">= 3.1"
 
   # homepage_uri metadata is omitted: it would just duplicate spec.homepage,
   # which RubyGems already shows on the gem page, and `gem build` warns when
@@ -51,6 +51,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "rackup", "~> 2.1"
   spec.add_dependency "kramdown", "~> 2.4"
   spec.add_dependency "kramdown-parser-gfm", "~> 1.1"
+  spec.add_dependency "slim_graph_r", "~> 0.30.0"
   spec.add_dependency "ostruct"  # Explicit dep for Ruby 3.5+ compatibility
   # opal (the browser-compile toolchain behind `streamweaver opal-build`) is
   # deliberately NOT a runtime dependency here. It's the Gemfile's dev

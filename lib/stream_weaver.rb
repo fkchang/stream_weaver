@@ -118,6 +118,10 @@ module StreamWeaver
   end
 end
 
+# SlimGraphR is StreamWeaver's built-in diagram engine. Its adapter only
+# extends DisplayDSL; the renderer's core entrypoint remains independent.
+require "slim_graph_r/stream_weaver"
+
 # Global helper method (exported to main namespace)
 def app(title, layout: :default, theme: :default, theme_overrides: {}, components: [], scripts: [], stylesheets: [], fonts: [], &block)
   StreamWeaver.app(title, layout: layout, theme: theme, theme_overrides: theme_overrides, components: components, scripts: scripts, stylesheets: stylesheets, fonts: fonts, &block)

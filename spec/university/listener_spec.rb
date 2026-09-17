@@ -488,29 +488,29 @@ RSpec.describe StreamWeaver::University::Listener do
     it 'loads and repushes the course selected by the event token' do
       provider = Struct.new(:courses).new([
         {
-          id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose diagrams.',
+          id: 'fixture-diagram-intent', title: 'Diagram Intent', blurb: 'Choose diagrams.',
           steps: [{ number: 1, title: 'Choose', prompt: 'Choose a diagram.' }],
           demo_resolver: ->(name) { name }
         }
       ])
-      StreamWeaver.register_extension(:slim_graph_r, course_provider: provider)
+      StreamWeaver.register_extension(:fixture_provider, course_provider: provider)
       allow(StreamWeaver::University::Runner).to receive(:run_step!)
       allow(described_class).to receive(:repush)
 
       described_class.handle_event(
-        { data: { button: 'btn_run_run-course-diagram-intent-1' } },
+        { data: { button: 'btn_run_run-course-fixture-diagram-intent-1' } },
         session_name: 'demo-session'
       )
 
       expect(StreamWeaver::University::Runner).to have_received(:run_step!).with(
         1,
-        course_id: 'diagram-intent',
-        progress: have_attributes(course_id: 'diagram-intent')
+        course_id: 'fixture-diagram-intent',
+        progress: have_attributes(course_id: 'fixture-diagram-intent')
       )
       expect(described_class).to have_received(:repush).with(
         session_name: 'demo-session',
         scroll_top: false,
-        course_id: 'diagram-intent'
+        course_id: 'fixture-diagram-intent'
       )
     ensure
       StreamWeaver::Extensions.reset!

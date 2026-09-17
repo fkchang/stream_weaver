@@ -16,21 +16,25 @@ RSpec.describe StreamWeaver::University::CourseCatalog do
     StreamWeaver::Extensions.reset!
   end
 
-  def course(id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose diagrams by intent.',
+  before do
+    allow(described_class).to receive(:discovered_extensions) { StreamWeaver::Extensions.all }
+  end
+
+  def course(id: 'fixture-diagram-intent', title: 'Diagram Intent', blurb: 'Choose diagrams by intent.',
              steps: [{ number: 1, title: 'Choose a diagram' }], demo_resolver: ->(name) { name })
     { id: id, title: title, blurb: blurb, steps: steps, demo_resolver: demo_resolver }
   end
 
   it 'normalizes an immutable built-in course followed by registered provider courses' do
     StreamWeaver.register_extension(
-      :slim_graph_r,
+      :fixture_provider,
       course_provider: Provider.new([course])
     )
 
     catalog = described_class.build
     getting_started, diagram_intent = catalog
 
-    expect(catalog.map(&:id)).to eq(%w[getting-started diagram-intent])
+    expect(catalog.map(&:id)).to eq(%w[getting-started fixture-diagram-intent])
     expect(getting_started.steps).to eq(StreamWeaver::University::Course::GETTING_STARTED_STEPS)
     expect(getting_started.demo_resolver.call('dashboard')).to eq(
       StreamWeaver::University::Demos.path('dashboard')
@@ -46,10 +50,10 @@ RSpec.describe StreamWeaver::University::CourseCatalog do
   end
 
   it 'strips display text while preserving an already canonical ID' do
-    StreamWeaver.register_extension(:alpha, course_provider: Provider.new([course(id: 'diagram-intent', title: '  Diagram Intent  ', blurb: '  Choose diagrams.  ')]))
-    normalized = described_class.build.last
+    StreamWeaver.register_extension(:alpha, course_provider: Provider.new([course(id: 'fixture-diagram-intent', title: '  Diagram Intent  ', blurb: '  Choose diagrams.  ')]))
+    normalized = described_class.build.find { |candidate| candidate.id == 'fixture-diagram-intent' }
     expect([normalized.id, normalized.title, normalized.blurb]).to eq(
-      ['diagram-intent', 'Diagram Intent', 'Choose diagrams.']
+      ['fixture-diagram-intent', 'Diagram Intent', 'Choose diagrams.']
     )
   end
 
@@ -61,12 +65,12 @@ RSpec.describe StreamWeaver::University::CourseCatalog do
 
     invalid_ids.each do |id|
       StreamWeaver::Extensions.reset!
-      StreamWeaver.register_extension(:slim_graph_r, course_provider: Provider.new([course(id: id)]))
+      StreamWeaver.register_extension(:fixture_provider, course_provider: Provider.new([course(id: id)]))
 
       expect { described_class.build }
         .to raise_error(
           described_class::InvalidProviderError,
-          /slim_graph_r.*:id.*lowercase kebab slug/i
+          /fixture_provider.*:id.*lowercase kebab slug/i
         ), "expected #{id.inspect} to be rejected"
     end
   end
@@ -77,20 +81,20 @@ RSpec.describe StreamWeaver::University::CourseCatalog do
         raise 'must not convert'
       end
     end.new
-    StreamWeaver.register_extension(:slim_graph_r, course_provider: Provider.new([converting_record]))
+    StreamWeaver.register_extension(:fixture_provider, course_provider: Provider.new([converting_record]))
 
     expect { described_class.build }
-      .to raise_error(described_class::InvalidProviderError, /slim_graph_r.*:course/i)
+      .to raise_error(described_class::InvalidProviderError, /fixture_provider.*:course/i)
   end
 
   it 'rejects unsupported mutable step values with the provider and :steps' do
     StreamWeaver.register_extension(
-      :slim_graph_r,
+      :fixture_provider,
       course_provider: Provider.new([course(steps: [{ number: 1, metadata: Object.new }])])
     )
 
     expect { described_class.build }
-      .to raise_error(described_class::InvalidProviderError, /slim_graph_r.*:steps/i)
+      .to raise_error(described_class::InvalidProviderError, /fixture_provider.*:steps/i)
   end
 
   it 'wraps a duplicated frozen demo resolver owned by the normalized definition' do
@@ -99,7 +103,7 @@ RSpec.describe StreamWeaver::University::CourseCatalog do
         "#{path}/#{name}"
       end
     end.new('/original')
-    StreamWeaver.register_extension(:slim_graph_r, course_provider: Provider.new([course(demo_resolver: resolver)]))
+    StreamWeaver.register_extension(:fixture_provider, course_provider: Provider.new([course(demo_resolver: resolver)]))
 
     normalized_resolver = described_class.build.last.demo_resolver
     resolver.path = '/changed'
@@ -140,13 +144,13 @@ RSpec.describe StreamWeaver::University::CourseCatalog do
   describe '.fetch' do
     before do
       StreamWeaver.register_extension(
-        :slim_graph_r,
-        course_provider: Provider.new([course(id: 'diagram-intent')])
+        :fixture_provider,
+        course_provider: Provider.new([course(id: 'fixture-diagram-intent')])
       )
     end
 
     it 'resolves an explicit course identifier' do
-      expect(described_class.fetch('diagram-intent').id).to eq('diagram-intent')
+      expect(described_class.fetch('fixture-diagram-intent').id).to eq('fixture-diagram-intent')
     end
 
     it 'never treats a positional index as a course identifier' do
@@ -165,16 +169,16 @@ RSpec.describe StreamWeaver::University::CourseCatalog do
       expect { described_class.fetch('missing-course') }
         .to raise_error(
           described_class::UnknownCourseError,
-          /missing-course.*getting-started.*diagram-intent/i
+          /missing-course.*getting-started.*fixture-diagram-intent/i
         )
     end
   end
 
   it 'rejects invalid provider data with the provider ID and failing field' do
-    StreamWeaver.register_extension(:slim_graph_r, course_provider: Provider.new([course(title: '  ')]))
+    StreamWeaver.register_extension(:fixture_provider, course_provider: Provider.new([course(title: '  ')]))
 
     expect { described_class.build }
-      .to raise_error(described_class::InvalidProviderError, /slim_graph_r.*title/i)
+      .to raise_error(described_class::InvalidProviderError, /fixture_provider.*title/i)
   end
 
   it 'rejects duplicate course IDs with the provider ID and id field' do
@@ -187,11 +191,11 @@ RSpec.describe StreamWeaver::University::CourseCatalog do
 
   it 'rejects a provider course ID that collides with the built-in course' do
     StreamWeaver.register_extension(
-      :slim_graph_r,
+      :fixture_provider,
       course_provider: Provider.new([course(id: 'getting-started')])
     )
 
     expect { described_class.build }
-      .to raise_error(described_class::InvalidProviderError, /slim_graph_r.*:id.*getting-started/i)
+      .to raise_error(described_class::InvalidProviderError, /fixture_provider.*:id.*getting-started/i)
   end
 end

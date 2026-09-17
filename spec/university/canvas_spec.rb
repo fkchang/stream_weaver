@@ -118,8 +118,8 @@ RSpec.describe StreamWeaver::University::Canvas do
 
     it 'offers Run on every step row (no Repeat yet -- nothing is done)' do
       html = render
-      expect(html.scan('id="btn_run_run-').size).to eq(5)
-      expect(html).not_to include('btn_repeat_repeat-')
+      expect(html.scan(/id="btn_run_run-\d+"/).size).to eq(5)
+      expect(html).not_to match(/id="btn_repeat_repeat-\d+"/)
     end
 
     it 'does not render a dormant course shelf when no extension provides courses' do
@@ -138,7 +138,7 @@ RSpec.describe StreamWeaver::University::Canvas do
     before do
       provider = Struct.new(:courses).new([
         {
-          id: 'diagram-intent',
+          id: 'fixture-diagram-intent',
           title: 'Diagram Intent',
           blurb: 'Choose diagrams by intent.',
           steps: [{
@@ -152,7 +152,7 @@ RSpec.describe StreamWeaver::University::Canvas do
           demo_resolver: ->(name) { name }
         }
       ])
-      StreamWeaver.register_extension(:slim_graph_r, course_provider: provider)
+      StreamWeaver.register_extension(:fixture_provider, course_provider: provider)
     end
 
     after { StreamWeaver::Extensions.reset! }
@@ -165,9 +165,9 @@ RSpec.describe StreamWeaver::University::Canvas do
       expect(html).to include('Choose diagrams by intent.')
       expect(html).to include('>Course<')
       expect(html).not_to include('uni-course--dormant')
-      expect(html).to include('id="btn_run_run-course-diagram-intent-1"')
-      expect(html).to include('id="btn_mark_done_mark-done-course-diagram-intent-1"')
-      expect(html).to include('id="btn_reset_course_reset-course-diagram-intent"')
+      expect(html).to include('id="btn_run_run-course-fixture-diagram-intent-1"')
+      expect(html).to include('id="btn_mark_done_mark-done-course-fixture-diagram-intent-1"')
+      expect(html).to include('id="btn_reset_course_reset-course-fixture-diagram-intent"')
     end
   end
 

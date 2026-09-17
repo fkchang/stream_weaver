@@ -173,7 +173,7 @@ RSpec.describe StreamWeaver::University::Runner do
   describe '.run_step! — selected provider course' do
     let(:provider_course) do
       {
-        id: 'diagram-intent',
+        id: 'fixture-diagram-intent',
         title: 'Diagram Intent',
         blurb: 'Choose diagrams by intent.',
         steps: [
@@ -190,7 +190,7 @@ RSpec.describe StreamWeaver::University::Runner do
         steps: [{ number: 1, title: 'First step', prompt: 'Do not dispatch this prompt.' }]
       )
       StreamWeaver.register_extension(
-        :slim_graph_r,
+        :fixture_provider,
         course_provider: Struct.new(:courses).new([earlier_course, provider_course])
       )
       write_worker(session_id: 'worker-session-1')
@@ -201,13 +201,13 @@ RSpec.describe StreamWeaver::University::Runner do
     after { StreamWeaver::Extensions.reset! }
 
     it 'dispatches by stable course ID rather than provider position' do
-      selected_progress = StreamWeaver::University::Progress.load(course_id: 'diagram-intent')
+      selected_progress = StreamWeaver::University::Progress.load(course_id: 'fixture-diagram-intent')
 
-      result = described_class.run_step!(1, course_id: 'diagram-intent', progress: selected_progress)
+      result = described_class.run_step!(1, course_id: 'fixture-diagram-intent', progress: selected_progress)
 
       expect(StreamWeaver::ITerm).to have_received(:send_to_session)
         .with('worker-session-1', 'Run the provider prompt.')
-      expect(result.course_id).to eq('diagram-intent')
+      expect(result.course_id).to eq('fixture-diagram-intent')
     end
 
     it 'raises an actionable error for an unknown selected course' do

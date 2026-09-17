@@ -59,8 +59,8 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
 
             Provider = Struct.new(:courses)
             COURSE = {
-              id: 'diagram-intent',
-              title: 'Diagram Intent',
+              id: 'fixture-diagram-intent',
+              title: 'Fixture Diagram Course',
               blurb: 'Choose diagrams by intent.',
               steps: [{ number: 1, title: 'Choose a diagram', prompt: 'Choose by intent.' }],
               demo_resolver: ->(_name) { DEMO }
@@ -117,14 +117,17 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
       stdout, stderr, status = Open3.capture3(env, *ruby_command(script))
 
       expect(status).to be_success, stderr
-      expect(stdout.lines.map(&:strip)).to eq(['getting-started,diagram-intent', 'false'])
+      expect(stdout.lines.map(&:strip)).to eq([
+        'getting-started,fixture-diagram-intent,diagram-intent',
+        'false'
+      ])
     end
   end
 
   it 'resolves university-demo --course through discovery in a fresh CLI process' do
     executable = File.expand_path('../../exe/streamweaver', __dir__)
     script = <<~RUBY
-      ARGV.replace(%w[university-demo diagram --course diagram-intent])
+      ARGV.replace(%w[university-demo diagram --course fixture-diagram-intent])
       load #{executable.inspect}
     RUBY
     with_installed_extensions do |env|
@@ -141,8 +144,8 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
     script = <<~RUBY
       require 'stream_weaver'
       html = StreamWeaver::CLI.render_dsl_to_html(File.read(#{canvas_path.inspect}), session_name: 'discovery-spec')
-      puts html.include?('Diagram Intent')
-      puts html.include?('run-course-diagram-intent-1')
+      puts html.include?('Fixture Diagram Course')
+      puts html.include?('run-course-fixture-diagram-intent-1')
       puts StreamWeaver::Extensions.registered?(:ghost_course)
     RUBY
 
@@ -158,8 +161,8 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
     script = <<~RUBY
       require 'stream_weaver/university/listener'
       StreamWeaver::University::Listener.define_singleton_method(:repush) { |**| }
-      StreamWeaver::University::Listener.university_done!(1, course_id: 'diagram-intent')
-      progress = StreamWeaver::University::Progress.load(course_id: 'diagram-intent')
+      StreamWeaver::University::Listener.university_done!(1, course_id: 'fixture-diagram-intent')
+      progress = StreamWeaver::University::Progress.load(course_id: 'fixture-diagram-intent')
       puts progress.done?(1)
     RUBY
 

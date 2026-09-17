@@ -51,15 +51,15 @@ RSpec.describe StreamWeaver::University::Demos do
     it 'uses the selected course definition resolver when a course ID is supplied' do
       StreamWeaver::Extensions.reset!
       StreamWeaver.register_extension(
-        :slim_graph_r,
+        :fixture_provider,
         course_provider: DemosProvider.new([
-          { id: 'diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
+          { id: 'fixture-diagram-intent', title: 'Diagram Intent', blurb: 'Choose by intent.',
             steps: [{ number: 1, title: 'Choose' }],
             demo_resolver: ->(name) { "/gem/demos/#{name}.rb" } }
         ])
       )
 
-      expect(described_class.path('semantic', course_id: 'diagram-intent'))
+      expect(described_class.path('semantic', course_id: 'fixture-diagram-intent'))
         .to eq('/gem/demos/semantic.rb')
     ensure
       StreamWeaver::Extensions.reset!

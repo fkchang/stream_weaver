@@ -1222,7 +1222,9 @@ An integration gem opts in with gemspec metadata
 `StreamWeaver.register_extension(:stable_id)`. Call `StreamWeaver.discover_extensions` once at
 the host boundary; discovery is deterministic by gem name and never scans arbitrary load-path
 files. Loader successes and structured failures are cached once per process, so restart after
-fixing a broken extension. StreamWeaver itself must not depend on the integration gem.
+fixing a broken extension. Third-party integrations remain optional. SlimGraphR is the built-in
+exception: StreamWeaver depends on it and loads its diagram adapter, while SlimGraphR core stays
+independent of StreamWeaver.
 
 An extension may pass `course_provider:` to `register_extension`. The provider responds to
 `courses`, returning hashes with `id`, `title`, `blurb`, a nonempty ordered `steps` array, and
