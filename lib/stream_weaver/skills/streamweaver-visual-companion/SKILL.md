@@ -112,6 +112,12 @@ badge "New", color: :green
 status_dot :green, "Active"
 ```
 
+## Diagrams
+
+`diagram` is a first-class StreamWeaver DSL method after StreamWeaver is installed; do not add a separate SlimGraphR require. Use it when the visual is chiefly about a relationship, system, plan, strategy, or quantitative comparison. Run `streamweaver diagrams` to open the executable Diagram Atlas when choosing or checking a form.
+
+Keep this skill small: read [the SlimGraphR diagram guide](references/slim-graph-r-diagrams.md) only for diagram work. It maps the question to the six atlas families, gives minimal runnable DSL, and records the constraints that make a different visual more honest.
+
 ## Known Gotchas
 
 - `spacer` and `divider` don't exist — use `div(style: "height:Npx")`
@@ -128,3 +134,4 @@ status_dot :green, "Active"
 | Ending a push with more than one question | `references/checkpoints-and-forms.md` |
 | Saving/persisting a canvas doc, sharing DSL across two docs | `references/persistence.md` |
 | Cleaning up orphaned processes, or how `panel` opens the browser | `references/cleanup-and-panel.md` |
+| Choosing or writing a SlimGraphR diagram | `references/slim-graph-r-diagrams.md` |
