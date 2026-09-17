@@ -575,7 +575,9 @@ process after correcting or installing a broken extension. Duplicate or blank ID
 
 This hook remains generic for third-party gems. SlimGraphR is StreamWeaver's built-in diagram
 engine, so `require 'stream_weaver'` also loads its `diagram` DSL. Other integration gems can
-keep their adapters behind explicit optional requires.
+keep their adapters behind explicit optional requires. Run `streamweaver diagrams` to open the
+packaged Diagram Atlas with executable Ruby for every supported SlimGraphR type; it uses a live
+canvas when available and falls back to Canvas Reader elsewhere.
 
 An extension can also provide University shelf entries. Pass an object responding to
 `courses`; it returns course hashes with `id`, `title`, `blurb`, nonempty ordered

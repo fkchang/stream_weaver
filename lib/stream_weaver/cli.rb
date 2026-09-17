@@ -37,6 +37,8 @@ module StreamWeaver
         admin
       when 'showcase'
         showcase
+      when 'diagrams'
+        diagrams(args)
       when 'tutorial'
         tutorial
       when 'stop'
@@ -590,6 +592,7 @@ module StreamWeaver
           streamweaver admin                  Open admin dashboard
           streamweaver tutorial               Interactive tutorial
           streamweaver showcase               Browse all examples
+          streamweaver diagrams               Open the packaged Diagram Atlas
           streamweaver serve                  Start service in foreground
           streamweaver stop                   Stop the background service
           streamweaver status                 Show service status
@@ -2002,6 +2005,69 @@ module StreamWeaver
       Thread.new { sleep 0.8; open_browser(url) } unless ENV['SW_NO_OPEN']
 
       StreamWeaver::Canvas::Reader.run!
+    end
+
+    # Open SlimGraphR's packaged Diagram Atlas. The activated gem is the
+    # source of truth so this works from a plain gem install with no sibling
+    # source checkout. Prefer the live iTerm canvas when available; the
+    # render-only Canvas Reader is the portable path everywhere else.
+    def self.diagrams(args)
+      if args.any?
+        $stderr.puts 'Usage: streamweaver diagrams'
+        exit 1
+      end
+
+      atlas_path = diagram_atlas_path
+      unless File.file?(atlas_path)
+        $stderr.puts "Error: activated slim_graph_r gem is missing examples/stream_weaver/gallery.rb at #{atlas_path}; " \
+                     'reinstall or upgrade slim_graph_r.'
+        exit 1
+      end
+
+      require_relative 'iterm'
+      return canvas_read([atlas_path]) unless ITerm.available?
+
+      require_relative 'canvas/client'
+      response = begin
+        panel(['diagram-atlas', '--layout=wide'])
+        live_response = Canvas::Client.send_message(
+          Canvas::Protocol::Messages.push(
+            'diagram-atlas',
+            File.read(atlas_path, encoding: Encoding::UTF_8),
+            source_dir: nil
+          )
+        )
+        if live_response && live_response[:type] == 'error'
+          raise Canvas::Client::ConnectionError, live_response[:message]
+        end
+        unless live_response && %w[push_ok push_error].include?(live_response[:type])
+          raise Canvas::Client::ConnectionError, 'live canvas did not acknowledge the atlas push'
+        end
+
+        live_response
+      rescue Canvas::Client::NotRunningError, Canvas::Client::ConnectionError, SystemExit => error
+        raise if error.is_a?(SystemExit) && error.status != 1
+
+        $stderr.puts "Live canvas unavailable (#{error.message}); opening Diagram Atlas in Canvas Reader."
+        return canvas_read([atlas_path])
+      end
+
+      if response && response[:type] == 'push_error'
+        $stderr.puts "Error: packaged Diagram Atlas could not render: #{response[:message]}"
+        exit 1
+      end
+
+      puts "Diagram Atlas opened in the live canvas from #{atlas_path}"
+    end
+
+    def self.diagram_atlas_path
+      specification = Gem.loaded_specs['slim_graph_r']
+      unless specification
+        $stderr.puts 'Error: slim_graph_r is not activated; reinstall StreamWeaver so its diagram dependency is available.'
+        exit 1
+      end
+
+      File.join(specification.full_gem_path, 'examples', 'stream_weaver', 'gallery.rb')
     end
 
     # Converts a saved DSL doc to a human-readable org-mode sibling file,
