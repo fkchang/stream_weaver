@@ -173,4 +173,44 @@ Feature: University Getting Started — one door, premier iTerm experience, driv
     And its packaged steps demonstrate standalone rendering, semantic diagram choices, and StreamWeaver composition and export
     And each demo resolves from the installed SlimGraphR gem without a source checkout
     And SlimGraphR still installs and renders without StreamWeaver
-    And StreamWeaver still installs and runs University without SlimGraphR
+    And StreamWeaver's built-in Getting Started course remains behavior-compatible when SlimGraphR is present
+
+  Scenario: first-class-slim-graph-r-diagrams
+    # Intent: Make SlimGraphR the built-in diagram engine for every ordinary StreamWeaver runtime.
+    # RIGOR: strict — dependency direction, load order, and isolated installs can break both gems
+    Given a user installs StreamWeaver without separately installing integrations
+    When StreamWeaver loads its shared DSL in an app, canvas, Canvas Reader, or exporter
+    Then diagram is available without an explicit SlimGraphR require
+    And StreamWeaver declares a compatible SlimGraphR runtime dependency
+    And SlimGraphR core still installs and renders without StreamWeaver
+    And the generic extension registry remains available to third-party gems
+
+  Scenario: complete-diagram-atlas
+    # Intent: Give humans one executable visual reference for every SlimGraphR chart available inside StreamWeaver.
+    # RIGOR: strict — 39 heterogeneous fixtures must remain complete, readable, packaged, and executable
+    Given StreamWeaver includes SlimGraphR diagram support
+    When a user runs streamweaver diagrams
+    Then a packaged Diagram Atlas opens without a source checkout
+    And all 39 SlimGraphR types render as real StreamWeaver diagram components
+    And every example includes executable Ruby, use guidance, and honest limits
+    And the atlas renders in a live canvas, Canvas Reader, and exported HTML
+    And the existing three-step University course links users to the atlas instead of duplicating 39 lessons
+
+  Scenario: chrome-extension-slim-graph-r-diagrams
+    # Intent: Render saved StreamWeaver documents containing SlimGraphR diagrams in the offline Chrome extension viewer.
+    # RIGOR: strict — Opal parity, MV3 sandbox CSP, bundle size, and 39 renderers can fail silently
+    Given the StreamWeaver Chrome extension is built with its packaged offline runtime
+    When the viewer opens a saved Ruby or Org document containing SlimGraphR diagrams
+    Then the sandbox renders self-contained inline SVG without a Ruby server or network access
+    And all 39 packaged atlas types compile and render through the browser-safe SlimGraphR entrypoint
+    And accessible titles and descriptions survive the viewer pipeline
+    And extension CSP reports no diagram-related errors
+
+  Scenario: visual-companion-diagram-guidance
+    # Intent: Make Visual Companion select and write SlimGraphR diagrams as a token-efficient first-class visual primitive.
+    # RIGOR: loose — progressive-disclosure guidance backed by executable examples
+    Given the installed Visual Companion skill can use StreamWeaver diagrams
+    When an agent chooses a visual form for relationships, systems, plans, strategy, or quantitative data
+    Then a compact reference maps the intent to an appropriate SlimGraphR family
+    And the skill points to exact minimal DSL without loading the complete atlas into context
+    And a clean-room agent can build representative diagrams using only the skill and its referenced resource
