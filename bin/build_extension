@@ -6,7 +6,8 @@
 # The extension renders a StreamWeaver doc from Ruby source it reads off
 # GitHub, which means it has to compile Ruby in the browser. That needs two
 # things bundled together: Opal's self-hosted compiler (opal-parser) and the
-# StreamWeaver runtime. Everything is copied in as a local file -- Manifest V3
+# StreamWeaver runtime plus SlimGraphR's browser-safe adapter. Everything is
+# copied in as a local file -- Manifest V3
 # forbids remote script outright, so nothing may come from a CDN.
 #
 # Nothing produced here is committed (see extension/.gitignore); the bundle is
@@ -20,6 +21,30 @@ ROOT   = File.expand_path("..", __dir__)
 VENDOR = File.join(ROOT, "extension", "vendor")
 STUBS  = File.join(ROOT, "lib", "stream_weaver", "opal", "stubs")
 ASSETS = File.join(ROOT, "lib", "stream_weaver", "assets", "js")
+SLIM_GRAPH_R_LIB = begin
+  override = ENV["SLIM_GRAPH_R_LIB"]
+  candidates = if override && !override.empty?
+    [File.expand_path(override)]
+  else
+    sibling = File.expand_path("../../slim_graph_r/lib", ROOT)
+    installed = begin
+      spec = Gem.loaded_specs["slim_graph_r"] || Gem::Specification.find_by_name("slim_graph_r")
+      File.join(spec.full_gem_path, "lib")
+    rescue Gem::MissingSpecError
+      nil
+    end
+    [sibling, installed].compact.uniq
+  end
+
+  entrypoint = File.join("slim_graph_r", "stream_weaver_opal.rb")
+  selected = candidates.find { |lib| File.file?(File.join(lib, entrypoint)) }
+  unless selected
+    abort "SlimGraphR browser entrypoint #{entrypoint} was not found. " \
+          "Checked: #{candidates.join(', ')}. Install a compatible slim_graph_r gem " \
+          "or set SLIM_GRAPH_R_LIB to its lib directory."
+  end
+  selected
+end
 
 $LOAD_PATH.unshift(File.join(ROOT, "lib"))
 require "opal"
@@ -28,15 +53,17 @@ require "stream_weaver/theme"
 
 FileUtils.mkdir_p(VENDOR)
 
-# --- 1. Ruby compiler + StreamWeaver runtime, in one bundle -----------------
+# --- 1. Ruby compiler + document runtime, in one bundle ----------------------
 #
 # Order matters: `opal` first establishes the runtime the rest attaches to,
 # then the stdlib pieces StreamWeaver touches, then opal-parser (which is what
 # provides Opal.compile in the browser), then StreamWeaver itself.
-puts "Compiling StreamWeaver + Opal compiler..."
+puts "Compiling StreamWeaver + SlimGraphR + Opal compiler..."
+puts "SlimGraphR source: #{SLIM_GRAPH_R_LIB}"
 builder = Opal::Builder.new(missing_require_severity: :ignore)
 builder.append_paths(STUBS)
 builder.append_paths(File.join(ROOT, "lib"))
+builder.append_paths(SLIM_GRAPH_R_LIB)
 builder.build("opal")
 # Must come immediately after `opal` (which defines Opal.regexp) and before
 # every other builder.build call below -- each compiled file captures its
@@ -51,6 +78,10 @@ rescue StandardError => e
 end
 builder.build("opal-parser")
 builder.build("stream_weaver/opal_entry")
+# This entry's narrow static require tree brings date, bigdecimal, and
+# securerandom with SlimGraphR's core/renderers; no second StreamWeaver runtime
+# or server adapter is compiled.
+builder.build("slim_graph_r/stream_weaver_opal")
 # Org::Reader (org -> DSL text) only, not Writer -- Writer needs `ripper`
 # (MRI-only, not Opal-compatible) and the extension only ever reads .org
 # docs, never writes them. Lets sandbox.js convert .org source to DSL text

@@ -579,6 +579,10 @@ keep their adapters behind explicit optional requires. Run `streamweaver diagram
 packaged Diagram Atlas with executable Ruby for every supported SlimGraphR type; it uses a live
 canvas when available and falls back to Canvas Reader elsewhere.
 
+The packaged Chrome viewer also includes SlimGraphR's browser-safe Opal entrypoint. Saved Ruby
+and Org documents render all 39 atlas types as self-contained inline SVG, including accessible
+titles and descriptions, inside the existing offline sandbox runtime.
+
 An extension can also provide University shelf entries. Pass an object responding to
 `courses`; it returns course hashes with `id`, `title`, `blurb`, nonempty ordered
 `steps`, and a callable `demo_resolver`:

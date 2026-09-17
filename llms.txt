@@ -1226,7 +1226,9 @@ fixing a broken extension. Third-party integrations remain optional. SlimGraphR 
 exception: StreamWeaver depends on it and loads its diagram adapter, while SlimGraphR core stays
 independent of StreamWeaver. `streamweaver diagrams` opens SlimGraphR's packaged Diagram Atlas
 from the activated gem, using a live canvas when available and Canvas Reader as the portable
-fallback.
+fallback. The packaged Chrome viewer includes SlimGraphR's narrow browser-safe Opal entrypoint;
+saved Ruby and Org documents render all 39 atlas types as self-contained inline SVG with
+accessible titles and descriptions and no diagram network assets.
 
 An extension may pass `course_provider:` to `register_extension`. The provider responds to
 `courses`, returning hashes with `id`, `title`, `blurb`, a nonempty ordered `steps` array, and

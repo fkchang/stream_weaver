@@ -29,6 +29,12 @@ bin/vendor_browser_assets   # once -- fetches mermaid, which is too large to com
 bin/build_extension         # assembles extension/vendor/ (~7MB)
 ```
 
+During two-repository development, `bin/build_extension` uses a sibling
+`slim_graph_r/lib` checkout when it contains the browser entrypoint; packaged
+builds use the installed gem. Set `SLIM_GRAPH_R_LIB=/path/to/slim_graph_r/lib`
+to select another checkout explicitly. The build stops with an actionable
+error if the selected source cannot provide `slim_graph_r/stream_weaver_opal.rb`.
+
 Then in Chrome: `chrome://extensions` → enable **Developer mode** → **Load
 unpacked** → select this directory. Open any StreamWeaver doc on GitHub; a
 **View rendered** button appears in the file toolbar.
@@ -86,6 +92,14 @@ and the extension only ever *reads* `.org`, never writes it) is bundled into
 `.org` content by its header marker and runs it through `Reader.to_dsl`
 before compiling — the exact same org → DSL → render path `canvas-read` uses
 server-side, just client-side here.
+
+**SlimGraphR uses the same Ruby path.** `bin/build_extension` adds
+SlimGraphR's browser-safe entrypoint to the existing Opal runtime, including
+the date, decimal, and random-ID standard libraries its renderers use. Saved
+Ruby and Org documents can keep the public
+`require 'slim_graph_r/stream_weaver'` line; the sandbox produces the same
+self-contained inline SVG, with its accessible title and description, without
+a Ruby server or a network asset.
 
 **Why two pages.** Rendering means compiling Ruby in the browser, and the
 compiler's output has to be evaluated. Manifest V3 pins extension pages to
@@ -394,11 +408,11 @@ window. Not something this session did or could prevent; noted here since
 
 ## Known gaps
 
-- **No committed automated test for the extension itself.** Everything under
-  "Verified" was checked manually (headless Chromium runs, live github.com).
-  `spec/` has no extension coverage and `bin/browser_smoke` covers the canvas
-  parity slices, not this. A real gap — this is the part most likely to
-  silently regress.
+- **Packed Chrome interaction remains a manual gate.** The committed extension
+  spec builds the offline runtime and executes the complete 39-type SlimGraphR
+  atlas through Ruby and Org under Node, including accessibility, CSP shape,
+  and remote-asset checks. Reloading the unpacked extension, the local picker,
+  GitHub/Gist navigation, and Chrome's own console still need the release UAT.
 - **No icons.** Chrome falls back to a default.
 - **Toolbar anchor is a guess.** `mountButton` tries several selectors and
   falls back to a floating button. GitHub reshuffles this markup regularly —
