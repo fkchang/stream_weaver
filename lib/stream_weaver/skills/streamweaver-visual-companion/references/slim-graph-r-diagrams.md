@@ -2,6 +2,22 @@
 
 `diagram` is already available after installing StreamWeaver. Start a canvas session as usual, then put a diagram inside `streamweaver canvas-push`; no separate `require 'slim_graph_r'` belongs in the document. Run `streamweaver diagrams` whenever the choice is uncertain: it opens the packaged, executable Diagram Atlas with all 39 examples, use guidance, and limits.
 
+## Complete document scaffold
+
+Saved `.rb` documents and `canvas-push` input are bare shared-DSL calls. Start with this shape; do **not** wrap it in `document do ... end`.
+
+```ruby
+# streamweaver-doc: v1
+require 'stream_weaver'
+
+header1 'Publishing path'
+diagram :architecture, title: 'Publishing path' do
+  external :reader, 'Reader'
+  node :app, 'Web app'
+  flow :reader, :app
+end
+```
+
 Pick the picture that answers the question. A diagram describes declared information; do not imply live telemetry, provenance, capacity, policy enforcement, or elapsed time that you do not have.
 
 | Question | Family and first choice | Choose another type when | Constraint to keep honest |

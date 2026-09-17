@@ -4,6 +4,9 @@ require 'spec_helper'
 require 'slim_graph_r'
 require 'stream_weaver'
 require 'stream_weaver/cli'
+require 'stream_weaver/canvas/bridge'
+require 'stream_weaver/canvas/reader'
+require 'stream_weaver/export/html_exporter'
 require 'tmpdir'
 
 RSpec.describe 'Visual Companion SlimGraphR diagram guidance' do
@@ -17,6 +20,24 @@ RSpec.describe 'Visual Companion SlimGraphR diagram guidance' do
     expect(skill).to include('`streamweaver diagrams`')
     expect(skill).to include('references/slim-graph-r-diagrams.md')
     expect(guide).to include('all 39 examples')
+  end
+
+  it 'gives a complete bare-DSL document scaffold that crosses saved, canvas, and export boundaries' do
+    scaffold = guide.split('## Complete document scaffold', 2).last
+                    .split('Pick the picture', 2).first
+                    .scan(/```ruby\n(.*?)\n```/m).flatten.fetch(0)
+
+    expect(scaffold).to include('# streamweaver-doc: v1')
+    expect(scaffold).to include("require 'stream_weaver'")
+    expect(scaffold).to include('diagram :architecture')
+    expect(scaffold).not_to include('document do')
+
+    canvas = StreamWeaver::Canvas::Bridge.new.send(:render_dsl, scaffold, session_name: 'guide-scaffold')
+    reader = StreamWeaver::Canvas::Reader.render_doc(scaffold)
+    exported = StreamWeaver::Export::HtmlExporter.from_dsl(scaffold).to_html
+
+    expect(canvas.error).to be_nil
+    expect([canvas.html, reader.html, exported]).to all(include('<svg'))
   end
 
   it 'accounts for every supported SlimGraphR type in its six-family index' do
