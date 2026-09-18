@@ -24,6 +24,7 @@
   const status = document.getElementById("status");
   const sourceLink = document.getElementById("source-link");
   const dropZone = document.getElementById("drop-zone");
+  const dropZoneWarning = document.getElementById("drop-zone-warning");
   const dropZoneError = document.getElementById("drop-zone-error");
   const fileInput = document.getElementById("file-input");
 
@@ -437,6 +438,14 @@
   }
 
   function initDropZone() {
+    // The warning is only true for one of the two cases that reach this
+    // function: a bare file:// open with no extension APIs at all. The other
+    // case -- an installed extension opened with no `key` (bookmarked, or
+    // fresh from chrome://extensions) -- has the real CSP/nav-lockdown
+    // hardening active, so showing the same warning there would be false, and
+    // a warning that's wrong in the routine case trains people to ignore it.
+    dropZoneWarning.hidden = hasExtensionContext;
+
     // Clicking anywhere in the zone opens the picker; the visible
     // #file-picker-btn inside it is what gives this keyboard/screen-reader
     // access (Tab reaches it, Enter/Space activates it natively) without

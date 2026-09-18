@@ -299,6 +299,20 @@ GitHub flow uses, so `sandbox.js` needed zero changes; this is purely a
 second supplier wired into `viewer.js`, the same way `content.js` is the
 first.
 
+**Trust warning: this path renders without any of this repo's extension
+hardening.** Every CSP/DNR/nav-lockdown mechanism this epic built
+(`extension-csp-hardening`, `extension-sandbox-per-doc`, `extension-nav-lockdown`)
+is declared in `manifest.json` or wired through `chrome.*` APIs that only
+apply to the *installed extension's* pages. Opening `viewer.html` as a bare
+`file://` page (the case this section describes) is not the installed
+extension — it is a plain, unpackaged HTML file, so none of that hardening is
+present: no sandbox CSP restricting `connect-src`/`form-action`, no
+declarativeNetRequest navigation lockdown, no popup restriction. A dropped
+doc's Ruby still compiles and runs with the same JS interop it always has.
+Only drop a file here that you already trust, the same as you'd only run a
+script you trust — this mode is for previewing your own docs locally, not for
+opening an untrusted `.org`/`.rb` file someone sent you.
+
 **Two independent signals decide which mode `viewer.js` starts in**, because
 they catch two different situations:
 

@@ -247,6 +247,12 @@
   }
 
   window.addEventListener("message", (event) => {
+    // This page isn't web-accessible (manifest.json never exposes it outside
+    // the extension), so this is defense in depth rather than closing a live
+    // gap -- but a bare source check costs nothing and keeps this handler
+    // from trusting a message from anywhere other than the parent viewer.js
+    // frame that owns it.
+    if (event.source !== parent) return;
     const msg = event.data;
     if (!msg || msg.type !== "sw:render") return;
     render(msg.source, msg.name);

@@ -94,6 +94,7 @@ RSpec.describe 'the viewer sandbox frame lifecycle' do
         "status": new Elem("status"),
         "source-link": new Elem("source-link"),
         "drop-zone": new Elem("drop-zone"),
+        "drop-zone-warning": new Elem("drop-zone-warning"),
         "drop-zone-error": new Elem("drop-zone-error"),
         "file-input": new Elem("file-input"),
         "doc-name": new Elem("doc-name")
@@ -172,7 +173,8 @@ RSpec.describe 'the viewer sandbox frame lifecycle' do
 
           deliver(currentFrame(), { type: "sw:sandbox-ready" });
           await settle();
-          console.log(JSON.stringify({ afterA, afterDropB, afterStaleReady, posts, frameCount: frames.length }));
+          const warningHidden = elements["drop-zone-warning"].hidden;
+          console.log(JSON.stringify({ afterA, afterDropB, afterStaleReady, posts, frameCount: frames.length, warningHidden }));
         })();
       JS
     end
@@ -180,6 +182,10 @@ RSpec.describe 'the viewer sandbox frame lifecycle' do
     it 'renders the first doc into the frame viewer.html already shipped' do
       expect(result['afterA']['frameCount']).to eq(1)
       expect(result['afterA']['posts']).to eq([render_post(1, 'doc-a.org', 'DOC A SOURCE')])
+    end
+
+    it 'shows the drop-zone trust warning, since this bare-file entry point has none of the hardening' do
+      expect(result['warningHidden']).to be false
     end
 
     it 'discards the used frame and inserts a fresh one when a second doc arrives' do

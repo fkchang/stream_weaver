@@ -122,6 +122,7 @@ RSpec.describe 'the viewer navigation lockdown' do
           "status": new Elem("status"),
           "source-link": new Elem("source-link"),
           "drop-zone": new Elem("drop-zone"),
+          "drop-zone-warning": new Elem("drop-zone-warning"),
           "drop-zone-error": new Elem("drop-zone-error"),
           "file-input": new Elem("file-input"),
           "doc-name": new Elem("doc-name")
@@ -160,7 +161,8 @@ RSpec.describe 'the viewer navigation lockdown' do
           events: events,
           warnings: warnings,
           status: { text: elements["status"].textContent, hidden: elements["status"].hidden },
-          frameHidden: currentFrame().hidden
+          frameHidden: currentFrame().hidden,
+          warningHidden: elements["drop-zone-warning"].hidden
         }, extra || {})));
       JS
     end
@@ -220,6 +222,10 @@ RSpec.describe 'the viewer navigation lockdown' do
 
       it 'installs the rule before the doc is ever sent to the sandbox' do
         expect(result['events'].map { |event| event['kind'] }).to eq(%w[dnr render-post])
+      end
+
+      it 'hides the drop-zone trust warning, since this is the installed-extension context where the hardening applies' do
+        expect(result['warningHidden']).to be true
       end
 
       it 'blocks sub-frame navigation scoped to this tab only' do

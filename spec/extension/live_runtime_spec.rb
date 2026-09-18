@@ -267,9 +267,23 @@ RSpec.describe 'extension live runtime wiring' do
       load("extension/sandbox.js");
 
       // What viewer.js sends. The real listener, the real render path.
+      //
+      // `source: globalThis.parent` on the outer envelope is event.source, not
+      // the doc-source parameter of the same name below -- extension-misc-hardening
+      // added an event.source === parent check to sandbox.js's listener, so this
+      // shim now has to look like a real postMessage from the parent frame, the
+      // same way a real browser sets event.source automatically.
       const deliver = (source, name) => {
         (winListeners["message"] || []).forEach((fn) =>
-          fn({ data: { type: "sw:render", source: source, name: name || "Test Doc" } }));
+          fn({ source: globalThis.parent, data: { type: "sw:render", source: source, name: name || "Test Doc" } }));
+      };
+
+      // extension-misc-hardening: same envelope as deliver(), but from an
+      // arbitrary sender rather than the real parent frame -- proves the
+      // event.source === parent guard sandbox.js's listener added.
+      const deliverFrom = (spoofedSource, source, name) => {
+        (winListeners["message"] || []).forEach((fn) =>
+          fn({ source: spoofedSource, data: { type: "sw:render", source: source, name: name || "Test Doc" } }));
       };
 
       const fire = (type, target) => {
@@ -322,6 +336,30 @@ RSpec.describe 'extension live runtime wiring' do
       <<~RUBY
       table(headers: ["name", "qty"], rows: [["beta", "2"], ["alpha", "1"]], sortable: true)
       RUBY
+    end
+
+    describe "sandbox.js's sw:render message listener (extension-misc-hardening)" do
+      it 'ignores a render message whose source is not the parent frame' do
+        result = run_live(<<~JS)
+          deliverFrom({ postMessage: () => {} }, #{text_doc.to_json});
+          console.log(JSON.stringify({ count: morphs.length, posts: posts }));
+        JS
+
+        # Never reached render() at all -- no morph, and no post beyond the
+        # load-time "sw:sandbox-ready" every run gets regardless.
+        expect(result['count']).to eq(0)
+        expect(result['posts']).to eq([{ 'type' => 'sw:sandbox-ready' }])
+      end
+
+      it 'still renders a message that genuinely comes from the parent frame' do
+        result = run_live(<<~JS)
+          deliver(#{text_doc.to_json});
+          console.log(JSON.stringify({ count: morphs.length, posts: posts }));
+        JS
+
+        expect(result['count']).to be >= 1
+        expect(result['posts']).to include(hash_including('type' => 'sw:rendered'))
+      end
     end
 
     it 'patches the extension container, not a hardcoded sw-app' do

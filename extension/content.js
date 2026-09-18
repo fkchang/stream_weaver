@@ -130,12 +130,18 @@ function mountButton(button) {
 function gistFileBlocks() {
   return Array.from(document.querySelectorAll(".file"))
     .map((file) => {
-      const rawLink = file.querySelector('a[href*="/raw/"]');
+      // Scoped to .file-actions (GitHub's own toolbar), not a bare `a[href*="/raw/"]`
+      // anywhere in the file block -- a gist's rendered content can itself contain a
+      // link whose href happens to match /raw/ (e.g. a doc that links to some other
+      // gist's raw file), which would otherwise be mistaken for GitHub's actual Raw
+      // button.
+      const actions = file.querySelector(".file-actions");
+      const rawLink = actions?.querySelector('a[href*="/raw/"]');
       if (!rawLink) return null;
       const rawUrl = new URL(rawLink.getAttribute("href"), location.origin).href;
       const nameEl = file.querySelector(".file-info a");
       const name = nameEl ? nameEl.textContent.trim() : decodeURIComponent(rawUrl.split("/").pop());
-      return { file, actions: file.querySelector(".file-actions"), name, rawUrl };
+      return { file, actions, name, rawUrl };
     })
     .filter(Boolean);
 }
@@ -147,6 +153,10 @@ function mountFileButton(button, actions) {
   if (actions) {
     actions.prepend(button);
   } else {
+    // gistFileBlocks() now only returns a block once its rawLink was found
+    // inside .file-actions, so `actions` is never null on this call's only
+    // path (scanGistPage) -- kept as a defensive fallback rather than removed,
+    // to keep this function's contract the same shape as mountButton's.
     button.classList.add("sw-view-rendered-btn--floating");
     document.body.appendChild(button);
   }

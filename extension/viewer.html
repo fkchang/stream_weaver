@@ -66,6 +66,11 @@
       font-size: .9em;
     }
     #drop-zone-hint { margin-top: .5rem; font-size: .85em; }
+    #drop-zone-warning {
+      margin-top: .75rem;
+      font-size: .8em;
+      color: #9a6700;
+    }
     #file-picker-btn {
       padding: 0;
       color: #0969da;
@@ -103,6 +108,9 @@
       <p>Drop a StreamWeaver <code>.org</code> or <code>.rb</code> file here,<br>
          or <button type="button" id="file-picker-btn">choose a file</button>.</p>
       <p id="drop-zone-hint">Rendered entirely in this tab -- nothing is uploaded.</p>
+      <p id="drop-zone-warning"><strong>Trust warning:</strong> opened outside the installed
+         extension, this page has none of the extension's security hardening (CSP, navigation
+         lockdown, popup blocking) -- only drop files you already trust.</p>
       <div id="drop-zone-error" hidden></div>
     </div>
   </div>
