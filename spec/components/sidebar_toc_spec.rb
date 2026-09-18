@@ -225,7 +225,11 @@ RSpec.describe "SidebarToc Component (T11)" do
     end
 
     it "keeps the overflow reset out of the desktop media query -- mobile's top nav is sticky too" do
-      desktop_block = css[/@media \(min-width:\s*1000px\).*/m]
+      # Comments stripped first: this block's prose discusses the overflow
+      # reset, and passed only because that prose happened to spell it
+      # without a space. Every comment added inside the media query
+      # widened that trap.
+      desktop_block = css.gsub(%r{/\*.*?\*/}m, "")[/@media \(min-width:\s*1000px\).*/m]
       expect(desktop_block).not_to include("overflow: visible")
     end
 
@@ -240,6 +244,79 @@ RSpec.describe "SidebarToc Component (T11)" do
     it "preserves the horizontal-bar responsive layout below 1000px" do
       expect(css).to match(/@media \(max-width:\s*999px\)\s*\{[^@]*\.sw-sidebar-toc\s*\{[^}]*top:\s*0/m)
       expect(css).to match(/\.sw-sidebar-toc__nav\s*\{[^}]*flex-direction:\s*row/m)
+    end
+  end
+
+  # =========================================
+  # sw-region-N wrapper tolerance
+  # =========================================
+
+  # Why any of this exists lives once, next to the rule: see the
+  # "sw-region-N wrapper tolerance" comment in Adapter::Static#sidebar_toc_css.
+  describe "sw-region-N wrapper tolerance" do
+    let(:adapter) { StreamWeaver::Adapter::AlpineJS.new }
+    # Selector shape is the subject here, and the comments explaining that
+    # shape quote the selectors (and "@media") verbatim -- left in, the
+    # prose would satisfy assertions about the rules it describes.
+    let(:rules) { adapter.send(:sidebar_toc_css).gsub(%r{/\*.*?\*/}m, "") }
+    let(:wrapper_reset) { /#app-container\s*>\s*\[id\^="sw-region-"\]\s*\{[^}]*display:\s*contents/m }
+    let(:wrapper) { '[id^="sw-region-"]' }
+
+    it "makes the wrapper layout-transparent so the component stays the grid item" do
+      expect(rules).to match(wrapper_reset)
+    end
+
+    it "applies the wrapper reset at every width -- the mobile toc bar is sticky too" do
+      expect(rules.split("@media").first).to match(wrapper_reset)
+    end
+
+    it "gives every #app-container direct-child selector a wrapper-tolerant twin" do
+      # Derived, not enumerated: a sixth direct-child selector added later
+      # without a twin fails here instead of passing green.
+      direct_child = rules.lines.map(&:strip).select do |line|
+        line.include?("#app-container") && line.include?("> .sw-") && !line.include?(wrapper)
+      end.uniq
+
+      # 5 distinct selectors; the grid rule and the chrome-removal rule
+      # share one of them, so the un-uniqued line count is 6.
+      expect(direct_child.length).to eq(5)
+      aggregate_failures do
+        direct_child.each do |line|
+          twin = line.gsub("> .sw-", "> #{wrapper} > .sw-").sub(/[,{]\s*\z/, "").strip
+          expect(rules).to include(twin)
+        end
+      end
+    end
+
+    it "keeps each unwrapped selector in its list, last, rather than replacing it" do
+      # Kept at all: specificity is per selector, not per list, so the
+      # server-rendered path (canvas/reader/export, no wrappers) cascades
+      # unchanged. Kept last: eight assertions in this file match a
+      # selector abutting its "{".
+      twins = rules.lines.map(&:strip).select { |line| line.include?(wrapper) }
+
+      expect(twins).not_to be_empty
+      aggregate_failures do
+        twins.each do |line|
+          next if line.end_with?("{") # a line opening its own rule, not a list member
+
+          expect(line).to end_with(","), "#{line.inspect} must not be the last selector in its list"
+        end
+      end
+    end
+
+    it "still cannot be hijacked by a sidebar_toc nested deep inside an app_shell" do
+      # Tolerating the wrapper has to mean that one element at that one
+      # depth. A bare descendant, a bare div, or a second wrapper level
+      # would all let an app_shell-nested toc hijack #app-container into
+      # the doc grid and collapse the shell into the 220px toc column.
+      aggregate_failures do
+        expect(rules).not_to match(/:has\(\s*\.sw-sidebar-toc/)
+        expect(rules).not_to match(/:has\(\s*\.sw-doc-header/)
+        expect(rules).not_to match(/:has\(>\s*\*/)
+        expect(rules).not_to match(/:has\(>\s*div\b/)
+        expect(rules).not_to include("#{wrapper} > #{wrapper}")
+      end
     end
   end
 

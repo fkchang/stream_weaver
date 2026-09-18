@@ -229,6 +229,27 @@ RSpec.describe StreamWeaver::Opal::OpalRuntime do
       deps = runtime.state.dependencies_for("sw-region-0")
       expect(deps.count(:name)).to eq(1)
     end
+
+    # patch_regions resolves each region by document.getElementById("sw-region-N").
+    # A host that renders the wrappers once and then drops them turns every
+    # later region-scoped patch into a silent no-op -- the state changes, the
+    # DOM does not, and nothing errors.
+    it "emits the wrappers on every render, not just the first" do
+      runtime.set_block do
+        text state[:first].to_s
+        text "second"
+      end
+
+      renders = %w[a b c].map do |value|
+        runtime.state[:first] = value
+        runtime.render_html
+      end
+
+      renders.each_with_index do |html, i|
+        expect(html).to include('id="sw-region-0"'), "render #{i + 1} lost sw-region-0"
+        expect(html).to include('id="sw-region-1"'), "render #{i + 1} lost sw-region-1"
+      end
+    end
   end
 
   describe "state-update-loop banner" do

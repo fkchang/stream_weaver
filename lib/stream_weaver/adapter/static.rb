@@ -820,8 +820,63 @@ module StreamWeaver
              overflow wrapper and will now overflow to the page-level
              `html { overflow-x: auto }` scroller instead -- accepted, since
              a stuck TOC beats a nested table scrollbar. */
+          body[class*="sw-layout-"] > #app-container:has(> [id^="sw-region-"] > .sw-sidebar-toc),
           body[class*="sw-layout-"] > #app-container:has(> .sw-sidebar-toc) {
             overflow: visible;
+          }
+
+          /* ── sw-region-N wrapper tolerance ──
+             OpalRuntime#render_html wraps every top-level component in
+             `<div id="sw-region-N">` so update_and_patch can morph one
+             region instead of the whole document (runtime.rb's
+             patch_regions resolves each by getElementById). Those wrappers
+             have to survive every render, so this CSS reads through them
+             instead of hosts deleting them after each render to satisfy
+             the ">" combinators below (which is what extension/sandbox.js
+             did, commit 7bb5898, before it moved to the wrapper-free
+             render_static_html path).
+
+             Two separate problems, both real, each needing its own fix:
+
+             - Box tree: an interposed wrapper becomes the actual grid item
+               of the doc grid, so .sw-sidebar-toc loses `grid-column: 1`
+               / `grid-row: 1 / 9999` and its sticky containing block
+               shrinks to the wrapper's own short row. `display: contents`
+               removes the wrapper from the box tree entirely, restoring
+               the flat-siblings layout the server-rendered path (canvas /
+               reader / export, which never emit wrappers) already has.
+               Not inside a @media: the mobile top nav is sticky too.
+               Scoping note: this rule ships with sidebar_toc_css, so a
+               doc with no sidebar_toc keeps box-forming wrappers. Nothing
+               in lib/ breaks on that today (no `#app-container > *`
+               structural or sibling selectors at that level), and the
+               obvious alternative home -- views.rb's master_theme_css --
+               cannot reach the extension sandbox at all (disc-194:
+               CSS.base_stylesheet silently degrades to minimal_css).
+
+             - Selector matching: `display: contents` changes boxes, not
+               the DOM, so every `>` combinator below still needs a
+               wrapper-tolerant variant. Those variants go through
+               `[id^="sw-region-"]` at exactly one level -- deliberately
+               not a bare descendant or a bare `div`, which would
+               reintroduce the app_shell hijack the ">" exists to prevent
+               (see the comment on the desktop grid rules below).
+
+             Two separate reasons the unwrapped selector is KEPT, and kept
+             in a specific place. Kept at all: specificity is computed per
+             selector rather than per list, so leaving the original in the
+             list means the server-rendered path cascades exactly as it did
+             before these variants existed. Kept LAST, immediately before
+             the `{`: that position has no cascade meaning (selector order
+             within a list never does) but it is load-bearing anyway,
+             because spec/components/sidebar_toc_spec.rb asserts these
+             rules by matching the selector abutting its opening brace
+             (eight assertions, e.g. its "out-specifies the base
+             #app-container rule it has to beat"). Reorder a list for
+             readability and those go red pointing at the cascade rather
+             than at their own regexes. */
+          #app-container > [id^="sw-region-"] {
+            display: contents;
           }
 
           .sw-sidebar-toc__nav {
@@ -944,12 +999,21 @@ module StreamWeaver
                into this grid. Since app_shell is then #app-container's
                ONLY child, CSS Grid auto-placement drops it into just the
                first (toc-width) column and leaves the second column empty
-               -- collapsing the entire app_shell to ~220px wide. */
+               -- collapsing the entire app_shell to ~220px wide.
+
+               The `[id^="sw-region-"]` variants paired into each list
+               below are the one exception, and they keep that guard: they
+               tolerate exactly one extra level, and only when it is an
+               OpalRuntime region wrapper (see the wrapper-tolerance
+               comment above). */
+            body:has(> #app-container > [id^="sw-region-"] > .sw-sidebar-toc),
             body:has(> #app-container > .sw-sidebar-toc) {
               max-width: 1200px;
             }
 
+            body:has(> #app-container > [id^="sw-region-"] > .sw-doc-header) > h1 + #app-container,
             body:has(> #app-container > .sw-doc-header) > h1 + #app-container,
+            #app-container:has(> [id^="sw-region-"] > .sw-sidebar-toc),
             #app-container:has(> .sw-sidebar-toc) {
               padding-top: 0;
               box-shadow: none;
@@ -965,6 +1029,7 @@ module StreamWeaver
                `body[class*="sw-layout-"] > #app-container:has(> .sw-sidebar-toc)`
                rule above, not here -- it has to apply below 1000px too,
                for the mobile top nav. */
+            #app-container:has(> [id^="sw-region-"] > .sw-sidebar-toc),
             #app-container:has(> .sw-sidebar-toc) {
               --sw-toc-width: 220px;
               --sw-toc-gap: 2rem;
@@ -976,6 +1041,7 @@ module StreamWeaver
             /* doc_header stays a normal column-2 grid item (never claims
                column 1) so it can't block the sidebar's row-span below —
                it bleeds visually full-width via negative margin instead. */
+            #app-container:has(> [id^="sw-region-"] > .sw-sidebar-toc) > [id^="sw-region-"] > .sw-doc-header,
             #app-container:has(> .sw-sidebar-toc) > .sw-doc-header {
               margin-left: calc(-1 * (var(--sw-toc-width) + var(--sw-toc-gap)));
               padding-left: calc(var(--sw-toc-width) + var(--sw-toc-gap));
