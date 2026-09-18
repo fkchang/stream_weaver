@@ -476,11 +476,18 @@ RSpec.describe "Mermaid Component (T3)" do
       expect(js).to include("showModal")
     end
 
-    it "guards against re-wiring the expand button on every theme switch" do
-      # reRenderAll() (a theme toggle) re-runs initExpand against the same
-      # button without recreating it -- without an idempotency guard, every
-      # toggle stacks another click handler on it.
-      expect(js).to include("data-sw-expand-wired")
+    it "guards against re-wiring the expand button on every re-render" do
+      # reRenderAll() (a theme toggle) and a morphdom patch (the extension's
+      # live runtime) both re-run initExpand against the same button without
+      # recreating it -- without an idempotency guard, each one stacks another
+      # click handler on it.
+      #
+      # Keyed on node identity, not a data attribute: a morphdom patch syncs
+      # attributes from freshly rendered markup that never carries the guard
+      # flag, so an attribute guard is stripped at exactly the moment the node
+      # it was protecting is kept.
+      expect(js).to include("expandWired")
+      expect(js).not_to include("setAttribute('data-sw-expand-wired'")
     end
 
     it "ties every fullscreen listener to one AbortController per open" do

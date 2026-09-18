@@ -48,9 +48,23 @@
     return `app(${title}) do\n${rewrite(source)}\nend\n`;
   }
 
-  // Static markup rather than a live runtime: this is a document viewer, so
-  // there is nothing to interact with, and skipping SWRuntime.start() avoids
-  // installing event delegation and a re-render loop that would never fire.
+  // The live runtime, not the one-pass static render this used to call.
+  //
+  // A doc's interactive controls -- a sortable table's column header, a
+  // text_field, a checkbox -- are inert without it: SWRuntime.start() is what
+  // installs the delegated event listeners and the morphdom patch loop, and
+  // it renders through the region-wrapping path those patches target.
+  // Both SWRuntime and SWRender are installed by every compiled doc's `app()`
+  // call regardless (opal_entry.rb), so this is a change of which one is
+  // asked to render, not new capability.
+  //
+  // start() is handed this page's own container id. The runtime defaults to
+  // "sw-app"; sandbox.html explains why this page cannot be renamed to match.
+  //
+  // Component CSS needs no handling here any more: rendering through the live
+  // runtime routes it through the adapter's inject_component_css, which writes
+  // one keyed <style> into <head> per component and is therefore idempotent
+  // across the re-renders this page now does.
   function render(source, name) {
     let ruby;
     try {
@@ -65,29 +79,13 @@
       return fail("Compiling Ruby", e);
     }
 
-    let html, css;
     try {
-      html = SWRender.staticHtml();
-      css = SWRender.css();
+      window.SWRuntime.start("app-container");
     } catch (e) {
       return fail("Rendering document", e);
     }
 
-    if (css) {
-      const style = document.createElement("style");
-      style.textContent = css;
-      document.head.appendChild(style);
-    }
-    app.innerHTML = html;
-    // sw-sidebar-toc.js (vendor, stream_weaver-v3ni) only self-initializes
-    // once, at DOMContentLoaded -- before this render() has put any doc
-    // content into #app-container. Every other host re-triggers it via a
-    // real htmx:afterSwap event; this sandbox never uses htmx, so it calls
-    // the script's own exported hook directly instead.
-    self.swInitSidebarToc?.();
-
-    enhance();
-    parent.postMessage({ type: "sw:rendered", bytes: html.length }, "*");
+    parent.postMessage({ type: "sw:rendered", bytes: app.innerHTML.length }, "*");
   }
 
   // Every link in a rendered doc is routed by this one delegated handler --
@@ -172,9 +170,14 @@
     parent.postMessage({ type: "sw:open-external", href: resolved }, "*");
   });
 
-  // Prism and Mermaid decorate markup rather than produce it, so they run
-  // after the HTML is in the DOM. Failures here are cosmetic -- the document
-  // is already readable -- so they are logged rather than surfaced.
+  // Prism, sidebar-toc and Mermaid decorate markup rather than produce it, so
+  // they run after the HTML is in the DOM. Failures here are cosmetic -- the
+  // document is already readable -- so they are logged rather than surfaced.
+  //
+  // All three self-initialize at DOMContentLoaded, which fires before any doc
+  // content exists in #app-container. Every other host re-triggers them with a
+  // real htmx:afterSwap event; this page has no htmx, so it calls their
+  // exported hooks itself.
   function enhance() {
     try {
       if (typeof Prism !== "undefined") Prism.highlightAll();
@@ -182,8 +185,32 @@
       console.error("[StreamWeaver] highlighting failed:", e);
     }
 
+    try {
+      self.swInitSidebarToc?.();
+    } catch (e) {
+      console.error("[StreamWeaver] sidebar toc failed:", e);
+    }
+
     runMermaidWhenPainted();
   }
+
+  // Once per patch, not once per document.
+  //
+  // morphdom replaces nodes and takes their decoration with them, so a doc
+  // that re-renders (which is the whole point of starting the live runtime)
+  // would otherwise lose its highlighting and diagrams on the first
+  // interaction and never get them back. OpalRuntime#announce_render fires
+  // this event at the end of every patch, full-container or per-region alike.
+  //
+  // Registered at load, before any render(): the first patch happens inside
+  // SWRuntime.start(), so a listener attached afterwards would miss it.
+  //
+  // Each hook is responsible for its own idempotency, and each one's guard has
+  // to key on node identity rather than on a DOM attribute -- morphdom syncs
+  // attributes from freshly rendered markup that never carries the guard flag,
+  // so it strips the flag while keeping the very node whose listeners are
+  // already attached (see sw-sidebar-toc.js and sw-mermaid-zoom.js).
+  document.addEventListener("sw:render", enhance);
 
   // viewer.js unhides this iframe before sending "sw:render" specifically so
   // mermaid has real layout to measure (a hidden ancestor makes getBBox etc.

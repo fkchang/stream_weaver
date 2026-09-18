@@ -1117,8 +1117,7 @@ module StreamWeaver
         # Server-paginated sort requires app-level state + re-query; this only sorts in-memory rows.
         # Sort state uses string keys to avoid collision with update_state, which symbolizes all keys.
         return unless @sortable && @data.is_a?(Symbol)
-        col_count = @headers ? @headers.length : Array(@columns).length
-        col_count.times do |col_index|
+        sortable_column_count.times do |col_index|
           registry["#{key}_sort_#{col_index}"] = ->(state) {
             if state["#{key}_sort_col"] == col_index
               state["#{key}_sort_dir"] = state["#{key}_sort_dir"] == :asc ? :desc : :asc
@@ -1131,6 +1130,26 @@ module StreamWeaver
       end
 
       private
+
+      # One callback per column the adapter will actually emit a sort button
+      # for, which is one per *resolved* header -- so that is what this counts
+      # first. The `table` DSL method resolves eagerly (display_dsl.rb), so by
+      # the time callbacks are registered the resolved headers are the real
+      # column list, and a declared `headers:` that disagrees with them is only
+      # a guess made before the data was seen.
+      #
+      # Counting the declaration alone is the bug this replaces:
+      # `table(:my_data, sortable: true)`, with the headers arriving inside the
+      # state value, has no `headers:` kwarg and no column DSL, so it
+      # registered nothing and rendered sort buttons wired to nothing.
+      # The declaration stays as the fallback for a table asked for its
+      # callbacks before it was ever resolved.
+      def sortable_column_count
+        resolved = Array(@resolved_headers).length
+        return resolved if resolved.positive?
+
+        (@headers || @columns).length
+      end
 
       def resolve_data(state, app = nil, fragment = nil)
         raw = raw_data(state)

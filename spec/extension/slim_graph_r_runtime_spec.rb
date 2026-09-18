@@ -196,8 +196,10 @@ RSpec.describe 'the packaged SlimGraphR extension runtime' do
     expect(manifest.dig('content_security_policy', 'sandbox')).to include("script-src 'self' 'unsafe-eval'")
     expect(sandbox_html.scan(/<(?:script|link)[^>]+(?:src|href)="([^"]+)"/).flatten)
       .to all(satisfy { |path| !path.match?(%r{\A(?:https?:)?//}) })
-    expect(sandbox_js).to include('SWRender.staticHtml()')
-    expect(sandbox_js.scan('app.innerHTML = html').length).to eq(1)
+    # The render path itself is pinned by spec/extension/live_runtime_spec.rb
+    # (it moved from SWRender.staticHtml() + innerHTML to SWRuntime.start()
+    # when the live runtime was wired up). What matters here is only that
+    # rendering a diagram still reaches no network.
     expect(sandbox_js).not_to match(/\bfetch\s*\(/)
   end
 

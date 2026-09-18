@@ -30,9 +30,31 @@ module StreamWeaver
         end
       end
 
-      attr_reader :state
+      # The element every patch morphs into, by id.
+      #
+      # Configurable rather than fixed because the two Opal hosts disagree and
+      # only one of them can be changed: OpalShell's standalone page owns its
+      # own markup and uses this default, while the browser extension's
+      # sandbox.html has to keep `id="app-container"` -- a large amount of
+      # :doc-theme CSS is scoped to `body[class*="sw-layout-"] > #app-container`
+      # (adapter/static.rb's sidebar_toc_css), and renaming it to match this
+      # default was tried in 2026-08 and silently dropped the sidebar's grid
+      # column. So the runtime is told where to mount instead of the page being
+      # renamed to suit the runtime.
+      DEFAULT_MOUNT_ID = "sw-app"
+
+      attr_reader :state, :mount_id
+
+      # nil/empty means "whatever the default is" rather than an error: the JS
+      # side calls start() with no argument in the standalone host, and an
+      # absent argument arrives here as nil.
+      def mount_id=(id)
+        value = id.to_s.strip
+        @mount_id = value.empty? ? DEFAULT_MOUNT_ID : value
+      end
 
       def initialize(adapter:)
+        self.mount_id         = nil
         @adapter              = adapter
         @state                = ReactiveState.new
         @callbacks            = {}
@@ -244,6 +266,14 @@ module StreamWeaver
         end
       end
 
+      # What window.SWRuntime.start(mountId) calls: mount where the host says,
+      # then render and patch. Here rather than assembled in the bridge so the
+      # bridge stays a thin JS surface over named runtime methods.
+      def start(id = nil)
+        self.mount_id = id
+        render_and_patch
+      end
+
       def render_and_patch
         @sync_rendering = true
         html = render_html
@@ -280,17 +310,61 @@ module StreamWeaver
         @sync_rendering = false
       end
 
+      # morphdom options shared by both patch paths.
+      #
+      # A subtree some host library has already decorated must not be morphed
+      # from freshly rendered markup, because that markup is the *undecorated*
+      # version. Mermaid is the case that forces this: the DSL emits an empty
+      # diagram container and sw-mermaid-zoom.js renders the SVG into it
+      # afterwards, so morphing deletes the diagram on every patch and leaves
+      # an async re-render to put it back -- a flicker per keystroke at best,
+      # and no diagram at all when patches arrive faster than mermaid renders
+      # (observed in real Chrome). Returning false from onBeforeElUpdated skips
+      # the element and its children.
+      #
+      # This is only safe because such a container's id is derived from its
+      # content (Components::Mermaid#diagram_id): edit the diagram and the id
+      # changes, so morphdom never pairs the old node with the new one and the
+      # new one renders normally. An id that merely happened to be unique would
+      # make this a way to pin stale output on screen.
+      def morph_options
+        @morph_options ||= build_morph_options
+      end
+
+      # Its own method so the x-string is the whole body: Opal only gives a
+      # multi-line x-string an implicit return in that position (same shape as
+      # .install_browser_timer above).
+      def build_morph_options
+        # :nocov:
+        %x{
+          return {
+            onBeforeElUpdated: function(fromEl) {
+              return !(fromEl.hasAttribute && fromEl.hasAttribute('data-sw-mermaid-done'));
+            }
+          };
+        }
+        # :nocov:
+      end
+
+      # The markup both patch paths morph into: the rendered body inside a
+      # stand-in for the mount element, so morphdom compares like with like.
+      def mounted_html(html)
+        "<div id=\"#{@mount_id}\">#{html}</div>"
+      end
+
       def patch_regions(region_ids, full_html)
+        options = morph_options
+        parse_source = mounted_html(full_html)
         # :nocov:
         %x{
           var parser = new DOMParser();
-          var doc = parser.parseFromString('<div id="sw-app">' + #{full_html} + '</div>', 'text/html');
+          var doc = parser.parseFromString(#{parse_source}, 'text/html');
           var ids = #{region_ids};
           for (var i = 0; i < ids.length; i++) {
-            var id = ids[i];
-            var newRegion = doc.getElementById(id);
-            var oldRegion = document.getElementById(id);
-            if (newRegion && oldRegion) { morphdom(oldRegion, newRegion); }
+            var regionId = ids[i];
+            var newRegion = doc.getElementById(regionId);
+            var oldRegion = document.getElementById(regionId);
+            if (newRegion && oldRegion) { morphdom(oldRegion, newRegion, #{options}); }
           }
         }
         # :nocov:
@@ -337,9 +411,21 @@ module StreamWeaver
         render_and_patch
       end
 
+      # A missing mount element throws rather than no-oping: the failure mode it
+      # replaces is a page that renders, accepts clicks, and silently never
+      # patches anything, which is far harder to diagnose than a message naming
+      # the id nothing matched. Both hosts wrap start() in a handler that shows
+      # the message (the extension's error box, sandbox.js).
       def patch_dom(html)
+        mount   = @mount_id
+        options = morph_options
+        patched = mounted_html(html)
         # :nocov:
-        %x{ morphdom(document.getElementById('sw-app'), '<div id="sw-app">' + #{html} + '</div>') }
+        %x{
+          var root = document.getElementById(#{mount});
+          if (!root) throw new Error("StreamWeaver: no mount element with id '" + #{mount} + "'");
+          morphdom(root, #{patched}, #{options});
+        }
         # :nocov:
         announce_render
       end

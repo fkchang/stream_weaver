@@ -650,6 +650,23 @@ table data, sticky_header: true
 table data, sortable: true, sticky_header: true, striped: true
 ```
 
+**`sortable: true` needs the data to live in state.** Sorting is wired by
+`Table#register_callbacks`, which only registers a sort callback when the
+table's data is a Symbol naming a state key:
+
+```ruby
+table :rows, sortable: true                                  # sorts
+table headers: [...], rows: [...], sortable: true            # renders sort
+                                                             # buttons that do
+                                                             # nothing
+```
+
+A literal `headers:`/`rows:` table still renders clickable sort buttons, but
+there is nothing behind them — a state-bound table is the only form that
+sorts. Making literal tables sortable would need sort state the component
+does not currently own; it is a separate piece of work, not a bug in a
+particular host.
+
 ### Markdown Links in Cells
 
 ```ruby

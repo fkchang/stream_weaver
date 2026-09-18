@@ -127,16 +127,18 @@ bodies are full of them, so `sw-heredoc-rewrite.js` converts them to quoted
 strings first. Without that step, in-browser compilation fails on essentially
 every real document.
 
-**`#app-container`, not `#sw-app`, and static docs render in one pass.** A lot
-of `:doc`-theme CSS (sidebar_toc's sticky grid layout, doc_header's chrome
+**`#app-container`, not `#sw-app`, and the runtime is told so.** A lot of
+`:doc`-theme CSS (sidebar_toc's sticky grid layout, doc_header's chrome
 removal) is scoped to `body[class*="sw-layout-"] > #app-container`, matching
 the server-rendered shape exactly — using a different mount id/no layout
-class would silently drop all of that. The live Opal runtime rebuilds the app
-once per tracked region so later state changes can patch only the affected
-component. The extension never starts that reactive runtime, so
-`SWRender.staticHtml()` builds the component tree once and renders it in
-document order through the same adapter. Static output therefore has no
-reactive region wrappers to remove and still satisfies the direct-child CSS.
+class would silently drop all of that, and renaming this page's container to
+the runtime's `sw-app` default was tried in 2026-08 and broke the sidebar's
+grid column. So `sandbox.js` passes the id to `SWRuntime.start("app-container")`
+instead: the runtime's mount id is a parameter, not a constant. The live
+runtime wraps each top-level component in an `sw-region-N` div so a state
+change can patch only the affected region; the `:doc` CSS tolerates those
+wrappers via `display: contents` rather than having them stripped after every
+render, which would turn every region-scoped patch into a silent no-op.
 
 **Opal's `\A`/`\z` anchors don't translate in runtime-built regexes.** A real
 Opal compiler bug, not specific to this codebase: `\A`/`\z` only become JS's
@@ -159,11 +161,26 @@ the mermaid call in a double `requestAnimationFrame` as a wall-clock-
 independent guarantee ("the browser has completed a real layout+paint pass")
 instead of relying on message-ordering luck.
 
-**Docs render inert.** The viewer uses the one-pass `SWRender.staticHtml()`
-bridge rather than starting the live runtime. There is nothing to interact with
-in a document, so it skips dependency tracking, event delegation, and the
-re-render loop while keeping the same Ruby DSL, adapter, and component
-renderers.
+**Docs are interactive.** `sandbox.js` starts the live runtime
+(`SWRuntime.start`), so a doc's controls actually do something: a sortable
+table's column header sorts, a `text_field` or `checkbox` updates state, and
+the runtime patches the affected regions with morphdom rather than replacing
+the whole container.
+
+Two constraints worth knowing:
+
+- Sorting is wired only for a **state-bound** table — `table(:my_data,
+  sortable: true)`, whose data is a Symbol state key. A literal
+  `table(headers: [...], rows: [...], sortable: true)` renders sort buttons
+  that are wired to nothing (`Table#register_callbacks` returns early when the
+  data is not a Symbol). Pre-existing, and a separate piece of work to change.
+- Prism, Mermaid and sidebar-toc decorate rendered markup, so they re-run on
+  every patch via the `sw:render` event the runtime dispatches. Each one's
+  "already initialized" guard keys on node identity (a `WeakSet`), not a DOM
+  attribute: morphdom syncs attributes from freshly rendered markup that never
+  carries the guard flag, so an attribute guard gets stripped at exactly the
+  moment the node it protects is kept — which stacks a duplicate listener or
+  observer on every render.
 
 **`<base target="_blank">` hijacks same-page fragment links too, not just
 outbound ones — fixed at the cause, not just for `sidebar_toc`.** That base

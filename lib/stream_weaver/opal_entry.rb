@@ -97,11 +97,14 @@ module StreamWeaver
   # undefined in every Opal build (this extension, opal-build's standalone
   # HTML output) the moment app.rb started calling it -- "undefined method
   # `strict_ids?' for StreamWeaver", reproduced live against a rebuilt
-  # extension bundle. Always false here, not a stub of the real check: both
-  # Opal hosts only ever render a doc once, non-interactively (SWRuntime.
-  # start() is never called for the extension's static preview; opal-build's
-  # standalone HTML is likewise a one-shot render), so there is no
-  # interactive id-collision risk for strict mode to catch in either one.
+  # extension bundle. Always false here, not a stub of the real check.
+  #
+  # Strict mode exists to catch two DSL callsites colliding on one dom id
+  # across rerenders, and the Opal hosts cannot hit that: AppButtonPatch (above)
+  # replaces source_location-derived ids with a counter reset per App build, so
+  # every render of a given doc assigns the same ids in the same order. This
+  # holds now that the extension starts the live runtime and re-renders on every
+  # interaction, not only when it rendered once statically.
   def self.strict_ids?
     false
   end

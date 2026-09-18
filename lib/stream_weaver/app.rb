@@ -104,7 +104,18 @@ module StreamWeaver
       @loading_indicators = loading_indicators
       @_warned_duplicate_ids = Set.new
       @scripts = scripts
-      @script_dir = File.dirname(File.expand_path(caller_locations(1, 1).first.path))
+      # caller_locations can come back empty under Opal: a compiled frame
+      # entered from a setTimeout callback has nothing parseable above it, so
+      # .first is nil and this line raised NoMethodError *mid-render*. That
+      # surfaced as the extension's first user interaction being silently
+      # swallowed -- OpalRuntime#render_html clears its callback registry
+      # before rebuilding the app, so a raise here left the registry empty and
+      # the next click found nothing to invoke. There is no local filesystem to
+      # serve assets from in that host anyway, so the fallback is inert rather
+      # than merely safe -- and it is the working directory itself, not its
+      # parent, since @script_dir seeds @allowed_asset_dirs on the next line.
+      location    = caller_locations(1, 1)&.first
+      @script_dir = location ? File.dirname(File.expand_path(location.path)) : Dir.pwd
       @allowed_asset_dirs = ([@script_dir] + assets_dirs.map { |d| File.expand_path(d) }).uniq
       @stylesheets = stylesheets.map { |href| resolve_stylesheet_href(href) }
       @inline_stylesheets = []
