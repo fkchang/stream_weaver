@@ -269,7 +269,7 @@ RSpec.describe 'the viewer sandbox frame lifecycle' do
         const chrome = {
           runtime: { getURL: (path) => "chrome-extension://testextid/" + path },
           tabs: { getCurrent: async () => ({ id: 3 }) },
-          declarativeNetRequest: { updateSessionRules: async () => {} },
+          declarativeNetRequest: { updateSessionRules: async () => {}, getSessionRules: async () => [] },
           storage: {
             session: {
               get: async (key) => ({ [key]: { source: "GITHUB DOC SOURCE", name: "readme.org" } }),

@@ -145,10 +145,11 @@ RSpec.describe 'the viewer navigation lockdown' do
           messageHandlers.forEach((fn) => fn({ source: frameEl.contentWindow, data: data }));
         // Enough turns for the deepest promise chain viewer.js has on these
         // paths to finish: the nav-lockdown install awaits chrome.tabs
-        // .getCurrent then updateSessionRules, then re-drives sendWhenReady,
-        // and handleFile awaits file.text() -- six is slack over that, not a
-        // tuned number. Anything whose timing is actually under test is
-        // released explicitly instead (see the deferred-install example).
+        // .getCurrent, then getSessionRules, then updateSessionRules, then
+        // re-drives sendWhenReady, and handleFile awaits file.text() -- six
+        // is slack over that, not a tuned number. Anything whose timing is
+        // actually under test is released explicitly instead (see the
+        // deferred-install example).
         const settle = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setTimeout(r, 0)); };
         const drop = (name, source) => {
           const input = elements["file-input"];
@@ -164,12 +165,14 @@ RSpec.describe 'the viewer navigation lockdown' do
       JS
     end
 
-    # The chrome.* surface viewer.js actually uses, with the three pieces an
+    # The chrome.* surface viewer.js actually uses, with the four pieces an
     # example may want to break: how updateSessionRules behaves, what
+    # getSessionRules reports already installed (the id-allocation lookup
+    # reads this before ever calling updateSessionRules), what
     # chrome.tabs.getCurrent answers, and whether declarativeNetRequest exists
     # at all.
     def chrome_stub(dnr: 'async (arg) => { events.push({ kind: "dnr", arg: arg }); }', tab: '{ id: 7 }',
-                    declarative: true)
+                    declarative: true, session_rules: '[]')
       <<~JS
         const chrome = {
           runtime: { getURL: (p) => "chrome-extension://testextid/" + p },
@@ -177,13 +180,22 @@ RSpec.describe 'the viewer navigation lockdown' do
           tabs: {
             getCurrent: async () => (#{tab}),
             create: (opts) => events.push({ kind: "tab-create", url: opts.url })
-          }#{declarative ? ",\n  declarativeNetRequest: { updateSessionRules: #{dnr} }" : ''}
+          }#{declarative ? ",\n  declarativeNetRequest: { updateSessionRules: #{dnr}, getSessionRules: async () => (#{session_rules}) }" : ''}
         };
       JS
     end
 
     def run_viewer(shim, script)
       run_node_json(shim, viewer_source, script)
+    end
+
+    # The updateSessionRules() call's argument -- addRules/removeRuleIds --
+    # pulled out of the event log every example in this describe wants to
+    # assert on. Named dnr_call rather than dnr_arg so it doesn't collide
+    # with the identically-named `let` a shadowing method of the same name
+    # would silently override.
+    def dnr_call(result)
+      result['events'].find { |event| event['kind'] == 'dnr' }['arg']
     end
 
     # Renders one doc the ordinary way: drop it in, let the fresh frame report
@@ -203,7 +215,7 @@ RSpec.describe 'the viewer navigation lockdown' do
 
     describe 'installing the tab-scoped guard before anything renders' do
       let(:result) { render_one(viewer_shim(chrome_stub: chrome_stub)) }
-      let(:dnr_arg) { result['events'].find { |event| event['kind'] == 'dnr' }['arg'] }
+      let(:dnr_arg) { dnr_call(result) }
       let(:rules) { dnr_arg.fetch('addRules') }
 
       it 'installs the rule before the doc is ever sent to the sandbox' do
@@ -242,6 +254,103 @@ RSpec.describe 'the viewer navigation lockdown' do
       it 'replaces its own rules rather than stacking them on a reload' do
         expect(dnr_arg.fetch('removeRuleIds')).to eq(rules.map { |rule| rule.fetch('id') })
         expect(rules.map { |rule| rule.fetch('id') }.uniq.length).to eq(2)
+      end
+    end
+
+    describe 'allocating rule ids for a large, realistic tab id' do
+      # disc-uat-nav-lockdown: a Playwright-launched Chromium tab id
+      # (1473826186, well under the int32 max declarativeNetRequest's rule id
+      # field requires) produced a blockId of 2947652373 under the old
+      # `tabId * 2 + 1` scheme -- past int32 max -- and
+      # updateSessionRules() threw "expected integer, found number" on the
+      # very first install. Regression coverage for the id-allocation
+      # rewrite: real, already-observed-in-the-wild tab ids must not
+      # overflow.
+      let(:big_tab_id) { 1_473_826_186 }
+      let(:result) do
+        render_one(viewer_shim(chrome_stub: chrome_stub(tab: "{ id: #{big_tab_id} }")))
+      end
+      let(:dnr_arg) { dnr_call(result) }
+      let(:rules) { dnr_arg.fetch('addRules') }
+
+      it 'installs without throwing and renders the doc' do
+        expect(result['events'].map { |event| event['kind'] }).to eq(%w[dnr render-post])
+      end
+
+      it 'allocates the deterministic lowest-free pair rather than deriving ids from the tab id' do
+        # No other tab owns anything yet, so the allocator's contract is
+        # exact: the lowest two ids, not merely "some in-range pair".
+        expect(rules.map { |rule| rule.fetch('id') }).to eq([1, 2])
+      end
+
+      it 'still scopes both rules to the real (large) tab id' do
+        expect(rules.map { |rule| rule.dig('condition', 'tabIds') }).to all(eq([big_tab_id]))
+      end
+    end
+
+    describe "reusing this tab's own ids on a later install" do
+      def installed_rule(id:, type:, url_filter:)
+        <<~JS
+          { id: #{id}, priority: #{type == 'block' ? 1 : 2}, action: { type: #{type.to_json} },
+            condition: { urlFilter: #{url_filter.to_json}, tabIds: [7], resourceTypes: ["sub_frame"] } }
+        JS
+      end
+
+      it "reuses its previous pair instead of allocating a new one" do
+        # Same tab, installed twice (e.g. the guard re-running without the
+        # page navigating away). The lookup should find its own previous
+        # pair via getSessionRules and reuse them -- not hand out a fresh
+        # pair and orphan the old one.
+        previously_installed = "[#{installed_rule(id: 3, type: 'block', url_filter: '*')}," \
+                                "#{installed_rule(id: 4, type: 'allow', url_filter: '|chrome-extension://testextid/')}]"
+
+        result = render_one(viewer_shim(chrome_stub: chrome_stub(session_rules: previously_installed)))
+
+        expect(dnr_call(result).fetch('addRules').map { |rule| rule.fetch('id') }).to eq([3, 4])
+        expect(dnr_call(result).fetch('removeRuleIds')).to eq([3, 4])
+      end
+
+      it 'tops up rather than colliding when it owns only one previous id' do
+        # The bug this regresses: a prior install that left only one rule
+        # behind (a partial install, or one rule removed out from under it).
+        # Reusing that single id and then allocating a second "lowest free"
+        # id without first accounting for the reused one would hand out the
+        # same id twice -- Chrome rejects a duplicate id in one addRules
+        # call, so this tab's guard would fail to install on every future
+        # reload.
+        one_previous_rule = "[#{installed_rule(id: 3, type: 'block', url_filter: '*')}]"
+
+        result = render_one(viewer_shim(chrome_stub: chrome_stub(session_rules: one_previous_rule)))
+        ids = dnr_call(result).fetch('addRules').map { |rule| rule.fetch('id') }
+
+        expect(ids).to eq([3, 1])
+        expect(ids.uniq.length).to eq(2)
+        expect(result['events'].map { |event| event['kind'] }).to eq(%w[dnr render-post])
+      end
+    end
+
+    describe "not colliding with another tab's already-installed ids" do
+      it 'skips ids a different tab already owns' do
+        other_tabs_rules = <<~JS
+          [
+            { id: 1, priority: 1, action: { type: "block" },
+              condition: { urlFilter: "*", tabIds: [99], resourceTypes: ["sub_frame"] } },
+            { id: 2, priority: 2, action: { type: "allow" },
+              condition: { urlFilter: "|chrome-extension://testextid/", tabIds: [99], resourceTypes: ["sub_frame"] } }
+          ]
+        JS
+
+        result = render_one(viewer_shim(chrome_stub: chrome_stub(session_rules: other_tabs_rules)))
+        dnr_arg = dnr_call(result)
+        ids = dnr_arg.fetch('addRules').map { |rule| rule.fetch('id') }
+
+        # The allocator's exact contract given tab 99 already holds 1 and 2:
+        # the next lowest free pair, not merely "avoids 1 and 2 somehow".
+        expect(ids).to eq([3, 4])
+        # The security property this whole scheme exists for: this tab's
+        # install must never be able to remove a rule that belongs to
+        # another tab's still-open, still-relying-on-it guard.
+        expect(dnr_arg.fetch('removeRuleIds')).not_to include(1, 2)
       end
     end
 

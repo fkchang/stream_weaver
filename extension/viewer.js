@@ -192,11 +192,46 @@
   // both halves live in Chrome: the rule blocks the self-navigation, and the
   // same rule cannot touch a popup, whose new tab has an id no tab-scoped
   // rule matches -- hence removing popups outright instead).
-  function navLockdownRules(tabId) {
-    // Ids are derived from the tab so every viewer tab owns its own pair and
-    // two open viewers never overwrite each other's rules (session rule ids
-    // are extension-global). Offset by one because a rule id must be >= 1.
-    const blockId = tabId * 2 + 1;
+  async function navLockdownRules(tabId) {
+    // Ids used to be derived arithmetically from the tab (tabId * 2 + 1).
+    // DNR rule ids must fit the signed-32-bit range, and while tabId itself
+    // is guaranteed to (it's Chrome's own tab id type), doubling it is not --
+    // Chrome rejects the overflowed id with a misleading "expected integer,
+    // found number" (Number.isInteger() is true; it just isn't a 32-bit int).
+    // Reproduced live and detailed in nav_lockdown_spec.rb's "allocating rule
+    // ids for a large, realistic tab id" examples.
+    //
+    // Fixed by allocating small ids instead of computing them: read the
+    // currently-installed session rules and reuse the lowest ids this tab
+    // already owns (a reload replaces rather than duplicates), topping up
+    // with the lowest ids no tab owns yet for however many it's short. This
+    // keeps the original safety property (two open viewers never overwrite
+    // each other's rules) without ever producing an out-of-range id. It does
+    // leave one narrow race: two viewer tabs whose installs interleave
+    // between this read and their own updateSessionRules() call could
+    // compute the same "next free" id. That is a pre-existing class of risk
+    // (session rule ids are extension-global, and nothing serializes writers
+    // across tabs) rather than one this change introduces, and is far
+    // narrower than the guaranteed overflow it replaces.
+    const existing = await chrome.declarativeNetRequest.getSessionRules();
+    const isMine = (rule) => (rule.condition.tabIds || []).includes(tabId);
+    const taken = new Set(existing.map((rule) => rule.id));
+
+    let nextCandidate = 1;
+    function allocate() {
+      while (taken.has(nextCandidate)) nextCandidate++;
+      taken.add(nextCandidate);
+      return nextCandidate++;
+    }
+
+    // `taken` seeds from every id currently in use, mine included, so
+    // topping up with allocate() below can never hand out an id this tab
+    // just reused a line above -- reusing fewer than two ids (a partial
+    // prior install) is exactly the case that has to stay collision-free.
+    const ids = existing.filter(isMine).map((rule) => rule.id).sort((a, b) => a - b);
+    while (ids.length < 2) ids.push(allocate());
+    const [blockId, allowId] = ids;
+
     return [
       {
         id: blockId,
@@ -222,7 +257,7 @@
         // any replacement frame. An explicit higher-priority allow for the
         // extension's own URL prefix makes that safe regardless of whether
         // chrome-extension: requests are matchable by DNR at all.
-        id: blockId + 1,
+        id: allowId,
         priority: 2,
         action: { type: "allow" },
         condition: {
@@ -258,7 +293,7 @@
       throw new Error("this tab's own id could not be determined, so the rule cannot be scoped to it");
     }
 
-    const rules = navLockdownRules(tab.id);
+    const rules = await navLockdownRules(tab.id);
     await chrome.declarativeNetRequest.updateSessionRules({
       // Idempotent: a reloaded viewer in a recycled tab id replaces its own
       // rules instead of failing on a duplicate id.
