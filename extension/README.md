@@ -127,17 +127,16 @@ bodies are full of them, so `sw-heredoc-rewrite.js` converts them to quoted
 strings first. Without that step, in-browser compilation fails on essentially
 every real document.
 
-**`#app-container`, not `#sw-app`, and region divs get unwrapped.** A lot of
-`:doc`-theme CSS (sidebar_toc's sticky grid layout, doc_header's chrome
+**`#app-container`, not `#sw-app`, and static docs render in one pass.** A lot
+of `:doc`-theme CSS (sidebar_toc's sticky grid layout, doc_header's chrome
 removal) is scoped to `body[class*="sw-layout-"] > #app-container`, matching
 the server-rendered shape exactly — using a different mount id/no layout
-class would silently drop all of that. `OpalRuntime#render_html` (shared with
-the live/interactive runtime) also wraps every top-level component in
-`<div id="sw-region-N">` for morphdom patching, which the sandbox never uses
-(`SWRuntime.start()` is deliberately never called for a static doc view) but
-which breaks the CSS's `> .foo` direct-child selectors regardless —
-`unwrapRegions()` in `sandbox.js` removes the now-pointless wrappers after
-render rather than weakening those selectors for every other host.
+class would silently drop all of that. The live Opal runtime rebuilds the app
+once per tracked region so later state changes can patch only the affected
+component. The extension never starts that reactive runtime, so
+`SWRender.staticHtml()` builds the component tree once and renders it in
+document order through the same adapter. Static output therefore has no
+reactive region wrappers to remove and still satisfies the direct-child CSS.
 
 **Opal's `\A`/`\z` anchors don't translate in runtime-built regexes.** A real
 Opal compiler bug, not specific to this codebase: `\A`/`\z` only become JS's
@@ -160,9 +159,11 @@ the mermaid call in a double `requestAnimationFrame` as a wall-clock-
 independent guarantee ("the browser has completed a real layout+paint pass")
 instead of relying on message-ordering luck.
 
-**Docs render inert.** The viewer uses `SWRender.html()` rather than starting
-the live runtime — there is nothing to interact with in a document, so it skips
-event delegation and the re-render loop.
+**Docs render inert.** The viewer uses the one-pass `SWRender.staticHtml()`
+bridge rather than starting the live runtime. There is nothing to interact with
+in a document, so it skips dependency tracking, event delegation, and the
+re-render loop while keeping the same Ruby DSL, adapter, and component
+renderers.
 
 **`<base target="_blank">` hijacks same-page fragment links too, not just
 outbound ones — fixed at the cause, not just for `sidebar_toc`.** That base

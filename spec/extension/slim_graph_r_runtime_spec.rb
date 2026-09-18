@@ -5,6 +5,7 @@ require 'json'
 require 'open3'
 require 'rbconfig'
 require 'tmpdir'
+require 'timeout'
 
 RSpec.describe 'the packaged SlimGraphR extension runtime' do
   let(:root) { File.expand_path('../..', __dir__) }
@@ -27,6 +28,93 @@ RSpec.describe 'the packaged SlimGraphR extension runtime' do
     source.scan(/example\.call\(:(\w+).*?<<~'RUBY'\),\n(.*?)^  RUBY$/mu).map do |type, ruby|
       [type, ruby.gsub(/^    /, '')]
     end
+  end
+
+  def capture_node(program, timeout: 10)
+    stdout_text = stderr_text = nil
+    status = nil
+
+    Open3.popen3('node', '-e', program) do |stdin, stdout, stderr, wait_thread|
+      stdin.close
+      stdout_reader = Thread.new { stdout.read }
+      stderr_reader = Thread.new { stderr.read }
+
+      begin
+        status = Timeout.timeout(timeout) { wait_thread.value }
+      rescue Timeout::Error
+        Process.kill('KILL', wait_thread.pid)
+        wait_thread.value
+        raise
+      ensure
+        stdout_text = stdout_reader.value
+        stderr_text = stderr_reader.value
+      end
+    end
+
+    [stdout_text, stderr_text, status]
+  end
+
+  it 'renders the complete saved Ruby gallery in one bounded static pass' do
+    saved_ruby = File.read(gallery, encoding: 'UTF-8')
+    expected_titles = atlas_examples.map do |_type, ruby|
+      ruby.match(/diagram\s+:\w+,\s+title:\s+(['"])(.*?)\1/)[2]
+    end
+    marked = File.join(root, 'extension', 'vendor', 'marked.umd.js')
+    heredoc_rewriter = File.join(root, 'extension', 'vendor', 'sw-heredoc-rewrite.js')
+
+    program = <<~JS
+      const fs = require("fs");
+      const vm = require("vm");
+      global.marked = require(#{marked.to_json});
+      const { rewriteHeredocs } = require(#{heredoc_rewriter.to_json});
+      vm.runInThisContext(fs.readFileSync(#{runtime.to_json}, "utf8"), { filename: #{runtime.to_json} });
+
+      const appPrototype = Opal.StreamWeaver.App.$$prototype;
+      const rebuildWithState = appPrototype.$rebuild_with_state;
+      let builds = 0;
+      appPrototype.$rebuild_with_state = function() {
+        builds += 1;
+        return rebuildWithState.apply(this, arguments);
+      };
+
+      const source = rewriteHeredocs(#{saved_ruby.to_json});
+      const evalStarted = performance.now();
+      Opal.eval(`app("Complete diagram atlas") do\n${source}\nend`);
+      const evalMs = performance.now() - evalStarted;
+
+      if (typeof SWRender.staticHtml !== "function") {
+        throw new Error("SWRender.staticHtml() is required for saved document previews");
+      }
+
+      const renderStarted = performance.now();
+      const html = SWRender.staticHtml();
+      const renderMs = performance.now() - renderStarted;
+      process.stdout.write(JSON.stringify({
+        svg: (html.match(/<svg\\b/g) || []).length,
+        title: (html.match(/<title\\b/g) || []).length,
+        desc: (html.match(/<desc\\b/g) || []).length,
+        titles: Array.from(html.matchAll(/<title[^>]*>(.*?)<\\/title>/g), match => match[1]),
+        regions: (html.match(/id="sw-region-/g) || []).length,
+        builds,
+        remote: /(?:href|src)=["'](?:https?:)?\\/\\//.test(html),
+        evalMs,
+        renderMs
+      }));
+    JS
+
+    stdout, stderr, status = capture_node(program)
+    expect(status).to be_success, stderr
+    expect(stderr).to be_empty
+    result = JSON.parse(stdout)
+    expect(result).to include(
+      'svg' => 39, 'title' => 39, 'desc' => 39, 'regions' => 0, 'builds' => 1, 'remote' => false
+    )
+    expect(result.fetch('titles')).to eq(expected_titles)
+    expect(result.fetch('renderMs')).to be <= 5_000
+    RSpec.configuration.reporter.message(
+      format('gallery timings: Opal.eval %.1f ms, SWRender.staticHtml %.1f ms',
+             result.fetch('evalMs'), result.fetch('renderMs'))
+    )
   end
 
   it 'renders every packaged atlas type as accessible offline SVG through Opal' do
@@ -108,6 +196,8 @@ RSpec.describe 'the packaged SlimGraphR extension runtime' do
     expect(manifest.dig('content_security_policy', 'sandbox')).to include("script-src 'self' 'unsafe-eval'")
     expect(sandbox_html.scan(/<(?:script|link)[^>]+(?:src|href)="([^"]+)"/).flatten)
       .to all(satisfy { |path| !path.match?(%r{\A(?:https?:)?//}) })
+    expect(sandbox_js).to include('SWRender.staticHtml()')
+    expect(sandbox_js.scan('app.innerHTML = html').length).to eq(1)
     expect(sandbox_js).not_to match(/\bfetch\s*\(/)
   end
 

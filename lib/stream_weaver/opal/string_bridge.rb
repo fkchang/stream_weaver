@@ -15,6 +15,7 @@ module StreamWeaver
     # (e.g. to serialize what it is showing) without a second code path.
     #
     #   globalThis.SWRender.html()        -> body markup, same as the browser paints
+    #   globalThis.SWRender.staticHtml()  -> one-pass body markup for static viewers
     #   globalThis.SWRender.css()         -> component CSS collected by that render
     #   globalThis.SWRender.document(t)   -> standalone HTML page, CSS inlined
     #
@@ -36,6 +37,7 @@ module StreamWeaver
         %x{
           globalThis.SWRender = {
             html: function() { return #{runtime.render_body_html}; },
+            staticHtml: function() { return #{runtime.render_static_html}; },
             css: function() { return #{runtime.collected_css}; },
             document: function(title) {
               return #{runtime.render_document(title: `title == null ? default_title : title`)};

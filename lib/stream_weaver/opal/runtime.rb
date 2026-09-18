@@ -82,6 +82,29 @@ module StreamWeaver
         OpalRuntime.current = nil
       end
 
+      # Render a one-shot document without reactive region tracking.
+      #
+      # Static hosts never patch individual components, so rebuilding the
+      # complete App once per region only repeats DSL work without creating a
+      # capability they can use. Build the component tree once, then render
+      # that tree in document order through the same adapter and component
+      # renderers as the live path.
+      def render_static_html
+        @callbacks.clear
+        @state.reset_tracking
+        OpalRuntime.current = self
+
+        app = StreamWeaver::App.new("__opal__", &@block)
+        app.rebuild_with_state(@state)
+        @watchers_initialized = true
+
+        renderer = OpalRenderer.new(@adapter, @state)
+        app.components.each { |component| component.render(renderer, @state) }
+        renderer.to_html
+      ensure
+        OpalRuntime.current = nil
+      end
+
       # --- DOM-free rendering -------------------------------------------------
       #
       # render_html already builds the whole document without touching the DOM;
