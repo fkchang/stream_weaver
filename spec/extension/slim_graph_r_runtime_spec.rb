@@ -117,6 +117,69 @@ RSpec.describe 'the packaged SlimGraphR extension runtime' do
     )
   end
 
+  it 'renders the complete saved Ruby gallery in one bounded live pass with visible labels' do
+    saved_ruby = File.read(gallery, encoding: 'UTF-8')
+    expected_titles = atlas_examples.map do |_type, ruby|
+      ruby.match(/diagram\s+:\w+,\s+title:\s+(['"])(.*?)\1/)[2]
+    end
+    marked = File.join(root, 'extension', 'vendor', 'marked.umd.js')
+    heredoc_rewriter = File.join(root, 'extension', 'vendor', 'sw-heredoc-rewrite.js')
+
+    program = <<~JS
+      const fs = require("fs");
+      const vm = require("vm");
+      global.marked = require(#{marked.to_json});
+      const { rewriteHeredocs } = require(#{heredoc_rewriter.to_json});
+      vm.runInThisContext(fs.readFileSync(#{runtime.to_json}, "utf8"), { filename: #{runtime.to_json} });
+
+      const appPrototype = Opal.StreamWeaver.App.$$prototype;
+      const rebuildWithState = appPrototype.$rebuild_with_state;
+      let builds = 0;
+      appPrototype.$rebuild_with_state = function() {
+        builds += 1;
+        return rebuildWithState.apply(this, arguments);
+      };
+
+      const source = rewriteHeredocs(#{saved_ruby.to_json});
+      const evalStarted = performance.now();
+      Opal.eval(`app("Complete live diagram atlas") do\n${source}\nend`);
+      const evalMs = performance.now() - evalStarted;
+      const renderStarted = performance.now();
+      const html = SWRender.html();
+      const renderMs = performance.now() - renderStarted;
+      const svgs = Array.from(html.matchAll(/<svg\\b[\\s\\S]*?<\\/svg>/g), match => match[0]);
+      const labeled = svgs.filter(svg => Array.from(svg.matchAll(/<text\\b[^>]*>([\\s\\S]*?)<\\/text>/g))
+        .some(match => match[1].replace(/<[^>]*>/g, "").trim().length > 0));
+      process.stdout.write(JSON.stringify({
+        svg: svgs.length,
+        labeled: labeled.length,
+        title: (html.match(/<title\\b/g) || []).length,
+        desc: (html.match(/<desc\\b/g) || []).length,
+        titles: Array.from(html.matchAll(/<title[^>]*>(.*?)<\\/title>/g), match => match[1]),
+        regions: (html.match(/id="sw-region-/g) || []).length,
+        builds,
+        remote: /(?:href|src)=["'](?:https?:)?\\/\\//.test(html),
+        evalMs,
+        renderMs
+      }));
+    JS
+
+    stdout, stderr, status = capture_node(program)
+    expect(status).to be_success, stderr
+    expect(stderr).to be_empty
+    result = JSON.parse(stdout)
+    expect(result).to include(
+      'svg' => 39, 'labeled' => 39, 'title' => 39, 'desc' => 39, 'builds' => 1, 'remote' => false
+    )
+    expect(result.fetch('regions')).to be > 39
+    expect(result.fetch('titles')).to eq(expected_titles)
+    expect(result.fetch('renderMs')).to be <= 10_000
+    RSpec.configuration.reporter.message(
+      format('live gallery timings: Opal.eval %.1f ms, SWRender.html %.1f ms',
+             result.fetch('evalMs'), result.fetch('renderMs'))
+    )
+  end
+
   it 'renders every packaged atlas type as accessible offline SVG through Opal' do
     expect(atlas_examples.length).to eq(39)
 
@@ -136,6 +199,8 @@ RSpec.describe 'the packaged SlimGraphR extension runtime' do
             svg: (html.match(/<svg\\b/g) || []).length,
             title: (html.match(/<title\\b/g) || []).length,
             desc: (html.match(/<desc\\b/g) || []).length,
+            labeled: Array.from(html.matchAll(/<text\\b[^>]*>([\\s\\S]*?)<\\/text>/g))
+              .some(match => match[1].replace(/<[^>]*>/g, "").trim().length > 0),
             remote: /(?:href|src)=["'](?:https?:)?\\/\\//.test(html)
           });
         } catch (error) {
@@ -153,7 +218,30 @@ RSpec.describe 'the packaged SlimGraphR extension runtime' do
     failure = results.find { |result| result['error'] }
     expect(failure).to be_nil, -> { "first failing atlas type: #{failure.fetch('type')}: #{failure.fetch('error')}" }
     expect(results.map { |result| result['type'] }).to eq(atlas_examples.map(&:first))
-    expect(results).to all(include('svg' => 1, 'title' => 1, 'desc' => 1, 'remote' => false))
+    expect(results).to all(include(
+      'svg' => 1, 'title' => 1, 'desc' => 1, 'labeled' => true, 'remote' => false
+    ))
+  end
+
+  it 'keeps ASCII and Unicode labels when Text.wrap runs through Opal' do
+    program = <<~JS
+      const fs = require("fs");
+      const vm = require("vm");
+      vm.runInThisContext(fs.readFileSync(#{runtime.to_json}, "utf8"), { filename: "sw-runtime.js" });
+      const text = Opal.SlimGraphR.Text;
+      process.stdout.write(JSON.stringify({
+        ascii: text.$wrap("Architecture API", 10_000).join(""),
+        unicode: text.$wrap("café 東京 e\\u0301", 10_000).join("")
+      }));
+    JS
+
+    stdout, stderr, status = capture_node(program)
+    expect(status).to be_success, stderr
+    expect(stderr).to be_empty
+    expect(JSON.parse(stdout)).to eq(
+      'ascii' => 'Architecture API',
+      'unicode' => "café 東京 e\u0301"
+    )
   end
 
   it 'converts an Org saved document containing the atlas through the bundled reader' do

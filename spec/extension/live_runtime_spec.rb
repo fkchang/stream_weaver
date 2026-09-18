@@ -325,6 +325,12 @@ RSpec.describe 'extension live runtime wiring' do
       RUBY
     end
 
+    let(:render_time_text_doc) do
+      <<~RUBY
+      text ->(state) { "q=" + state[:q].to_s }
+      RUBY
+    end
+
     let(:state_table_doc) do
       <<~RUBY
       state[:my_data] ||= { headers: ["name", "qty"], rows: [["beta", "2"], ["alpha", "1"]] }
@@ -418,15 +424,28 @@ RSpec.describe 'extension live runtime wiring' do
       expect(result['afterThree']).to eq('prism' => 4, 'toc' => 4, 'mermaid' => 4)
     end
 
-    it 'patches only the regions that read the changed key' do
+    it 'full-patches keys read while building the DSL' do
       result = run_live(<<~JS)
         deliver(#{text_doc.to_json});
         typeInto("q", "a");
-        console.log(JSON.stringify({ ids: morphs.map((m) => m.id) }));
+        console.log(JSON.stringify({ ids: morphs.map((m) => m.id), html: lastMorph().html }));
+      JS
+
+      expect(result['ids'].first).to eq('app-container')
+      expect(result['ids'][1..]).to all(eq('app-container'))
+      expect(result['html']).to include('q=a')
+    end
+
+    it 'patches only regions for keys read exclusively while rendering components' do
+      result = run_live(<<~JS)
+        deliver(#{render_time_text_doc.to_json});
+        window.__swActiveRuntime.update("q", "a");
+        console.log(JSON.stringify({ ids: morphs.map((m) => m.id), html: lastMorph().html }));
       JS
 
       expect(result['ids'].first).to eq('app-container')
       expect(result['ids'][1..]).to all(match(/\Asw-region-\d+\z/))
+      expect(result['html']).to include('q=a')
     end
 
     it 'updates state from a checkbox change as well as a text input' do

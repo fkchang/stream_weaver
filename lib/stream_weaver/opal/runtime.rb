@@ -42,6 +42,7 @@ module StreamWeaver
       # column. So the runtime is told where to mount instead of the page being
       # renamed to suit the runtime.
       DEFAULT_MOUNT_ID = "sw-app"
+      DSL_BUILD_DEPENDENCY = :__sw_dsl_build_dependency__
 
       attr_reader :state, :mount_id
 
@@ -130,27 +131,24 @@ module StreamWeaver
         @state.reset_tracking
         OpalRuntime.current = self
 
-        # First pass: build components and determine count (no tracking yet)
+        # Build the component tree once. State reads while evaluating the DSL
+        # cannot be attributed to one component, so track them under a sentinel
+        # that forces a full patch if that key changes. A key may also be read
+        # while rendering a component; the sentinel must win over that ordinary
+        # region dependency because the component tree itself may have changed.
         app = StreamWeaver::App.new("__opal__", &@block)
-        app.rebuild_with_state(@state)
+        @state.track(DSL_BUILD_DEPENDENCY) { app.rebuild_with_state(@state) }
         @watchers_initialized = true
-        n = app.components.length
 
         register_component_callbacks(app.components)
 
-        # Second pass: render each component inside its own track region.
-        # rebuild_with_state is called inside each track block so that state
-        # reads in the DSL block (e.g. `text state[:name].to_s`) are recorded
-        # against the correct region_id.
-        # DSL-time reads (state[:key] inside the app block) happen during rebuild_with_state,
-        # so we re-build once per region inside track() to attribute reads to the correct region.
-        parts = (0...n).map do |i|
+        # Rendering-time reads can be attributed precisely without rebuilding
+        # the DSL. Each top-level component keeps its stable wrapper, document
+        # order, callbacks, and granular patch eligibility.
+        parts = app.components.each_with_index.map do |component, i|
           region_html = @state.track("sw-region-#{i}") do
-            scoped_app = StreamWeaver::App.new("__opal__", &@block)
-            scoped_app.rebuild_with_state(@state)
-            component = scoped_app.components[i]
             sub = OpalRenderer.new(@adapter, @state)
-            component.render(sub, @state) if component
+            component.render(sub, @state)
             sub.to_html
           end
           "<div id=\"sw-region-#{i}\">#{region_html}</div>"
@@ -295,13 +293,14 @@ module StreamWeaver
         @sync_rendering = true
         update_state(key, value)
         regions = @state.dependencies_for_key(key.to_sym)
+        changes_dsl_structure = regions.delete(DSL_BUILD_DEPENDENCY)
         html    = render_html
         # A tripped loop banner is emitted outside every sw-region-N wrapper, so
         # a region-scoped patch would morph past it and never put it on screen.
         # That matters most here: OpalBridge routes input events through this
         # method, so a text_field whose watcher writes its own key is both the
         # likeliest way to trip the guard and the path that would hide it.
-        if regions.empty? || @state_loop_error
+        if changes_dsl_structure || regions.empty? || @state_loop_error
           patch_dom(html)
         else
           patch_regions(regions, html)
@@ -375,6 +374,8 @@ module StreamWeaver
         return if @start_hooks_fired
         @start_hooks_fired = true
         hooks = @start_hooks.dup
+        return if hooks.empty?
+
         schedule_start_hooks(hooks)
       end
 

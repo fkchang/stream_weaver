@@ -7,9 +7,9 @@ require "stream_weaver/opal/renderer"
 require "stream_weaver/opal/runtime"
 require "stream_weaver/opal/app_timers"
 
-# render_html re-executes the doc's DSL block once per render PLUS once per
-# region, so every `every`/`after` callsite in a doc runs several times per
-# render. Before this guard each execution installed a brand-new browser timer:
+# render_html executes the doc's DSL block once per render. The timer registry
+# still has to survive later renders, where every `every`/`after` callsite is
+# encountered again. Before this guard each render installed a brand-new browser timer:
 # a live Node probe against the compiled bundle measured one `every(1)`
 # callsite becoming 3 live intervals after one render, 6 after two, 9 after
 # three. Registration is keyed by callsite so a callsite that already owns a
@@ -33,14 +33,12 @@ RSpec.describe StreamWeaver::Opal::AppTimers do
   end
 
   # What OpalRuntime#render_html does to the DSL block, minus the DOM: build a
-  # fresh App and evaluate the block once for the whole doc, then once more per
-  # region. Re-implemented here only because render_html hardcodes
+  # fresh App and evaluate the block once. Re-implemented here only because
+  # render_html hardcodes
   # StreamWeaver::App, which this spec deliberately does not patch.
-  def render(regions: 2)
+  def render
     StreamWeaver::Opal::OpalRuntime.current = runtime
-    (1 + regions).times do
-      app_class.new("__opal__", &doc).rebuild_with_state({})
-    end
+    app_class.new("__opal__", &doc).rebuild_with_state({})
   ensure
     StreamWeaver::Opal::OpalRuntime.current = nil
   end
@@ -113,7 +111,7 @@ RSpec.describe StreamWeaver::Opal::AppTimers do
     end
 
     it "counts them independently and still does not grow across renders" do
-      3.times { render(regions: 1) }
+      3.times { render }
       expect(runtime.timer_callsites).to contain_exactly("every:1", "every:2")
     end
   end
@@ -128,7 +126,7 @@ RSpec.describe StreamWeaver::Opal::AppTimers do
     end
 
     it "numbers same-kind timer calls by position within one DSL-block execution" do
-      render(regions: 0)
+      render
       expect(runtime.timer_callsites).to eq(["every:1", "every:2", "after:1"])
     end
 

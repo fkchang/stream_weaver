@@ -213,7 +213,7 @@ RSpec.describe StreamWeaver::Opal::OpalRuntime do
 
     it "populates track_map after render — region reads state key" do
       runtime.set_block do
-        text state[:name].to_s
+        text ->(state) { state[:name].to_s }
       end
       runtime.state[:name] = "Alice"
       runtime.render_html
@@ -222,7 +222,7 @@ RSpec.describe StreamWeaver::Opal::OpalRuntime do
     end
 
     it "clears stale tracking entries on each render" do
-      runtime.set_block { text state[:name].to_s }
+      runtime.set_block { text ->(state) { state[:name].to_s } }
       runtime.state[:name] = "Alice"
       runtime.render_html
       runtime.render_html  # second render should re-populate, not accumulate
@@ -280,7 +280,7 @@ RSpec.describe StreamWeaver::Opal::OpalRuntime do
     # guard in the first place -- so a tripped loop has to force a full patch.
     describe "and the patch path that has to carry it" do
       before do
-        runtime.set_block { text state[:query].to_s }
+        runtime.set_block { text ->(state) { state[:query].to_s } }
         runtime.render_html # populate dependencies_for_key(:query)
         allow(runtime).to receive(:patch_dom)
         allow(runtime).to receive(:patch_regions)
