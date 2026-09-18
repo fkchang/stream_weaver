@@ -883,8 +883,10 @@ module StreamWeaver
             counter-reset: sw-toc-counter;
           }
 
-          /* Desktop: vertical sidebar */
-          @media (min-width: 1000px) {
+          /* Wide documents: vertical sidebar. Keep the horizontal TOC until
+             the content column can absorb the rail without squeezing prose
+             or diagrams. */
+          @media (min-width: 1600px) {
             .sw-sidebar-toc {
               grid-column: 1;
               /* Span a large number of implicit rows so the sidebar's grid
@@ -906,8 +908,8 @@ module StreamWeaver
             }
           }
 
-          /* Mobile: horizontal scrollable bar */
-          @media (max-width: 999px) {
+          /* Narrow and medium documents: horizontal scrollable bar */
+          @media (max-width: 1599px) {
             .sw-sidebar-toc {
               top: 0;
               background: var(--sw-surface, #ffffff);
@@ -971,7 +973,7 @@ module StreamWeaver
             background: color-mix(in oklch, var(--sw-accent) 6%, transparent);
           }
 
-          @media (max-width: 999px) {
+          @media (max-width: 1599px) {
             .sw-sidebar-toc__link {
               border-left: none;
               border-bottom: 2px solid transparent;
@@ -985,10 +987,9 @@ module StreamWeaver
 
           /* ── Document layout fix ──
              When sidebar_toc is present:
-             - Expand the body to give the sidebar room
              - Remove the card chrome from #app-container
              - Remove top padding (hidden h1 leaves a gap) */
-          @media (min-width: 1000px) {
+          @media (min-width: 1600px) {
             /* All the :has() checks below are scoped to a DIRECT child
                sidebar_toc/doc_header (the flat prd_dsl.rb-style page
                pattern: sidebar_toc and doc content as siblings directly
@@ -1006,11 +1007,6 @@ module StreamWeaver
                tolerate exactly one extra level, and only when it is an
                OpalRuntime region wrapper (see the wrapper-tolerance
                comment above). */
-            body:has(> #app-container > [id^="sw-region-"] > .sw-sidebar-toc),
-            body:has(> #app-container > .sw-sidebar-toc) {
-              max-width: 1200px;
-            }
-
             body:has(> #app-container > [id^="sw-region-"] > .sw-doc-header) > h1 + #app-container,
             body:has(> #app-container > .sw-doc-header) > h1 + #app-container,
             #app-container:has(> [id^="sw-region-"] > .sw-sidebar-toc),
@@ -1027,8 +1023,8 @@ module StreamWeaver
                away instead of staying sticky). The overflow:visible fix
                that makes position:sticky work lives on the
                `body[class*="sw-layout-"] > #app-container:has(> .sw-sidebar-toc)`
-               rule above, not here -- it has to apply below 1000px too,
-               for the mobile top nav. */
+               rule above, not here -- it has to apply below 1600px too,
+               for the horizontal top nav. */
             #app-container:has(> [id^="sw-region-"] > .sw-sidebar-toc),
             #app-container:has(> .sw-sidebar-toc) {
               --sw-toc-width: 220px;
@@ -1046,6 +1042,13 @@ module StreamWeaver
               margin-left: calc(-1 * (var(--sw-toc-width) + var(--sw-toc-gap)));
               padding-left: calc(var(--sw-toc-width) + var(--sw-toc-gap));
             }
+          }
+
+          /* Keep prose readable while allowing code, diagrams, tables, and
+             other document components to use the full fluid column. */
+          #app-container:has(> [id^="sw-region-"] > .sw-sidebar-toc) > [id^="sw-region-"] > .sw-markdown,
+          #app-container:has(> .sw-sidebar-toc) > .sw-markdown {
+            width: min(100%, 74ch);
           }
         CSS
       end

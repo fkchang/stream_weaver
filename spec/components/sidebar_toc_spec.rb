@@ -224,13 +224,13 @@ RSpec.describe "SidebarToc Component (T11)" do
       expect(css).to match(/body\[class\*="sw-layout-"\]\s*>\s*#app-container:has\(>\s*\.sw-sidebar-toc\)\s*\{\s*overflow:\s*visible/m)
     end
 
-    it "keeps the overflow reset out of the desktop media query -- mobile's top nav is sticky too" do
+    it "keeps the overflow reset out of the wide media query -- the horizontal nav is sticky too" do
       # Comments stripped first: this block's prose discusses the overflow
       # reset, and passed only because that prose happened to spell it
       # without a space. Every comment added inside the media query
       # widened that trap.
-      desktop_block = css.gsub(%r{/\*.*?\*/}m, "")[/@media \(min-width:\s*1000px\).*/m]
-      expect(desktop_block).not_to include("overflow: visible")
+      wide_block = css.gsub(%r{/\*.*?\*/}m, "")[/@media \(min-width:\s*1600px\).*/m]
+      expect(wide_block).not_to include("overflow: visible")
     end
 
     it "stays pinned to the base selector it overrides (views.rb)" do
@@ -241,9 +241,29 @@ RSpec.describe "SidebarToc Component (T11)" do
       expect(StreamWeaver::Views::AppView.master_theme_css).to include('body[class*="sw-layout-"] > #app-container')
     end
 
-    it "preserves the horizontal-bar responsive layout below 1000px" do
-      expect(css).to match(/@media \(max-width:\s*999px\)\s*\{[^@]*\.sw-sidebar-toc\s*\{[^}]*top:\s*0/m)
+    it "preserves the horizontal-bar responsive layout through 1599px" do
+      expect(css).to match(/@media \(max-width:\s*1599px\)\s*\{[^@]*\.sw-sidebar-toc\s*\{[^}]*top:\s*0/m)
       expect(css).to match(/\.sw-sidebar-toc__nav\s*\{[^}]*flex-direction:\s*row/m)
+    end
+  end
+
+  describe "fluid document layout" do
+    let(:adapter) { StreamWeaver::Adapter::AlpineJS.new }
+    let(:css) { adapter.send(:sidebar_toc_css).gsub(%r{/\*.*?\*/}m, "") }
+
+    it "does not cap a sidebar document below the fluid layout width" do
+      expect(css).not_to match(/body:has\(>\s*#app-container\s*>\s*\.sw-sidebar-toc\)\s*\{[^}]*max-width:/m)
+    end
+
+    it "keeps the horizontal toc through 1599px and starts the vertical grid at 1600px" do
+      expect(css).to match(/@media \(min-width:\s*1600px\)/)
+      expect(css).to match(/@media \(max-width:\s*1599px\)\s*\{[^@]*\.sw-sidebar-toc\s*\{[^}]*top:\s*0/m)
+      expect(css).not_to match(/@media \((?:min-width:\s*1000px|max-width:\s*999px)\)/)
+    end
+
+    it "limits only prose blocks to a readable measure" do
+      expect(css).to match(/#app-container:has\(>\s*\.sw-sidebar-toc\)\s*>\s*\.sw-markdown\s*\{[^}]*width:\s*min\(100%,\s*74ch\)/m)
+      expect(css).not_to match(/#app-container:has\(>\s*\.sw-sidebar-toc\)\s*>\s*\*\s*\{[^}]*74ch/m)
     end
   end
 
@@ -266,12 +286,12 @@ RSpec.describe "SidebarToc Component (T11)" do
       expect(rules).to match(wrapper_reset)
     end
 
-    it "applies the wrapper reset at every width -- the mobile toc bar is sticky too" do
+    it "applies the wrapper reset at every width -- the horizontal toc bar is sticky too" do
       expect(rules.split("@media").first).to match(wrapper_reset)
     end
 
     it "gives every #app-container direct-child selector a wrapper-tolerant twin" do
-      # Derived, not enumerated: a sixth direct-child selector added later
+      # Derived, not enumerated: another direct-child selector added later
       # without a twin fails here instead of passing green.
       direct_child = rules.lines.map(&:strip).select do |line|
         line.include?("#app-container") && line.include?("> .sw-") && !line.include?(wrapper)
