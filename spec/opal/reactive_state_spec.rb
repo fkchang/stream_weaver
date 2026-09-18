@@ -147,6 +147,120 @@ RSpec.describe StreamWeaver::Opal::ReactiveState do
     end
   end
 
+  describe "state-update-loop guard" do
+    # A watcher whose callback writes the key it watches recurses synchronously
+    # inside notify_watchers, so an async rerender-rate cap never sees it.
+    it "stops a watcher that writes the key it watches, instead of recursing unboundedly" do
+      calls = 0
+      rs.watch(:count) do |v|
+        calls += 1
+        rs[:count] = v + 1
+      end
+
+      expect { rs[:count] = 1 }.not_to raise_error
+      # Bound against the cap that actually fires for this shape, not the
+      # looser one -- a `<= 200` here would stay green if the depth guard broke.
+      expect(calls).to eq(described_class::MAX_WATCHER_DEPTH)
+    end
+
+    # The other runaway shape: wide, not deep. Many watchers on one key each
+    # writing a DIFFERENT key never nests past depth 2, so only the call cap
+    # can stop it. This is the case MAX_WATCHER_CALLS_PER_WRITE exists for.
+    it "stops a wide fan-out that never recurses deeply" do
+      calls = 0
+      300.times do |i|
+        rs.watch(:fan) do
+          calls += 1
+          rs[:"leaf#{i}"] = i
+        end
+      end
+
+      expect { rs[:fan] = 1 }.not_to raise_error
+      expect(calls).to eq(described_class::MAX_WATCHER_CALLS_PER_WRITE)
+      expect(calls).to be < 300
+      expect(rs.state_loop_error).to include("state update loop")
+    end
+
+    it "records a visible state-update-loop error naming the offending key" do
+      rs.watch(:count) { |v| rs[:count] = v + 1 }
+      rs[:count] = 1
+
+      expect(rs.state_loop_error).to include("state update loop")
+      expect(rs.state_loop_error).to include("count")
+    end
+
+    it "reports the loop to a registered handler" do
+      reported = []
+      rs.on_state_loop { |message, key| reported << [message, key] }
+      rs.watch(:count) { |v| rs[:count] = v + 1 }
+      rs[:count] = 1
+
+      expect(reported.length).to eq(1)
+      expect(reported.first[1]).to eq(:count)
+      expect(reported.first[0]).to include("state update loop")
+    end
+
+    it "stops an indirect loop that cycles through another key" do
+      calls = 0
+      rs.watch(:a) { |v| calls += 1; rs[:b] = v + 1 }
+      rs.watch(:b) { |v| calls += 1; rs[:a] = v + 1 }
+
+      expect { rs[:a] = 1 }.not_to raise_error
+      expect(rs.state_loop_error).to include("state update loop")
+      expect(calls).to eq(described_class::MAX_WATCHER_DEPTH)
+    end
+
+    # The trip must not wedge the object: @loop_tripped is per top-level write,
+    # so an unrelated healthy key still dispatches afterwards.
+    it "keeps dispatching healthy watchers after a loop has been stopped" do
+      rs.watch(:count) { |v| rs[:count] = v + 1 }
+      rs[:count] = 1
+
+      healthy = 0
+      rs.watch(:other) { healthy += 1 }
+      rs[:other] = "fine"
+
+      expect(healthy).to eq(1)
+    end
+
+    it "keeps the error sticky, because a doc with a feedback loop stays broken" do
+      rs.watch(:count) { |v| rs[:count] = v + 1 }
+      rs[:count] = 1
+      first = rs.state_loop_error
+
+      rs[:unrelated] = "later write"
+      expect(rs.state_loop_error).to eq(first)
+    end
+
+    it "leaves legitimate rapid sequential updates completely unaffected" do
+      calls = 0
+      rs.watch(:query) { calls += 1 }
+      500.times { |i| rs[:query] = "term#{i}" }
+
+      expect(calls).to eq(500)
+      expect(rs.state_loop_error).to be_nil
+    end
+
+    it "leaves a legitimate bounded watcher chain unaffected" do
+      log = []
+      rs.watch(:a) { |v| log << :a; rs[:b] = v }
+      rs.watch(:b) { |v| log << :b; rs[:c] = v }
+      rs.watch(:c) { log << :c }
+
+      rs[:a] = 1
+      expect(log).to eq([:a, :b, :c])
+      expect(rs.state_loop_error).to be_nil
+    end
+
+    it "resets the per-write budget between top-level writes" do
+      rs.watch(:a) { |v| rs[:b] = v }
+      rs.watch(:b) { nil }
+
+      200.times { |i| rs[:a] = i }
+      expect(rs.state_loop_error).to be_nil
+    end
+  end
+
   describe "#on_any_change" do
     it "fires the callback when any key changes" do
       changed = []

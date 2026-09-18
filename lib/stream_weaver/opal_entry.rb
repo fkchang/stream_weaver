@@ -17,6 +17,7 @@ require "stream_weaver/opal/renderer"
 require "stream_weaver/opal/runtime"
 require "stream_weaver/opal/bridge"
 require "stream_weaver/opal/string_bridge"
+require "stream_weaver/opal/app_timers"
 
 # Opal-specific patches: fix methods that break in the browser.
 
@@ -59,35 +60,20 @@ module StreamWeaver
         OpalRuntime.current&.register_start_hook(block)
       end
 
-      def after(seconds, &block)
-        return unless RUBY_ENGINE == "opal"
-        ms = (seconds * 1000).to_i
-        cb = block
-        # :nocov:
-        %x{ setTimeout(function() { #{cb.call} }, #{ms}) }
-        # :nocov:
-      end
-
-      def every(seconds, &block)
-        return unless RUBY_ENGINE == "opal"
-        ms = (seconds * 1000).to_i
-        cb = block
-        # :nocov:
-        %x{ setInterval(function() { #{cb.call} }, #{ms}) }
-        # :nocov:
-      end
-
+      # A zero-delay one-shot -- the same setTimeout install every/after use,
+      # so it goes through the same helper rather than a third copy of the
+      # %x{} block. Not callsite-tracked: a 0ms timeout fires and is gone, so
+      # there is no live timer for a later render to accumulate.
       def defer(&block)
-        return unless RUBY_ENGINE == "opal"
-        cb = block
-        # :nocov:
-        %x{ setTimeout(function() { #{cb.call} }, 0) }
-        # :nocov:
+        OpalRuntime.install_browser_timer(:after, 0, &block)
       end
     end
   end
 end
 StreamWeaver::App.prepend StreamWeaver::Opal::AppReactivePatch
+# every/after live in their own file so their lifecycle behaviour is reachable
+# without the global browser-only overrides this file also installs.
+StreamWeaver::App.prepend StreamWeaver::Opal::AppTimers
 
 # Opal-mode global `app` helper — replaces the Sinatra-wired StreamWeaver.app.
 # Creates an OpalRuntime with the DSL block, publishes it to JavaScript, and
