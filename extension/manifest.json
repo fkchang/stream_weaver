@@ -9,7 +9,8 @@
     "128": "icons/icon128.png"
   },
   "permissions": [
-    "storage"
+    "storage",
+    "declarativeNetRequest"
   ],
   "host_permissions": [
     "https://raw.githubusercontent.com/*",
@@ -39,6 +40,6 @@
     ]
   },
   "content_security_policy": {
-    "sandbox": "sandbox allow-scripts allow-popups; default-src 'none'; connect-src 'none'; form-action 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; child-src 'self';"
+    "sandbox": "sandbox allow-scripts; default-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; child-src 'self';"
   }
 }

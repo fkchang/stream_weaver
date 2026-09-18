@@ -83,7 +83,7 @@ RSpec.describe 'the viewer sandbox frame lifecycle' do
       const initialFrame = new Frame("frame", {
         id: "frame",
         src: "sandbox.html",
-        sandbox: "allow-scripts allow-popups allow-popups-to-escape-sandbox"
+        sandbox: "allow-scripts"
       });
       initialFrame.hidden = true;
       initialFrame.parent = body;
@@ -193,7 +193,7 @@ RSpec.describe 'the viewer sandbox frame lifecycle' do
       attrs = result['afterDropB']['docBFrame']['attrs']
 
       expect(attrs['src']).to eq('sandbox.html')
-      expect(attrs['sandbox']).to eq('allow-scripts allow-popups allow-popups-to-escape-sandbox')
+      expect(attrs['sandbox']).to eq('allow-scripts')
       expect(attrs['id']).to eq('frame')
     end
 
@@ -259,9 +259,17 @@ RSpec.describe 'the viewer sandbox frame lifecycle' do
     # background.js opens a fresh tab per click, so this viewer renders exactly
     # one doc and must not pay for a frame it never dirtied.
     let(:result) do
+      # The tabs/declarativeNetRequest half is what extension-nav-lockdown's
+      # guard needs: in an extension context viewer.js now refuses to render
+      # until the tab-scoped navigation rule is installed, so a stub without
+      # those APIs is a fail-closed viewer, not a rendering one. What that
+      # guard does with them is spec/extension/nav_lockdown_spec.rb's subject;
+      # here they only need to succeed.
       chrome_stub = <<~JS
         const chrome = {
-          runtime: {},
+          runtime: { getURL: (path) => "chrome-extension://testextid/" + path },
+          tabs: { getCurrent: async () => ({ id: 3 }) },
+          declarativeNetRequest: { updateSessionRules: async () => {} },
           storage: {
             session: {
               get: async (key) => ({ [key]: { source: "GITHUB DOC SOURCE", name: "readme.org" } }),

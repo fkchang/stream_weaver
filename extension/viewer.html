@@ -116,8 +116,7 @@
     duplicate of manifest.json's declarative sandbox CSP for sandbox.html.
     That CSP governs sandbox.html specifically; it says nothing about
     wherever a doc-controlled navigation (a rendered link, or script setting
-    location) might send this iframe next -- self-navigation isn't gated by
-    "allow-scripts allow-popups" alone, and the destination is an arbitrary
+    location) might send this iframe next -- the destination is an arbitrary
     URL, not one of the manifest's declared sandbox pages, so it would load
     with full, unsandboxed privileges inside this iframe -- still visually
     contained under the "<doc name> · View source on GitHub" header, a
@@ -125,13 +124,25 @@
     The HTML sandbox attribute applies to this iframe's browsing context
     itself, so it constrains whatever ends up loaded there, original or
     navigated-to, regardless of the CSP the destination document declares
-    for itself. allow-popups-to-escape-sandbox exists for the <base
-    target="_blank"> in sandbox.html's <head>: an in-doc link opens as a
-    normal, unsandboxed new tab with a visible URL bar instead of navigating
-    this frame in place.
+    for itself.
+
+    allow-scripts is the whole grant, deliberately. It used to also carry
+    allow-popups and allow-popups-to-escape-sandbox, so that the <base
+    target="_blank"> in sandbox.html could open an in-doc link as a normal
+    tab -- but doc-author Ruby reaches JS through Opal's %x{} interop, so the
+    same capability let a doc call window.open() on an arbitrary URL and get
+    a real, full-privilege browser tab. That could not be filtered after the
+    fact: a popup lands in a brand-new tab with its own tab id, which the
+    tab-scoped declarativeNetRequest rule viewer.js installs structurally
+    cannot match (verified live, disc-191), and a load-event tripwire fires
+    only once the request has already left. So the capability is gone
+    instead, and legitimate doc links now go the other way: the sandbox asks
+    viewer.js to open them, and viewer.js validates the URL and uses
+    chrome.tabs.create. Doc code can request a navigation; it cannot perform
+    one.
   -->
   <iframe id="frame" src="sandbox.html"
-          sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" hidden></iframe>
+          sandbox="allow-scripts" hidden></iframe>
   <script src="viewer.js"></script>
 </body>
 </html>

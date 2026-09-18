@@ -81,6 +81,11 @@ Renders StreamWeaver documentation files (.rb DSL source or .org export) as the 
 Uses chrome.storage.session only, to hand a doc's source text from the GitHub/Gist content script to the extension's own viewer tab and sandboxed render frame. When "View rendered" is clicked, the file's text is stashed under a one-time key in session storage; the viewer tab reads that key once. Session storage fits because the content only needs to survive that one handoff between tabs -- it does not need to persist across browser restarts (local) or sync across devices (sync), and it never leaves the device. No browsing history, credentials, analytics, or user identifiers are ever stored -- only the text of the specific StreamWeaver file the user chose to render, already visible to them on the page they were viewing.
 ```
 
+**declarativeNetRequest justification** (780 chars):
+```
+Used purely as a safety block, never to observe traffic. A rendered document's code runs inside a sandboxed frame with no network access, and the one channel a Content Security Policy cannot close is that frame navigating itself to a remote URL. So the viewer tab installs one session rule -- in-memory, discarded when the browser closes -- scoped to its own tab id: block sub-frame requests leaving that tab, allow the extension's own pages. The document's source is only handed to the renderer once that rule is confirmed registered; if it fails to register, nothing renders. No static rulesets, no rules touching any other tab, nothing modified, redirected or read. declarativeNetRequestFeedback, the permission that can observe matched requests, is deliberately not requested.
+```
+
 **Host permission justification** (730 chars, one field covering both
 `raw.githubusercontent.com` and `gist.githubusercontent.com` — the console
 doesn't split it per-host the way the reference section below does):
@@ -111,7 +116,7 @@ Permissions actually declared in `manifest.json` (re-read fresh for this draft,
 not from memory):
 
 ```json
-"permissions": ["storage"],
+"permissions": ["storage", "declarativeNetRequest"],
 "host_permissions": [
   "https://raw.githubusercontent.com/*",
   "https://gist.githubusercontent.com/*"
@@ -138,6 +143,29 @@ user identifiers. The only data that ever touches `chrome.storage.session` is
 the text content of the specific StreamWeaver doc file the user chose to
 render — data already visible to the user on the GitHub/Gist page they were
 looking at.
+
+### `declarativeNetRequest`
+
+**What it's for:** Blocking, not observing. A rendered doc's Ruby can call
+arbitrary JavaScript (the language's own JS interop), so the viewer runs every
+doc inside a sandboxed frame with no network access. The one thing a CSP
+cannot close is that frame navigating *itself* to a remote URL, so the viewer
+tab installs a **session** rule — in-memory, gone when the browser closes —
+scoped to its own tab id, that blocks sub-frame requests leaving that tab and
+explicitly allows the extension's own pages. The doc's source is only handed
+to the renderer once that rule is confirmed installed; if it fails to
+register, nothing renders.
+
+**Why the plain `declarativeNetRequest` permission:** the rule has to be able
+to block *any* origin a hostile doc might name, and the narrower
+`declarativeNetRequestWithHostAccess` variant only acts on hosts the extension
+already has permission for (here, two GitHub raw-content hosts).
+
+**What it is NOT used for:** no static rulesets, no rules affecting any other
+tab, no rules that modify, redirect or read requests — one `block` rule and
+one `allow` rule, both pinned to the extension's own viewer tab, both gone
+with the session. The `declarativeNetRequestFeedback` permission (which is
+what can observe matched requests) is deliberately not requested.
 
 ### `host_permissions`: `https://raw.githubusercontent.com/*`
 

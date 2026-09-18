@@ -175,9 +175,72 @@ site) don't navigate this frame in place. But a `<base target>` applies to
 click, it inherits `target="_blank"` and tries to pop itself open in a new
 tab instead of scrolling, which then gets blocked — reproduced live as a
 genuine `ERR_BLOCKED_BY_CLIENT` navigation error, not a hypothetical.
-`sandbox.js` now installs one delegated `click` listener for every
-`a[href^="#"]` that scrolls the target into view instead, covering any
-fragment link a doc produces, not only `sidebar_toc`'s.
+`sandbox.js` now installs one delegated `click` listener for every `a[href]`
+that scrolls fragment targets into view instead, covering any fragment link a
+doc produces, not only `sidebar_toc`'s. That same listener is now also what
+routes a doc's *outbound* links — see the next note.
+
+**Doc code cannot navigate; it can only ask to.** A doc's Ruby reaches JS
+through Opal's backtick / `%x{}` interop, so `window.open("https://…")` and
+`window.location = "https://…"` were both real channels out of the sandbox,
+independent of the CSP that closed `fetch`. They are closed differently, on
+purpose:
+
+- **Popups are removed as a capability.** The iframe's `sandbox` attribute in
+  `viewer.html` is now just `allow-scripts` (no `allow-popups`,
+  no `allow-popups-to-escape-sandbox`), and `manifest.json`'s sandbox CSP
+  dropped `allow-popups` too. Filtering popups instead was measured and
+  rejected: a popup lands in a **new tab with a new tab id**, which a
+  tab-scoped `declarativeNetRequest` rule structurally cannot match, and a
+  `load`-event tripwire only fires once the request has already left.
+- **Self-navigation is blocked by a rule.** `viewer.js` installs a
+  `declarativeNetRequest` **session** rule pair scoped to its own tab id:
+  block `sub_frame` requests, with a higher-priority `allow` for the
+  extension's own URL prefix so `sandbox.html` itself always loads.
+  `main_frame` is deliberately *not* blocked — DNR blocks user-initiated
+  navigation too, so that would stop the user typing a URL or hitting Back in
+  the viewer tab, and the sandbox cannot navigate the top frame anyway without
+  `allow-top-navigation`.
+- **The rule gates the render.** The doc's source is only posted to the
+  sandbox after the rule is confirmed installed; an install failure shows an
+  error and renders nothing. Fail closed, not fail silent.
+- **Legitimate links go the other way round.** The sandbox posts
+  `{type: "sw:open-external", href}` to `viewer.js`, which validates the URL
+  against an `http:`/`https:` allowlist and opens it with
+  `chrome.tabs.create`. `javascript:`, `data:`, `blob:`, `file:` and
+  `chrome-extension:` are all refused, and so is a click the doc synthesized
+  itself: `sandbox.js` forwards only `event.isTrusted` clicks, because doc
+  code can build an anchor and call `.click()` on it, which would otherwise
+  be the popup capability back in through the side door. This is VS Code's
+  webview shape:
+  capability minimization plus one narrow privileged message. It is handled in
+  `viewer.js` rather than `background.js` on purpose — the service worker's
+  `chrome.runtime.onMessage` is reachable from every content script this
+  extension injects into `github.com`, so an "open this URL" handler there
+  would be callable from any page it runs on.
+- **Not every anchor in a doc is an HTML one.** Mermaid runs at
+  `securityLevel: 'loose'` (`vendor/sw-mermaid-zoom.js`), which is what makes a
+  diagram's `click A "https://…"` emit a real `<a>` inside the generated SVG.
+  An `SVGAElement`'s `.href` is an `SVGAnimatedString`, not a string, and it
+  has no `.hash`, so the handler reads the attribute (from the `xlink`
+  namespace too — which one mermaid writes depends on its renderer) and
+  resolves it against `document.baseURI` itself. That `securityLevel` grants a
+  doc author nothing they didn't already have — Opal's `%x{}` interop is full
+  JS inside the sandbox regardless — and a `javascript:` href mermaid emits is
+  refused by the allowlist above like any other.
+- **A refused link does nothing, visibly.** Refusals are logged to the
+  console, not surfaced in the page: a doc's *relative* link resolves to a
+  `chrome-extension:` URL and is therefore refused, so it reads as a link that
+  simply doesn't work. That's deliberate — rendering doc-controlled text into
+  the viewer's own privileged chrome is its own risk — but it is behavior, not
+  a bug.
+- `base-uri 'none'` was added to the sandbox CSP as part of the same change:
+  `base-uri` has no `default-src` fallback, and without it a doc could inject
+  `<base href="http://attacker.example/">` so that its relative links resolve
+  to an attacker origin — which the privileged opener above would then accept
+  as a perfectly valid `http:` URL. `<base target="_blank">` stays as a
+  backstop: an anchor the delegated handler somehow misses now gets blocked
+  for want of `allow-popups` instead of navigating the frame in place.
 
 **`sidebar_toc` additionally gets real scroll-spy highlighting, which the
 delegated handler above doesn't provide on its own.** `Adapter::Opal#
