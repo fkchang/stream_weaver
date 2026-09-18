@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "cgi"
+
 require_relative "reactive_state"
 require_relative "shell"
 
@@ -8,6 +10,24 @@ module StreamWeaver
     class OpalRuntime
       class << self
         attr_accessor :current
+
+        # Installs the actual browser timer. The only part of the every/after
+        # path that needs a browser; everything that decides *whether* to
+        # install runs in every host, which is what makes the lifecycle
+        # behaviour provable without one.
+        def install_browser_timer(kind, seconds, &block)
+          return nil unless RUBY_ENGINE == "opal"
+
+          ms = (seconds * 1000).to_i
+          cb = block
+          # :nocov:
+          if kind == :every
+            %x{ return setInterval(function() { #{cb.call} }, #{ms}) }
+          else
+            %x{ return setTimeout(function() { #{cb.call} }, #{ms}) }
+          end
+          # :nocov:
+        end
       end
 
       attr_reader :state
@@ -16,14 +36,50 @@ module StreamWeaver
         @adapter              = adapter
         @state                = ReactiveState.new
         @callbacks            = {}
+        @timers               = {}
+        @timer_blocks         = {}
         @block                = nil
         @start_hooks          = []
         @start_hooks_fired    = false
         @watchers_initialized = false
         @sync_rendering       = false
         @rerender_pending     = false
+        @state_loop_error     = nil
         @state.on_any_change { schedule_rerender }
+        @state.on_state_loop { |message, _key| report_state_loop(message) }
       end
+
+      # --- every/after timer lifecycle ---------------------------------------
+      #
+      # At most one timer per callsite, however many times the DSL block runs.
+      #
+      # Not clear-and-reinstall-per-render, the other option: that resets each
+      # interval's phase on every render, so `every(60)` in a doc re-rendering
+      # more often than once a minute would never fire at all. The cost of that
+      # choice is that `seconds` is read only on first install -- a callsite
+      # keeps the period it was created with (see AppTimers#next_timer_callsite,
+      # which documents `key:` as the way to ask for a new one).
+      #
+      # The block, however, must NOT be frozen at the first execution -- a timer
+      # block closes over DSL-time data, so a stale one polls the state the doc
+      # had on render #1 forever. The installed timer calls through
+      # @timer_blocks, which every registration overwrites: one timer per
+      # callsite, latest block wins, phase untouched.
+      def register_timer(kind, callsite, seconds, &block)
+        @timer_blocks[callsite] = block
+        return if @timers.key?(callsite)
+
+        # The handle is kept, not merely counted: it is what a future teardown
+        # (doc swap in the same runtime) needs to actually clear the timer.
+        @timers[callsite] =
+          OpalRuntime.install_browser_timer(kind, seconds) { fire_timer(callsite) }
+      end
+
+      def fire_timer(callsite)
+        @timer_blocks[callsite]&.call
+      end
+
+      def timer_callsites = @timers.keys
 
       def watchers_initialized? = @watchers_initialized
 
@@ -77,7 +133,7 @@ module StreamWeaver
           end
           "<div id=\"sw-region-#{i}\">#{region_html}</div>"
         end
-        parts.join
+        state_loop_banner + parts.join
       ensure
         OpalRuntime.current = nil
       end
@@ -103,6 +159,36 @@ module StreamWeaver
         renderer.to_html
       ensure
         OpalRuntime.current = nil
+      end
+
+      # --- state-update-loop reporting ---------------------------------------
+      #
+      # A tripped loop guard has to be seen, not just survived -- the symptom it
+      # replaces is a tab that stops responding with nothing to explain why. So
+      # the message goes two places: the console, for whoever has devtools open,
+      # and the top of the document, for whoever does not. It stays until the
+      # runtime is rebuilt; a doc with a feedback loop is broken until its
+      # author fixes it, so there is nothing for the banner to clear on.
+      def report_state_loop(message)
+        @state_loop_error = message
+        return unless RUBY_ENGINE == "opal"
+
+        # :nocov:
+        %x{ console.error(#{message}) }
+        # :nocov:
+      end
+
+      # Styling is inline rather than a base-stylesheet rule on purpose: this
+      # banner has to be legible in a bare standalone document and in the
+      # extension sandbox, neither of which is guaranteed to have loaded the
+      # framework CSS that defines the --sw-color-* tokens.
+      def state_loop_banner
+        return "" unless @state_loop_error
+
+        "<div class=\"sw-state-loop-error\" role=\"alert\" style=\"" \
+          "background:#7f1d1d;color:#fff;padding:0.75rem 1rem;margin:0 0 1rem;" \
+          "border-radius:4px;font:600 0.875rem/1.5 ui-monospace,monospace\">" \
+          "#{CGI.escapeHTML(@state_loop_error)}</div>"
       end
 
       # --- DOM-free rendering -------------------------------------------------
@@ -178,12 +264,17 @@ module StreamWeaver
       def update_and_patch(key, value)
         @sync_rendering = true
         update_state(key, value)
-        affected_regions = @state.dependencies_for_key(key.to_sym)
-        if affected_regions.empty?
-          patch_dom(render_html)
+        regions = @state.dependencies_for_key(key.to_sym)
+        html    = render_html
+        # A tripped loop banner is emitted outside every sw-region-N wrapper, so
+        # a region-scoped patch would morph past it and never put it on screen.
+        # That matters most here: OpalBridge routes input events through this
+        # method, so a text_field whose watcher writes its own key is both the
+        # likeliest way to trip the guard and the path that would hide it.
+        if regions.empty? || @state_loop_error
+          patch_dom(html)
         else
-          html = render_html
-          patch_regions(affected_regions, html)
+          patch_regions(regions, html)
         end
       ensure
         @sync_rendering = false

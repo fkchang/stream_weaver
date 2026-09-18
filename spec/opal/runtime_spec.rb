@@ -230,4 +230,65 @@ RSpec.describe StreamWeaver::Opal::OpalRuntime do
       expect(deps.count(:name)).to eq(1)
     end
   end
+
+  describe "state-update-loop banner" do
+    # The guard in ReactiveState stops the loop; this is the half that makes it
+    # visible to someone without devtools open. Without it the only symptom of
+    # a doc-authoring feedback loop was a tab that stopped responding.
+    it "is absent from a healthy render" do
+      runtime.set_block { text "fine" }
+      expect(runtime.render_html).not_to include("sw-state-loop-error")
+    end
+
+    it "is prepended to the render once the loop guard has tripped" do
+      runtime.state.watch(:count) { |v| runtime.state[:count] = v + 1 }
+      runtime.state[:count] = 1
+      runtime.set_block { text "doc body" }
+
+      html = runtime.render_html
+      expect(html).to include("sw-state-loop-error")
+      expect(html).to include("doc has a state update loop")
+      expect(html).to include("state[:count]")
+      expect(html).to include("doc body")
+    end
+
+    # The banner is emitted outside every sw-region-N wrapper, so a
+    # region-scoped patch would morph only the regions and drop it. That is
+    # exactly the path a text_field takes (OpalBridge routes input events
+    # through update_and_patch), which is the path most likely to trip the
+    # guard in the first place -- so a tripped loop has to force a full patch.
+    describe "and the patch path that has to carry it" do
+      before do
+        runtime.set_block { text state[:query].to_s }
+        runtime.render_html # populate dependencies_for_key(:query)
+        allow(runtime).to receive(:patch_dom)
+        allow(runtime).to receive(:patch_regions)
+      end
+
+      it "patches only the affected regions for a healthy update" do
+        runtime.update_and_patch(:query, "hello")
+
+        expect(runtime).to have_received(:patch_regions)
+        expect(runtime).not_to have_received(:patch_dom)
+      end
+
+      it "falls back to a full patch once the loop guard has tripped" do
+        runtime.state.watch(:query) { |v| runtime.state[:query] = "#{v}!" }
+        runtime.state[:query] = "loop"
+
+        runtime.update_and_patch(:query, "hello")
+
+        expect(runtime).to have_received(:patch_dom)
+        expect(runtime).not_to have_received(:patch_regions)
+      end
+    end
+
+    it "escapes the message so a doc-supplied key cannot inject markup" do
+      runtime.state.watch(:"x<script>") { |v| runtime.state[:"x<script>"] = v.to_s + "!" }
+      runtime.state[:"x<script>"] = "a"
+      runtime.set_block { text "body" }
+
+      expect(runtime.render_html).not_to include("<script>")
+    end
+  end
 end
