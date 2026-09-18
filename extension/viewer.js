@@ -11,7 +11,9 @@
   const key = params.get("key");
   const name = params.get("name") || "StreamWeaver doc";
 
-  const frame = document.getElementById("frame");
+  // Reassigned per doc by resetSandboxFrame(); every read below, including the
+  // event.source identity check, is meant to be the *current* frame.
+  let frame = document.getElementById("frame");
   const status = document.getElementById("status");
   const sourceLink = document.getElementById("source-link");
   const dropZone = document.getElementById("drop-zone");
@@ -30,6 +32,10 @@
 
   let record = null;
   let sandboxReady = false;
+  // What separates a still-pristine frame from one that must be replaced. Set
+  // when a doc is actually posted, not when a file is picked: a frame nothing
+  // ran in is still clean.
+  let frameHasRendered = false;
 
   function sendWhenReady() {
     if (!sandboxReady || !record) return;
@@ -37,6 +43,36 @@
       { type: "sw:render", source: record.source, name: record.name || name },
       "*"
     );
+    frameHasRendered = true;
+  }
+
+  // Throws the sandbox frame away and puts a fresh one in its place.
+  //
+  // A sandbox frame is single-use. Rendering a doc runs its compiled Ruby
+  // inside that frame's window, which installs state there that nothing can
+  // take back out: window.SWRuntime and its click delegation, morphdom's
+  // bookkeeping, and every interval/timeout or listener the doc's own
+  // `every`/`after`/handlers registered (each `render_html` pass installs a
+  // fresh timer with no cleanup of the prior one). There is no "unload the
+  // doc" API -- discarding the whole browsing context is the only reliable
+  // reset, so doc B never inherits doc A's live timers firing against what is
+  // now doc B's DOM.
+  //
+  // Cloning the live element rather than building an iframe from scratch keeps
+  // the security attributes in one place: whatever `sandbox`/`src` viewer.html
+  // declares is what the replacement gets, with no second copy here to drift
+  // out of sync when that attribute is tightened.
+  function resetSandboxFrame() {
+    const fresh = frame.cloneNode(false);
+    // cloneNode copies attributes, and the first render removed the `hidden`
+    // attribute; re-hide so the replacement goes through the same
+    // hidden-until-"sw:sandbox-ready" sequence the shipped frame did, for the
+    // reason that handler explains.
+    fresh.hidden = true;
+    frame.replaceWith(fresh);
+    frame = fresh;
+    sandboxReady = false;
+    frameHasRendered = false;
   }
 
   window.addEventListener("message", (event) => {
@@ -152,11 +188,16 @@
 
   // Shared by both entry points from here down: sets the record the render
   // pipeline reads and reuses the exact same sendWhenReady() the GitHub path
-  // calls after load(). frame.hidden is not touched here -- it is only ever
-  // flipped false once, by the "sw:sandbox-ready" handler above, and stays
-  // that way for every render after the first (a second file dropped in
-  // doesn't need the frame re-revealed, only re-rendered).
+  // calls after load(). frame.hidden is not touched here -- each frame is
+  // unhidden once by the "sw:sandbox-ready" handler above, and this path gets
+  // a brand-new frame (and so a brand-new ready message) per doc.
   function startRender(source, fileName) {
+    // Only this path can render twice in one tab, and only from the second doc
+    // on: reusing the pristine frame viewer.html shipped saves loading
+    // sandbox.html (and its vendored runtime) a second time for nothing. The
+    // GitHub/Gist path never reaches here -- background.js opens a fresh tab
+    // per click, so its frame renders exactly once.
+    if (frameHasRendered) resetSandboxFrame();
     dropZone.hidden = true;
     document.getElementById("doc-name").textContent = fileName;
     document.title = fileName;

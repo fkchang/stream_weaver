@@ -262,6 +262,23 @@ inline error and leaves the drop zone open to try again, rather than
 attempting to render arbitrary text and failing deep inside the Opal
 compiler with a confusing message.
 
+**One sandbox frame per doc — the frame is single-use.** This is the only
+path that can render more than one doc in a single tab (the GitHub button
+opens a fresh tab per click), and a rendered doc leaves state behind in its
+frame's window that nothing can take back out: `window.SWRuntime` and its
+click delegation, morphdom's bookkeeping, and every interval/timeout or
+listener the doc's own code registered. There is no "unload the doc" API, so
+`viewer.js` discards the whole `<iframe>` and puts a fresh clone of it in
+place (`resetSandboxFrame()`) before rendering each doc after the first —
+otherwise doc B would inherit doc A's still-live timers, firing against what
+is now doc B's DOM. The first drop reuses the pristine frame `viewer.html`
+shipped, so a one-doc tab never reloads `sandbox.html` (and its vendored
+Opal runtime) for nothing. The replacement is a `cloneNode(false)` of the
+live element rather than a hand-built iframe, deliberately: the `sandbox`
+and `src` attributes stay declared in one place, `viewer.html`, with no
+second copy in `viewer.js` to drift out of sync when that sandboxing is
+tightened.
+
 **A CSS trap worth naming for anyone touching this again:** `#drop-zone`'s
 layout rule was originally a bare `#drop-zone { display: flex; ... }`. An ID
 selector outranks the browser's built-in `[hidden] { display: none }` rule
