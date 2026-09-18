@@ -409,6 +409,27 @@ window. Not something this session did or could prevent; noted here since
 
 ## Known gaps
 
+- **The sandbox CSP closes fetch/XHR/WebSocket, but not WebRTC or connection
+  hints.** A rendered doc's Ruby can call arbitrary JS (Opal's backtick / `%x{}`
+  interop), so the sandbox CSP in `manifest.json` is the network boundary, and it
+  now carries `default-src 'none'; connect-src 'none'; form-action 'none'`. That
+  genuinely blocks `fetch`, `XMLHttpRequest`, `WebSocket`, remote-source loading
+  (`Kernel#require_remote`-style fetches) and form submission — verified live in
+  Chrome, not inferred from the manifest text. It does **not** block two channels:
+  an `RTCPeerConnection` will still send STUN/TURN traffic to an
+  attacker-controlled server, and a `<link rel="preconnect">` (and, by inference,
+  `dns-prefetch`) will still open a real TCP connection. Both were observed
+  reaching a controlled listener with the hardening in place, at the same hit
+  count as without it. This is a known, tracked residual gap, not an oversight:
+  see `disc-192` in the project ledger. It is rated lower severity than the
+  fetch/XHR vector because the bandwidth is tiny (data has to be smuggled into
+  STUN hostnames or ICE candidate fields), a hostile STUN/TURN endpoint is itself
+  conspicuous, and a preconnect leaks only "a connection was opened" with no
+  request path or body. Closing it needs a mechanism that does not exist here yet
+  (UDP-level `declarativeNetRequest` rules, or Permissions-Policy coverage that
+  has not been confirmed), which is its own piece of work. Treat "renders in the
+  viewer" as "this doc cannot phone home over HTTP", not as "this doc cannot make
+  any outbound connection at all".
 - **Packed Chrome interaction remains a manual gate.** The committed extension
   spec builds the offline runtime and executes the complete 39-type SlimGraphR
   atlas through Ruby and Org under Node, including accessibility, CSP shape,
