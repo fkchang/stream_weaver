@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+  <main class="benchmark-shell">
+    <header class="benchmark-header">
+      <h1><%= title %></h1>
+      <span class="badge<%= " badge--attention" if badge_label == "ACTION NEEDED" %>"><%= badge_label %></span>
+    </header>
+    <section class="metrics" aria-label="Release metrics">
+      <% metrics.each do |metric| %>
+        <article class="metric"><strong class="metric-value"><%= metric[:value] %></strong><span class="metric-label"><%= metric[:label] %></span></article>
+      <% end %>
+    </section>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Work</th><th>Owner</th><th>Due</th><% if include_status %><th>Status</th><% end %></tr></thead>
+        <tbody>
+          <% rows.each do |row| %>
+            <tr><td><%= row[:work] %></td><td><%= row[:owner] %></td><td><%= row[:due] %></td><% if include_status %><td><%= row[:status] %></td><% end %></tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</body>
+</html>

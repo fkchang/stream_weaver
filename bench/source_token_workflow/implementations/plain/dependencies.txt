@@ -1,0 +1,4 @@
+ruby==3.3.5
+erb==stdlib
+browser_html==living-standard
+browser_css==css-media-queries-level-4

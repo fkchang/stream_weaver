@@ -1,0 +1,293 @@
+{
+  "fixture": [
+    {
+      "bytes": 840,
+      "path": "fixture.json",
+      "sha256": "dcbb74a9f96abf5ff8e1bc49094dac1e436425e227f0bef7dc8ee32f39e0e086"
+    }
+  ],
+  "implementations": {
+    "plain_html_css": {
+      "counts": {
+        "dependency_records": 29,
+        "final_all_recorded": 1568,
+        "final_app": 238,
+        "final_existing_project": 1401,
+        "fixture_spec": 250,
+        "full_source_reread": 1560,
+        "initial_all_recorded": 1560,
+        "initial_app": 230,
+        "initial_existing_project": 1393,
+        "render_harness": 138,
+        "reusable_helpers": 355,
+        "revision_patch": 386,
+        "shared_local_styles": 558
+      },
+      "final_inputs": [
+        {
+          "bytes": 821,
+          "path": "implementations/plain/revised.rb",
+          "sha256": "56aa0c473526c5d70086726dd9b8f4e02d169982b55eae8563f69f0cc86bbf41"
+        },
+        {
+          "bytes": 840,
+          "path": "fixture.json",
+          "sha256": "dcbb74a9f96abf5ff8e1bc49094dac1e436425e227f0bef7dc8ee32f39e0e086"
+        },
+        {
+          "bytes": 1704,
+          "path": "shared/dashboard.css",
+          "sha256": "db6539041cf2b9d0b9c058ada7b347b31087683b95ee6d426711ec177e9e176a"
+        },
+        {
+          "bytes": 1199,
+          "path": "implementations/plain/dashboard.erb",
+          "sha256": "df25d4ca699a3c281fc5e45f1ccd859f99bbf3c514cb0bfbc005f91e005e0aae"
+        },
+        {
+          "bytes": 571,
+          "path": "implementations/plain/render.rb",
+          "sha256": "b90be4beec0a98fc056c3b926093d267bea0b7d64e7a54d875c78606d09891b5"
+        },
+        {
+          "bytes": 93,
+          "path": "implementations/plain/dependencies.txt",
+          "sha256": "3b378d74127e0532bd3acc3270c33c7bec74acc8df767c84439b6c38f6c41062"
+        }
+      ],
+      "initial_inputs": [
+        {
+          "bytes": 795,
+          "path": "implementations/plain/initial.rb",
+          "sha256": "054ab5a0629cedd3092ff6764b2af944851db8e3b4a9d3c2866ed43024041348"
+        },
+        {
+          "bytes": 840,
+          "path": "fixture.json",
+          "sha256": "dcbb74a9f96abf5ff8e1bc49094dac1e436425e227f0bef7dc8ee32f39e0e086"
+        },
+        {
+          "bytes": 1704,
+          "path": "shared/dashboard.css",
+          "sha256": "db6539041cf2b9d0b9c058ada7b347b31087683b95ee6d426711ec177e9e176a"
+        },
+        {
+          "bytes": 1199,
+          "path": "implementations/plain/dashboard.erb",
+          "sha256": "df25d4ca699a3c281fc5e45f1ccd859f99bbf3c514cb0bfbc005f91e005e0aae"
+        },
+        {
+          "bytes": 571,
+          "path": "implementations/plain/render.rb",
+          "sha256": "b90be4beec0a98fc056c3b926093d267bea0b7d64e7a54d875c78606d09891b5"
+        },
+        {
+          "bytes": 93,
+          "path": "implementations/plain/dependencies.txt",
+          "sha256": "3b378d74127e0532bd3acc3270c33c7bec74acc8df767c84439b6c38f6c41062"
+        }
+      ],
+      "revision_patch": "--- implementations/plain/initial.rb\n+++ implementations/plain/revised.rb\n@@ -4,20 +4,19 @@\n   module PlainDashboard\n     METRICS = [{ value: \"4\", label: \"Ready\" }, { value: \"2\", label: \"Review\" }, { value: \"1\", label: \"Blocked\" }].freeze\n     ROWS = [\n-      { work: \"Navigation\", owner: \"Web\", due: \"Today\" },\n-      { work: \"Source inspection\", owner: \"Docs\", due: \"Today\" },\n-      { work: \"Mobile layout\", owner: \"Design\", due: \"Tomorrow\" },\n-      { work: \"Release checklist\", owner: \"Ops\", due: \"Friday\" }\n+      { work: \"Navigation\", owner: \"Web\", due: \"Today\", status: \"Ready\" },\n+      { work: \"Source inspection\", owner: \"Docs\", due: \"Today\", status: \"Review\" },\n+      { work: \"Mobile layout\", owner: \"Design\", due: \"Tomorrow\", status: \"Ready\" },\n+      { work: \"Release checklist\", owner: \"Ops\", due: \"Friday\", status: \"Blocked\" }\n     ].freeze\n \n     def self.locals\n-      blocked = METRICS.find { |metric| metric[:label] == \"Blocked\" }[:value].to_i\n       {\n         title: \"Release readiness\",\n         metrics: METRICS,\n         rows: ROWS,\n-        badge_label: blocked <= 1 ? \"ON TRACK\" : \"AT RISK\",\n-        include_status: false\n+        badge_label: ROWS.any? { |row| row[:status] == \"Blocked\" } ? \"ACTION NEEDED\" : \"ON TRACK\",\n+        include_status: true\n       }\n     end\n   end\n",
+      "revision_patch_sha256": "53e7b80b2e694373fc6c383ff421e68f84c830b29ee99894e40fc39e36de3f70"
+    },
+    "react": {
+      "counts": {
+        "dependency_records": 6985,
+        "final_all_recorded": 8540,
+        "final_app": 216,
+        "final_existing_project": 1352,
+        "fixture_spec": 250,
+        "full_source_reread": 8534,
+        "initial_all_recorded": 8534,
+        "initial_app": 210,
+        "initial_existing_project": 1346,
+        "render_harness": 203,
+        "reusable_helpers": 328,
+        "revision_patch": 383,
+        "shared_local_styles": 558
+      },
+      "final_inputs": [
+        {
+          "bytes": 780,
+          "path": "implementations/react/revised.jsx",
+          "sha256": "69afcdf8bcd42a500485ab561b78487db4727e84f7132a36bae9b8c6737f6214"
+        },
+        {
+          "bytes": 840,
+          "path": "fixture.json",
+          "sha256": "dcbb74a9f96abf5ff8e1bc49094dac1e436425e227f0bef7dc8ee32f39e0e086"
+        },
+        {
+          "bytes": 1704,
+          "path": "shared/dashboard.css",
+          "sha256": "db6539041cf2b9d0b9c058ada7b347b31087683b95ee6d426711ec177e9e176a"
+        },
+        {
+          "bytes": 1285,
+          "path": "implementations/react/components.jsx",
+          "sha256": "c6512c683e530db5f3c854f73f1c93d446d3faf79fd77703b136c55e79a9f4d8"
+        },
+        {
+          "bytes": 874,
+          "path": "implementations/react/render.jsx",
+          "sha256": "5569e6c4deb3b36360bf549279d0199797edf4e8514424b4f2042d48c8df7c5d"
+        },
+        {
+          "bytes": 285,
+          "path": "package.json",
+          "sha256": "29798067e3cd1bb29097ced844d6bf488062e258218abdc8e03c6507ef59b537"
+        },
+        {
+          "bytes": 17623,
+          "path": "package-lock.json",
+          "sha256": "41c24c7b96596d31d016bc7c8ff7349ced8a2aa4a6a9ef027afb4095c1e95a26"
+        }
+      ],
+      "initial_inputs": [
+        {
+          "bytes": 765,
+          "path": "implementations/react/initial.jsx",
+          "sha256": "74a6f3cbc52a60642fcf6bbbf4efbc24f091ca35c5b2f82c699b8ff5c116ad31"
+        },
+        {
+          "bytes": 840,
+          "path": "fixture.json",
+          "sha256": "dcbb74a9f96abf5ff8e1bc49094dac1e436425e227f0bef7dc8ee32f39e0e086"
+        },
+        {
+          "bytes": 1704,
+          "path": "shared/dashboard.css",
+          "sha256": "db6539041cf2b9d0b9c058ada7b347b31087683b95ee6d426711ec177e9e176a"
+        },
+        {
+          "bytes": 1285,
+          "path": "implementations/react/components.jsx",
+          "sha256": "c6512c683e530db5f3c854f73f1c93d446d3faf79fd77703b136c55e79a9f4d8"
+        },
+        {
+          "bytes": 874,
+          "path": "implementations/react/render.jsx",
+          "sha256": "5569e6c4deb3b36360bf549279d0199797edf4e8514424b4f2042d48c8df7c5d"
+        },
+        {
+          "bytes": 285,
+          "path": "package.json",
+          "sha256": "29798067e3cd1bb29097ced844d6bf488062e258218abdc8e03c6507ef59b537"
+        },
+        {
+          "bytes": 17623,
+          "path": "package-lock.json",
+          "sha256": "41c24c7b96596d31d016bc7c8ff7349ced8a2aa4a6a9ef027afb4095c1e95a26"
+        }
+      ],
+      "revision_patch": "--- implementations/react/initial.jsx\n+++ implementations/react/revised.jsx\n@@ -3,14 +3,13 @@\n \n const metrics = [{ value: \"4\", label: \"Ready\" }, { value: \"2\", label: \"Review\" }, { value: \"1\", label: \"Blocked\" }];\n const rows = [\n-  { work: \"Navigation\", owner: \"Web\", due: \"Today\" },\n-  { work: \"Source inspection\", owner: \"Docs\", due: \"Today\" },\n-  { work: \"Mobile layout\", owner: \"Design\", due: \"Tomorrow\" },\n-  { work: \"Release checklist\", owner: \"Ops\", due: \"Friday\" }\n+  { work: \"Navigation\", owner: \"Web\", due: \"Today\", status: \"Ready\" },\n+  { work: \"Source inspection\", owner: \"Docs\", due: \"Today\", status: \"Review\" },\n+  { work: \"Mobile layout\", owner: \"Design\", due: \"Tomorrow\", status: \"Ready\" },\n+  { work: \"Release checklist\", owner: \"Ops\", due: \"Friday\", status: \"Blocked\" }\n ];\n \n export default function DashboardApp() {\n-  const blocked = Number(metrics.find((metric) => metric.label === \"Blocked\").value);\n-  const badgeLabel = blocked <= 1 ? \"ON TRACK\" : \"AT RISK\";\n-  return <Dashboard title=\"Release readiness\" metrics={metrics} rows={rows} badgeLabel={badgeLabel} includeStatus={false} />;\n+  const badgeLabel = rows.some((row) => row.status === \"Blocked\") ? \"ACTION NEEDED\" : \"ON TRACK\";\n+  return <Dashboard title=\"Release readiness\" metrics={metrics} rows={rows} badgeLabel={badgeLabel} includeStatus />;\n }\n",
+      "revision_patch_sha256": "a11b84f3c84c6c310bd04ce2cd139d4129c23a81ce6493d0fecabfdebdcd4324"
+    },
+    "streamweaver": {
+      "counts": {
+        "dependency_records": 27,
+        "final_all_recorded": 1301,
+        "final_app": 308,
+        "final_existing_project": 1116,
+        "fixture_spec": 250,
+        "full_source_reread": 1285,
+        "initial_all_recorded": 1285,
+        "initial_app": 292,
+        "initial_existing_project": 1100,
+        "render_harness": 158,
+        "reusable_helpers": 0,
+        "revision_patch": 432,
+        "shared_local_styles": 558
+      },
+      "final_inputs": [
+        {
+          "bytes": 1168,
+          "path": "implementations/streamweaver/revised.rb",
+          "sha256": "92b98248b4456fd91a32f34d3b35f3daf6be01d22119085e4f86804844b40ed8"
+        },
+        {
+          "bytes": 840,
+          "path": "fixture.json",
+          "sha256": "dcbb74a9f96abf5ff8e1bc49094dac1e436425e227f0bef7dc8ee32f39e0e086"
+        },
+        {
+          "bytes": 1704,
+          "path": "shared/dashboard.css",
+          "sha256": "db6539041cf2b9d0b9c058ada7b347b31087683b95ee6d426711ec177e9e176a"
+        },
+        {
+          "bytes": 646,
+          "path": "implementations/streamweaver/render.rb",
+          "sha256": "364414f10aa5264e7885a9264732213cb1bdf8f042db0d712a808839cec6b5ca"
+        },
+        {
+          "bytes": 45,
+          "path": "implementations/streamweaver/dependencies.txt",
+          "sha256": "4fb86d3ced0945a5533a51b6a521ff0fbe2d2daab4a5763d46fd9d94a10f4194"
+        }
+      ],
+      "initial_inputs": [
+        {
+          "bytes": 1124,
+          "path": "implementations/streamweaver/initial.rb",
+          "sha256": "0f78f99169021f6af31dad10023462dabc96bf8d05671f036a855d8882e182ea"
+        },
+        {
+          "bytes": 840,
+          "path": "fixture.json",
+          "sha256": "dcbb74a9f96abf5ff8e1bc49094dac1e436425e227f0bef7dc8ee32f39e0e086"
+        },
+        {
+          "bytes": 1704,
+          "path": "shared/dashboard.css",
+          "sha256": "db6539041cf2b9d0b9c058ada7b347b31087683b95ee6d426711ec177e9e176a"
+        },
+        {
+          "bytes": 646,
+          "path": "implementations/streamweaver/render.rb",
+          "sha256": "364414f10aa5264e7885a9264732213cb1bdf8f042db0d712a808839cec6b5ca"
+        },
+        {
+          "bytes": 45,
+          "path": "implementations/streamweaver/dependencies.txt",
+          "sha256": "4fb86d3ced0945a5533a51b6a521ff0fbe2d2daab4a5763d46fd9d94a10f4194"
+        }
+      ],
+      "revision_patch": "--- implementations/streamweaver/initial.rb\n+++ implementations/streamweaver/revised.rb\n@@ -4,28 +4,27 @@\n   module StreamWeaverDashboard\n     METRICS = [[\"4\", \"READY\", :green], [\"2\", \"REVIEW\", :orange], [\"1\", \"BLOCKED\", :red]].freeze\n     ROWS = [\n-      [\"Navigation\", \"Web\", \"Today\"],\n-      [\"Source inspection\", \"Docs\", \"Today\"],\n-      [\"Mobile layout\", \"Design\", \"Tomorrow\"],\n-      [\"Release checklist\", \"Ops\", \"Friday\"]\n+      [\"Navigation\", \"Web\", \"Today\", \"Ready\"],\n+      [\"Source inspection\", \"Docs\", \"Today\", \"Review\"],\n+      [\"Mobile layout\", \"Design\", \"Tomorrow\", \"Ready\"],\n+      [\"Release checklist\", \"Ops\", \"Friday\", \"Blocked\"]\n     ].freeze\n \n     def self.app(stylesheet)\n-      blocked = METRICS.last.first.to_i\n-      badge_label = blocked <= 1 ? \"ON TRACK\" : \"AT RISK\"\n+      badge_label = ROWS.any? { |row| row.last == \"Blocked\" } ? \"ACTION NEEDED\" : \"ON TRACK\"\n \n       StreamWeaver::App.new(\"Release readiness\", chrome: false) do\n         use_stylesheet stylesheet\n         div class: \"benchmark-shell\" do\n           div class: \"benchmark-header\" do\n             header1 \"Release readiness\"\n-            badge badge_label, variant: :success\n+            badge badge_label, variant: :warning\n           end\n           grid columns: 3, class: \"metrics\" do\n             METRICS.each { |value, label, color| stat_display value: value, label: label, color: color }\n           end\n           div class: \"table-wrap\" do\n-            table headers: [\"Work\", \"Owner\", \"Due\"], rows: ROWS\n+            table headers: [\"Work\", \"Owner\", \"Due\", \"Status\"], rows: ROWS\n           end\n         end\n       end\n",
+      "revision_patch_sha256": "09631b80124634f1024bfd9a63445836652b197b478692d41151762358ef4f59"
+    }
+  },
+  "measurement_infrastructure": {
+    "included_in_implementation_totals": false,
+    "inputs": [
+      {
+        "bytes": 17,
+        "path": "requirements.txt",
+        "sha256": "5295ad472445fa0fb2d1c52122755bcb46ef42eb31c69457c22488dcf3c4aab0"
+      },
+      {
+        "bytes": 5071,
+        "path": "scripts/measure.py",
+        "sha256": "240635414b98b2a05f906f0ceeeddb02114314de056a82045e2e426bf7b6b857"
+      },
+      {
+        "bytes": 1927,
+        "path": "scripts/verify_outputs.py",
+        "sha256": "1d48ace4af44230bf86f2b5359b5e8f779e81015660ac8d629020ecd6f293f50"
+      },
+      {
+        "bytes": 829,
+        "path": "scripts/render_all.sh",
+        "sha256": "56a9f69901cab5db7b431c12d2314efb27cedc967e89842f83580899c7cda078"
+      }
+    ],
+    "tokens": 1876
+  },
+  "method": {
+    "counting": "UTF-8 source text including formatting and comments; each listed file tokenized separately and summed",
+    "encoding": "cl100k_base",
+    "patch": "Python difflib unified_diff with stable benchmark-relative labels and three context lines",
+    "tokenizer": "tiktoken",
+    "version": "0.11.0"
+  }
+}

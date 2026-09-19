@@ -1,0 +1,17 @@
+{
+  "title": "Release readiness",
+  "metrics": [
+    { "label": "Ready", "value": "4" },
+    { "label": "Review", "value": "2" },
+    { "label": "Blocked", "value": "1" }
+  ],
+  "rows": [
+    { "work": "Navigation", "owner": "Web", "due": "Today", "status": "Ready" },
+    { "work": "Source inspection", "owner": "Docs", "due": "Today", "status": "Review" },
+    { "work": "Mobile layout", "owner": "Design", "due": "Tomorrow", "status": "Ready" },
+    { "work": "Release checklist", "owner": "Ops", "due": "Friday", "status": "Blocked" }
+  ],
+  "initial_badge_rule": "ON TRACK when blocked metric is at most 1; otherwise AT RISK",
+  "revised_badge_rule": "ACTION NEEDED when any row status is Blocked; otherwise ON TRACK",
+  "responsive_requirement": "Three metric columns collapse to one and the table scrolls horizontally below 700px"
+}
