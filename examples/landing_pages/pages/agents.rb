@@ -4,44 +4,30 @@ module LandingPages
   module Pages
     module Agents
       SOURCE = __FILE__
+      PROOF_SOURCE = <<~'RUBY'
+        decision question: "How should we release?" do
+          option id: :phased, label: "Two phases", detail: "Observe each step", recommended: true
+          option id: :once, label: "One cutover", detail: "Fast, harder to reverse"
+        end
+      RUBY
 
       def self.render(view)
         view.instance_exec do
           lp_page page: :agents, source: SOURCE do
-            lp_hero eyebrow: "Agent communication / Structured handoff",
-              title: "GIVE AGENTS A SHARED SURFACE",
-              summary: "Move a choice from scattered context into a visible decision with options, rationale, and a structured result."
+            lp_hero eyebrow: "For agents that need to show, ask, and continue",
+              title: "LET YOUR AGENT SHOW YOU THE CHOICE",
+              summary: "Instead of a wall of terminal text, the agent can put the options on a page and make the tradeoff readable."
 
-            lp_section_label "Decision storyboard", "From an open question to a reusable result."
-            div class: "lp-stage" do
-              div class: "lp-storyboard" do
-                div class: "lp-story-step" do
-                  text "INPUT / OPEN QUESTION", class: "lp-eyebrow"
-                  header3 "How should the release be staged?", class: "lp-story-title"
-                  text "Constraints: reversible, observable, and easy to hand off.", class: "lp-stage-copy"
-                end
-                div class: "lp-story-step" do
-                  text "OPTIONS / TRADEOFFS", class: "lp-eyebrow"
-                  div class: "lp-chip-row" do
-                    text "One cutover", class: "lp-chip"
-                    text "Two phases", class: "lp-chip"
-                    text "Feature flag", class: "lp-chip"
-                  end
-                  text "Each option stays attached to the reason it exists.", class: "lp-stage-copy"
-                end
-                div class: "lp-story-step lp-story-result" do
-                  text "RESULT / EXAMPLE DECISION", class: "lp-eyebrow"
-                  header3 "Ship in two observable phases.", class: "lp-story-title"
-                  text "Owner: release agent · Gate: route checks · Follow-up: remove flag after UAT", class: "lp-stage-copy"
-                end
-              end
+            lp_section_label "Agent proof", "A real decision, rendered from the source beside it.", anchor: "example"
+            div class: "lp-proof" do
+              code_preview PROOF_SOURCE, title: "A release decision", file: "release_choice.rb"
             end
 
-            lp_benefits [
-              ["Structured inputs", "Forms give every agent the same question, constraints, and vocabulary."],
-              ["Persistent canvas", "Keep the decision surface available as options and rationale become a result."],
-              ["Choose when to respond", "Collect a blocking answer or keep a canvas available while the agent continues."]
-            ]
+            lp_audiences(
+              ruby_author: "Define the page with the same Ruby components you use for the rest of the workflow.",
+              agent_author: "Show options, diagrams, progress, or a structured question instead of describing them in terminal prose.",
+              reader: "See what the agent is asking, compare the choices, and answer now or return to the persistent canvas later."
+            )
           end
         end
       end

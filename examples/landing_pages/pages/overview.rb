@@ -4,55 +4,40 @@ module LandingPages
   module Pages
     module Overview
       SOURCE = __FILE__
+      PROOF_SOURCE = <<~'RUBY'
+        header2 "Release readiness"
+        columns do
+          column do
+            stat_display value: "4", label: "READY", color: :green
+          end
+          column do
+            callout "Checks passed. Ready for review.", variant: :success
+          end
+        end
+      RUBY
 
       def self.render(view)
         view.instance_exec do
           lp_page page: :overview, source: SOURCE do
-            lp_hero eyebrow: "Ruby DSL / One shared surface",
-              title: "EXPRESS MORE. WRITE LESS.",
-              summary: "Turn concise Ruby into explorable interfaces for decisions, diagrams, documents, apps, and review. Less code to generate, read, and revise."
+            lp_hero eyebrow: "Ruby DSL for interfaces agents can write and people can use.",
+              title: "ONE RUBY FILE. A REAL INTERFACE.",
+              summary: "Build a dashboard, document, slide deck, diagram, chart, or question for a person—without starting a second frontend project."
 
-            lp_section_label "Code → render", "A small source can carry a large idea."
-            div class: "lp-stage" do
-              div class: "lp-stage-grid" do
-                div class: "lp-stage-panel lp-code" do
-                  text "RUBY DSL", class: "lp-eyebrow"
-                  code_block <<~'RUBY', lang: "ruby", file: "idea.rb"
-                    header1 "Make the work visible"
-                    columns widths: ["42%", "58%"] do
-                      column { decision_summary }
-                      column do
-                        mermaid workflow
-                        diff(language: "ruby") do
-                          before { draft }
-                          after { proposal }
-                        end
-                      end
-                    end
-                  RUBY
-                end
-                div class: "lp-stage-panel lp-dark" do
-                  text "RENDER / SHARED SURFACE", class: "lp-eyebrow"
-                  header2 "A decision you can see, inspect, and discuss.", class: "lp-stage-title"
-                  div class: "lp-chip-row" do
-                    text "Decision", class: "lp-chip"
-                    text "Diagram", class: "lp-chip"
-                    text "Diff", class: "lp-chip"
-                  end
-                  text "The DSL stays close to the meaning of the work while StreamWeaver handles the presentation.", class: "lp-stage-copy"
-                end
-              end
+            lp_section_label "One source / one result", "One snippet. Its actual result.", anchor: "example"
+            div class: "lp-proof" do
+              code_preview PROOF_SOURCE, title: "A small release dashboard", file: "release_readiness.rb"
             end
 
-            lp_section_label "Five focused uses", "One language across the work."
+            lp_section_label "What do you want to make?", "One language across the work."
             div class: "lp-use-grid" do
-              {
-                agents: ["Agents", "Give parallel work a shared decision surface."],
-                visuals: ["Visuals", "Explain structure with diagrams and comparisons."],
-                documents: ["Docs", "Create long-form material people can explore."],
-                applications: ["Apps", "Turn a script into a useful working view."],
-                review: ["Review workflows · concept", "Put intent, criteria, and code changes together."]
-              }.each do |page, (label, copy)|
+              [
+                [:applications, "Dashboards + apps", "Turn the Ruby script you already have into a useful view."],
+                [:documents, "Documents", "Write long-form material with navigation, tables, and evidence."],
+                [:documents, "Slide decks", "Compose presentations from the same Ruby component language."],
+                [:visuals, "Diagrams + charts", "Show a system, sequence, comparison, or changing value."],
+                [:agents, "Forms + answers", "Ask a person a question and receive structured data in a live workflow."],
+                [:agents, "Agent canvas", "Let an agent show its work while you decide when to answer."]
+              ].each do |page, label, copy|
                 div class: "lp-use" do
                   link_to "#{label} →", href: LandingPages::ROUTES.fetch(page)
                   text copy
@@ -60,11 +45,11 @@ module LandingPages
               end
             end
 
-            lp_benefits [
-              ["More meaning per line", "Compose with decisions, diagrams, tables, and diffs instead of rebuilding their markup."],
-              ["One surface for the arc", "Move from thought to artifact without changing languages at every step."],
-              ["Easy to revisit", "Readable Ruby keeps the source approachable when the work changes tomorrow."]
-            ]
+            lp_audiences(
+              ruby_author: "Keep the data and the interface in Ruby, with no separate JavaScript application to maintain.",
+              agent_author: "Give the agent a short component vocabulary and let it produce something you can inspect line by line.",
+              reader: "Open an explorable page or exported file; the source stays close when you want to understand how it was made."
+            )
           end
         end
       end

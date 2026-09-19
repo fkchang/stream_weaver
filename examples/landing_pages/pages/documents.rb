@@ -4,51 +4,31 @@ module LandingPages
   module Pages
     module Documents
       SOURCE = __FILE__
+      PROOF_SOURCE = <<~'RUBY'
+        doc_header title: "Release note",
+          eyebrow: "What changed and why",
+          pills: ["Product team"]
+        callout "Navigation now uses real, bookmarkable routes.", variant: :success
+        md "Readers get the decision, the evidence, and the next step in one document."
+      RUBY
 
       def self.render(view)
         view.instance_exec do
           lp_page page: :documents, source: SOURCE do
-            lp_hero eyebrow: "Living documents / Editorial structure",
-              title: "DOCUMENTS YOU CAN EXPLORE",
-              summary: "Give long-form thinking a clear reading path, a compact table of contents, and evidence that remains part of the document."
+            lp_hero eyebrow: "Reports, notes, and slide decks from the same DSL",
+              title: "WRITE A DOCUMENT PEOPLE CAN EXPLORE",
+              summary: "Give long-form work a reading path, evidence, and a source that stays approachable when the story changes."
 
-            lp_section_label "Miniature field note", "A document with wayfinding built in."
-            div class: "lp-stage" do
-              div class: "lp-document" do
-                div do
-                  sidebar_toc sections: [
-                    { id: "doc-question", label: "Question" },
-                    { id: "doc-observation", label: "Observation" },
-                    { id: "doc-next", label: "Next move" }
-                  ]
-                end
-                div class: "lp-doc-body" do
-                  div id: "doc-question" do
-                    text "FIELD NOTE / SEPTEMBER 13", class: "lp-eyebrow"
-                    header2 "What makes a document stay useful?", class: "lp-stage-title"
-                    md "A useful document supports a first read and a return visit. Its structure reveals where the answer lives; its source stays simple enough to revise when the answer changes."
-                  end
-                  div id: "doc-observation" do
-                    header3 "Observation", class: "lp-stage-title"
-                    table headers: ["Layer", "Job", "Reader signal"], rows: [
-                      ["Outline", "Expose the argument", "I know where I am"],
-                      ["Evidence", "Support the claim", "I can verify this"],
-                      ["Source", "Keep revision cheap", "I can change this later"]
-                    ]
-                  end
-                  div id: "doc-next" do
-                    header3 "Next move", class: "lp-stage-title"
-                    callout "Keep the reading path visible and the authoring language concise.", tone: :neutral
-                  end
-                end
-              end
+            lp_section_label "Document proof", "The source and the reading experience stay together.", anchor: "example"
+            div class: "lp-proof" do
+              code_preview PROOF_SOURCE, title: "A compact release note", file: "release_note.rb", layout: :stacked
             end
 
-            lp_benefits [
-              ["Readable structure", "Sections and wayfinding help readers scan before committing to the whole piece."],
-              ["Evidence in context", "Tables, diagrams, and code live inside the argument they support."],
-              ["Living source", "Less code to generate, read, and revise keeps maintenance close to authorship."]
-            ]
+            lp_audiences(
+              ruby_author: "Compose reports and slide decks with named sections, navigation, tables, code, and diagrams.",
+              agent_author: "Draft a structured artifact that is easier to review than a long answer in chat.",
+              reader: "Follow the argument, open supporting details, and receive a static export when no live server is needed."
+            )
           end
         end
       end

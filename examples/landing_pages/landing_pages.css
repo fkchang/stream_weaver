@@ -48,6 +48,12 @@ body ::selection { background: var(--lp-ink); color: var(--lp-accent); }
 .lp-stage-copy { max-width: 52ch; font-size: 1rem !important; line-height: 1.55 !important; color: var(--lp-muted) !important; }
 .lp-arrow { display: flex; align-items: center; justify-content: center; font-size: clamp(2rem, 6vw, 5rem); }
 .lp-code .sw-code-block { margin: 0 !important; }
+.lp-proof { padding: clamp(34px, 5vw, 72px) 0; border-bottom: 1px solid var(--lp-ink); }
+.lp-proof .sw-code-preview { margin: 0; background: var(--lp-white); }
+.lp-proof .sw-code-preview__preview { min-height: 260px; display: flex; flex-direction: column; justify-content: center; }
+.lp-proof .sw-code-preview__source { background: #151515; }
+.lp-proof .sw-code-preview__source .sw-code-block { margin: 0; }
+.lp-exploration-label { width: max-content; margin: 0 0 18px !important; padding: 8px 13px; border: 1px solid var(--lp-ink); border-radius: 999px; font-family: var(--lp-mono) !important; font-size: .68rem !important; letter-spacing: .08em !important; }
 
 .lp-benefits { display: grid; grid-template-columns: repeat(3, 1fr); padding: 100px 0; }
 .lp-benefit { padding: 24px 34px 24px 0; border-top: 1px solid var(--lp-ink); }
@@ -55,6 +61,10 @@ body ::selection { background: var(--lp-ink); color: var(--lp-accent); }
 .lp-benefit-index { font-family: var(--lp-mono) !important; font-size: .68rem !important; color: var(--lp-muted) !important; }
 .lp-benefit-title { margin: 54px 0 16px !important; font-family: var(--lp-display) !important; font-size: clamp(1.5rem, 2.2vw, 2.4rem) !important; line-height: .95 !important; letter-spacing: -.025em !important; text-transform: uppercase; color: var(--lp-ink) !important; }
 .lp-benefit-copy { max-width: 31ch; margin: 0 !important; line-height: 1.55 !important; color: var(--lp-muted) !important; }
+.lp-audiences { display: grid; grid-template-columns: repeat(3, 1fr); padding: 100px 0; border-top: 1px solid var(--lp-ink); }
+.lp-audience { padding: 24px 34px 24px 0; }
+.lp-audience + .lp-audience { padding-left: 34px; border-left: 1px solid var(--lp-rule); }
+.lp-audience-copy { max-width: 34ch; margin: 42px 0 0 !important; font-size: 1.12rem !important; line-height: 1.5 !important; color: var(--lp-ink) !important; }
 
 .lp-storyboard { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--lp-ink); border-radius: 14px; overflow: hidden; background: var(--lp-white); }
 .lp-story-step { min-height: 310px; padding: 28px; display: flex; flex-direction: column; justify-content: space-between; }
@@ -81,7 +91,7 @@ body ::selection { background: var(--lp-ink); color: var(--lp-accent); }
 .lp-status-row { display: grid; grid-template-columns: 1.2fr .6fr .5fr; gap: 16px; padding: 15px 0; border-top: 1px solid var(--lp-rule); }
 .lp-review-criterion { padding: 28px; background: var(--lp-accent); border-radius: 14px; }
 .lp-review-criterion p { margin: 0 !important; font-family: var(--lp-mono) !important; font-size: .8rem !important; line-height: 1.6 !important; }
-.lp-use-grid { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--lp-ink); }
+.lp-use-grid { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--lp-ink); }
 .lp-use { min-height: 230px; padding: 22px; border-bottom: 1px solid var(--lp-rule); }
 .lp-use + .lp-use { border-left: 1px solid var(--lp-rule); }
 .lp-use a { font-family: var(--lp-display); font-size: 1.65rem; line-height: .95; text-transform: uppercase; color: var(--lp-ink); }
@@ -102,6 +112,8 @@ body ::selection { background: var(--lp-ink); color: var(--lp-accent); }
   .lp-section-heading, .lp-stage-grid, .lp-document { grid-template-columns: 1fr; }
   .lp-benefits { grid-template-columns: 1fr; padding: 70px 0; }
   .lp-benefit + .lp-benefit { padding-left: 0; border-left: 0; }
+  .lp-audiences { grid-template-columns: 1fr; padding: 70px 0; }
+  .lp-audience + .lp-audience { padding-left: 0; border-left: 0; border-top: 1px solid var(--lp-rule); }
   .lp-storyboard { grid-template-columns: 1fr; }
   .lp-story-step { min-height: 220px; }
   .lp-story-step + .lp-story-step { border-left: 0; border-top: 1px solid var(--lp-ink); }

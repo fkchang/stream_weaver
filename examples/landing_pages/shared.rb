@@ -55,8 +55,10 @@ module LandingPages
       end
     end
 
-    def lp_section_label(label, title)
-      div id: "example", class: "lp-section-heading" do
+    def lp_section_label(label, title, anchor: nil)
+      options = { class: "lp-section-heading" }
+      options[:id] = anchor if anchor
+      div **options do
         text label, class: "lp-eyebrow"
         header2 title, class: "lp-heading"
       end
@@ -69,6 +71,21 @@ module LandingPages
             text format("%02d", index + 1), class: "lp-benefit-index"
             header3 title, class: "lp-benefit-title"
             text body, class: "lp-benefit-copy"
+          end
+        end
+      end
+    end
+
+    def lp_audiences(ruby_author:, agent_author:, reader:)
+      div class: "lp-audiences" do
+        [
+          ["IF YOU WRITE RUBY", ruby_author],
+          ["IF YOUR AGENT WRITES IT", agent_author],
+          ["IF YOU READ IT", reader]
+        ].each do |label, body|
+          div class: "lp-audience" do
+            text label, class: "lp-eyebrow"
+            text body, class: "lp-audience-copy"
           end
         end
       end
