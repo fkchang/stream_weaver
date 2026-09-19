@@ -330,6 +330,10 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_code_block"
       end
 
+      def render_code_preview(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_code_preview"
+      end
+
       # Render an image with optional caption
       #
       # @param view [Phlex::HTML] The Phlex view instance

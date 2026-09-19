@@ -8244,6 +8244,107 @@ module StreamWeaver
         CSS
       end
 
+      public
+
+      def render_code_preview(view, component, state)
+        inject_component_css(view, "code_preview", code_preview_css)
+
+        view.section(
+          id: component.id,
+          class: "sw-code-preview sw-code-preview--#{component.layout_class}",
+          "aria-label" => component.title || "Code preview"
+        ) do
+          if component.title
+            view.div(class: "sw-code-preview__title") { component.title }
+          end
+
+          view.div(class: "sw-code-preview__grid") do
+            view.div(class: "sw-code-preview__preview") do
+              if component.error
+                render_code_preview_error(view, component.error)
+              else
+                view.raw(view.safe(component.preview_html.to_s))
+              end
+            end
+
+            view.div(class: "sw-code-preview__source") do
+              render_code_block(view, component.code_block, state)
+            end
+          end
+        end
+      end
+
+      def render_code_preview_error(view, error)
+        view.div(class: "sw-code-preview__error", role: "alert") do
+          view.div(class: "sw-code-preview__error-title") { "#{error.class}: #{error.message}" }
+          if error.backtrace&.first
+            view.div(class: "sw-code-preview__error-location") { error.backtrace.first }
+          end
+        end
+      end
+
+      def code_preview_css
+        <<~CSS
+          .sw-code-preview {
+            display: block;
+            margin: 1rem 0;
+          }
+
+          .sw-code-preview__title {
+            font-weight: 650;
+            margin-bottom: 0.5rem;
+          }
+
+          .sw-code-preview__grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 1rem;
+            align-items: stretch;
+          }
+
+          .sw-code-preview--stacked .sw-code-preview__grid {
+            grid-template-columns: minmax(0, 1fr);
+          }
+
+          .sw-code-preview__preview,
+          .sw-code-preview__source {
+            min-width: 0;
+          }
+
+          .sw-code-preview__preview {
+            border: 1px solid var(--sw-border, #e5e7eb);
+            border-radius: 8px;
+            padding: 1rem;
+            background: var(--sw-surface, #ffffff);
+          }
+
+          .sw-code-preview__error {
+            border: 1px solid color-mix(in srgb, var(--sw-danger, #dc2626) 45%, transparent);
+            border-radius: 8px;
+            padding: 0.75rem;
+            background: color-mix(in srgb, var(--sw-danger, #dc2626) 8%, transparent);
+            color: var(--sw-danger, #dc2626);
+          }
+
+          .sw-code-preview__error-title {
+            font-weight: 650;
+          }
+
+          .sw-code-preview__error-location {
+            margin-top: 0.35rem;
+            font-size: 0.85em;
+            color: inherit;
+            opacity: 0.75;
+          }
+
+          @media (max-width: 768px) {
+            .sw-code-preview__grid {
+              grid-template-columns: minmax(0, 1fr);
+            }
+          }
+        CSS
+      end
+
     end
   end
 end

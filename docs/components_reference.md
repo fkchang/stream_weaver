@@ -573,6 +573,52 @@ code_block source_code, lang: "ruby", file: "app.rb"
 a small Copy button that always copies the full code text, even if the block is
 truncated for display via `truncate:`.
 
+### Code Preview
+
+Renders one trusted, self-contained, display-only Ruby DSL snippet beside the
+exact source that produced it. Use it for examples where the source and result
+must stay in lockstep.
+
+```ruby
+code_preview <<~RUBY, title: "Small status proof", file: "examples/status.rb"
+  header3 "Build health"
+  badge "Passing", variant: :success
+  text "3 checks completed"
+RUBY
+```
+
+```ruby
+{
+  name: "code_preview",
+  category: "examples/documentation",
+  summary: "Displays exact trusted Ruby DSL source beside its rendered output.",
+  use_when: "Teaching or proving one self-contained StreamWeaver DSL example.",
+  limit: "Trusted, self-contained, display-only Ruby only. This is not a sandbox and does not run visitor-supplied code, setup preambles, callbacks, stateful forms, nested previews, Opal, or live browser Ruby.",
+  runtime: {
+    server: "supported",
+    build: "supported",
+    export: "supported_static_markup",
+    canvas: "supported_static_markup",
+    opal: "unsupported"
+  },
+  params: [
+    { name: "source", type: "String", default: nil, required: true, note: "First positional argument. The exact string is displayed and evaluated once per host render." },
+    { name: "id", type: "String|Symbol|Integer", default: "short source digest", required: false, note: "Explicit ids and digest ids are duplicate-safe within the page." },
+    { name: "title", type: "String", default: nil, required: false, note: "Accessible label shown above the preview." },
+    { name: "file", type: "String", default: nil, required: false, note: "Optional source-pane file label, matching code_block." },
+    { name: "layout", type: "Symbol", default: ":side_by_side", required: false, note: ":side_by_side or :stacked; stacked places preview above source." }
+  ],
+  examples: [
+    { id: "small-status-proof", title: "Small status proof", source: "header3 \"Build health\"\\nbadge \"Passing\", variant: :success\\ntext \"3 checks completed\"" }
+  ],
+  gotchas: [
+    "Visible component errors preserve the source and show the real Ruby error.",
+    "StreamWeaver::CodePreview.evaluate(source, adapter: nil) returns rendered HTML or raises."
+  ],
+  source_file: "lib/stream_weaver/components/code_preview.rb"
+}
+```
+
 ## Table
 
 Display tabular data with smart data inference, formatters, and interactive features.

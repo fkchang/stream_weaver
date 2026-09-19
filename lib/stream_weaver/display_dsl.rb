@@ -283,6 +283,31 @@ module StreamWeaver
       components << Components::CodeBlock.new(code, copy: copy, **options)
     end
 
+    # Render trusted, self-contained Ruby DSL beside the exact source that
+    # produced it. This is display-only: live controls are rejected.
+    def code_preview(source, id: nil, title: nil, file: nil, layout: :side_by_side)
+      Components::CodePreview.validate_layout!(layout)
+      source = source.to_s
+      preview_html = nil
+      error = nil
+
+      begin
+        preview_html = StreamWeaver::CodePreview.evaluate(source)
+      rescue SyntaxError, StandardError => e
+        error = e
+      end
+
+      components << Components::CodePreview.new(
+        source,
+        id: code_preview_id(source, id),
+        title: title,
+        file: file,
+        layout: layout,
+        preview_html: preview_html,
+        error: error
+      )
+    end
+
     # Render an image with optional caption.
     # Supports local files, URLs, and base64 data URI conversion for export.
     #
@@ -957,6 +982,17 @@ module StreamWeaver
 
     def warned_duplicate_ids
       @_warned_duplicate_ids ||= Set.new
+    end
+
+    def code_preview_id(source, explicit_id)
+      explicit_id = validate_scalar_key!(explicit_id, context: "code_preview id")
+      base = explicit_id ? sanitize_explicit_id(explicit_id) : StreamWeaver::CodePreview.source_digest(source)
+      candidate = base.start_with?("code-preview-") ? base : "code-preview-#{base}"
+      occurrence = seen_component_ids[candidate]
+      seen_component_ids[candidate] = occurrence + 1
+      return candidate if occurrence.zero?
+
+      "#{candidate}-dup-#{occurrence + 1}"
     end
 
     def strict_ids?

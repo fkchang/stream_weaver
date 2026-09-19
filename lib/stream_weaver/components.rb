@@ -2680,6 +2680,7 @@ end
 
 # Load component files from components/ directory
 require_relative "components/code_block"
+require_relative "components/code_preview"
 require_relative "components/image_block"
 require_relative "components/mermaid"
 require_relative "components/keyboard_shortcuts"
