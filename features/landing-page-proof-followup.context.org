@@ -1,0 +1,41 @@
+#+TITLE: landing-page-proof-followup: epic wiki (read FIRST via `tyrion epic-context show --story <slug>`)
+#+DATE: 2026-09-19
+
+* Where the knowledge already is
+- Coordination contract and decision trail: agent-mailbox/FROM-CLAUDE.md (C-004 through C-006) and agent-mailbox/FROM-CODEX.md (X-001, X-002, X-006).
+- Research handoff and landing argument: agent-mailbox/handoff-001-poetryui-research-and-landing-page.md.
+- Existing six-page prototype and source inspector: examples/landing_pages/.
+- Existing source-display API: lib/stream_weaver/display_dsl.rb and lib/stream_weaver/components/code_block.rb.
+- Existing component rendering seam: lib/stream_weaver/component_renderer.rb and the adapter render methods.
+- Runtime honesty source: docs/frontend-only.md.
+
+* Verified facts
+- No code_preview component exists in the current branch; code_block already accepts positional source plus file and language options (lib/stream_weaver/display_dsl.rb).
+- The accepted contract is code_preview(source, id: nil, title: nil, file: nil, layout: :side_by_side), with one source string displayed and evaluated (agent-mailbox/FROM-CODEX.md, X-006).
+- V1 is trusted, self-contained, display-only Ruby and is not a sandbox or browser-Ruby promise (agent-mailbox/FROM-CLAUDE.md, C-004; agent-mailbox/FROM-CODEX.md, X-006).
+- The benchmark is one constructed source-size fixture, not independent model generation runs or a speed/comprehension experiment.
+
+* Gotchas already paid for
+- Default identity must survive identical source repeated on one page without duplicate DOM ids; explicit ids also cannot create collisions.
+- :stacked means preview first, code second. Narrow layouts may stack regardless of the desktop preference.
+- Honest errors keep the failing source visible and never substitute unrelated output.
+- Static/exported output must not show live-looking controls that cannot work; document runtime limits rather than implying parity.
+- Do not imply the current multi-file landing suite is literally one file. The hero names the category and demonstrates one-file examples.
+- Disclose shared helpers, CSS, setup, and runtime dependencies in benchmark accounting. Source tokens are not model tokens or elapsed time.
+- No component registry, docs site, site publication, main merge, Org/parser work, or unrelated component extraction belongs to this epic.
+
+* Lanes
+| Lane | Stories | Builder | Why one lane |
+|---+---+---+---|
+| Component | reusable-code-preview | strict builder | Establishes the contract and evaluation seam required downstream. |
+| Landing adoption | adopt-real-proof-copy | loose builder after component | Uses the finished primitive and preserves the existing prototype. |
+| Measurement | benchmark-source-token-workflow | loose builder after landing adoption | Measures the final representative shape with fixed inputs. |
+
+* Instrument
+| Story | Builder | Start | End | Wall-clock | Gate attempts | Rediscoveries |
+|---+---+---+---+---+---+---|
+
+* Learnings
+#+BEGIN_COMMENT
+Append only via: tyrion epic-context append --story <slug> "<what you learned> (file:line)"
+#+END_COMMENT
