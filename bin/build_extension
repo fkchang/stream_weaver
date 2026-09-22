@@ -36,10 +36,13 @@ SLIM_GRAPH_R_LIB = begin
     [sibling, installed].compact.uniq
   end
 
-  entrypoint = File.join("slim_graph_r", "stream_weaver_opal.rb")
-  selected = candidates.find { |lib| File.file?(File.join(lib, entrypoint)) }
+  required_entries = [
+    File.join("slim_graph_r", "stream_weaver_opal.rb"),
+    File.join("slim_graph_r", "motion_player.rb")
+  ]
+  selected = candidates.find { |lib| required_entries.all? { |entry| File.file?(File.join(lib, entry)) } }
   unless selected
-    abort "SlimGraphR browser entrypoint #{entrypoint} was not found. " \
+    abort "Compatible SlimGraphR browser entries #{required_entries.join(' and ')} were not found. " \
           "Checked: #{candidates.join(', ')}. Install a compatible slim_graph_r gem " \
           "or set SLIM_GRAPH_R_LIB to its lib directory."
   end
@@ -89,6 +92,13 @@ builder.build("slim_graph_r/stream_weaver_opal")
 # canvas-read uses server-side (org-doc-format-design.md).
 builder.build("stream_weaver/org/reader")
 File.write(File.join(VENDOR, "sw-runtime.js"), builder.to_s)
+
+# Motion stays a SlimGraphR-owned capability. The extension copies the exact
+# player source from the selected gem checkout so Manifest V3 runs local code
+# without eval or document-authored inline scripts.
+$LOAD_PATH.unshift(SLIM_GRAPH_R_LIB) unless $LOAD_PATH.include?(SLIM_GRAPH_R_LIB)
+require "slim_graph_r/motion_player"
+File.write(File.join(VENDOR, "slim-graph-r-motion.js"), SlimGraphR::MotionPlayer::JAVASCRIPT)
 
 # --- 2. Theme CSS -----------------------------------------------------------
 #

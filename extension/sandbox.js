@@ -180,6 +180,12 @@
   // exported hooks itself.
   function enhance() {
     try {
+      self.SlimGraphRMotion?.boot(app);
+    } catch (e) {
+      console.error("[StreamWeaver] SlimGraphR motion failed:", e);
+    }
+
+    try {
       if (typeof Prism !== "undefined") Prism.highlightAll();
     } catch (e) {
       console.error("[StreamWeaver] highlighting failed:", e);

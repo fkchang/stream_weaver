@@ -206,6 +206,16 @@ Feature: University Getting Started — one door, premier iTerm experience, driv
     And accessible titles and descriptions survive the viewer pipeline
     And extension CSP reports no diagram-related errors
 
+  Scenario: chrome-extension-slim-graph-r-motion
+    # Intent: Keep SlimGraphR storyboards interactive in the offline Chrome extension without weakening Manifest V3 isolation.
+    # RIGOR: strict — CSP-safe asset packaging, Opal rendering, and delegated playback can fail independently
+    Given the StreamWeaver Chrome extension is built against a SlimGraphR release with storyboards
+    When the viewer opens a saved document containing an animated SlimGraphR diagram
+    Then the build copies SlimGraphR's exact motion player into the local extension bundle
+    And Opal renders motion groups and playback controls without a document-authored inline script
+    And the sandbox boots the bundled player after each live render
+    And the complete static and live diagram atlas remain within their existing performance budgets
+
   Scenario: visual-companion-diagram-guidance
     # Intent: Make Visual Companion select and write SlimGraphR diagrams as a token-efficient first-class visual primitive.
     # RIGOR: loose — progressive-disclosure guidance backed by executable examples

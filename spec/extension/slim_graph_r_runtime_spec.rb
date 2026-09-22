@@ -6,10 +6,12 @@ require 'open3'
 require 'rbconfig'
 require 'tmpdir'
 require 'timeout'
+require 'fileutils'
 
 RSpec.describe 'the packaged SlimGraphR extension runtime' do
   let(:root) { File.expand_path('../..', __dir__) }
   let(:runtime) { File.join(root, 'extension', 'vendor', 'sw-runtime.js') }
+  let(:motion_player) { File.join(root, 'extension', 'vendor', 'slim-graph-r-motion.js') }
   let(:gallery) do
     local = File.expand_path('../../slim_graph_r/examples/stream_weaver/gallery.rb', root)
     installed = File.join(Gem::Specification.find_by_name('slim_graph_r').full_gem_path,
@@ -21,6 +23,119 @@ RSpec.describe 'the packaged SlimGraphR extension runtime' do
     root = File.expand_path('../..', __dir__)
     stdout, stderr, status = Open3.capture3(RbConfig.ruby, File.join(root, 'bin', 'build_extension'))
     raise "extension build failed:\n#{stdout}\n#{stderr}" unless status.success?
+  end
+
+  it 'bundles the SlimGraphR motion player as local extension code' do
+    source = File.read(motion_player, encoding: 'UTF-8')
+    sandbox = File.read(File.join(root, 'extension', 'sandbox.html'), encoding: 'UTF-8')
+    bridge = File.read(File.join(root, 'extension', 'sandbox.js'), encoding: 'UTF-8')
+
+    slim_lib = ENV.fetch('SLIM_GRAPH_R_LIB', File.expand_path('../../slim_graph_r/lib', root))
+    expected, errors, status = Open3.capture3(
+      RbConfig.ruby, '-I', slim_lib, '-rslim_graph_r/motion_player',
+      '-e', 'print SlimGraphR::MotionPlayer::JAVASCRIPT'
+    )
+    expect(status).to be_success, errors
+    expect(source).to eq(expected)
+    expect(sandbox).to include('vendor/slim-graph-r-motion.js')
+    expect(bridge).to include('SlimGraphRMotion?.boot(app)')
+  end
+
+  it 'refreshes preserved motion roots after a live patch without duplicate handlers' do
+    program = <<~JS
+      const fs = require("fs");
+      const vm = require("vm");
+      class Classes {
+        constructor() { this.values = new Set(); }
+        add(name) { this.values.add(name); }
+        delete(name) { this.values.delete(name); }
+        toggle(name, on) { on ? this.values.add(name) : this.values.delete(name); }
+        has(name) { return this.values.has(name); }
+      }
+      class Item {
+        constructor(step, key) { this.dataset = { step: String(step), motionKey: key }; this.classList = new Classes(); this.attrs = {}; }
+        setAttribute(name, value) { this.attrs[name] = value; }
+        getAttribute(name) { return name === "aria-label" ? `Step ${this.dataset.step}` : this.attrs[name]; }
+      }
+      class Button {
+        constructor(action) { this.dataset = { motionAction: action }; this.attrs = {}; this.disabled = false; }
+        closest() { return this; }
+        setAttribute(name, value) { this.attrs[name] = value; }
+      }
+      const makeControls = () => {
+        const buttons = Object.fromEntries(["prev", "play", "next", "replay"].map(name => [name, new Button(name)]));
+        return { buttons, hidden: false, querySelector(selector) { return buttons[selector.match(/="([^"]+)/)[1]]; } };
+      };
+      const root = {
+        dataset: { stepCount: "2", motionMode: "steps" }, classList: new Classes(), listeners: {},
+        items: [new Item(1, "one"), new Item(2, "two")], controls: makeControls(),
+        status: { textContent: "" }, counter: { textContent: "" },
+        addEventListener(name, fn) { (this.listeners[name] ||= []).push(fn); },
+        querySelectorAll() { return this.items; },
+        querySelector(selector) {
+          if (selector === "[data-sgr-motion-controls]") return this.controls;
+          if (selector === "[data-sgr-motion-status]") return this.status;
+          if (selector === "[data-sgr-motion-current]") return this.counter;
+        }
+      };
+      global.document = { hidden: false, querySelectorAll: () => [root], addEventListener() {} };
+      global.location = { search: "" };
+      global.matchMedia = () => ({ matches: false, addEventListener() {} });
+      global.setTimeout = () => 1;
+      global.clearTimeout = () => {};
+      vm.runInThisContext(fs.readFileSync(#{motion_player.to_json}, "utf8"));
+      const invoke = action => root.listeners.click[0]({ target: root.controls.buttons[action] });
+      invoke("next");
+      const beforePatch = root.dataset.stepCurrent;
+      root.classList.delete("sgr-motion-ready");
+      delete root.dataset.motionReady;
+      root.items = [new Item(1, "one"), new Item(2, "two")];
+      root.controls = makeControls();
+      SlimGraphRMotion.boot(document);
+      const afterPatch = root.dataset.stepCurrent;
+      const refreshed = root.classList.has("sgr-motion-ready") && root.items[1].classList.has("is-visible");
+      invoke("replay");
+      process.stdout.write(JSON.stringify({ beforePatch, afterPatch, replay: root.dataset.stepCurrent, refreshed,
+        clickHandlers: root.listeners.click.length, keyHandlers: root.listeners.keydown.length }));
+    JS
+
+    stdout, stderr, status = capture_node(program)
+    expect(status).to be_success, stderr
+    expect(JSON.parse(stdout)).to eq(
+      'beforePatch' => '2', 'afterPatch' => '2', 'replay' => '1', 'refreshed' => true,
+      'clickHandlers' => 1, 'keyHandlers' => 1
+    )
+  end
+
+  it 'renders an animated SlimGraphR storyboard through Opal for the bundled player' do
+    program = <<~JS
+      const fs = require("fs");
+      const vm = require("vm");
+      vm.runInThisContext(fs.readFileSync(#{runtime.to_json}, "utf8"), { filename: #{runtime.to_json} });
+      Opal.eval(`app("Motion") do
+        diagram(:architecture, title: "Animated path") do
+          node :source, "Source"
+          node :worker, "Worker"
+          flow :source, :worker
+        end.storyboard do
+          reveal 1, :source, "Source appears"
+          reveal 2, :worker, route(:source, :worker), "Worker appears"
+        end
+      end`);
+      const html = SWRender.html();
+      process.stdout.write(JSON.stringify({
+        root: html.includes('data-sgr-motion-root'),
+        items: (html.match(/data-motion-item=/g) || []).length,
+        controls: html.includes('data-motion-action="replay"'),
+        inlineScript: html.includes('<script>')
+      }));
+    JS
+
+    stdout, stderr, status = capture_node(program)
+    expect(status).to be_success, stderr
+    expect(JSON.parse(stdout)).to eq(
+      'root' => true, 'items' => 3, 'controls' => true, 'inlineScript' => false
+    )
   end
 
   def atlas_examples
@@ -291,8 +406,10 @@ RSpec.describe 'the packaged SlimGraphR extension runtime' do
     expect(sandbox_js).not_to match(/\bfetch\s*\(/)
   end
 
-  it 'fails the build explicitly when the selected SlimGraphR source lacks the browser entrypoint' do
+  it 'fails the build explicitly when the selected SlimGraphR source lacks a required browser entry' do
     Dir.mktmpdir('slim-graph-r-missing-entrypoint') do |empty_lib|
+      FileUtils.mkdir_p(File.join(empty_lib, 'slim_graph_r'))
+      File.write(File.join(empty_lib, 'slim_graph_r', 'stream_weaver_opal.rb'), "# present\n")
       stdout, stderr, status = Open3.capture3(
         { 'SLIM_GRAPH_R_LIB' => empty_lib },
         RbConfig.ruby,
@@ -300,7 +417,7 @@ RSpec.describe 'the packaged SlimGraphR extension runtime' do
       )
 
       expect(status).not_to be_success
-      expect("#{stdout}\n#{stderr}").to include('slim_graph_r/stream_weaver_opal.rb')
+      expect("#{stdout}\n#{stderr}").to include('slim_graph_r/motion_player.rb')
     end
   end
 end
