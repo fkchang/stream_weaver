@@ -80,6 +80,7 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
         'RUBYOPT' => nil,
         'RUBYLIB' => nil,
         'BUNDLE_GEMFILE' => nil,
+        'SLIM_GRAPH_R_SOURCE' => nil,
         'STREAMWEAVER_UNIVERSITY_PROGRESS' => File.join(gem_home, 'progress.yml')
       }
       yield env

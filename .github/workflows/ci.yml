@@ -43,11 +43,6 @@ jobs:
 
       - name: Run RSpec
         run: bundle exec rspec
-        env:
-          # The bundle was resolved from Git above. Fresh-process isolation
-          # specs must not carry that development-only source switch into the
-          # temporary GEM_HOME they construct.
-          SLIM_GRAPH_R_SOURCE: ""
 
   smoke:
     runs-on: ubuntu-latest
