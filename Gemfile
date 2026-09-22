@@ -5,6 +5,10 @@ source "https://rubygems.org"
 # Specify your gem's dependencies in stream_weaver.gemspec
 gemspec
 
+if ENV["SLIM_GRAPH_R_SOURCE"] == "git"
+  gem "slim_graph_r", git: "https://github.com/fkchang/slim_graph_r.git", require: false
+end
+
 # Optional iTerm2 split-pane integration (https://rubygems.org/gems/iterm2_ruby).
 # Not a runtime dependency of the stream_weaver gem — end users opt in with
 # `gem install iterm2_ruby`; StreamWeaver::ITerm falls back to the system browser.

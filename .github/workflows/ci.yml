@@ -6,6 +6,9 @@ on:
       - main
   pull_request:
 
+env:
+  SLIM_GRAPH_R_SOURCE: git
+
 jobs:
   rspec:
     runs-on: ubuntu-latest
