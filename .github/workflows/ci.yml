@@ -38,8 +38,16 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Vendor browser assets
+        run: bin/vendor_browser_assets
+
       - name: Run RSpec
         run: bundle exec rspec
+        env:
+          # The bundle was resolved from Git above. Fresh-process isolation
+          # specs must not carry that development-only source switch into the
+          # temporary GEM_HOME they construct.
+          SLIM_GRAPH_R_SOURCE: ""
 
   smoke:
     runs-on: ubuntu-latest
