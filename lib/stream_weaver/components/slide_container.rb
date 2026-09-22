@@ -16,17 +16,27 @@ module StreamWeaver
     #     text "Welcome to the presentation"
     #   end
     class Slide < Base
-      attr_reader :id, :title, :type
+      attr_reader :id, :title, :type, :kicker, :subtitle, :meta, :number
       attr_accessor :children
 
       # @param id [String] Unique identifier for this slide
       # @param title [String, nil] Optional slide title
-      # @param type [Symbol] Slide type (:content, :title)
+      # @param type [Symbol] Slide type (:content, :title; presentations add
+      #   :section, :cards, :milestones)
+      # @param kicker [String, nil] Small uppercase accent label (presentations)
+      # @param subtitle [String, nil] Subtitle line (presentations)
+      # @param meta [String, nil] Metadata / closing note line (presentations)
+      # @param number [String, nil] Big section number (presentations, :section type)
       # @param options [Hash] Additional HTML options
-      def initialize(id, title = nil, type: :content, **options)
+      def initialize(id, title = nil, type: :content,
+                     kicker: nil, subtitle: nil, meta: nil, number: nil, **options)
         @id = id.to_s
         @title = title
         @type = type.to_sym
+        @kicker = kicker
+        @subtitle = subtitle
+        @meta = meta
+        @number = number
         @children = []
         super(**options)
       end
@@ -123,6 +133,12 @@ module StreamWeaver
       # Whether scroll-snap mode
       def scroll_snap?
         @mode == :scroll_snap
+      end
+
+      # Whether this container renders presentation stage chrome
+      # (16:9 stage, footer, slide numbers). Overridden by Presentation.
+      def presentation?
+        false
       end
 
       # Generate a unique container ID

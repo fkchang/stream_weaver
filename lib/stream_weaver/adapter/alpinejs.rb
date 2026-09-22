@@ -3817,6 +3817,9 @@ module StreamWeaver
         inject_keyboard_js(view) if component.keyboard_nav
         inject_slide_container_css(view)
 
+        presentation = component.respond_to?(:presentation?) && component.presentation?
+        inject_component_css(view, :presentation, PRESENTATION_CSS) if presentation
+
         total = component.slide_count
         alpine_data = "swSlideNav(#{total}, '#{component.mode}', #{component.keyboard_nav})"
         container_id = component.container_id
@@ -3850,19 +3853,27 @@ module StreamWeaver
           if component.swap?
             # Swap mode: show one slide at a time
             component.children.each_with_index do |slide_component, index|
+              slide_classes = slide_component.css_classes
+              slide_classes += " sw-pres-stage" if presentation
               view.div(
                 id: "sw-slide-#{index}",
-                class: slide_component.css_classes,
+                class: slide_classes,
                 "x-show" => "current === #{index}",
                 "x-transition:enter" => "sw-slide-fade-enter",
                 "x-transition:enter-start" => "sw-slide-fade-enter-start",
                 "x-transition:enter-end" => "sw-slide-fade-enter-end",
                 "x-cloak" => (index > 0 ? true : nil)
               ) do
-                if slide_component.title
-                  view.h2(class: "sw-slide__title") { slide_component.title }
+                if presentation
+                  render_presentation_slide_header(view, slide_component)
+                  render_presentation_slide_body(view, slide_component, state)
+                  render_presentation_footer(view, component, index)
+                else
+                  if slide_component.title
+                    view.h2(class: "sw-slide__title") { slide_component.title }
+                  end
+                  slide_component.children.each { |child| child.render(view, state) }
                 end
-                slide_component.children.each { |child| child.render(view, state) }
               end
             end
 
@@ -3926,6 +3937,97 @@ module StreamWeaver
             view.h2(class: "sw-slide__title") { component.title }
           end
           component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # =========================================
+      # Presentation deck rendering
+      # =========================================
+
+      # Slide header for presentation decks: section number block for
+      # :section slides, kicker label, title, subtitle, and meta line.
+      # Meta is deferred to the body on :milestones slides, where it reads
+      # as a closing note under the timeline.
+      def render_presentation_slide_header(view, slide)
+        if slide.type == :section && slide.number
+          view.div(class: "sw-pres-section-number") do
+            view.span(class: "sw-pres-section-number__value") { slide.number }
+            view.span(class: "sw-pres-section-number__label") { "SECTION" }
+          end
+        elsif slide.kicker
+          view.div(class: "sw-pres-kicker") { slide.kicker }
+        end
+
+        if slide.title
+          tag = slide.type == :title ? :h1 : :h2
+          view.public_send(tag, class: "sw-slide__title") { slide.title }
+        end
+        view.div(class: "sw-pres-subtitle") { slide.subtitle } if slide.subtitle
+        if slide.meta && slide.type != :milestones
+          view.div(class: "sw-pres-meta") { slide.meta }
+        end
+      end
+
+      # Slide body for presentation decks. :title slides group Phase children
+      # into a strip; :milestones slides wrap children in the timeline track
+      # and number each Milestone by position when unset.
+      def render_presentation_slide_body(view, slide, state)
+        case slide.type
+        when :milestones
+          view.div(class: "sw-pres-track") do
+            slide.children.each_with_index do |child, i|
+              child.number ||= (i + 1) if child.respond_to?(:number=)
+              child.render(view, state)
+            end
+          end
+          view.div(class: "sw-pres-meta") { slide.meta } if slide.meta
+        when :title
+          phases, rest = slide.children.partition { |c| c.is_a?(::StreamWeaver::Components::Phase) }
+          rest.each { |child| child.render(view, state) }
+          unless phases.empty?
+            view.div(class: "sw-pres-phases") do
+              phases.each { |phase_component| phase_component.render(view, state) }
+            end
+          end
+        else
+          slide.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # Recurring footer chrome pinned to the bottom of each 16:9 stage.
+      def render_presentation_footer(view, component, index)
+        return unless component.footer || component.slide_numbers
+
+        view.div(class: "sw-pres-footer") do
+          view.span(class: "sw-pres-footer__text") { component.footer.to_s }
+          if component.slide_numbers
+            view.span(class: "sw-pres-footer__number") { (index + 1).to_s }
+          end
+        end
+      end
+
+      # Render a phase card inside a :title slide's phase strip.
+      def render_phase(view, component, state)
+        view.div(class: "sw-phase") do
+          view.div(class: "sw-phase__label") { component.label }
+          view.div(class: "sw-phase__title") { component.title }
+          view.div(class: "sw-phase__meta") { component.meta } if component.meta
+        end
+      end
+
+      # Render one dated node on a :milestones slide's timeline.
+      def render_milestone(view, component, state)
+        view.div(class: "sw-milestone") do
+          view.div(class: "sw-milestone__header") do
+            view.div(class: "sw-milestone__date") { component.date }
+            view.div(class: "sw-milestone__label") { component.label }
+          end
+          view.div(class: "sw-milestone__dot", "aria-hidden" => "true") do
+            (component.number || "").to_s
+          end
+          if component.description
+            view.div(class: "sw-milestone__description") { component.description }
+          end
         end
       end
 
@@ -6742,6 +6844,251 @@ module StreamWeaver
 
         /* x-cloak: hide until Alpine initializes */
         [x-cloak] { display: none !important; }
+      CSS
+
+      # CSS for presentation decks (16:9 stage chrome + slide layouts).
+      # Scoped under .sw-presentation so plain slide_containers are unaffected.
+      PRESENTATION_CSS = <<~CSS
+        /* ===========================================
+           Presentation Deck Styles (sw-pres- prefix)
+           =========================================== */
+
+        .sw-presentation .sw-pres-stage {
+          aspect-ratio: 16 / 9;
+          width: 100%;
+          box-sizing: border-box;
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          padding: 2.5rem 3rem 2.75rem;
+          border: 1px solid var(--sw-border, #e0e0e0);
+          border-radius: var(--sw-radius-md, 6px);
+          background: var(--sw-surface, #fff);
+        }
+
+        /* Recurring footer chrome */
+        .sw-pres-footer {
+          position: absolute;
+          left: 3rem;
+          right: 3rem;
+          bottom: 0.9rem;
+          display: flex;
+          justify-content: space-between;
+          align-items: baseline;
+          gap: 1rem;
+          font-size: 0.7rem;
+          color: var(--sw-text-dim, #666);
+        }
+
+        /* Slide header elements */
+        .sw-pres-kicker {
+          font-size: 0.78rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--sw-accent, #0f9d58);
+          margin-bottom: 0.6rem;
+        }
+
+        .sw-presentation .sw-slide__title {
+          margin: 0 0 0.35rem 0;
+        }
+
+        .sw-pres-subtitle {
+          font-size: 1.1rem;
+          color: var(--sw-text-dim, #444);
+          margin-bottom: 0.75rem;
+        }
+
+        .sw-pres-meta {
+          font-size: 0.9rem;
+          color: var(--sw-text-dim, #444);
+          margin: 0.5rem 0 1rem 0;
+        }
+
+        .sw-pres-section-number {
+          display: flex;
+          flex-direction: column;
+          margin-bottom: 1rem;
+        }
+
+        .sw-pres-section-number__value {
+          font-size: 3.5rem;
+          font-weight: 800;
+          line-height: 1;
+        }
+
+        .sw-pres-section-number__label {
+          font-size: 0.75rem;
+          font-weight: 700;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          opacity: 0.85;
+        }
+
+        /* Title slide: brand bars top/bottom, big title, accent subtitle */
+        .sw-presentation .sw-slide--title {
+          border-top: 6px solid var(--sw-accent, #0f9d58);
+          border-bottom: 6px solid var(--sw-accent, #0f9d58);
+        }
+
+        .sw-presentation .sw-slide--title .sw-slide__title {
+          font-size: 2.25rem;
+          font-weight: 800;
+        }
+
+        .sw-presentation .sw-slide--title .sw-pres-subtitle {
+          font-size: 1.35rem;
+          font-weight: 600;
+          color: var(--sw-accent, #0f9d58);
+        }
+
+        .sw-pres-phases {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 1.25rem;
+          margin-top: auto;
+          padding-bottom: 1.25rem;
+        }
+
+        .sw-phase {
+          background: var(--sw-surface-elevated, #f4f7f6);
+          border-left: 4px solid var(--sw-accent, #0f9d58);
+          border-radius: 0 var(--sw-radius-md, 6px) var(--sw-radius-md, 6px) 0;
+          padding: 0.85rem 1.1rem;
+        }
+
+        .sw-phase__label {
+          font-size: 0.68rem;
+          font-weight: 700;
+          letter-spacing: 0.07em;
+          text-transform: uppercase;
+          color: var(--sw-accent, #0f9d58);
+        }
+
+        .sw-phase__title {
+          font-weight: 700;
+          color: var(--sw-text, #111);
+          margin: 0.15rem 0;
+        }
+
+        .sw-phase__meta {
+          font-size: 0.78rem;
+          color: var(--sw-text-dim, #666);
+        }
+
+        /* Section divider: green field, white type */
+        .sw-presentation .sw-slide--section {
+          justify-content: center;
+          border: none;
+          background: linear-gradient(135deg, #12a150 0%, #0b7a3d 100%);
+          color: #fff;
+        }
+
+        .sw-presentation .sw-slide--section .sw-slide__title {
+          color: #fff;
+          font-size: 2rem;
+          font-weight: 700;
+        }
+
+        .sw-presentation .sw-slide--section .sw-pres-subtitle {
+          color: rgba(255, 255, 255, 0.88);
+          font-size: 1rem;
+        }
+
+        .sw-presentation .sw-slide--section .sw-pres-footer {
+          color: rgba(255, 255, 255, 0.75);
+        }
+
+        /* Card grid slide: accent-left criterion cards */
+        .sw-presentation .sw-slide--cards .sw-card {
+          background: var(--sw-surface-elevated, #f4f7f6);
+          border-left: 4px solid var(--sw-accent, #0f9d58);
+          padding: 0.7rem 1rem;
+          font-size: 0.85rem;
+        }
+
+        .sw-presentation .sw-slide--cards .sw-card h4 {
+          margin: 0 0 0.3rem 0;
+        }
+
+        .sw-presentation .sw-slide--cards .sw-card p {
+          margin: 0;
+        }
+
+        /* Milestone slide: horizontal dated timeline */
+        .sw-pres-track {
+          display: flex;
+          align-items: stretch;
+          margin: 1.5rem 0 1rem 0;
+        }
+
+        .sw-milestone {
+          flex: 1 1 0;
+          position: relative;
+          text-align: center;
+          padding: 0 0.75rem;
+        }
+
+        /* Continuous connecting line behind the dots */
+        .sw-milestone::before {
+          content: "";
+          position: absolute;
+          top: calc(4rem + 0.9rem + 1.125rem);
+          left: 0;
+          right: 0;
+          height: 2px;
+          background: var(--sw-border, #cfe3d8);
+        }
+
+        .sw-milestone__header {
+          min-height: 4rem;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-end;
+          margin-bottom: 0.9rem;
+        }
+
+        .sw-milestone__date {
+          font-size: 0.85rem;
+          font-weight: 700;
+          color: var(--sw-accent, #0f9d58);
+        }
+
+        .sw-milestone__label {
+          font-size: 0.88rem;
+          font-weight: 700;
+          color: var(--sw-text, #111);
+        }
+
+        .sw-milestone__dot {
+          position: relative;
+          z-index: 1;
+          width: 2.25rem;
+          height: 2.25rem;
+          margin: 0 auto 0.9rem auto;
+          border-radius: 50%;
+          background: var(--sw-accent, #0f9d58);
+          color: #fff;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .sw-milestone__description {
+          font-size: 0.78rem;
+          color: var(--sw-text-dim, #444);
+        }
+
+        /* Closing note under a milestone timeline (e.g. cadence) */
+        .sw-presentation .sw-slide--milestones .sw-pres-meta {
+          font-style: italic;
+          color: #b8860b;
+          text-align: center;
+          margin-top: 1.25rem;
+        }
       CSS
 
       # =========================================

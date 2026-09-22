@@ -443,6 +443,56 @@ module StreamWeaver
       with_container(Components::Slide.new(id, title, **options), &block)
     end
 
+    # Create a presentation deck: a slide_container pinned to swap mode with
+    # 16:9 stage chrome (recurring footer text and per-slide page numbers).
+    # Slides use presentation layouts via type: :title, :section, :cards,
+    # or :milestones, plus kicker:/subtitle:/meta:/number: header options.
+    #
+    # @param footer [String, nil] Recurring footer text on every slide
+    # @param slide_numbers [Boolean] Show per-slide page numbers (default: true)
+    #
+    # @example
+    #   presentation footer: "Acme – Confidential" do
+    #     slide "title", "Acme Project", type: :title, kicker: "KICKOFF" do
+    #       phase "PHASE 1", "Discovery", "2 weeks"
+    #     end
+    #     slide "sec1", "Overview", type: :section, number: "01"
+    #     slide "done", "Done when...", type: :cards, kicker: "CRITERIA" do
+    #       grid(columns: 3) { card { text "..." } }
+    #     end
+    #     slide "next", "Next steps", type: :milestones do
+    #       milestone "Sep 22", "Kickoff", "Confirm counterparts."
+    #     end
+    #   end
+    def presentation(footer: nil, slide_numbers: true, **options, &block)
+      with_container(
+        Components::Presentation.new(footer: footer, slide_numbers: slide_numbers, **options),
+        &block
+      )
+    end
+
+    # Add a phase entry to a :title slide's phase strip.
+    #
+    # @param label [String] Small caps label (e.g. "PHASE 1")
+    # @param title [String] Phase name (e.g. "Discovery & Planning")
+    # @param meta [String, nil] Supporting line (e.g. "2.5 weeks · Sep 23 – Oct 9")
+    def phase(label, title, meta = nil, **options)
+      component = Components::Phase.new(label, title, meta, **options)
+      components << component
+      component
+    end
+
+    # Add a dated node to a :milestones slide's timeline.
+    #
+    # @param date [String] Short date label (e.g. "Sep 22")
+    # @param label [String] Milestone name (e.g. "Kickoff (today)")
+    # @param description [String, nil] Short supporting copy
+    def milestone(date, label, description = nil, **options)
+      component = Components::Milestone.new(date, label, description, **options)
+      components << component
+      component
+    end
+
     # =========================================
     # Theme toggle (visual skills auto-mode)
     # =========================================

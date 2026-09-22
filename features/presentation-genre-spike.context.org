@@ -1,0 +1,37 @@
+#+TITLE: presentation-genre-spike: epic wiki (read FIRST via `tyrion epic-context show --story <slug>`)
+#+DATE: 2026-09-22
+
+* Where the knowledge already is
+- Reference PDF: user-supplied session attachment, intentionally not stored in the repository
+- Existing slide primitives: lib/stream_weaver/components/slide_container.rb
+- Existing slide rendering and CSS: lib/stream_weaver/adapter/alpinejs.rb
+- Existing DSL entry points: lib/stream_weaver/display_dsl.rb
+- Existing deck example: examples/visual_skills/design_deck_demo.rb
+
+PROTOTYPE: user-supplied session attachment, intentionally not stored in the repository
+The four selected reference slides are the visual specification. Match their
+overall composition and density without pursuing pixel-identical reproduction.
+
+* Verified facts
+- The source PDF has 20 pages at 960 x 540 points, a 16:9 aspect ratio.
+- SlideContainer already supplies swap and scroll-snap navigation, keyboard handling, counters, and progress state.
+- Org::Writer preserves an unrecognized top-level slide_container statement as a verbatim streamweaver-raw Ruby block, and Org::Reader restores it losslessly.
+
+* Gotchas already paid for
+- Keep this as one bounded spike: title, section divider, card grid, and milestone only.
+- Do not generalize to native Org syntax, PDF generation, presenter tooling, animations, or phone layouts.
+- disc-127 overlaps: live canvas ignores use_theme/use_layout declared in pushed DSL, so visual verification should use the standalone example rather than treating canvas parity as spike scope.
+- disc-171 overlaps: a same-version installed bridge may serve stale code; restart the bridge before interpreting a canvas mismatch as a presentation bug.
+- disc-183 is analogous prior work for an audit-report genre; leave it open and reuse its lesson that a genre should be proven with a real consumer before expanding its dialect.
+
+* Lanes
+| Lane | Stories | Builder | Why one lane |
+|---|---|---|---|
+| presentation spike | consulting-presentation-spike | Kimi K3 | One cohesive visual shell and example |
+
+* Instrument
+| Story | Builder | Start | End | Wall-clock | Gate attempts | Rediscoveries |
+|---|---|---|---|---|---|---|
+
+* Learnings
+# Append only via: tyrion epic-context append --story <slug> "<what you learned> (file:line)"
