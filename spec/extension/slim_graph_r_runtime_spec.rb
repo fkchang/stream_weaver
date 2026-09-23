@@ -138,6 +138,30 @@ RSpec.describe 'the packaged SlimGraphR extension runtime' do
     )
   end
 
+  it 'renders all bounded SlimGraphR motion patterns through Opal' do
+    program = <<~JS
+      const fs = require("fs");
+      const vm = require("vm");
+      vm.runInThisContext(fs.readFileSync(#{runtime.to_json}, "utf8"), { filename: #{runtime.to_json} });
+      Opal.eval(`app("Motion patterns") do
+        motion_pattern :fan_in_queue
+        motion_pattern :paired_policy_trace
+        motion_pattern :secure_paved_road
+      end`);
+      const html = SWRender.html();
+      process.stdout.write(JSON.stringify({
+        roots: (html.match(/<section data-sgr-motion-root/g) || []).length,
+        queue: html.includes('FIFO QUEUE · CAPACITY 5'),
+        policy: html.includes('FIRST DIVERGENCE: RULE 3 · DATA CLASS'),
+        paved: html.includes('BLOCKED AT FIREWALL')
+      }));
+    JS
+
+    stdout, stderr, status = capture_node(program)
+    expect(status).to be_success, stderr
+    expect(JSON.parse(stdout)).to eq('roots' => 3, 'queue' => true, 'policy' => true, 'paved' => true)
+  end
+
   def atlas_examples
     source = File.read(gallery, encoding: 'UTF-8')
     source.scan(/example\.call\(:(\w+).*?<<~'RUBY'\),\n(.*?)^  RUBY$/mu).map do |type, ruby|
