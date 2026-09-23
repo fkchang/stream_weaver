@@ -81,6 +81,7 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
         'RUBYLIB' => nil,
         'BUNDLE_GEMFILE' => nil,
         'SLIM_GRAPH_R_SOURCE' => nil,
+        'SLIM_GRAPH_R_SPEC' => Gem.loaded_specs.fetch('slim_graph_r').loaded_from,
         'STREAMWEAVER_UNIVERSITY_PROGRESS' => File.join(gem_home, 'progress.yml')
       }
       yield env
@@ -96,8 +97,10 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
       fixture_specs = Dir[File.join(ENV.fetch('GEM_HOME'), 'specifications', '*.gemspec')].filter_map do |path|
         Gem::Specification.load(path)
       end
+      fixture_specs << Gem::Specification.load(ENV.fetch('SLIM_GRAPH_R_SPEC'))
       fixture_specs.flat_map(&:full_require_paths).reverse_each { |path| $LOAD_PATH.unshift(path) }
-      installed_specs = Gem::Specification.to_a
+      fixture_names = fixture_specs.map(&:name)
+      installed_specs = Gem::Specification.to_a.reject { |spec| fixture_names.include?(spec.name) }
       Gem::Specification.define_singleton_method(:each) do |&block|
         specs = fixture_specs + installed_specs
         block ? specs.each(&block) : specs.each
