@@ -103,7 +103,8 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
         block ? specs.each(&block) : specs.each
       end
     RUBY
-    [RbConfig.ruby, '-I', File.expand_path('../../lib', __dir__), '-e', ruby_gems_bootstrap + script]
+    slim_graph_r_lib = Gem.loaded_specs.fetch('slim_graph_r').full_require_paths.first
+    [RbConfig.ruby, '-I', File.expand_path('../../lib', __dir__), '-I', slim_graph_r_lib, '-e', ruby_gems_bootstrap + script]
   end
 
   def capture_fresh(env, script)
