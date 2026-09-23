@@ -106,6 +106,10 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
     [RbConfig.ruby, '-I', File.expand_path('../../lib', __dir__), '-e', ruby_gems_bootstrap + script]
   end
 
+  def capture_fresh(env, script)
+    Bundler.with_unbundled_env { Open3.capture3(env, *ruby_command(script)) }
+  end
+
   it 'lists an installed metadata-declared course while isolating a broken loader' do
     script = <<~RUBY
       require 'stream_weaver/university/course_catalog'
@@ -115,7 +119,7 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
     RUBY
 
     with_installed_extensions do |env|
-      stdout, stderr, status = Open3.capture3(env, *ruby_command(script))
+      stdout, stderr, status = capture_fresh(env, script)
 
       expect(status).to be_success, stderr
       expect(stdout.lines.map(&:strip)).to eq([
@@ -132,7 +136,7 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
       load #{executable.inspect}
     RUBY
     with_installed_extensions do |env|
-      stdout, stderr, status = Open3.capture3(env, *ruby_command(script))
+      stdout, stderr, status = capture_fresh(env, script)
 
       expect(status).to be_success, stderr
       expect(stdout.strip).to end_with('/zzz_healthy_university_extension/demo.rb')
@@ -151,7 +155,7 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
     RUBY
 
     with_installed_extensions do |env|
-      stdout, stderr, status = Open3.capture3(env, *ruby_command(script))
+      stdout, stderr, status = capture_fresh(env, script)
 
       expect(status).to be_success, stderr
       expect(stdout.lines.map(&:strip)).to eq(%w[true true false])
@@ -168,7 +172,7 @@ RSpec.describe 'University extension discovery at the course catalog boundary' d
     RUBY
 
     with_installed_extensions do |env|
-      stdout, stderr, status = Open3.capture3(env, *ruby_command(script))
+      stdout, stderr, status = capture_fresh(env, script)
 
       expect(status).to be_success, stderr
       expect(stdout.strip).to eq('true')
