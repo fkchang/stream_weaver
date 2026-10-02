@@ -3405,6 +3405,109 @@ module StreamWeaver
       end
 
       # =========================================
+      # Replay rendering (animated event replay)
+      # =========================================
+
+      # Static markup + JSON config; sw-replay.js (inlined once, vanilla JS)
+      # does all the animating, so no Alpine/htmx/CDN is involved.
+      def render_replay(view, component, state)
+        inject_component_css(view, :replay, REPLAY_CSS)
+        cfg = component.to_config
+
+        view.div(class: "sw-replay", style: "height: #{component.height}") do
+          view.div(class: "sw-replay__header") do
+            view.div do
+              view.div(class: "sw-replay__title") do
+                view.b { component.title }
+                view.plain " · #{component.subtitle}" if component.subtitle
+              end
+              view.div(class: "sw-replay__clock") do
+                view.span(class: "sw-replay__day") { "" }
+                view.span(class: "sw-replay__time") { "" }
+              end
+            end
+            view.div(class: "sw-replay__counters") do
+              cfg[:counters].each do |c|
+                view.div(class: "sw-replay__counter") do
+                  view.div(class: "sw-replay__n", data: { key: c[:key] }) { "0" }
+                  view.div(class: "sw-replay__l") { c[:label] }
+                end
+              end
+            end
+          end
+          view.div(class: "sw-replay__lanes") do
+            cfg[:lanes].each do |l|
+              view.div(class: "sw-replay__lane", style: "--c: #{l[:color]}") do
+                view.div(class: "sw-replay__name") do
+                  view.plain l[:name]
+                  view.small { l[:sub] } if l[:sub]
+                end
+                view.div(class: "sw-replay__track", data: { lane: l[:id] })
+              end
+            end
+          end
+          view.div(class: "sw-replay__footer") do
+            view.span { component.footnote.to_s }
+            view.span do
+              view.button(type: "button", class: "sw-replay__play") { "Pause" }
+              view.button(type: "button", class: "sw-replay__restart") { "Restart" }
+              view.button(type: "button", class: "sw-replay__speed") { "1x" }
+            end
+          end
+          view.div(class: "sw-replay__card")
+          view.script(type: "application/json", class: "sw-replay__data") do
+            view.raw(view.safe(component.to_json_safe))
+          end
+        end
+        inject_asset_script(view, :replay, "sw-replay.js")
+        view.script { view.raw(view.safe("window.swReplayInit && window.swReplayInit();")) }
+      end
+
+      REPLAY_CSS = <<~CSS
+        .sw-replay { --bg:#002b36; --panel:#073642; --text:#eee8d5; --dim:#839496; --faint:#586e75;
+          position:relative; display:flex; flex-direction:column; gap:16px; padding:24px 32px; box-sizing:border-box;
+          background:var(--bg); color:var(--text); border-radius:12px; overflow:hidden;
+          font:16px/1.4 -apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif; }
+        .sw-replay *, .sw-replay *::before, .sw-replay *::after { box-sizing:border-box; }
+        .sw-replay__header { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:12px 24px; }
+        .sw-replay__title { font-size:20px; color:var(--dim); letter-spacing:.02em; }
+        .sw-replay__title b { color:var(--text); font-weight:600; }
+        .sw-replay__clock { font-variant-numeric:tabular-nums; font-size:84px; font-weight:200; line-height:1; }
+        .sw-replay__day { font-size:26px; color:var(--dim); margin-right:14px; font-weight:400; }
+        .sw-replay__counters { display:flex; gap:22px; }
+        .sw-replay__counter { text-align:right; min-width:64px; flex:0 0 auto; }
+        .sw-replay__n { font-size:40px; font-weight:300; font-variant-numeric:tabular-nums; transition:color .3s; }
+        .sw-replay__n--bump { color:#fdf6e3; text-shadow:0 0 12px rgba(253,246,227,.6); }
+        .sw-replay__l { overflow-wrap:normal; word-break:normal; font-size:12px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; }
+        .sw-replay__lanes { flex:1; display:flex; flex-direction:column; gap:10px; min-height:0; }
+        .sw-replay__lane { flex:1; display:grid; grid-template-columns:210px 1fr; align-items:center;
+          background:var(--panel); border-radius:10px; padding:0 14px; min-height:0; border-left:4px solid var(--c); }
+        .sw-replay__name { font-weight:600; color:var(--c); }
+        .sw-replay__name small { display:block; font-weight:400; color:var(--dim); font-size:12px; }
+        .sw-replay__track { display:flex; gap:8px; overflow:hidden; align-items:center; justify-content:flex-end; height:100%; }
+        .sw-replay__chip { flex:0 0 auto; max-width:300px; padding:6px 10px; border-radius:6px; background:rgba(0,0,0,.25);
+          border:1px solid var(--c); font-size:13px; line-height:1.25; animation:sw-replay-pop .6s ease-out; }
+        .sw-replay__t { color:var(--dim); font-variant-numeric:tabular-nums; margin-right:6px; }
+        .sw-replay__chip--old { opacity:.45; border-color:var(--faint); }
+        .sw-replay__chip--human { border-style:dashed; }
+        @keyframes sw-replay-pop { from { transform:scale(.6); opacity:0; box-shadow:0 0 24px var(--c); }
+          to { transform:scale(1); opacity:1; box-shadow:none; } }
+        .sw-replay__card { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+          background:rgba(0,43,54,.92); font-size:44px; font-weight:200; opacity:0; pointer-events:none;
+          transition:opacity .5s; text-align:center; padding:0 32px; }
+        .sw-replay__card--show { opacity:1; }
+        .sw-replay__card small { display:block; font-size:20px; color:var(--dim); margin-top:12px; }
+        .sw-replay__footer { display:flex; justify-content:space-between; color:var(--faint); font-size:12px; }
+        .sw-replay button { background:var(--panel); color:var(--text); border:1px solid var(--faint); border-radius:6px;
+          padding:4px 10px; margin-left:6px; font:inherit; cursor:pointer; }
+        @media (max-width:800px) {
+          .sw-replay { padding:16px; } .sw-replay__clock { font-size:48px; } .sw-replay__counters { gap:10px; }
+          .sw-replay__n { font-size:24px; } .sw-replay__lane { grid-template-columns:110px 1fr; }
+          .sw-replay__header { flex-wrap:wrap; }
+        }
+      CSS
+
+      # =========================================
       # Pipeline rendering (visual skills T12)
       # =========================================
 

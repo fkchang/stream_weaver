@@ -2115,6 +2115,7 @@ module StreamWeaver
       output = nil
       inline_images = false
       offline = false
+      bare = false
       until args.empty?
         arg = args.shift
         case arg
@@ -2127,12 +2128,13 @@ module StreamWeaver
         when /\A--output=(.+)\z/     then output = Regexp.last_match(1)
         when '--inline-images'       then inline_images = true
         when '--offline'             then offline = true
+        when '--bare'                then bare = true
         else source = arg
         end
       end
 
       unless source && File.file?(source)
-        $stderr.puts "Usage: streamweaver export <file.rb> [-o out.html] [--inline-images] [--offline]"
+        $stderr.puts "Usage: streamweaver export <file.rb> [-o out.html] [--inline-images] [--offline] [--bare]"
         $stderr.puts "Error: no such file: #{source}" if source
         exit 1
       end
@@ -2146,7 +2148,7 @@ module StreamWeaver
         # button silently produce different-width documents from the same source
         # file whenever it doesn't declare its own use_layout.
         path = StreamWeaver::Export::HtmlExporter.from_dsl_file(source, theme: :default, layout: :fluid)
-                                                 .export(path: output, inline_images: inline_images, offline: offline)
+                                                 .export(path: output, inline_images: inline_images, offline: offline, bare: bare)
       rescue StreamWeaver::Export::InvalidDslError, StreamWeaver::Export::OfflineAssetError => e
         $stderr.puts "Error: #{e.message}"
         exit 1

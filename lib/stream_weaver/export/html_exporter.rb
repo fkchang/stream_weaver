@@ -50,7 +50,14 @@ module StreamWeaver
       CDN_ALPINE = "https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
       CDN_GOOGLE_FONTS = "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap"
 
-      # Ground truth for "does this export need Alpine.js" -- see
+# `bare: true` drops the page shell (padding, card, background) so the
+# content runs edge to edge -- for embedding the export in an <iframe>.
+# A replay stage fills the frame (100vh), square-cornered.
+BARE_CSS = "<style>body{padding:0;background:transparent}" \
+           "#app-container{padding:0;background:none;box-shadow:none;border-radius:0;max-width:100%}" \
+           ".sw-replay{height:100vh!important;border-radius:0}</style>"
+
+# Ground truth for "does this export need Alpine.js" -- see
       # #collect_cdn_scripts.
       ALPINE_DIRECTIVE = /\sx-data=/
 
@@ -133,8 +140,8 @@ module StreamWeaver
       #   etc.) -- see #mermaid_offline_script_tag. Requires network access
       #   at export time; no effect on docs with no mermaid component.
       # @return [String] The output file path
-      def export(path:, inline_images: false, offline: false)
-        html = to_html(inline_images: inline_images, offline: offline)
+      def export(path:, inline_images: false, offline: false, bare: false)
+        html = to_html(inline_images: inline_images, offline: offline, bare: bare)
         dir = File.dirname(path)
         FileUtils.mkdir_p(dir) unless File.directory?(dir)
         File.write(path, html)
@@ -146,7 +153,7 @@ module StreamWeaver
       # @param inline_images [Boolean] Convert local image src to base64 data URIs
       # @param offline [Boolean] see #export
       # @return [String] Complete HTML document
-      def to_html(inline_images: false, offline: false)
+      def to_html(inline_images: false, offline: false, bare: false)
         # Only block-built apps can be rebuilt. A canvas doc is instance_eval'd
         # from a DSL *string* into a bare App, so @block is nil there and
         # rebuilding would re-evaluate nothing, wiping every component
@@ -162,7 +169,7 @@ module StreamWeaver
 
         build_document(
           title: @app.title,
-          css_html: css_html,
+          css_html: bare ? css_html + BARE_CSS : css_html,
           cdn_scripts: collect_cdn_scripts(body_html, skip_mermaid: inline_mermaid),
           cdn_styles: collect_cdn_styles,
           inline_scripts: inline_mermaid ? [mermaid_offline_script_tag] : [],

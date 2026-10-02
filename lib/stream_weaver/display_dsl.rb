@@ -342,6 +342,19 @@ module StreamWeaver
       components << Components::Pipeline.new(steps: steps, **options)
     end
 
+    # Animated event replay (clock, counters, lanes, chips, gaps, finale).
+    # The block is instance_eval'd on the component; see Components::Replay.
+    #
+    # @example
+    #   replay title: "Thursday", ms_per_minute: 340 do
+    #     counter :commit, "commits"
+    #     lane :a, "Lane A", color: :cyan
+    #     event "Thu 09:48", :a, "did a thing", commit: 1
+    #   end
+    def replay(title:, **options, &block)
+      components << Components::Replay.new(title: title, **options, &block)
+    end
+
     # Render a KPI dashboard with auto-fit grid of metric cards.
     # Each card shows a large value, label, optional trend arrow, and optional color.
     #

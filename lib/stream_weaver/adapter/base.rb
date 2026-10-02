@@ -363,6 +363,13 @@ module StreamWeaver
         raise NotImplementedError, "#{self.class} must implement #render_pipeline"
       end
 
+      # Render an animated event replay
+      #
+      # @raise [NotImplementedError] if not implemented by subclass
+      def render_replay(view, component, state)
+        raise NotImplementedError, "#{self.class} must implement #render_replay"
+      end
+
       # Render a KPI dashboard grid of metric cards
       #
       # @param view [Phlex::HTML] The Phlex view instance
