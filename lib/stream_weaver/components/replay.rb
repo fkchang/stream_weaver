@@ -56,6 +56,7 @@ module StreamWeaver
         @lanes = []
         @windows = []
         @window_args = []
+        @auto_idle = nil
         @gaps = []
         @events = []
         @finale = nil
@@ -75,6 +76,17 @@ module StreamWeaver
       def window(range)
         @windows << [minute_of(range.begin), minute_of(range.end)]
         @window_args << [range.begin.to_s, range.end.to_s]
+      end
+
+      # Derive the windows from the events instead of declaring them: the
+      # timeline splits wherever two consecutive events are more than `idle`
+      # minutes apart, and each break gets a generated gap card ("6h 10m
+      # later" / "Back at Thu 09:05"). An explicit `gap` at the same position
+      # wins over the generated one. Mutually exclusive with `window`.
+      def auto_windows(idle: 120)
+        raise ArgumentError, "auto_windows idle must be at least 2 minutes" unless idle.is_a?(Integer) && idle >= 2
+
+        @auto_idle = idle
       end
 
       def gap(caption, sub: nil)
@@ -108,7 +120,7 @@ module StreamWeaver
           title: title, subtitle: subtitle, msPerMinute: ms_per_minute, maxVisible: max_visible,
           autoplay: autoplay, days: @days.map { |d| d.split.first }, counters: @counters,
           lanes: @lanes.map { |l| l.except(:color_arg) },
-          windows: windows, gaps: @gaps, events: sorted.map { |e| e.except(:at) },
+          windows: windows, gaps: gap_list, events: sorted.map { |e| e.except(:at) },
           finale: finale_with_totals(sorted)
         }
       end
@@ -123,11 +135,14 @@ module StreamWeaver
           counters: @counters,
           lanes: @lanes.map { |l| l.slice(:id, :name, :sub).merge(color: l[:color_arg]) },
           windows: @window_args,
+          auto_windows: @auto_idle,
           gaps: @gaps,
           events: @events.map { |e| e.slice(:at, :lane, :text, :inc, :human) },
           finale: @finale
         }
       end
+
+      # Integer division below is always `div`: under Opal `/` on integers is float division.
 
       # Deterministic content hash (same in MRI and Opal, unlike String#hash).
       # Gives the stage an id derived from its content: a live runtime that
@@ -146,26 +161,59 @@ module StreamWeaver
         view.adapter.render_replay(view, self, state)
       end
 
-      # Turn `session-skeleton --json` output into event tuples.
+      # How an effect kind reads on a chip: [singular, plural]. The default
+      # label is this, not the raw command: session-skeleton truncates `cmd` to
+      # 140 characters and real ones are compound shell lines, so the prefix is
+      # often unrelated to the effect (a `sed` ahead of the `git commit`).
+      SKELETON_LABELS = {
+        git_commit: ["commit", "commits"], git_push: ["push", "pushes"], pr_opened: ["PR opened", "PRs opened"],
+        github_invite: ["GitHub invite", "GitHub invites"], teams_post: ["Teams post", "Teams posts"],
+        email_draft: ["email draft", "email drafts"], email_sent: ["email sent", "emails sent"],
+        jira_created: ["Jira card created", "Jira cards created"], jira_updated: ["Jira updated", "Jira updates"],
+        aws_change: ["AWS change", "AWS changes"], sharepoint_upload: ["SharePoint upload", "SharePoint uploads"],
+        ledger_write: ["ledger write", "ledger writes"], message_post: ["message posted", "messages posted"]
+      }.freeze
+
+      def self.skeleton_label(kind, item)
+        singular, plural = SKELETON_LABELS[kind.to_sym] || [kind.to_s.tr("_", " "), "#{kind.to_s.tr('_', ' ')}s"]
+        count = item["count"].to_i
+        count > 1 ? "#{count} #{plural}" : singular
+      end
+
+      # Turn `session-skeleton --json` output into event tuples, oldest first.
+      # Times keep the date ("Thu 10-01 09:48"): the day label shown is the
+      # weekday, but the date is what keeps two different Thursdays apart.
       # @param report [Hash] parsed session-skeleton JSON
       # @param map [Hash] effect kind => [lane, counter_key] (kinds not listed are skipped)
       # @param label [Proc] (effect_kind, item) -> chip text; default is the command
-      # @return [Array<Array>] tuples for #events (times as "Thu 09:48")
-      def self.events_from_skeleton(report, map:, label: ->(_kind, item) { item["cmd"] })
-        report.fetch("effects").flat_map do |kind, data|
+      # @return [Array<Array>] tuples for #events
+      def self.events_from_skeleton(report, map:, label: method(:skeleton_label))
+        rows = report.fetch("effects").flat_map do |kind, data|
           lane, key = map[kind.to_sym]
           next [] unless lane
 
           data["items"].map do |item|
-            [skeleton_time(item.fetch("at")), lane, label.call(kind, item), key ? { key => item["count"] || 1 } : {}]
+            [item.fetch("at"), lane, label.call(kind, item), key ? { key => item["count"] || 1 } : {}]
           end
         end
+        rows.sort_by { |row| skeleton_sort_key(row.first) }
       end
 
-      # "Thu 10-01 09:48" -> "Thu 09:48" (the date part only disambiguates days)
-      def self.skeleton_time(at)
+      # Several sessions into one replay, one lane per session.
+      # @param reports [Hash] lane => parsed session-skeleton JSON
+      # @param counters [Hash] effect kind => counter key (nil: show the chip, count nothing)
+      # @return [Array<Array>] merged tuples, oldest first
+      def self.events_from_skeletons(reports, counters:, label: method(:skeleton_label))
+        rows = reports.flat_map do |lane, report|
+          events_from_skeleton(report, map: counters.to_h { |kind, key| [kind, [lane, key]] }, label: label)
+        end
+        rows.sort_by { |row| skeleton_sort_key(row.first) }
+      end
+
+      # "Thu 10-01 09:48" -> ["10-01", "09:48"]; a time with no date sorts by clock alone.
+      def self.skeleton_sort_key(at)
         parts = at.split
-        "#{parts.first} #{parts.last}"
+        [parts.size >= 3 ? parts[1] : "", parts.last]
       end
 
       private
@@ -183,11 +231,74 @@ module StreamWeaver
       end
 
       def windows
+        raise ArgumentError, "use either window or auto_windows, not both" if @auto_idle && !@windows.empty?
         return @windows unless @windows.empty?
         return [] if @events.empty?
 
-        ms = @events.map { |e| e[:m] }
-        [[ms.min - 1, ms.max + 1]]
+        ms = @events.map { |e| e[:m] }.sort
+        return [[[ms.first - 1, 0].max, ms.last + 1]] unless @auto_idle
+
+        ms.slice_when { |a, b| b - a > @auto_idle }.map { |run| [[run.first - 1, 0].max, run.last + 1] }
+      end
+
+      # Authored gaps first, then a generated card for each break without one.
+      def gap_list
+        ws = windows
+        (0...[ws.size - 1, 0].max).map { |i| @gaps[i] || generated_gap(ws[i], ws[i + 1]) }
+      end
+
+      # Measured event to event (windows are padded one minute each side). Day
+      # labels carry only ORDER, so when both carry an MM-DD date the real
+      # calendar distance is used instead: "Thu 10-01" to "Thu 10-08" is a
+      # week, not one day. Without dates, consecutive labels are assumed to be
+      # consecutive days.
+      def generated_gap(before, after)
+        last_event = before.last - 1
+        next_event = after.first + 1
+        minutes = next_event - last_event + extra_calendar_days(last_event, next_event) * DAY_MINUTES
+        { caption: "#{duration_text(minutes)} later", sub: "Back at #{clock_label(next_event)}" }
+      end
+
+      # Whole days the dates say passed beyond what the replay's day order implies.
+      def extra_calendar_days(from_minute, to_minute)
+        from_day = @days[from_minute.div(DAY_MINUTES)].to_s
+        to_day = @days[to_minute.div(DAY_MINUTES)].to_s
+        a = day_of_year(from_day)
+        b = day_of_year(to_day)
+        return 0 unless a && b
+
+        real = (b - a) % 365
+        [real - (to_minute.div(DAY_MINUTES) - from_minute.div(DAY_MINUTES)), 0].max
+      end
+
+      CUMULATIVE_DAYS = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334].freeze
+
+      # "Thu 10-01" -> 274 (non-leap year; only differences matter). nil with no MM-DD.
+      def day_of_year(day_key)
+        m = day_key.match(/(\d{1,2})-(\d{1,2})/)
+        return nil unless m && (1..12).cover?(m[1].to_i)
+
+        CUMULATIVE_DAYS[m[1].to_i - 1] + m[2].to_i
+      end
+
+      def duration_text(minutes)
+        d, rest = minutes.divmod(1440)
+        h, m = rest.divmod(60)
+        parts = []
+        parts << "#{d}d" if d.positive?
+        parts << "#{h}h" if h.positive?
+        parts << "#{m}m" if m.positive? && d.zero?
+        parts.join(" ")
+      end
+
+      # "Thu 09:05", or just "09:05" when the replay has no day labels. A label
+      # that carries a date keeps it ("Thu 10-08 09:00"), since that is what
+      # tells two Thursdays apart.
+      def clock_label(minute)
+        key = @days[minute.div(DAY_MINUTES)].to_s
+        day = key.match?(/\d-\d/) ? key : key.split.first
+        hm = format("%02d:%02d", (minute % DAY_MINUTES).div(60), minute % 60)
+        day ? "#{day} #{hm}" : hm
       end
 
       def validate!
@@ -201,7 +312,7 @@ module StreamWeaver
 
           raise ArgumentError, "replay event #{e[:text].inspect} at #{e[:t]} falls outside every window"
         end
-        return if @gaps.size >= windows.size - 1
+        return if @auto_idle || @gaps.size >= windows.size - 1
 
         raise ArgumentError, "replay needs #{windows.size - 1} gap(s) for #{windows.size} windows, got #{@gaps.size}"
       end

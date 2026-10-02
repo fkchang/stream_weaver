@@ -112,8 +112,19 @@ RSpec.describe StreamWeaver::Components::Replay do
 
     it "maps effect kinds to lane + counter and drops unmapped kinds" do
       rows = described_class.events_from_skeleton(report, map: { git_commit: [:dev, :commit], teams_post: [:dev, nil] })
-      expect(rows).to eq([["Thu 09:48", :dev, "git commit -m x", { commit: 2 }],
-                          ["Thu 10:00", :dev, "teams send", {}]])
+      expect(rows).to eq([["Thu 10-01 09:48", :dev, "2 commits", { commit: 2 }],
+                          ["Thu 10-01 10:00", :dev, "Teams post", {}]])
+    end
+
+    it "labels with a humanized effect kind by default, not the raw (truncated, compound) command" do
+      expect(described_class.skeleton_label(:git_commit, { "count" => 1, "cmd" => "sed -i x; git commit" })).to eq("commit")
+      expect(described_class.skeleton_label(:pr_opened, { "count" => 3 })).to eq("3 PRs opened")
+      expect(described_class.skeleton_label(:something_new, { "count" => 1 })).to eq("something new")
+    end
+
+    it "accepts a label lambda to override" do
+      rows = described_class.events_from_skeleton(report, map: { git_commit: [:dev, :commit] }, label: ->(_k, i) { i["cmd"] })
+      expect(rows.first[2]).to eq("git commit -m x")
     end
 
     it "feeds #events" do
@@ -121,6 +132,134 @@ RSpec.describe StreamWeaver::Components::Replay do
       c = build { counter :commit, "commits"; lane :dev, "Dev" }
       c.events(rows)
       expect(c.to_config[:events].first[:inc]).to eq("commit" => 2)
+    end
+  end
+
+  describe ".events_from_skeletons (several sessions, one lane each)" do
+    def report(items)
+      { "effects" => { "git_commit" => { "count" => items.size, "items" => items.map { |at| { "at" => at, "cmd" => "c #{at}", "count" => 1 } } } } }
+    end
+
+    it "merges sessions into one oldest-first list, lane per session" do
+      rows = described_class.events_from_skeletons(
+        { dev: report(["Thu 10-01 10:00", "Wed 09-30 18:44"]), ops: report(["Thu 10-01 09:12"]) },
+        counters: { git_commit: :commit }
+      )
+      expect(rows.map { |r| [r[0], r[1]] }).to eq([["Wed 09-30 18:44", :dev], ["Thu 10-01 09:12", :ops], ["Thu 10-01 10:00", :dev]])
+    end
+
+    it "keeps two different Thursdays apart as separate days, both labelled Thu" do
+      c = build do
+        counter :commit, "commits"
+        lane :dev, "Dev"
+        auto_windows idle: 120
+      end
+      c.events(described_class.events_from_skeleton(report(["Thu 10-01 09:00", "Thu 10-08 09:00"]), map: { git_commit: [:dev, :commit] }))
+      cfg = c.to_config
+      expect(cfg[:days]).to eq(%w[Thu Thu])
+      expect(cfg[:windows].size).to eq(2)
+    end
+
+    it "builds a whole replay with no windows or captions written by hand" do
+      c = build do
+        counter :commit, "commits"
+        lane :dev, "Dev"
+        lane :ops, "Ops"
+        auto_windows idle: 120
+      end
+      rows = described_class.events_from_skeletons(
+        { dev: report(["Wed 09-30 18:44", "Thu 10-01 09:48"]), ops: report(["Thu 10-01 09:50"]) },
+        counters: { git_commit: :commit }
+      )
+      c.events(rows)
+      cfg = c.to_config
+      expect(cfg[:windows].size).to eq(2)
+      expect(cfg[:gaps]).to eq([{ caption: "15h 4m later", sub: "Back at Thu 10-01 09:48" }])
+      expect(cfg[:events].size).to eq(3)
+    end
+  end
+
+  describe "#auto_windows" do
+    def auto(idle: 120, times:)
+      build do
+        counter :n, "n"
+        lane :a, "A"
+        auto_windows idle: idle
+        times.each { |t| event t, :a, "e" }
+      end.to_config
+    end
+
+    it "splits where consecutive events are more than idle minutes apart" do
+      cfg = auto(times: ["09:00", "09:10", "13:30"])
+      expect(cfg[:windows]).to eq([[539, 551], [809, 811]])
+    end
+
+    it "does not split at exactly the idle threshold" do
+      expect(auto(times: ["09:00", "11:00"])[:windows].size).to eq(1)
+      expect(auto(times: ["09:00", "11:01"])[:windows].size).to eq(2)
+    end
+
+    it "generates a gap card: hours and minutes, with the day when the replay has day labels" do
+      expect(auto(times: ["09:00", "13:30"])[:gaps]).to eq([{ caption: "4h 30m later", sub: "Back at 13:30" }])
+      cfg = build do
+        lane :a, "A"
+        auto_windows idle: 60
+        event "Wed 18:00", :a, "x"
+        event "Thu 09:00", :a, "y"
+      end.to_config
+      expect(cfg[:gaps]).to eq([{ caption: "15h later", sub: "Back at Thu 09:00" }])
+    end
+
+    it "spells out days and drops minutes once a gap passes 24 hours" do
+      cfg = build do
+        lane :a, "A"
+        auto_windows idle: 120
+        event "Mon 09:00", :a, "x"
+        event "Tue 11:30", :a, "y"
+      end.to_config
+      expect(cfg[:gaps].first[:caption]).to eq("1d 2h later")
+    end
+
+    it "uses the real calendar distance when day labels carry dates (a week is not one day)" do
+      cfg = build do
+        lane :a, "A"
+        auto_windows idle: 120
+        event "Thu 10-01 09:00", :a, "x"
+        event "Thu 10-08 09:00", :a, "y"
+      end.to_config
+      expect(cfg[:gaps]).to eq([{ caption: "7d later", sub: "Back at Thu 10-08 09:00" }])
+    end
+
+    it "assumes consecutive labels are consecutive days when there are no dates (documented limitation)" do
+      cfg = build do
+        lane :a, "A"
+        auto_windows idle: 120
+        event "Mon 09:00", :a, "x"
+        event "Fri 09:00", :a, "y"
+      end.to_config
+      expect(cfg[:gaps].first[:caption]).to eq("1d later")
+    end
+
+    it "lets an authored gap win at its position and generates the rest" do
+      cfg = build do
+        lane :a, "A"
+        auto_windows idle: 120
+        gap "Sleep.", sub: "Picked up at 9"
+        event "09:00", :a, "x"
+        event "13:00", :a, "y"
+        event "20:00", :a, "z"
+      end.to_config
+      expect(cfg[:gaps].map { |g| g[:caption] }).to eq(["Sleep.", "7h later"])
+    end
+
+    it "never starts a window before minute 0" do
+      expect(auto(times: ["00:00", "00:30"])[:windows]).to eq([[0, 31]])
+    end
+
+    it "rejects mixing with explicit windows and a nonsensical idle" do
+      mixed = build { lane :a, "A"; auto_windows idle: 120; window "09:00".."10:00"; event "09:30", :a, "x" }
+      expect { mixed.to_config }.to raise_error(ArgumentError, /either window or auto_windows/)
+      expect { build { auto_windows idle: 1 } }.to raise_error(ArgumentError, /at least 2/)
     end
   end
 

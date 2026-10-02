@@ -647,6 +647,7 @@ module StreamWeaver
           sub = row["sub"].to_s.empty? ? "" : ", sub: #{row['sub'].inspect}"
           out << "  lane #{replay_ident(row['id'], 'lane id')}, #{row['name'].inspect}#{sub}#{color}"
         end
+        out << "  auto_windows idle: #{Integer(args[':auto-windows'])}" if args[":auto-windows"]
         out.concat(replay_body_lines(chunk[:lines]))
         events.each do |row|
           incs = counters.filter_map do |key, _|

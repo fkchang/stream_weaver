@@ -149,6 +149,24 @@ RSpec.describe "replay in org (#+NAME tables + #+begin_src replay)" do
     end
   end
 
+  describe "auto windows in org" do
+    let(:auto_org) do
+      org.sub(':title "Thursday"', ':title "Thursday" :auto-windows 120').gsub(/^#\+(WINDOW|GAP):.*\n/, "")
+    end
+
+    it "reads :auto-windows into auto_windows and round-trips it" do
+      expect(dsl_of(auto_org)).to include("auto_windows idle: 120")
+      cfg = replay_of(dsl_of(auto_org)).to_config
+      expect(cfg[:windows].size).to eq(2)
+      expect(cfg[:gaps].first[:caption]).to match(/later\z/)
+
+      out = StreamWeaver::Org::Writer.from_dsl(dsl_of(auto_org))
+      expect(out).to include(":auto-windows 120")
+      expect(out).not_to include("#+WINDOW:")
+      expect(StreamWeaver::Org::Writer.from_dsl(dsl_of(out))).to eq(out)
+    end
+  end
+
   describe "generic org renderers (what GitHub shows)" do
     it "shows the tables and the config lines instead of dropping the block" do
       out = StreamWeaver::Org::Writer.from_dsl(dsl_of(org))

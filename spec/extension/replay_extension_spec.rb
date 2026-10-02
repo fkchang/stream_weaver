@@ -73,6 +73,32 @@ RSpec.describe 'replay in the browser extension' do
       expect(result['finale']).to start_with('14 commits, 5 invites')
     end
 
+    it 'derives auto windows and generated gap cards identically to MRI (dates, midnight, week-long gap)' do
+      dsl = <<~RUBY
+        replay(title: "T") do
+          counter :n, "things"
+          lane :a, "A"
+          auto_windows idle: 120
+          event "Wed 09-30 18:44", :a, "x", n: 1
+          event "Thu 10-01 09:48", :a, "y"
+          event "Thu 10-01 09:50", :a, "z", n: 2
+          event "Thu 10-08 09:00", :a, "w"
+          finale "Done.", "{n} things"
+        end
+      RUBY
+      mri = StreamWeaver::App.new('t') { instance_eval(dsl) }.tap { |a| a.rebuild_with_state({}) }
+                             .components.find { |c| c.is_a?(StreamWeaver::Components::Replay) }
+      opal = run_node_json(load_runtime, <<~JS)
+        Opal.eval(`app("T") do\n${#{dsl.to_json}}\nend`);
+        const html = SWRender.staticHtml();
+        console.log(html.match(/class="sw-replay__data">([\\s\\S]*?)<\\/script>/)[1]);
+      JS
+
+      expect(opal).to eq(JSON.parse(mri.to_json_safe))
+      expect(opal['gaps'].map { |g| g['caption'] }).to eq(['15h 4m later', '6d 23h later'])
+      expect(opal['windows'].size).to eq(3)
+    end
+
     it 'reads a replay from org identically to MRI, including hyphenated ids (Symbol is a String in Opal)' do
       opal_dsl = run_node_json(load_runtime, <<~JS)
         console.log(JSON.stringify({ dsl: Opal.StreamWeaver.Org.Reader.$to_dsl(#{org.to_json}) }));

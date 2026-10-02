@@ -234,6 +234,9 @@ module StreamWeaver
         out << "\n#+NAME: #{events_name}\n"
         out << plain_table(event_headers, event_rows)
         out << "\n#+begin_src replay #{replay_header_args(a, lanes_name, events_name)}\n"
+        # No authored windows (inferred, or :auto-windows): any authored gaps
+        # still pair by position, so they are written out in order.
+        a[:gaps].each { |gap| out << "#+GAP: #{[gap[:caption], gap[:sub]].compact.join(' | ')}\n" } if a[:windows].empty?
         a[:windows].each_with_index do |(from, to), i|
           out << "#+WINDOW: #{from} .. #{to}\n"
           gap = a[:gaps][i]
@@ -253,6 +256,7 @@ module StreamWeaver
         args << ":max-visible #{o[:max_visible]}" unless o[:max_visible] == d[:max_visible]
         args << ":height #{o[:height].inspect}" unless o[:height] == d[:height]
         args << ":autoplay nil" unless o[:autoplay] == d[:autoplay]
+        args << ":auto-windows #{authoring[:auto_windows]}" if authoring[:auto_windows]
         counters = authoring[:counters].map { |c| "#{c[:key]}:#{c[:label]}" }.join(", ")
         args << ":counters #{counters.inspect}" unless counters.empty?
         args.join(" ")

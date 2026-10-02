@@ -73,18 +73,23 @@ Engine notes (differences from the source page): a `requestAnimationFrame` clock
 
 ## 4. Data loader: `session-skeleton`
 
-`Replay.events_from_skeleton(report, map:, label:)` turns `session-skeleton <uuid> --json` into event tuples. `map` is `effect_kind => [lane, counter_key]`; unmapped kinds are dropped (so unconfirmed attempts and noise stay out). Dates collapse as `"Thu 10-01 09:48"` to `"Thu 09:48"`.
+`Replay.events_from_skeleton(report, map:, label:)` turns one `session-skeleton <uuid> --json` report into event tuples, oldest first. `Replay.events_from_skeletons({ lane => report }, counters: { kind => counter_key })` merges several sessions, one lane per session. Kinds not listed are dropped (unconfirmed attempts and noise stay out). Times keep their date (`"Thu 10-01 09:48"`): the clock shows the weekday, but the date is what keeps two different Thursdays apart.
 
 ```ruby
-report = JSON.parse(`~/work/claude_code_history/bin/session-skeleton #{uuid} --json`)
-replay title: "My Thursday" do
-  counter :commit, "commits"; counter :invite, "invites"
-  lane :dev, "Dev work"; lane :access, "Access"
-  events Replay.events_from_skeleton(report, map: { git_commit: [:dev, :commit], github_invite: [:access, :invite] })
+reports = { dev: load("uuid-a"), ops: load("uuid-b") }   # parsed session-skeleton JSON
+replay title: "My week", height: "100vh" do
+  counter :commit, "commits"; counter :pr, "PRs"
+  lane :dev, "Dev work"; lane :ops, "Ops"
+  auto_windows idle: 180
+  events Replay.events_from_skeletons(reports, counters: { git_commit: :commit, pr_opened: :pr })
 end
 ```
 
-Limits found while reading `session-skeleton`: each item carries only `at`, `cmd` (a truncated shell command) and `count`, so the default chip text is the raw command. Real chips need a `label:` lambda or a hand-written pass. Lane assignment by session is also not in the data: one skeleton is one session, so a multi-lane replay means merging several sessions' reports (or lane-by-effect-kind). Merging is a few lines and was not built.
+`auto_windows idle: N` splits the timeline wherever two consecutive events are more than N minutes apart and writes a gap card for each break ("15h 4m later" / "Back at Thu 10-01 09:48"). An explicit `gap` at the same position wins. The caption is measured event to event, and when the day labels carry `MM-DD` it uses the real calendar distance: `Thu 10-01` to `Thu 10-08` reads "7d later", not "1d". **Limitation:** without dates in the labels, consecutive labels are assumed to be consecutive days (`Mon` then `Fri` reads "1d later"), because a label alone carries order, not distance. In org it is the header arg `:auto-windows 180`.
+
+**Chip text.** The default label is a humanized effect kind with a count ("2 commits", "PR opened"), not the raw command: `session-skeleton` truncates `cmd` to 140 characters and real ones are compound shell lines, so the prefix is often unrelated to the effect (a `sed` ahead of the `git commit`; the commit message is usually cut off). Pass `label: ->(kind, item) { ... }` to override. Chips in a multi-day replay say their day when it changes within a lane (`Mon 16:27`, `Tue 15:42`, `15:49`), so time never appears to run backwards.
+
+Tried on three real sessions (this week plus mid-September): 44 events became 11 windows and 10 generated gap cards with no hand-written windows or captions, including a "7d 8h later" across two Thursdays.
 
 ## 5. Verification
 
@@ -148,21 +153,20 @@ Tyrion story `replay-org-src-block` should be read with this design: its "org ta
 
 ## 8. Built vs proposed
 
-**Built:** org authoring (`#+NAME` tables + `#+begin_src replay`, Reader and Writer, fixpoint round trip, 2026-10-02; spec `spec/org/replay_org_spec.rb`), `Adapter::Static` renderer, self-initializing engine in canvas and reader shells.
+Everything below is built and committed locally (epic `interactive-widgets` in Tyrion, 2026-10-01 to 02):
 
-**Built in the first spike:** `replay` DSL (counter, lane, window, gap, event, milestone, finale, events), validation, client engine with play/pause/restart/speed and space/r keys, Alpine-adapter rendering and CSS, `events_from_skeleton`, example, spec.
+- The `replay` DSL (counter, lane, window, gap, event, milestone, finale, events), validation, and the vanilla-JS engine (play/pause/restart/speed, space and r keys).
+- `streamweaver export --bare` for edge-to-edge iframe embedding.
+- One renderer in `Adapter::Static` (shared by the Alpine and Opal adapters); the engine initializes stages itself and ships in the canvas and reader page shells, so re-pushed and later-pushed replays work.
+- Org authoring: `#+NAME` tables plus `#+begin_src replay`, Reader and Writer, fixpoint round trip, readable on GitHub's org renderer (`spec/org/replay_org_spec.rb`).
+- The Chrome extension: engine bundled, stage id derived from content, morph guard so live re-renders do not restart a replay, org reader fixed for Opal.
+- Session data: `events_from_skeleton(s)`, `auto_windows`, generated gap cards with real calendar distance, humanized default labels, a day prefix on chips when the day changes.
 
-**Proposed, not built:**
+**Still open:**
 
-1. **Chromeless export for iframes.** `streamweaver export` wraps the replay in the doc page shell (white card on beige in the screenshot). An org-reveal iframe wants the stage edge to edge. Needs a `--bare` or `chrome: false` export option (or a replay-only shell in `PageShell`).
-2. **`auto_windows idle: 120`.** Split a skeleton's timeline on idle gaps over N minutes and synthesize gap cards ("6h 10m later") so skeleton data needs no hand-authored windows or captions.
-3. **Multi-session merge** helper (several skeleton reports to lanes, one lane per session).
-4. **Theming.** Today the stage is always solarized-dark via scoped `--bg/--panel/--text` vars on `.sw-replay`; map them to StreamWeaver theme tokens if replays should follow doc themes.
-5. **Static and Opal adapters.** Only the Alpine adapter renders it (static export goes through that path, so export works); `Adapter::Opal` raises NotImplementedError like `pipeline` does today.
-6. **Multiple replays per page** share space/r keys (all respond). Fine for one stage per page; scope to the focused stage if a doc ever hosts several.
-7. **Seek/scrub** (a timeline slider) and **loop** option; the engine's state is small enough that both are cheap, but the source page has neither.
-
-## 9. Next steps (need Forrest's go-ahead)
-
-- Commit locally: stage explicit paths only (`components/replay.rb`, `assets/js/sw-replay.js`, spec, example, this doc, plus the edits to `alpinejs.rb`, `base.rb`, `components.rb`, `display_dsl.rb`). The working tree also holds unrelated pre-existing changes that must stay out.
-- Decide on proposal 1 (bare export) before pointing a deck at it, since that is the actual embed path.
+1. **Installed-extension check.** The extension work was verified on the real `sandbox.html` and `sandbox.js` served over HTTP, not in the installed extension (manifest CSP and the viewer frame were not exercised). One manual pass in real Chrome remains.
+2. **Canvas re-push restarts the replay.** The canvas morphs with idiomorph, which rebuilds the stage from markup; the Opal runtime's skip-if-initialized guard has no canvas equivalent yet.
+3. **Identical replays on one page share a stage id** (and all respond to space/r). Fine for one per page.
+4. **Theming.** The stage is always solarized-dark via scoped `--bg/--panel/--text` vars on `.sw-replay`; map them to theme tokens if replays should follow doc themes.
+5. **Seek/scrub** (a timeline slider) and **loop**. The engine's state is small enough that both are cheap; the source page has neither.
+6. **No dates in labels means no real gap distance.** `auto_windows` assumes consecutive day labels are consecutive days; give labels an `MM-DD` for the real distance (skeleton data already has it).
