@@ -317,6 +317,12 @@ module StreamWeaver
         inject_component_css(view, :mermaid, mermaid_css)
       end
 
+      # CSS only, like mermaid: sw-replay.js is bundled by the host
+      # (stream_weaver replay-extension-opal), not inlined per render.
+      def inject_replay_assets(view)
+        inject_component_css(view, :replay, replay_css)
+      end
+
       private
 
       if RUBY_ENGINE == "opal"

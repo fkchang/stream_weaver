@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "stream_weaver/opal/renderer"
+require "stream_weaver/adapter/opal"
+
 RSpec.describe StreamWeaver::Components::Replay do
   def build(**opts, &block)
     described_class.new(title: "T", **opts, &block)
@@ -152,24 +155,64 @@ RSpec.describe StreamWeaver::Components::Replay do
     end
   end
 
-describe "bare export" do
-  let(:exporter) { StreamWeaver::Export::HtmlExporter.from_dsl(%(replay(title: "T") { lane :a, "A"; event "09:00", :a, "x" }), layout: :fluid) }
+  describe "Opal adapter parity (renderer lives in Adapter::Static)" do
+    let(:opal) { StreamWeaver::Adapter::Opal.new }
+    let(:view) { StreamWeaver::Opal::OpalRenderer.new(opal, {}) }
 
-  it "keeps the page shell by default and drops it with bare: true" do
-    expect(exporter.to_html).not_to include(".sw-replay{height:100vh!important")
-    expect(exporter.to_html(bare: true)).to include(".sw-replay{height:100vh!important")
-  end
+    it "renders the same markup through the Opal renderer, with string data attributes" do
+      basic.render(view, {})
+      out = view.to_html
+      expect(out).to include('class="sw-replay"', 'data-key="commit"', 'data-lane="a"', "sw-replay__data")
+      expect(out).not_to include("data=")
+    end
 
-  it "needs no external script (offline and iframe safe)" do
-    expect(exporter.to_html(bare: true)).not_to match(%r{<script[^>]+src=})
-  end
-end
-
-describe "DSL" do
-    it "registers replay on the app DSL" do
-      app = StreamWeaver::App.new("t") { replay(title: "T") { lane :a, "A" } }
-      app.rebuild_with_state({})
-      expect(app.components.first).to be_a(described_class)
+    it "contributes CSS but no engine script (the host bundles sw-replay.js)" do
+      basic.render(view, {})
+      expect(opal.collected_css_text).to include(".sw-replay__chip")
+      expect(view.to_html).not_to include("sw-replay.js")
+      expect(view.to_html).not_to include("var SPEEDS")
     end
   end
+
+  describe "canvas and reader shells (tripwires; behavior verified in a browser, see Tyrion evidence)" do
+    root = File.expand_path("../..", __dir__)
+    read = ->(rel) { File.read(File.join(root, rel)) }
+
+    it "ships the engine in the canvas page shell so a replay in a LATER push (inert inline scripts) still initializes" do
+      expect(read.("lib/stream_weaver/canvas/bridge_server.rb")).to include("sw-replay.js")
+    end
+
+    it "ships the engine in every reader render path" do
+      reader = read.("lib/stream_weaver/canvas/reader.rb")
+      expect(reader.scan("@replay_js = REPLAY_JS").size).to eq(reader.scan("@mermaid_zoom_js = MERMAID_ZOOM_JS").size)
+      expect(read.("lib/stream_weaver/views/canvas/reader_layout.erb")).to include("@replay_js")
+    end
+
+    it "self-initializes new stages and stops loops on detached ones (morphs replace the DOM)" do
+      js = read.("lib/stream_weaver/assets/js/sw-replay.js")
+      expect(js).to include("MutationObserver")
+      expect(js).to include("isConnected")
+    end
+  end
+
+  describe "bare export" do
+    let(:exporter) { StreamWeaver::Export::HtmlExporter.from_dsl(%(replay(title: "T") { lane :a, "A"; event "09:00", :a, "x" }), layout: :fluid) }
+
+    it "keeps the page shell by default and drops it with bare: true" do
+      expect(exporter.to_html).not_to include(".sw-replay{height:100vh!important")
+      expect(exporter.to_html(bare: true)).to include(".sw-replay{height:100vh!important")
+    end
+
+    it "needs no external script (offline and iframe safe)" do
+      expect(exporter.to_html(bare: true)).not_to match(%r{<script[^>]+src=})
+    end
+  end
+
+  describe "DSL" do
+      it "registers replay on the app DSL" do
+        app = StreamWeaver::App.new("t") { replay(title: "T") { lane :a, "A" } }
+        app.rebuild_with_state({})
+        expect(app.components.first).to be_a(described_class)
+      end
+    end
 end

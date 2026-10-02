@@ -300,6 +300,7 @@
 
   <%# Mermaid zoom/pan engine — inlined here so it self-inits on DOMContentLoaded %>
   <script><%= @mermaid_zoom_js %></script>
+  <script><%= @replay_js %></script>
   <%# Kick off mermaid CDN preload immediately (same pattern as bridge server) %>
   <script>if (window.swMermaidPreload) window.swMermaidPreload();</script>
 </head>

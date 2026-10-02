@@ -205,6 +205,7 @@ module StreamWeaver
       # a bridge booted via Client.start_bridge's UTF-8 fix, and the file
       # itself is always UTF-8 regardless of the host process's locale.
       MERMAID_ZOOM_JS = File.read(File.expand_path('../assets/js/sw-mermaid-zoom.js', __dir__), encoding: 'UTF-8')
+      REPLAY_JS = File.read(File.expand_path('../assets/js/sw-replay.js', __dir__), encoding: 'UTF-8')
       private_constant :MERMAID_ZOOM_JS
 
       configure do
@@ -491,6 +492,7 @@ module StreamWeaver
         @repo_filter     = self.class.resolve_repo_filter(params[:repo], list)
         @repo_param      = params[:repo].to_s.empty? ? nil : params[:repo].to_s
         @mermaid_zoom_js = MERMAID_ZOOM_JS
+        @replay_js = REPLAY_JS
         erb :reader_layout, layout: false
       end
 
@@ -513,6 +515,7 @@ module StreamWeaver
         set_browse_ivars(self.class.resolve_browse_dir(params[:dir]))
         @file_list       = self.class.file_list
         @mermaid_zoom_js = MERMAID_ZOOM_JS
+        @replay_js = REPLAY_JS
         erb :reader_layout, layout: false
       end
 
@@ -536,6 +539,7 @@ module StreamWeaver
         set_browse_ivars(File.dirname(path))
         @file_list       = self.class.file_list
         @mermaid_zoom_js = MERMAID_ZOOM_JS
+        @replay_js = REPLAY_JS
         erb :reader_layout, layout: false
       end
 
@@ -832,6 +836,7 @@ module StreamWeaver
         @file_list       = list
         @doc             = nil
         @mermaid_zoom_js = MERMAID_ZOOM_JS
+        @replay_js = REPLAY_JS
         erb :reader_layout, layout: false
       end
 
