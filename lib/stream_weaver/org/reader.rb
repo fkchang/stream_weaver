@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "shellwords"
 require_relative "inline"
 
 module StreamWeaver
@@ -46,6 +47,15 @@ module StreamWeaver
       # attribute from the table it belongs to.
       PREAMBLE_RE = /\A#\+(?!begin_|end_|ATTR_STREAMWEAVER:)\w+:/i
       ATTR_RE = /\A#\+ATTR_STREAMWEAVER:\s*(.*)\z/i
+      # `#+NAME: x` names the table that follows it (org-babel style), so a
+      # `#+begin_src replay :lanes x` block can reference it. Matched before
+      # PREAMBLE_RE, which would otherwise swallow it as plain metadata.
+      NAME_RE = /\A#\+NAME:\s*(\S+)\s*\z/i
+
+      REPLAY_RESERVED_COLUMNS = %w[at lane text milestone].freeze
+      REPLAY_LANES_COLUMNS = %w[id name].freeze
+      REPLAY_EVENTS_COLUMNS = %w[at lane text].freeze
+      REPLAY_TRUTHY = /\A(t|true|yes|y|x|1)\z/i
 
       def self.to_dsl(org_text)
         new(org_text).call
@@ -78,6 +88,7 @@ module StreamWeaver
 
       def call
         chunk_list = chunks
+        resolve_replay_tables!(chunk_list)
 
         # sidebar_toc is derived from depth-1 headlines, in document order,
         # using TOC_LABEL when present and falling back to the headline's
@@ -173,11 +184,18 @@ module StreamWeaver
         result = []
         i = 0
         pending_attr = nil
+        pending_name = nil
 
         while i < lines.length
           line = lines[i]
 
           if line.empty?
+            i += 1
+            next
+          end
+
+          if (name_match = line.match(NAME_RE))
+            pending_name = name_match[1]
             i += 1
             next
           end
@@ -264,8 +282,9 @@ module StreamWeaver
               rows << lines[i]
               i += 1
             end
-            result << { type: :table, rows: rows, attr: pending_attr }
+            result << { type: :table, rows: rows, attr: pending_attr, name: pending_name }
             pending_attr = nil
+            pending_name = nil
             next
           end
 
@@ -330,6 +349,8 @@ module StreamWeaver
       end
 
       def emit_table(chunk)
+        return "" if chunk[:consumed] # data for a replay block, rendered as the animation
+
         # markdown: true is the default (absent #+ATTR_STREAMWEAVER: :markdown
         # nil) -- only that explicit marker (see #chunks) means the Writer
         # copied these cells byte-identical from a markdown: false table, so
@@ -360,6 +381,8 @@ module StreamWeaver
         tokens = chunk[:header].split(/\s+/)
         lang = tokens.shift
         lang = "text" if lang.nil? || lang.empty?
+        return emit_replay(chunk) if lang == "replay"
+
         code = chunk[:lines].join("\n")
 
         # Writer#raw_passthrough's escape hatch (see also its NO_OP_STATEMENT_RE
@@ -517,6 +540,129 @@ module StreamWeaver
         # callout's marker is just "*<emoji>*", no trailing space (see
         # Writer#render_component).
         marker.match(/\A\*(#{emoji_pattern})(?:\s+(.+))?\*\z/)
+      end
+
+      # ---- replay: `#+begin_src replay` plus named/adjacent org tables ----
+
+      def replay_src?(chunk)
+        chunk[:type] == :src && chunk[:header].split(/\s+/).first == "replay"
+      end
+
+      # Header args as {":key" => "value"}; values may be "quoted with spaces".
+      def replay_args(chunk)
+        tokens = Shellwords.split(chunk[:header]).drop(1)
+        tokens.each_slice(2).to_h { |k, v| [k, v] }
+      rescue ArgumentError => e
+        raise ArgumentError, "replay header: #{e.message}"
+      end
+
+      def table_header(chunk)
+        parse_table_row(chunk[:rows].first).map { |h| h.downcase }
+      end
+
+      def resolve_replay_tables!(chunk_list)
+        chunk_list.each_with_index do |chunk, i|
+          next unless replay_src?(chunk)
+
+          args = replay_args(chunk)
+          chunk[:lanes_table] = find_replay_table(chunk_list, i, args[":lanes"], REPLAY_LANES_COLUMNS, "lanes")
+          chunk[:events_table] = find_replay_table(chunk_list, i, args[":events"], REPLAY_EVENTS_COLUMNS, "events")
+          [chunk[:lanes_table], chunk[:events_table]].each { |t| t[:consumed] = true }
+        end
+      end
+
+      # Named: the table carrying that #+NAME: anywhere in the doc (org-babel
+      # allows forward references). Unnamed: the nearest PRECEDING table whose
+      # header has the required columns, so the simple case needs no names.
+      def find_replay_table(chunk_list, index, name, required, what)
+        tables = chunk_list.select { |c| c[:type] == :table }
+        found =
+          if name
+            tables.find { |t| t[:name] == name } or raise ArgumentError, "replay: no table named #{name.inspect} (:#{what})"
+          else
+            chunk_list[0...index].reverse.find { |t| t[:type] == :table && (required - table_header(t)).empty? } or
+              raise ArgumentError, "replay: no #{what} table (need columns #{required.join(', ')}) before the block"
+          end
+        missing = required - table_header(found)
+        raise ArgumentError, "replay #{what} table is missing column(s): #{missing.join(', ')}" unless missing.empty?
+
+        found
+      end
+
+      def replay_table_rows(table)
+        rows = table[:rows].reject { |row| table_separator?(row) }.map { |row| parse_table_row(row) }
+        header = rows.shift.map(&:downcase)
+        rows.map { |cells| header.zip(cells).to_h }
+      end
+
+      def replay_ident(value, what)
+        raise ArgumentError, "replay #{what} #{value.inspect} must be a plain word (letters, digits, _ or -)" unless value.to_s.match?(/\A[A-Za-z_][\w-]*\z/)
+
+        value.to_sym.inspect
+      end
+
+      # Counters from `:counters "key:label, key2:label 2"` (commas, or spaces
+      # when no label has any); with no :counters, every non-reserved events
+      # column is a counter labelled by its own name.
+      def replay_counters(args, event_rows)
+        spec = args[":counters"]
+        return event_rows.first.to_h.keys.reject { |k| REPLAY_RESERVED_COLUMNS.include?(k) }.map { |k| [k, k] } if spec.nil?
+
+        parts = spec.include?(",") ? spec.split(",") : spec.split(/\s+/)
+        parts.map(&:strip).reject(&:empty?).map do |part|
+          key, label = part.split(":", 2)
+          [key, label || key]
+        end
+      end
+
+      def emit_replay(chunk)
+        args = chunk.fetch(:replay_args) { replay_args(chunk) }
+        lanes = replay_table_rows(chunk.fetch(:lanes_table) { raise ArgumentError, "replay block cannot be nested inside a quote or card" })
+        events = replay_table_rows(chunk.fetch(:events_table))
+        counters = replay_counters(args, events.empty? ? [{}] : events)
+
+        opts = [%(title: #{(args[":title"] || @title || "Replay").inspect})]
+        opts << "subtitle: #{args[':subtitle'].inspect}" if args[":subtitle"]
+        opts << "footnote: #{args[':footnote'].inspect}" if args[":footnote"]
+        opts << "ms_per_minute: #{Integer(args[':ms-per-minute'])}" if args[":ms-per-minute"]
+        opts << "max_visible: #{Integer(args[':max-visible'])}" if args[":max-visible"]
+        opts << "height: #{args[':height'].inspect}" if args[":height"]
+        opts << "autoplay: #{!args[':autoplay'].to_s.match?(/\A(nil|false|no)\z/i)}" if args[":autoplay"]
+
+        out = ["replay(#{opts.join(', ')}) do"]
+        counters.each { |key, label| out << "  counter #{replay_ident(key, 'counter')}, #{label.inspect}" }
+        lanes.each do |row|
+          color = row["color"].to_s.empty? ? "" : ", color: #{row['color'].match?(/\A[a-z]+\z/) ? row['color'].to_sym.inspect : row['color'].inspect}"
+          sub = row["sub"].to_s.empty? ? "" : ", sub: #{row['sub'].inspect}"
+          out << "  lane #{replay_ident(row['id'], 'lane id')}, #{row['name'].inspect}#{sub}#{color}"
+        end
+        out.concat(replay_body_lines(chunk[:lines]))
+        events.each do |row|
+          incs = counters.filter_map do |key, _|
+            n = row[key].to_s.strip
+            "#{key.to_sym.inspect[1..]}: #{Integer(n)}" unless n.empty?
+          end
+          verb = row["milestone"].to_s.match?(REPLAY_TRUTHY) ? "milestone" : "event"
+          args_dsl = [row["at"].inspect, replay_ident(row["lane"], "event lane"), row["text"].inspect, *incs]
+          out << "  #{verb} #{args_dsl.join(', ')}"
+        end
+        out << "end"
+        out.join("\n")
+      end
+
+      # `#+WINDOW: a .. b`, `#+GAP: caption | sub`, `#+FINALE: caption | sub`,
+      # in body order (windows and gaps pair by order, as in the DSL).
+      def replay_body_lines(lines)
+        lines.map(&:strip).reject(&:empty?).map do |line|
+          if (m = line.match(/\A#\+WINDOW:\s*(.+?)\s+\.\.\s+(.+)\z/i))
+            "  window #{m[1].inspect}..#{m[2].inspect}"
+          elsif (m = line.match(/\A#\+(GAP|FINALE):\s*(.*)\z/i))
+            caption, sub = m[2].split(" | ", 2)
+            "  #{m[1].downcase} #{caption.to_s.strip.inspect}#{sub ? ", #{m[1].casecmp?('gap') ? 'sub: ' : ''}#{sub.strip.inspect}" : ''}"
+          else
+            raise ArgumentError, "unrecognized line in replay block: #{line.inspect}"
+          end
+        end
       end
 
       def table_separator?(row)

@@ -166,6 +166,12 @@ RSpec.describe StreamWeaver::Components::Replay do
       expect(out).not_to include("data=")
     end
 
+    it "styles the title tag the markup actually emits (a doc theme's dark text must not win)" do
+      basic.render(view, {})
+      tag = view.to_html[%r{sw-replay__title"><(\w+)>}, 1]
+      expect(opal.collected_css_text).to include(".sw-replay__title #{tag} {")
+    end
+
     it "contributes CSS but no engine script (the host bundles sw-replay.js)" do
       basic.render(view, {})
       expect(opal.collected_css_text).to include(".sw-replay__chip")

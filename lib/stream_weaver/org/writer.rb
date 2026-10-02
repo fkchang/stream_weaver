@@ -21,6 +21,7 @@ module StreamWeaver
         @coverage_counts = { total: 0, passthrough_verbatim: 0, passthrough_lossy: 0, omitted: 0 }
         @called = false
         @nesting_depth = 0
+        @replay_count = 0
       end
 
       # Top-level DSL statements RecordingContext deliberately no-ops (see
@@ -150,6 +151,8 @@ module StreamWeaver
         when Components::Mermaid
           header = component.zoom ? "mermaid :zoom t" : "mermaid"
           "\n#+begin_src #{header}\n#{component.code.to_s.rstrip}\n#+end_src\n"
+        when Components::Replay
+          render_replay(component)
         when Components::CodeBlock
           "\n#+begin_src #{component.lang}\n#{component.code.to_s.rstrip}\n#+end_src\n"
         else
@@ -204,6 +207,62 @@ module StreamWeaver
         out << row_line(headers.map { |h| convert.call(h) }, widths)
         out << "|" + widths.map { |w| "-" * (w + 2) }.join("|") + "|\n"
         rows.each { |r| out << row_line(r.map { |c| convert.call(c) }, widths) }
+        out
+      end
+
+      # Named lane/event tables plus a `#+begin_src replay` block (the src
+      # form, not a special block, so GitHub's org renderer shows the config
+      # instead of dropping it). Emitted from Replay#authoring so what the
+      # Reader turns back into DSL reproduces the same replay.
+      def render_replay(replay)
+        @replay_count += 1
+        suffix = @replay_count == 1 ? "" : "-#{@replay_count}"
+        a = replay.authoring
+        lanes_name = "lanes#{suffix}"
+        events_name = "events#{suffix}"
+        counter_keys = a[:counters].map { |c| c[:key] }
+        milestones = a[:events].any? { |e| e[:human] }
+
+        lane_rows = a[:lanes].map { |l| [l[:id], l[:name], l[:sub].to_s, l[:color].to_s] }
+        event_headers = %w[at lane text] + counter_keys + (milestones ? ["milestone"] : [])
+        event_rows = a[:events].map do |e|
+          [e[:at], e[:lane], e[:text]] + counter_keys.map { |k| e[:inc][k].to_s } + (milestones ? [e[:human] ? "t" : ""] : [])
+        end
+
+        out = +"\n#+NAME: #{lanes_name}\n"
+        out << plain_table(%w[id name sub color], lane_rows)
+        out << "\n#+NAME: #{events_name}\n"
+        out << plain_table(event_headers, event_rows)
+        out << "\n#+begin_src replay #{replay_header_args(a, lanes_name, events_name)}\n"
+        a[:windows].each_with_index do |(from, to), i|
+          out << "#+WINDOW: #{from} .. #{to}\n"
+          gap = a[:gaps][i]
+          out << "#+GAP: #{[gap[:caption], gap[:sub]].compact.join(' | ')}\n" if gap && i < a[:windows].size - 1
+        end
+        out << "#+FINALE: #{[a[:finale][:caption], a[:finale][:sub]].compact.join(' | ')}\n" if a[:finale]
+        out << "#+end_src\n"
+      end
+
+      def replay_header_args(authoring, lanes_name, events_name)
+        o = authoring[:options]
+        d = Components::Replay::DEFAULTS
+        args = [":title #{o[:title].to_s.inspect}", ":lanes #{lanes_name}", ":events #{events_name}"]
+        args << ":subtitle #{o[:subtitle].inspect}" if o[:subtitle]
+        args << ":footnote #{o[:footnote].inspect}" if o[:footnote]
+        args << ":ms-per-minute #{o[:ms_per_minute]}" unless o[:ms_per_minute] == d[:ms_per_minute]
+        args << ":max-visible #{o[:max_visible]}" unless o[:max_visible] == d[:max_visible]
+        args << ":height #{o[:height].inspect}" unless o[:height] == d[:height]
+        args << ":autoplay nil" unless o[:autoplay] == d[:autoplay]
+        counters = authoring[:counters].map { |c| "#{c[:key]}:#{c[:label]}" }.join(", ")
+        args << ":counters #{counters.inspect}" unless counters.empty?
+        args.join(" ")
+      end
+
+      def plain_table(headers, rows)
+        widths = headers.each_index.map { |i| ([headers[i]] + rows.map { |r| r[i] }).map { |s| s.to_s.length }.max }
+        out = +row_line(headers, widths)
+        out << "|" + widths.map { |wd| "-" * (wd + 2) }.join("|") + "|\n"
+        rows.each { |r| out << row_line(r.map(&:to_s), widths) }
         out
       end
 

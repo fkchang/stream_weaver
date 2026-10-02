@@ -1250,7 +1250,7 @@ module StreamWeaver
         .sw-replay *, .sw-replay *::before, .sw-replay *::after { box-sizing:border-box; }
         .sw-replay__header { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:12px 24px; }
         .sw-replay__title { font-size:20px; color:var(--dim); letter-spacing:.02em; }
-        .sw-replay__title b { color:var(--text); font-weight:600; }
+        .sw-replay__title strong { color:var(--text); font-weight:600; }
         .sw-replay__clock { font-variant-numeric:tabular-nums; font-size:84px; font-weight:200; line-height:1; }
         .sw-replay__day { font-size:26px; color:var(--dim); margin-right:14px; font-weight:400; }
         .sw-replay__counters { display:flex; gap:22px; }

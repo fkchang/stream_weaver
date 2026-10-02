@@ -148,7 +148,9 @@ Tyrion story `replay-org-src-block` should be read with this design: its "org ta
 
 ## 8. Built vs proposed
 
-**Built (uncommitted):** `replay` DSL (counter, lane, window, gap, event, milestone, finale, events), validation, client engine with play/pause/restart/speed and space/r keys, Alpine-adapter rendering and CSS, `events_from_skeleton`, example, spec.
+**Built:** org authoring (`#+NAME` tables + `#+begin_src replay`, Reader and Writer, fixpoint round trip, 2026-10-02; spec `spec/org/replay_org_spec.rb`), `Adapter::Static` renderer, self-initializing engine in canvas and reader shells.
+
+**Built in the first spike:** `replay` DSL (counter, lane, window, gap, event, milestone, finale, events), validation, client engine with play/pause/restart/speed and space/r keys, Alpine-adapter rendering and CSS, `events_from_skeleton`, example, spec.
 
 **Proposed, not built:**
 

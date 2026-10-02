@@ -32,6 +32,8 @@ module StreamWeaver
         green: "#859900", orange: "#cb4b16", red: "#dc322f", violet: "#6c71c4"
       }.freeze
 
+      DEFAULTS = { ms_per_minute: 340, max_visible: 4, height: "36rem", autoplay: true }.freeze
+
       attr_reader :title, :subtitle, :footnote, :ms_per_minute, :max_visible, :height, :autoplay
 
       # @param title [String] header title
@@ -53,6 +55,7 @@ module StreamWeaver
         @counters = []
         @lanes = []
         @windows = []
+        @window_args = []
         @gaps = []
         @events = []
         @finale = nil
@@ -66,11 +69,12 @@ module StreamWeaver
       end
 
       def lane(id, name, sub: nil, color: :cyan)
-        @lanes << { id: id.to_s, name: name, sub: sub, color: PALETTE.fetch(color) { color.to_s } }
+        @lanes << { id: id.to_s, name: name, sub: sub, color: PALETTE.fetch(color) { color.to_s }, color_arg: color }
       end
 
       def window(range)
         @windows << [minute_of(range.begin), minute_of(range.end)]
+        @window_args << [range.begin.to_s, range.end.to_s]
       end
 
       def gap(caption, sub: nil)
@@ -78,7 +82,7 @@ module StreamWeaver
       end
 
       def event(at, lane, text, human: false, **inc)
-        @events << { m: minute_of(at), t: at.to_s.split.last, lane: lane.to_s, text: text,
+        @events << { m: minute_of(at), at: at.to_s, t: at.to_s.split.last, lane: lane.to_s, text: text,
                      inc: inc.transform_keys(&:to_s), human: human }
       end
 
@@ -102,8 +106,26 @@ module StreamWeaver
         sorted = @events.sort_by { |e| e[:m] }
         {
           title: title, subtitle: subtitle, msPerMinute: ms_per_minute, maxVisible: max_visible,
-          autoplay: autoplay, days: @days.map { |d| d.split.first }, counters: @counters, lanes: @lanes,
-          windows: windows, gaps: @gaps, events: sorted, finale: finale_with_totals(sorted)
+          autoplay: autoplay, days: @days.map { |d| d.split.first }, counters: @counters,
+          lanes: @lanes.map { |l| l.except(:color_arg) },
+          windows: windows, gaps: @gaps, events: sorted.map { |e| e.except(:at) },
+          finale: finale_with_totals(sorted)
+        }
+      end
+
+      # The values as authored (day-labelled times, color names, the finale
+      # template with its {placeholders}), in authored order. The org Writer
+      # emits from this so Reader -> Writer reaches a fixpoint.
+      def authoring
+        {
+          options: { title: title, subtitle: subtitle, footnote: footnote, ms_per_minute: ms_per_minute,
+                     max_visible: max_visible, height: height, autoplay: autoplay },
+          counters: @counters,
+          lanes: @lanes.map { |l| l.slice(:id, :name, :sub).merge(color: l[:color_arg]) },
+          windows: @window_args,
+          gaps: @gaps,
+          events: @events.map { |e| e.slice(:at, :lane, :text, :inc, :human) },
+          finale: @finale
         }
       end
 
