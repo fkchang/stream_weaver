@@ -129,6 +129,15 @@ module StreamWeaver
         }
       end
 
+      # Deterministic content hash (same in MRI and Opal, unlike String#hash).
+      # Gives the stage an id derived from its content: a live runtime that
+      # morphs the page pairs nodes by id, so an unchanged replay keeps its
+      # running stage and an edited one gets a fresh node. Same contract as
+      # Components::Mermaid#diagram_id.
+      def fingerprint
+        to_json_safe.each_char.reduce(5381) { |h, c| (h * 33 + c.ord) % 4_294_967_291 }.to_s(36)
+      end
+
       def to_json_safe
         JSON.generate(to_config).gsub("</", '<\/')
       end

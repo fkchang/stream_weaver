@@ -126,6 +126,10 @@ copies = {
   # is bundled here and invoked directly by sandbox.js (stream_weaver-
   # mermaid-extension).
   File.join(ASSETS, "sw-mermaid-zoom.js")     => "sw-mermaid-zoom.js",
+  # sw-replay.js: the replay component's engine. Self-initializing (a
+  # MutationObserver inits any .sw-replay that appears), so sandbox.js needs
+  # no call. No network, no eval: fine under the hardened sandbox CSP.
+  File.join(ASSETS, "sw-replay.js")           => "sw-replay.js",
   File.join(STUBS,  "marked.umd.js")          => "marked.umd.js",
   File.join(STUBS,  "morphdom.min.js")        => "morphdom.min.js",
   File.join(STUBS,  "prism.min.js")           => "prism.min.js",

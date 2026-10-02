@@ -74,6 +74,7 @@ module StreamWeaver
         diff_js: nil,
         mermaid_js: nil,
         mermaid_zoom_js: nil,
+        replay_js: nil,
         theme_css: nil,
         google_fonts_url: nil,
         dark_mode_script: nil,
@@ -114,6 +115,7 @@ module StreamWeaver
         # After mermaid_src, not before: swMermaidInit's globalThis.mermaid
         # fast path (sw-mermaid-zoom.js) needs mermaid already loaded.
         mermaid_zoom_tag = mermaid_zoom_js ? "    <script src=\"#{mermaid_zoom_js}\"></script>\n" : ""
+        replay_tag = replay_js ? "    <script src=\"#{replay_js}\"></script>\n" : ""
 
         <<~HTML
           <!DOCTYPE html>
@@ -126,7 +128,7 @@ module StreamWeaver
             <script src="#{morphdom_src}"></script>
             <script src="#{prism_src}"></script>
             <script src="#{mermaid_src}"></script>
-          #{mermaid_zoom_tag}    <script src="#{diff_src}"></script>
+          #{mermaid_zoom_tag}#{replay_tag}    <script src="#{diff_src}"></script>
           </head>
           <body class="#{body_theme}">
             <div id="sw-app">#{body_html}</div>

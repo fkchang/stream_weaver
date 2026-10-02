@@ -551,16 +551,19 @@ RSpec.describe 'extension live runtime wiring' do
         deliver(#{text_doc.to_json});
         const guard = lastMorphOptions && lastMorphOptions.onBeforeElUpdated;
         const decorated = { hasAttribute: (name) => name === "data-sw-mermaid-done" };
+        const replayStage = { hasAttribute: (name) => name === "data-sw-ready" };
         const plain = { hasAttribute: () => false };
         console.log(JSON.stringify({
           present: typeof guard,
           skipsDecorated: guard ? guard(decorated, {}) : null,
+          skipsReplayStage: guard ? guard(replayStage, {}) : null,
           allowsPlain: guard ? guard(plain, {}) : null
         }));
       JS
 
       expect(result['present']).to eq('function')
       expect(result['skipsDecorated']).to be false
+      expect(result['skipsReplayStage']).to be false
       expect(result['allowsPlain']).to be true
     end
 

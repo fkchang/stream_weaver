@@ -598,7 +598,18 @@ module StreamWeaver
       def replay_ident(value, what)
         raise ArgumentError, "replay #{what} #{value.inspect} must be a plain word (letters, digits, _ or -)" unless value.to_s.match?(/\A[A-Za-z_][\w-]*\z/)
 
-        value.to_sym.inspect
+        replay_symbol(value)
+      end
+
+      # Symbol literal text built by hand: under Opal a Symbol IS a String, so
+      # Symbol#inspect differs from MRI's (and slicing it corrupts the text).
+      def replay_symbol(value)
+        value.match?(/\A[A-Za-z_]\w*\z/) ? ":#{value}" : ":#{value.inspect}"
+      end
+
+      # `key: 1` as a keyword-argument label; non-identifier keys become "key": 1.
+      def replay_kwarg(key)
+        key.match?(/\A[A-Za-z_]\w*\z/) ? "#{key}:" : "#{key.inspect}:"
       end
 
       # Counters from `:counters "key:label, key2:label 2"` (commas, or spaces
@@ -632,7 +643,7 @@ module StreamWeaver
         out = ["replay(#{opts.join(', ')}) do"]
         counters.each { |key, label| out << "  counter #{replay_ident(key, 'counter')}, #{label.inspect}" }
         lanes.each do |row|
-          color = row["color"].to_s.empty? ? "" : ", color: #{row['color'].match?(/\A[a-z]+\z/) ? row['color'].to_sym.inspect : row['color'].inspect}"
+          color = row["color"].to_s.empty? ? "" : ", color: #{row['color'].match?(/\A[a-z]+\z/) ? ":#{row['color']}" : row['color'].inspect}"
           sub = row["sub"].to_s.empty? ? "" : ", sub: #{row['sub'].inspect}"
           out << "  lane #{replay_ident(row['id'], 'lane id')}, #{row['name'].inspect}#{sub}#{color}"
         end
@@ -640,7 +651,7 @@ module StreamWeaver
         events.each do |row|
           incs = counters.filter_map do |key, _|
             n = row[key].to_s.strip
-            "#{key.to_sym.inspect[1..]}: #{Integer(n)}" unless n.empty?
+            "#{replay_kwarg(key)} #{Integer(n)}" unless n.empty?
           end
           verb = row["milestone"].to_s.match?(REPLAY_TRUTHY) ? "milestone" : "event"
           args_dsl = [row["at"].inspect, replay_ident(row["lane"], "event lane"), row["text"].inspect, *incs]

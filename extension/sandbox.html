@@ -47,6 +47,9 @@
        (stream_weaver-mermaid-extension). Loaded after mermaid.min.js above
        so globalThis.mermaid is already set when this self-inits. -->
   <script src="vendor/sw-mermaid-zoom.js"></script>
+  <!-- Animated replay engine; self-initializes any .sw-replay stage, so
+       sandbox.js has no hook to call. -->
+  <script src="vendor/sw-replay.js"></script>
 
   <style>
     html, body { margin: 0; padding: 0; }

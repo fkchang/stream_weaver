@@ -321,6 +321,12 @@ module StreamWeaver
       # (observed in real Chrome). Returning false from onBeforeElUpdated skips
       # the element and its children.
       #
+      # data-sw-ready is the same contract for sw-replay.js: it marks a stage
+      # the engine has initialized and is animating (chips and counters are
+      # built client-side, so freshly rendered markup would wipe them and
+      # restart the replay). Components::Replay#fingerprint derives the stage
+      # id from its config, which is what makes skipping safe.
+      #
       # This is only safe because such a container's id is derived from its
       # content (Components::Mermaid#diagram_id): edit the diagram and the id
       # changes, so morphdom never pairs the old node with the new one and the
@@ -338,7 +344,7 @@ module StreamWeaver
         %x{
           return {
             onBeforeElUpdated: function(fromEl) {
-              return !(fromEl.hasAttribute && fromEl.hasAttribute('data-sw-mermaid-done'));
+              return !(fromEl.hasAttribute && (fromEl.hasAttribute('data-sw-mermaid-done') || fromEl.hasAttribute('data-sw-ready')));
             }
           };
         }

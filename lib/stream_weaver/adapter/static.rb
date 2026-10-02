@@ -1193,7 +1193,7 @@ module StreamWeaver
         inject_replay_assets(view)
         cfg = component.to_config
 
-        view.div(class: "sw-replay", style: "height: #{component.height}") do
+        view.div(id: "sw-replay-#{component.fingerprint}", class: "sw-replay", style: "height: #{component.height}") do
           view.div(class: "sw-replay__header") do
             view.div do
               view.div(class: "sw-replay__title") do

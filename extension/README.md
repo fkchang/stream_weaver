@@ -272,6 +272,20 @@ exactly this case (a host with no htmx to re-trigger it via a real
 `htmx:afterSwap` event), and `sandbox.js` calls that directly right after
 injecting the rendered doc.
 
+**Replay (`replay`) ships its engine the same way, and animates with zero
+network.** `sw-replay.js` is copied into `vendor/` by `bin/build_extension` and
+loaded by `sandbox.html`. It needs no call from `sandbox.js`: it initializes any
+`.sw-replay` stage that appears (a `MutationObserver`), which also covers
+stages the live runtime morphs in. The engine uses no `fetch`, `eval`, or
+navigation, so it fits the hardened sandbox CSP;
+`spec/extension/replay_extension_spec.rb` pins that. Two details worth knowing:
+the stage carries an id derived from its config (`Replay#fingerprint`) and the
+runtime's morph guard skips a stage that has `data-sw-ready`, so an unchanged
+replay keeps running through re-renders while an edited one gets a fresh node;
+and Opal Symbols are Strings, so any reader code that prints a Symbol literal
+must build the text by hand (a `Symbol#inspect` slice corrupted `commit: 1`
+here before there was a spec).
+
 **Mermaid diagrams are not the same story — bundling `sw-mermaid-zoom.js` is
 not optional the way `sw-sidebar-toc.js` is.** `Adapter::Static#render_mermaid`
 (shared by both adapters) writes each diagram's source into a
