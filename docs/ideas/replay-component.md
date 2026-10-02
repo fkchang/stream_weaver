@@ -101,7 +101,52 @@ Limits found while reading `session-skeleton`: each item carries only `at`, `cmd
 
 Roughly 3x fewer lines and bytes, and about 3x fewer tokens (the source is dominated by CSS and engine; the example is dominated by the 33 event rows, which are the irreducible content). The author-facing cost is the data: chrome plus structure is about 24 lines. A new replay of a different day is the same ~25 lines of structure plus its events.
 
-## 7. Built vs proposed
+## 7. Org authoring syntax
+
+Two designs, merged. Tested against org-ruby 0.9.12 (the renderer GitHub uses; GitHub's deployed version may differ), 2026-10-02:
+
+| Org construct | org-ruby result |
+|---|---|
+| `#+NAME: x` followed by a table | Real HTML table with header row. The `#+NAME:` line is silently ignored. |
+| `#+BEGIN_REPLAY ... #+END_REPLAY` (unknown block) | **Dropped entirely, including its content.** Renders as nothing. |
+| `#+begin_src replay ... #+end_src` | Monospace block with the content verbatim, including `#+WINDOW:`-style lines. |
+
+**Proposal from the dinocloud-setup session** (org-babel style): lanes and events as `#+NAME`d org tables, config in a block whose header args reference them (`:lanes lanes :events events :ms-per-minute 340 :counters "commit:commits invite:invites"`), with `#+WINDOW:`, `#+GAP:`, `#+FINALE:` lines inside the block. Event tables carry one column per counter plus a `milestone` column.
+
+**Weighing it:**
+
+- **Take: data as named tables.** Better than my earlier single events table. Lanes become a table too, the file shows real tables on GitHub (they are the evidence), Emacs gives sorting and formulas for free, and the mapping to the DSL is 1:1 (a lane row is `lane`, an event row is `event`/`milestone`, a numeric cell in a counter column is `commit: 1`). Counter columns by `:counters` naming is cleaner than my `{key => n}` hash.
+- **Change: the config block must be `#+begin_src replay`, not `#+BEGIN_REPLAY`.** As verified above, an unknown special block vanishes on GitHub, so the windows, gaps and finale text would be invisible to anyone reading the .org there. The src form keeps them visible. Same header args, same body lines; only the block name changes. Precedent: the reader already special-cases `lang mermaid` (`org/reader.rb:375`).
+- **Change: use real day labels in the tables** (`Thu 09:48`), not the `W`/`T` codes. The clock displays the day label as written, and day order is first appearance, so `T` would show as "T" on screen. If short codes are wanted for typing, add a `:days "W=Wed T=Thu"` header arg that expands them; not needed for v1.
+- **Open point: `#+NAME` resolution is new work.** `org/reader.rb` does not handle `#+NAME:` today (grep finds nothing). The reader must attach each name to the table that follows and resolve `:lanes`/`:events` against it. Fallback when args are omitted: the nearest preceding lane/event tables, so the simple case needs no names.
+- **Open point: where windows live.** Body lines (`#+WINDOW:`) are fine and stay readable; with none present the component already infers one window. Gaps pair with windows by order, as in the DSL.
+- **Writer round trip** is easier with tables than with my embedded-table-in-src idea: tables are first-class org, so the writer does not need to re-serialize them.
+
+**Combined sketch:**
+
+```org
+#+NAME: lanes
+| id     | name             | sub         | color |
+|--------+------------------+-------------+-------|
+| access | DinoCloud access | AWS, GitHub | cyan  |
+
+#+NAME: events
+| at        | lane    | text                       | commit | milestone |
+|-----------+---------+----------------------------+--------+-----------|
+| Thu 09:48 | nowcast | commit: remove one-time    |      1 |           |
+| Thu 11:46 | prep    | Ask: I have 15 min to prep |        | t         |
+
+#+begin_src replay :title "Thursday" :lanes lanes :events events :ms-per-minute 340 :counters "commit:commits"
+#+WINDOW: Wed 18:40 .. Wed 18:50
+#+GAP: Then 6 hours away | Back after dinner, past midnight
+#+WINDOW: Thu 09:05 .. Thu 12:02
+#+FINALE: Noon. | {commit} commits before lunch
+#+end_src
+```
+
+Tyrion story `replay-org-src-block` should be read with this design: its "org table of events" criterion becomes "named lane and event tables plus a `#+begin_src replay` block with header args".
+
+## 8. Built vs proposed
 
 **Built (uncommitted):** `replay` DSL (counter, lane, window, gap, event, milestone, finale, events), validation, client engine with play/pause/restart/speed and space/r keys, Alpine-adapter rendering and CSS, `events_from_skeleton`, example, spec.
 
@@ -115,7 +160,7 @@ Roughly 3x fewer lines and bytes, and about 3x fewer tokens (the source is domin
 6. **Multiple replays per page** share space/r keys (all respond). Fine for one stage per page; scope to the focused stage if a doc ever hosts several.
 7. **Seek/scrub** (a timeline slider) and **loop** option; the engine's state is small enough that both are cheap, but the source page has neither.
 
-## 8. Next steps (need Forrest's go-ahead)
+## 9. Next steps (need Forrest's go-ahead)
 
 - Commit locally: stage explicit paths only (`components/replay.rb`, `assets/js/sw-replay.js`, spec, example, this doc, plus the edits to `alpinejs.rb`, `base.rb`, `components.rb`, `display_dsl.rb`). The working tree also holds unrelated pre-existing changes that must stay out.
 - Decide on proposal 1 (bare export) before pointing a deck at it, since that is the actual embed path.
