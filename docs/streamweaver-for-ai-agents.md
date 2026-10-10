@@ -333,6 +333,19 @@ streamweaver canvas-wait session
 - `canvas_continue` says "I'm working, here's a spinner"
 - `canvas-wait` says "I'm done, waiting for you"
 
+That rule is for ONE question and ONE click (Patterns A and B). It does not hold for a page you leave open as a working surface:
+
+### Pattern C: A working page that gets many clicks (a listener, not `canvas-wait`)
+
+`canvas-wait` takes the first click, closes its socket and times out at 300 s. A click when nothing is waiting replaces the page with "Submitted" and the event is lost. For a decision queue, a session list, or any page the user answers over time:
+
+- End the pushed doc with `canvas_continue message: "..."` at the TOP level (after the closing `end` of any `tabs` block). Here it is required: a click then shows a spinner instead of "Submitted".
+- Run a long-lived listener in the background BEFORE telling the user to click: `StreamWeaver::Canvas::Client.each_event(session)` yields every event on one held connection (a Ruby loop, see `lib/stream_weaver/skills/streamweaver-visual-companion/references/many-clicks.md`).
+- For every click: record it durably, then **re-push the page** (a spinner page swallows later clicks until the next push), then wake whoever acts on it.
+- The click carries every field's value; the pressed `button` is the answer.
+
+Full explanation: `docs/canvas-panel-workflow.md` ("Many clicks").
+
 ### Toast for Terminal Prompts
 
 When Claude needs permission for tools, toast alerts the user:

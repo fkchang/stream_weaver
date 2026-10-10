@@ -25,4 +25,6 @@ streamweaver canvas-wait brainstorm
 
 One click, one `canvas-wait`, every answer back at once in `.state` — no round-tripping to the terminal per question.
 
+That is a one-shot form: one click, then you push the next page. If the page stays open and gets MORE than one click (a queue of decisions, each with its own button), `canvas-wait` loses the later clicks and times out at 300 s. See `references/many-clicks.md`.
+
 **Boundary case:** only bundle questions that are independent of each other. If a later question depends on an earlier answer (e.g. "which of these three do you like?" then, based on that pick, "what should we change about it?"), keep those sequential — push the first, wait for the answer, then push the second.

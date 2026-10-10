@@ -170,6 +170,8 @@ echo "User chose: $result"
 
 `canvas-wait` returns JSON: `{"type":"action","element":"button","value":"Approve and proceed","state":{"db_choice":"PostgreSQL (recommended)"}}`.
 
+This is one sign-off, one click. For several decisions answered over time on one page, `canvas-wait` loses later clicks; use a listener (visual-companion skill, `references/many-clicks.md`).
+
 Use when the decision changes the implementation path, is hard to reverse, or the user should weigh in before code is written. Skip for low-stakes choices — don't block when the user can redirect in the next turn.
 
 ## Updating the Canvas During Implementation

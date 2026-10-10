@@ -73,6 +73,8 @@ streamweaver panel brainstorm --layout=full      # 1400px
 
 Blocking selection: `radio_group` + `button`, then `canvas-wait <session>` to get their click as JSON. Ending a push with more than one question? Bundle into one form instead of one round-trip each — see `references/checkpoints-and-forms.md`.
 
+**One question, one click is `canvas-wait`. A page you leave open and answer over time (a decision queue, a session list, several cards with their own buttons) is not.** `canvas-wait` takes the first click, closes its socket, times out at 300 s, and a click when nothing is waiting replaces the page with "Submitted" and loses the event. Use a long-lived listener instead: See `references/many-clicks.md`.
+
 Every push auto-saves to history; the user can promote it to a permanent doc with the canvas's own Save-as-doc button (their action, never yours) — see `references/persistence.md`.
 
 ## Returning to Terminal

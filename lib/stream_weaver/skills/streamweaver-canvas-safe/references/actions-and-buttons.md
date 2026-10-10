@@ -45,3 +45,5 @@ Author-supplied strings reaching a JS handler (tag labels, menu item text) route
 ## The gotcha
 
 None of these components render any different markup between "will dispatch to an agent" and "will replace the page with a submitted-state placeholder because nobody's listening." Before telling a user to click a button, make sure a `canvas-wait` (with the right `--event`) is actually running — otherwise the click looks like it worked and just wasn't heard.
+
+`canvas-wait` is also ONE event: it closes its socket after the first click and times out at 300 s. For a page that gets many clicks, hold a connection with `StreamWeaver::Canvas::Client.each_event(session)` and re-push after every click (a `canvas_continue` spinner page swallows later clicks until the next push); see the visual-companion skill's `references/many-clicks.md`.

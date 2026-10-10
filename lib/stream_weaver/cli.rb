@@ -652,7 +652,7 @@ module StreamWeaver
         Canvas (Two-way IPC with Claude Code):
           streamweaver canvas <name>              Create/connect to canvas session
           streamweaver canvas-push <name>         Push DSL content (from stdin)
-          streamweaver canvas-wait <name>         Wait for user interaction
+          streamweaver canvas-wait <name>         Wait for ONE click (closes after it, 300 s timeout; many clicks: see docs/canvas-panel-workflow.md)
           streamweaver canvas-toast <name> <msg>  Show toast overlay (doesn't replace content)
           streamweaver canvas-close <name>        Close a canvas session
           streamweaver canvas-raise <name>        Surface an already-pushed canvas (its iTerm pane if
@@ -1410,6 +1410,7 @@ module StreamWeaver
 
       parser = OptionParser.new do |opts|
         opts.banner = "Usage: streamweaver canvas-wait <session-name> [options]"
+        opts.separator 'Takes ONE event and closes its socket; a click when nothing is waiting is lost. For a page that gets many clicks use a listener (Canvas::Client.each_event), see docs/canvas-panel-workflow.md "Many clicks".'
         opts.on('-t', '--timeout SECONDS', Integer, 'Timeout in seconds (default: 300)') { |t| timeout = t }
         opts.on('-e', '--event TYPE', 'Event type to wait for (default: action)') { |e| event_filter = e }
         opts.on('-a', '--any', 'Wait for any event (not just action)') { event_filter = nil }
