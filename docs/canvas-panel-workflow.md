@@ -63,6 +63,22 @@ After user clicks "Next", they see "Processing..." spinner until you push the ne
 
 **Final page** (no `canvas_continue`): Shows "Submitted - You can close this window"
 
+`canvas_continue` goes at the top level, after the closing `end` of a `tabs` block, never inside it (inside `tabs` it raises `undefined method label`).
+
+## Many clicks: `canvas-wait` is one event, a listener is every event
+
+A canvas used as a working form (a coordinator page with several cards, each with its own button) gets more than one click. `canvas-wait` is the wrong tool for that:
+
+- It returns the **first** `action` event and closes its socket. A click that lands while the agent is not blocked in `canvas-wait` is lost, and the default timeout is 300 s (`-t SECONDS`; `-a` waits for any event type, `-e TYPE` for one type).
+- It returns the **whole form state** (every field), not only the button's own card. A radio selected in card B arrives with the button of card A; the button pressed is the answer, and a field alone is not a submit.
+- The page after a click is the `canvas_continue` spinner, or "Submitted" without it. Until the next push, a spinner page **swallows every later click** (the adapter sets `_swFeedbackActive`). So every click must be followed by a re-push, even when nothing on the page changed.
+
+For many clicks use `StreamWeaver::Canvas::Client.each_event(session)`: it holds **one** connection open and yields every event for that session (events are filtered by session name because the bridge broadcasts all sessions' events). Handle each click (write to your store, then re-push the page) and reconnect when `each_event` returns, which it does when the bridge closes the socket (`canvas-restart` does that routinely). Reference implementations: `lib/stream_weaver/university/listener.rb` (a click becomes a ledger write plus a re-push) and, outside this repo, `bin/scrum-canvas-listen` in cultiv-ai (a click becomes a durable log entry, a re-push, and a nudge to the agent that owns the canvas).
+
+Event shape: `{type: 'event', name: <session>, data: {type: 'action', button: 'btn_<label-slug>_<n>', state: {...}}}`.
+
+If the listener process loads only `stream_weaver/canvas/client`, the staleness guard may try to restart an older bridge from inside it and fail with `NameError ... CLI::Service`. Set `SW_NO_AUTO_RESTART=1` for the listener (it then warns and carries on against the running bridge) and run `streamweaver canvas-restart` yourself when you choose.
+
 ## Panel Features
 
 ### Automatic Pane Tracking
