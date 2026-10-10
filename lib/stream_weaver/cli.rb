@@ -1211,14 +1211,24 @@ module StreamWeaver
       require_relative 'canvas/client'
 
       layout = :fluid
-      args = args.dup
-      if (i = args.index { |a| a.start_with?('--layout=') })
-        layout = args.delete_at(i).split('=', 2).last.to_sym
+      reply_to = nil
+      usage = 'Usage: streamweaver canvas [--layout=fluid|full|wide|default] [--reply-to EXTENSION:PAYLOAD] <session-name>'
+      parser = OptionParser.new do |opts|
+        opts.banner = usage
+        opts.on('--layout=LAYOUT') { |v| layout = v.to_sym }
+        opts.on('--reply-to VALUE', 'Send browser events to EXTENSION:PAYLOAD (empty clears)') { |v| reply_to = v }
+        opts.on('-h', '--help') { $stderr.puts usage; exit 1 }
       end
-      session_name = args.first
+      begin
+        remaining = parser.parse(args)
+      rescue OptionParser::ParseError => e
+        $stderr.puts "#{e.message}\n#{usage}"
+        exit 1
+      end
+      session_name = remaining.first
 
-      if session_name.nil? || help_flag?(session_name)
-        $stderr.puts "Usage: streamweaver canvas [--layout=fluid|full|wide|default] <session-name>"
+      if session_name.nil?
+        $stderr.puts usage
         exit 1
       end
 
@@ -1228,7 +1238,7 @@ module StreamWeaver
 
       # Create session
       response = Canvas::Client.send_message(
-        Canvas::Protocol::Messages.create(session_name, layout: layout)
+        Canvas::Protocol::Messages.create(session_name, layout: layout, reply_to: reply_to)
       )
 
       if response && response[:type] == 'ready'
@@ -1259,9 +1269,11 @@ module StreamWeaver
     # Push DSL content to a canvas session
     def self.canvas_push(args)
       stylesheet_paths = []
+      reply_to = nil
       parser = OptionParser.new do |opts|
         opts.banner = "Usage: streamweaver canvas-push <session-name> [options] < dsl.rb"
         opts.on('-s', '--stylesheet PATH', 'Local CSS file to inline into the canvas head (repeatable)') { |p| stylesheet_paths << p }
+        opts.on('--reply-to VALUE', 'Send browser events to EXTENSION:PAYLOAD (empty clears)') { |v| reply_to = v }
       end
       remaining = parser.parse(args)
       session_name = remaining.first
@@ -1291,7 +1303,7 @@ module StreamWeaver
       source_dir = Canvas::DocStore.git_root(Dir.pwd)
 
       response = Canvas::Client.send_message(
-        Canvas::Protocol::Messages.push(session_name, dsl, source_dir: source_dir)
+        Canvas::Protocol::Messages.push(session_name, dsl, source_dir: source_dir, reply_to: reply_to)
       )
 
       # Check for DSL errors reported back from the bridge
@@ -1647,9 +1659,11 @@ module StreamWeaver
 
         dsl, source, unconfirmed = fetch_session_dsl(name)
         has_content = !(dsl.nil? || dsl.strip.empty?)
-        manifest_sessions << { 'name' => name, 'theme' => theme, 'layout' => layout,
-                                'captured_at' => captured_at, 'has_content' => has_content,
-                                'source' => (has_content ? source.to_s : nil), 'unconfirmed' => unconfirmed }
+        entry = { 'name' => name, 'theme' => theme, 'layout' => layout,
+                  'captured_at' => captured_at, 'has_content' => has_content,
+                  'source' => (has_content ? source.to_s : nil), 'unconfirmed' => unconfirmed }
+        entry['reply_to'] = s[:reply_to] if s[:reply_to] # absent when unset: manifests are unchanged
+        manifest_sessions << entry
 
         if has_content
           File.write(File.join(dir, "#{name}.rb"), dsl)
@@ -1813,7 +1827,7 @@ module StreamWeaver
         layout = (entry['layout'] || 'fluid').to_sym
 
         create_resp = Canvas::Client.send_message(
-          Canvas::Protocol::Messages.create(name, layout: layout, theme: theme)
+          Canvas::Protocol::Messages.create(name, layout: layout, theme: theme, reply_to: entry['reply_to'])
         )
         unless create_resp && create_resp[:type] == 'ready'
           puts "FAIL  #{name}  (create failed)"

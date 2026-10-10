@@ -8,7 +8,7 @@ module StreamWeaver
     class Session
       VALID_LAYOUTS = %i[default wide full fluid].freeze
 
-      attr_reader :name, :state, :websockets, :created_at, :layout, :dsl, :theme, :stylesheets, :source_dir
+      attr_reader :name, :state, :websockets, :created_at, :layout, :dsl, :theme, :stylesheets, :source_dir, :reply_to
       attr_accessor :html, :html_version, :pane_id
 
       # @param name [String] Session name
@@ -28,6 +28,7 @@ module StreamWeaver
         @source_dir = nil
         @pending_toasts = []
         @pane_id = nil
+        @reply_to = nil
         @mutex = Mutex.new
       end
 
@@ -44,6 +45,15 @@ module StreamWeaver
       # @param content [String] Raw DSL source
       def set_dsl(content)
         @dsl = content
+      end
+
+      # Set who receives this session's browser events: an opaque "<extension id>:<payload>"
+      # string the bridge routes to that extension's canvas_event_sink. Blank clears it.
+      # Called by Bridge#handle_create, and by #handle_push only on successful render.
+      # @param value [String, nil]
+      def set_reply_to(value)
+        text = value.to_s.strip
+        @reply_to = text.empty? ? nil : text.dup.freeze
       end
 
       # Set the directory the current DSL was pushed from. Called by
@@ -117,7 +127,7 @@ module StreamWeaver
       # Return session info as a hash
       # @return [Hash]
       def to_h
-        {
+        h = {
           name: @name,
           state: @state,
           websocket_count: @websockets.size,
@@ -126,6 +136,8 @@ module StreamWeaver
           theme: @theme,
           layout: @layout
         }
+        h[:reply_to] = @reply_to if @reply_to # absent when unset, so listings are unchanged
+        h
       end
     end
   end

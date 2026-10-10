@@ -8,6 +8,7 @@ require_relative 'protocol'
 require_relative 'code_stamp'
 require_relative 'scroll_top_hint'
 require_relative 'session'
+require_relative 'event_sinks'
 require_relative 'bridge'
 require_relative 'doc_store'
 require_relative 'gist_store'
@@ -545,6 +546,22 @@ module StreamWeaver
         rescue => e
           warn "canvas: dropped event for #{session_name}: #{e.message}"
         end
+
+        dispatch_to_reply_to(session_name, message)
+      end
+
+      # After connected clients have had the event: hand it to the extension a session's reply_to
+      # names. Runs off this thread and can never change the HTTP response (see EventSinks.dispatch).
+      def dispatch_to_reply_to(session_name, message)
+        bridge = self.class.bridge
+        session = bridge.get_session(session_name)
+        return unless session&.reply_to
+
+        EventSinks.dispatch(
+          name: session_name, reply_to: session.reply_to, message: message, state: session.state.dup,
+          pusher: ->(dsl) { bridge.handle_claude_message(type: 'push', name: session_name, dsl: dsl, source_dir: session.source_dir) },
+          logger: ->(line) { warn(line) }
+        )
       end
 
       # Start the Unix socket server in a background thread
@@ -630,6 +647,17 @@ module StreamWeaver
         @unix_server&.close
       end
 
+      # Loads installed gems' extensions so their canvas_event_sink is registered in THIS
+      # (long-lived) process. A broken extension is logged, never fatal: the bridge must come up.
+      def self.discover_extensions!
+        result = StreamWeaver::Extensions.discover
+        Array(result.failures).each do |failure|
+          warn "canvas: extension #{failure.gem_name} failed to load: #{failure.error}"
+        end
+      rescue StandardError => e
+        warn "canvas: extension discovery failed: #{e.message}"
+      end
+
       # Start the full server (Unix socket + HTTP)
       def self.run!
         # Find available port before setup
@@ -637,6 +665,7 @@ module StreamWeaver
         set :port, @port
 
         setup!
+        discover_extensions!
         write_pid_file
         start_unix_socket_server
 

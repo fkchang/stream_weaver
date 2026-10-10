@@ -10,6 +10,10 @@ module StreamWeaver
     class Bridge
       DEFAULT_PORT = 4568
 
+      # Tells "the message did not mention reply_to" (leave it alone) apart from nil or "" (clear it).
+      NOT_GIVEN = Object.new.freeze
+      private_constant :NOT_GIVEN
+
       # Result of rendering DSL to HTML
       RenderResult = Struct.new(:html, :error, :stylesheets, keyword_init: true)
 
@@ -53,9 +57,10 @@ module StreamWeaver
       def handle_claude_message(message)
         case message[:type]
         when 'create'
-          handle_create(message[:name], layout: (message[:layout] || :fluid).to_sym, theme: (message[:theme] || :default).to_sym)
+          handle_create(message[:name], layout: (message[:layout] || :fluid).to_sym, theme: (message[:theme] || :default).to_sym,
+                        reply_to: message.fetch(:reply_to, NOT_GIVEN))
         when 'push'
-          handle_push(message[:name], message[:dsl], message[:source_dir])
+          handle_push(message[:name], message[:dsl], message[:source_dir], reply_to: message.fetch(:reply_to, NOT_GIVEN))
         when 'toast'
           handle_toast(message[:name], message[:message], message[:variant], message[:duration])
         when 'close'
@@ -102,8 +107,11 @@ module StreamWeaver
 
       private
 
-      def handle_create(name, layout: :fluid, theme: :default)
-        create_session(name, layout: layout, theme: theme)
+      # reply_to: NOT_GIVEN leaves an existing session's reply_to alone; any other value (nil and
+      # "" clear it) replaces it, including on a session that already exists.
+      def handle_create(name, layout: :fluid, theme: :default, reply_to: NOT_GIVEN)
+        session = create_session(name, layout: layout, theme: theme)
+        session.set_reply_to(reply_to) unless reply_to.equal?(NOT_GIVEN)
         {
           type: 'ready',
           name: name,
@@ -111,7 +119,7 @@ module StreamWeaver
         }
       end
 
-      def handle_push(name, dsl, source_dir = nil)
+      def handle_push(name, dsl, source_dir = nil, reply_to: NOT_GIVEN)
         session = get_session(name)
         return { type: 'error', message: "Session not found: #{name}" } unless session
 
@@ -136,6 +144,7 @@ module StreamWeaver
           session.set_dsl(dsl)
           session.set_stylesheets(result.stylesheets)
           session.set_source_dir(source_dir)
+          session.set_reply_to(reply_to) unless reply_to.equal?(NOT_GIVEN)
           { type: 'push_ok' }
         end
       end
@@ -169,7 +178,9 @@ module StreamWeaver
         session = get_session(name)
         return { type: 'error', message: "Session not found: #{name}" } unless session
 
-        { type: 'dsl', name: name, dsl: session.dsl, theme: session.theme, layout: session.layout }
+        response = { type: 'dsl', name: name, dsl: session.dsl, theme: session.theme, layout: session.layout }
+        response[:reply_to] = session.reply_to if session.reply_to
+        response
       end
 
       def handle_set_pane_id(name, pane_id)

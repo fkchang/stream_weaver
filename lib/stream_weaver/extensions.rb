@@ -19,13 +19,14 @@ module StreamWeaver
   module Extensions
     METADATA_KEY = 'stream_weaver.extensions.v1'
 
-    Extension = Struct.new(:id, :source, :course_provider, keyword_init: true)
+    Extension = Struct.new(:id, :source, :course_provider, :canvas_event_sink, keyword_init: true)
     Loader = Struct.new(:gem_name, :loader, keyword_init: true)
     Failure = Struct.new(:gem_name, :loader, :error, keyword_init: true)
     Discovery = Struct.new(:loaded, :failures, keyword_init: true)
 
     class DuplicateRegistrationError < StreamWeaver::Error; end
     class InvalidExtensionIdError < StreamWeaver::Error; end
+    class InvalidSinkError < StreamWeaver::Error; end
 
     @extensions = {}
     @loader_results = {}
@@ -93,7 +94,13 @@ module StreamWeaver
 
       # Registers an extension identity from a loader. IDs are global because
       # later extension points need one unambiguous owner for each provider.
-      def register(id, course_provider: nil)
+      # canvas_event_sink: a callable receiving one Canvas::EventSinks::Context for each browser
+      # event of a canvas session whose reply_to is "<this id>:<payload>" (see Canvas::EventSinks).
+      def register(id, course_provider: nil, canvas_event_sink: nil)
+        if canvas_event_sink && !canvas_event_sink.respond_to?(:call)
+          raise InvalidSinkError, "canvas_event_sink for #{id.inspect} must respond to #call"
+        end
+
         normalized_id = normalize_id(id)
         source = immutable_string(@current_source || 'application')
         existing = @extensions[normalized_id] || @staged_extensions&.fetch(normalized_id, nil)
@@ -108,8 +115,14 @@ module StreamWeaver
         registrations[normalized_id] = Extension.new(
           id: normalized_id,
           source: source,
-          course_provider: course_provider
+          course_provider: course_provider,
+          canvas_event_sink: canvas_event_sink
         ).freeze
+      end
+
+      # The sink registered by extension `id`, or nil (unknown id, or an extension without one).
+      def canvas_event_sink_for(id)
+        @extensions[id.to_s]&.canvas_event_sink
       end
 
       def registered?(id)
@@ -229,8 +242,8 @@ module StreamWeaver
       Extensions.discover
     end
 
-    def register_extension(id, course_provider: nil)
-      Extensions.register(id, course_provider: course_provider)
+    def register_extension(id, course_provider: nil, canvas_event_sink: nil)
+      Extensions.register(id, course_provider: course_provider, canvas_event_sink: canvas_event_sink)
     end
   end
 end

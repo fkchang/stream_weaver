@@ -26,3 +26,21 @@ streamweaver canvas-wait brainstorm
 One click, one `canvas-wait`, every answer back at once in `.state` — no round-tripping to the terminal per question.
 
 **Boundary case:** only bundle questions that are independent of each other. If a later question depends on an earlier answer (e.g. "which of these three do you like?" then, based on that pick, "what should we change about it?"), keep those sequential — push the first, wait for the answer, then push the second.
+
+## Answers that arrive later — use reply_to, not canvas-wait
+
+`canvas-wait` blocks you and expires. If the person may answer much later, push the form with
+`--reply-to` and END YOUR TURN; the click reaches its recipient with nothing left running. With the
+peerpressure extension installed (`gem install peerpressure`, then restart the bridge), the recipient
+is a session and the answer arrives as a message:
+
+```bash
+streamweaver canvas-push decision --reply-to "$(peer reply-to)" <<'RUBY'
+  radio_group :choice, ["A", "B"]
+  button "Send"
+RUBY
+# end your turn; do not poll the canvas
+```
+
+Details, limits and how to write a recipient extension: `docs/canvas-reply-to.md` in the StreamWeaver gem.
+

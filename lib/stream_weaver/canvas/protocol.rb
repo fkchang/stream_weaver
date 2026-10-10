@@ -40,16 +40,23 @@ module StreamWeaver
       # Message factory methods
       module Messages
         # Claude → Bridge: Create a new session
-        def self.create(name, layout: :fluid, theme: :default)
-          { type: 'create', name: name, layout: layout, theme: theme }
+        def self.create(name, layout: :fluid, theme: :default, reply_to: nil)
+          message = { type: 'create', name: name, layout: layout, theme: theme }
+          message[:reply_to] = reply_to unless reply_to.nil?
+          message
         end
 
         # Claude → Bridge: Push DSL content to session
+        # @param reply_to [String, nil] Opaque "<extension id>:<payload>" naming who
+        #   receives this session's browser events (see Session#reply_to). nil
+        #   leaves it unchanged; an empty string clears it. Also accepted by create.
         # @param source_dir [String, nil] Git root of the pushing side's cwd
         #   (DocStore.git_root(Dir.pwd) computed by the caller), or nil
         #   outside a repo. Not the bridge's own cwd -- see Session#source_dir.
-        def self.push(name, dsl, source_dir: nil)
-          { type: 'push', name: name, dsl: dsl, source_dir: source_dir }
+        def self.push(name, dsl, source_dir: nil, reply_to: nil)
+          message = { type: 'push', name: name, dsl: dsl, source_dir: source_dir }
+          message[:reply_to] = reply_to unless reply_to.nil?
+          message
         end
 
         # Claude → Bridge: Close a session

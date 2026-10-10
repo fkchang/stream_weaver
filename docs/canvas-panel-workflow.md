@@ -28,13 +28,15 @@ streamweaver canvas-close myapp
 | Command | Description |
 |---------|-------------|
 | `panel <name> [--fresh]` | Open split pane with browser. `--fresh` closes existing session first |
-| `canvas-push <name>` | Push DSL content from stdin |
+| `canvas-push <name> [--reply-to EXT:PAYLOAD]` | Push DSL content from stdin. `--reply-to` also sends the canvas's events to an installed extension, so a form never has to be waited on ([reply_to](canvas-reply-to.md)) |
 | `canvas-wait <name>` | Block until user clicks a button, returns form state as JSON |
 | `canvas-toast <name> <msg>` | Show toast notification overlay |
 | `canvas-close <name>` | Close session and browser pane |
 | `canvas-raise <name>` | Surface an already-open session without opening a second pane: activates its tracked iTerm pane, or opens its URL in the default browser if there is none to reuse |
 | `canvas-reset <name>` | Reset session state (keep connections) |
 | `canvas-list` | List all canvas sessions |
+
+Prefer `reply_to` over `canvas-wait` or a hand-built listener when the person may answer minutes or hours later, or when a click should reach a recipient (an agent session, say) with nothing left running. See [canvas-reply-to.md](canvas-reply-to.md).
 
 ## Upgrading StreamWeaver under a running bridge
 
