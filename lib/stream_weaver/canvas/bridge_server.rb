@@ -4,6 +4,7 @@ require 'sinatra/base'
 require 'json'
 require 'socket'
 require 'fileutils'
+require_relative 'allowed_hosts'
 require_relative 'protocol'
 require_relative 'code_stamp'
 require_relative 'scroll_top_hint'
@@ -80,6 +81,24 @@ module StreamWeaver
             end
           end
         end
+      end
+
+      # Host gate (AllowedHosts: loopback plus STREAMWEAVER_CANVAS_ALLOWED_HOSTS),
+      # always on and identical to the reader's. Replaces Rack's
+      # host_authorization, which only runs in development and cannot be
+      # configured per request.
+      set :host_authorization, { permitted_hosts: [] }
+
+      # A cross-site page can POST to the bridge with a legitimate Host, so
+      # state-changing requests also need a browser-set Sec-Fetch-Site of
+      # same-origin/none (absent = curl or an old browser, allowed, as in the
+      # reader). GETs are exempt: following a canvas link from another site
+      # is cross-site and must keep working.
+      before do
+        halt 403, 'Host not permitted' unless AllowedHosts.permitted?(request.env['HTTP_HOST'])
+
+        site = request.env['HTTP_SEC_FETCH_SITE']
+        halt 403, 'Forbidden' if !request.get? && site && !%w[same-origin none].include?(site)
       end
 
       # Initialize bridge on first request

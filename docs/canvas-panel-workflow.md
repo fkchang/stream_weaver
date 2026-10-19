@@ -44,6 +44,20 @@ Two things it deliberately will not do. It never restarts twice within a minute:
 
 Set `SW_NO_AUTO_RESTART=1` to be warned instead of healed everywhere; the command then continues against the old bridge.
 
+## Reaching the bridge from your phone (tailnet)
+
+The bridge listens on `127.0.0.1:4700` and answers only loopback `Host` headers, so a proxy such as `tailscale serve` gets `403 Host not permitted` until you name the hosts it will present. Name them in `STREAMWEAVER_CANVAS_ALLOWED_HOSTS` (comma separated, host part only, no port) in the environment the bridge starts in, or, better because it survives an automatic bridge restart from a shell without the variable, one host per line in `~/.streamweaver/canvas_allowed_hosts` (`#` comments allowed; both are unioned). Then restart the bridge with `streamweaver canvas-restart` (snapshot, stop, start, restore: sessions keep their content):
+
+```bash
+export STREAMWEAVER_CANVAS_ALLOWED_HOSTS=mac.tailnet-name.ts.net,mac,100.64.0.7
+tailscale serve --bg --https=8445 http://127.0.0.1:4700   # tailnet only, not funnel
+# phone: https://mac.tailnet-name.ts.net:8445/canvas/<session>
+```
+
+Default (unset or empty) is loopback only, exactly as before. Matching is exact on the host (case-insensitive, port ignored); an empty `Host` and wildcard entries are ignored, never allowed. The same setting governs the reader (`canvas-read`), so both servers agree. The decision uses the raw `Host` header, not `X-Forwarded-Host`. The browser `Sec-Fetch-Site` check stays on the reader and now also guards the bridge's POST routes (events, save-doc, shutdown): the https proxy is same-origin to the page, so it passes, while a page from another site cannot post to the bridge. Edits to the file take effect on the next request; the env var needs a bridge restart. An entry is a bare host (no wildcard, no leading-dot subdomain syntax). Canvas pages use relative URLs for polling and events, so they work under whatever origin served them.
+
+**Security:** the bridge accepts pushed content and relays canvas actions (button clicks) to the agent sessions listening for them. Exposing it means every device on that tailnet can do both. Only add hosts on a tailnet you fully trust, and never proxy it through a public funnel. The setting also opens the reader, whose `/open` evaluates the `.rb` file it is given, so do not proxy the reader onto the tailnet unless you accept that every tailnet device can run code on this machine.
+
 ## Multi-Step Workflows
 
 Use `canvas_continue` to show a spinner after submit instead of "You can close this window":

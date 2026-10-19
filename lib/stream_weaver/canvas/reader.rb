@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'cgi'
+require_relative 'allowed_hosts'
 require 'json'
 require 'socket'
 require 'sinatra/base'
@@ -213,6 +214,9 @@ module StreamWeaver
         set :bind,    '127.0.0.1'
         set :server,  :puma
         set :logging, false
+        # The Host gate below (AllowedHosts) owns this decision; Rack's own
+        # would refuse a configured tailnet host first, with a different answer.
+        set :host_authorization, { permitted_hosts: [] }
       end
 
       # What Reader.render_doc hands the layout template: the rendered HTML
@@ -456,7 +460,7 @@ module StreamWeaver
       #   be worse than the residual risk from a browser old enough to omit
       #   Fetch Metadata.
       before do
-        halt 403, 'Forbidden' unless %w[127.0.0.1 localhost].include?(request.host)
+        halt 403, 'Forbidden' unless AllowedHosts.permitted?(request.env['HTTP_HOST'])
 
         site = request.env['HTTP_SEC_FETCH_SITE']
         halt 403, 'Forbidden' if site && !%w[same-origin none].include?(site)

@@ -23,12 +23,16 @@ ENV['RACK_ENV'] = 'test'
 require "stream_weaver"
 require "stream_weaver/university/listener"
 
-# Canvas::Reader's `before` filter (stream_weaver-rdh) checks request.host
-# against 127.0.0.1/localhost -- a real security boundary for /open, which
+# Canvas::Reader's and BridgeServer's `before` filters check the raw Host
+# header through Canvas::AllowedHosts (loopback + the allowed-hosts setting) -- a real security boundary for /open, which
 # evaluates the .rb file it's handed. Rack::Test's own default host is
 # "example.org", which every Rack::Test-driven Reader/BridgeServer spec
 # would otherwise get 403'd against. Overridden globally here rather than
 # passing a host on every request across dozens of spec files.
+# The developer's real ~/.streamweaver/canvas_allowed_hosts must not leak in.
+ENV['STREAMWEAVER_CANVAS_ALLOWED_HOSTS_FILE'] = '/nonexistent/canvas_allowed_hosts'
+ENV.delete('STREAMWEAVER_CANVAS_ALLOWED_HOSTS')
+
 require 'rack/test'
 Rack::Test.send(:remove_const, :DEFAULT_HOST)
 Rack::Test::DEFAULT_HOST = '127.0.0.1'
