@@ -344,6 +344,8 @@ module StreamWeaver
               #{initial_content}
             </div>
             #{save_doc_widget(session_name, session)}
+            <!-- Comment overlay: outside #app-container so the poll swap cannot remove it or an open composer -->
+            <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-canvas-notes.js'), encoding: 'UTF-8')}</script>
             <script>
               #{polling_script(session_name, session.html_version)}
             </script>
