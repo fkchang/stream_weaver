@@ -1075,6 +1075,8 @@ For comprehensive reference, see these docs:
 | `docs/streamweaver-frontend-vision.md` | Strategic direction: htmx + Alpine + Idiomorph as a Hotwire-equivalent stack for Ruby devs |
 | `docs/porting-artifacts.md` | Porting a claude.ai Artifact into StreamWeaver at visual parity: dissect, gap-assess, port, verify, promote |
 | `docs/shared-dsl-fragments.md` | Two or more docs for different audiences sharing ONE canonical copy of a table via an `instance_eval`'d fragment file, so they cannot drift — includes the per-mode `__dir__` truth table (export and canvas-read pass a filename to `instance_eval`; org-export and the canvas-push bridge do not) |
+| `docs/canvas-agent-channels.md` | The five ways a canvas click reaches an agent (`canvas-wait`, a hand-built listener, the University runner, the peerpressure relay, `reply_to`), what each loses, and a 10-second chooser. Read before building any canvas the person answers over time |
+| `docs/university/co-edit-loop.md` | The form-to-document loop (a picker form under a doc; the agent adds the answer as a section and re-pushes), with the rules each UAT round taught. Read before building any canvas doc an agent edits from a person's input |
 | `docs/tutorials/the-streamweaver-way.md` | **Tutorial** — "Build My Todos: the StreamWeaver Way": the four benchmark features rebuilt step by step, each naming its law, its gotcha, and its measured number. The narrated twin of the `streamweaver-way` skill |
 
 ## Live Streaming with `every` Timers
