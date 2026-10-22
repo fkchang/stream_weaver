@@ -66,6 +66,12 @@ module StreamWeaver
           { type: 'get_dsl', name: name }
         end
 
+        # Claude → Bridge: take (read and clear) the viewer notes on one
+        # session, or on every session that has any when name is nil.
+        def self.drain_notes(name = nil)
+          { type: 'drain_notes', name: name }
+        end
+
         # Claude → Bridge: Set iTerm pane ID for a session
         def self.set_pane_id(name, pane_id)
           { type: 'set_pane_id', name: name, pane_id: pane_id }
