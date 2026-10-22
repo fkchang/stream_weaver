@@ -249,6 +249,31 @@ module StreamWeaver
         { success: true }.to_json
       end
 
+      NOTE_MAX_TEXT = 2 * 1024
+      NOTE_MAX_BODY = 16 * 1024
+      NOTE_FIELDS = %i[text selected_text element_text breadcrumb kind index].freeze
+
+      # A viewer comment on the live page. Held on the session until the agent
+      # drains it (canvas-notes). Deliberately NOT routed through
+      # forward_to_claude: a note pushed to socket clients could be read as the
+      # response to an in-flight request (Client#send_message takes the first
+      # message), and nothing should wake on it.
+      post '/canvas/:name/note' do
+        content_type :json
+        session = self.class.bridge.get_session(params[:name])
+        halt 404, { error: 'Session not found' }.to_json unless session
+
+        raw = request.body.read(NOTE_MAX_BODY + 1).to_s
+        halt 413, { error: 'Note body too large' }.to_json if raw.bytesize > NOTE_MAX_BODY
+
+        body = JSON.parse(raw, symbolize_names: true) rescue nil
+        halt 422, { error: 'Invalid note' }.to_json unless body.is_a?(Hash) && body[:text].is_a?(String) && !body[:text].strip.empty?
+        halt 413, { error: 'Note text too large' }.to_json if body[:text].bytesize > NOTE_MAX_TEXT
+
+        note = body.slice(*NOTE_FIELDS)
+        { ok: true, count: session.add_note(note) }.to_json
+      end
+
       private
 
       def render_canvas_page(session_name, session)

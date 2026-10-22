@@ -27,6 +27,7 @@ module StreamWeaver
         @stylesheets = []
         @source_dir = nil
         @pending_toasts = []
+        @pending_notes = []
         @pane_id = nil
         @mutex = Mutex.new
       end
@@ -111,6 +112,25 @@ module StreamWeaver
           toasts = @pending_toasts.dup
           @pending_toasts.clear
           toasts
+        end
+      end
+
+      # Hold a viewer comment until the agent drains it. Notes never touch
+      # websockets or event sinks; they wait here for the drain_notes command.
+      # @return [Integer] pending note count after the append
+      def add_note(note)
+        @mutex.synchronize do
+          @pending_notes << note
+          @pending_notes.size
+        end
+      end
+
+      # Return all pending notes and clear them in one locked step.
+      def drain_notes
+        @mutex.synchronize do
+          notes = @pending_notes
+          @pending_notes = []
+          notes
         end
       end
 

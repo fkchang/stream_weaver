@@ -62,6 +62,8 @@ module StreamWeaver
           handle_close(message[:name])
         when 'get_dsl'
           handle_get_dsl(message[:name])
+        when 'drain_notes'
+          handle_drain_notes(message[:name])
         when 'set_pane_id'
           handle_set_pane_id(message[:name], message[:pane_id])
         when 'reset'
@@ -170,6 +172,21 @@ module StreamWeaver
         return { type: 'error', message: "Session not found: #{name}" } unless session
 
         { type: 'dsl', name: name, dsl: session.dsl, theme: session.theme, layout: session.layout }
+      end
+
+      # Drain viewer comments (canvas-notes). A name drains that session; no
+      # name drains every session that has notes. Each session's read-and-clear
+      # is one locked step, so concurrent drains never share a note.
+      def handle_drain_notes(name)
+        if name
+          session = get_session(name)
+          return { type: 'error', message: "Session not found: #{name}" } unless session
+
+          return { type: 'notes', notes: { name => session.drain_notes } }
+        end
+
+        notes = @sessions.values.to_h { |s| [s.name, s.drain_notes] }.reject { |_, v| v.empty? }
+        { type: 'notes', notes: notes }
       end
 
       def handle_set_pane_id(name, pane_id)
