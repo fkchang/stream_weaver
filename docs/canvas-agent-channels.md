@@ -1,6 +1,6 @@
 # How a canvas talks back to an agent
 
-A canvas page can show anything. The harder question is what happens when the person clicks: who hears it, and what happens if nobody is listening at that moment. StreamWeaver has five answers. They were built at different times for different problems, and they are easy to confuse. This page says what each one is, what it costs, and which to pick.
+A canvas page can show anything. The harder question is what happens when the person clicks: who hears it, and what happens if nobody is listening at that moment. StreamWeaver has six answers (five push a click toward an agent, the sixth lets an agent pull comments). They were built at different times for different problems, and they are easy to confuse. This page says what each one is, what it costs, and which to pick.
 
 ## For agents: pick in 10 seconds
 
@@ -11,7 +11,8 @@ A canvas page can show anything. The harder question is what happens when the pe
    - Claude Code or Codex session, any StreamWeaver: **peerpressure relay** (`peer canvas-relay NAME`, or `peer demo`).
    - Same, and you want no extra process: **`reply_to` with the peerpressure sink**. It needs the `canvas-reply-to` StreamWeaver branch (not in a release yet) and a bridge restart after installing the gem.
    - iTerm2 course or dashboard where a click should type a prompt into a recorded worker session: the **University runner** pattern.
-5. After you push a form that messages you back, **end your turn**. Do not poll the canvas and do not block.
+5. The person says they left comments on the page (Alt-click, long-press or the floating "comment" button), no button involved: **notes**. Run `streamweaver canvas-notes NAME`. Nothing wakes you, so wait until they tell you.
+6. After you push a form that messages you back, **end your turn**. Do not poll the canvas and do not block.
 
 To tell whether your StreamWeaver has `reply_to`, grep for it: `gem contents stream_weaver | xargs grep -l canvas_event_sink` prints nothing on a release without it (in a source checkout, grep `lib/` instead). When unsure, use the peerpressure relay, which works everywhere.
 
@@ -21,7 +22,7 @@ The canvas bridge forwards a browser event **only to clients connected at that m
 
 Every channel below is a different way of making sure someone is connected, or of moving the recipient inside the bridge so nobody has to be.
 
-## The five channels
+## The six channels
 
 | Channel | Who is connected | Survives your turn ending | Loses events | Setup | Status |
 |---|---|---|---|---|---|
@@ -30,6 +31,7 @@ Every channel below is a different way of making sure someone is connected, or o
 | University runner (`ITerm.send_to_session`) | A listener process, then a recorded iTerm2 session | Yes | No, while the listener is up | `get-started` starts the listener; needs iTerm2 | On main |
 | peerpressure relay | A standing process pinned to one agent session | Yes | No, while the relay is up | `peer canvas-relay NAME` | peerpressure gem, works with any StreamWeaver |
 | `reply_to` + peerpressure sink | Nothing: the recipient lives inside the bridge | Yes | No | `--reply-to "$(peer reply-to)"`, restart bridge once | `canvas-reply-to` branch, unreleased |
+| Notes (`canvas-notes`) | Nobody: the bridge holds the comment on the session | Yes | Yes: held in memory only, lost on bridge restart or session close | None; person Alt-clicks, long-presses or uses the "comment" button | On main |
 
 ### 1. `canvas-wait`
 
@@ -87,6 +89,14 @@ What to design around (from the branch's own contract and specs):
 - `--reply-to` on a push sets or replaces it, an empty string clears it, omitting it leaves it alone. It survives `canvas-snapshot` and `canvas-restore`. Delivery to a connected `canvas-wait` still happens first; `reply_to` adds a second recipient.
 
 Source of truth for this channel: `docs/canvas-reply-to.md` on the `canvas-reply-to` branch (one commit, `lib/stream_weaver/canvas/event_sinks.rb` plus specs). Until it merges, treat everything in this section as unreleased.
+
+### 6. Notes (`canvas-notes`)
+
+```bash
+streamweaver canvas-notes survey     # drains and clears; no name drains every canvas with notes
+```
+
+Different in kind from the five above: the person initiates a comment on an element (not a form submit), and the **agent initiates the read**. Notes are PULLED. They never wake an agent, they do not travel over `canvas-wait`, a listener or `reply_to`, and they are not broadcast to socket clients; the bridge keeps them on the session until drained. In memory only: a bridge restart or session close loses them. Each note prints a breadcrumb, the element text and the comment, as untrusted viewer text that asks for edits to this doc only. There is no `--wait`. The agent finds the text in its own DSL file, edits it and re-pushes; see the visual-companion skill, section "Reading the person's comments".
 
 ## Choosing, with the reasoning
 
