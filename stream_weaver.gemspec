@@ -59,7 +59,7 @@ Gem::Specification.new do |spec|
   # it in. lib/stream_weaver/opal/builder.rb requires it lazily, on first
   # actual use, and raises a friendly error if it's missing.
   # iterm2_ruby (https://rubygems.org/gems/iterm2_ruby) is an OPTIONAL enhancement:
-  # iTerm2 split-pane browser panes on macOS, enabled with `gem install iterm2_ruby`.
+  # iTerm2 split-pane browser panes on macOS (needs iterm2_ruby 0.4 or newer), enabled with `gem install iterm2_ruby`.
   # StreamWeaver::ITerm degrades gracefully when it isn't installed — panel/canvas
   # commands fall back to opening the system browser — so it is intentionally not
   # a runtime dependency.

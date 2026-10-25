@@ -53,64 +53,126 @@ RSpec.describe StreamWeaver::ITerm do
     end
   end
 
-  # Checked the same way iTerm2 itself locates the plugin (bundle
-  # identifier via Launch Services/Spotlight), not a fixed path -- no
-  # Python API connection involved at all.
-  describe '.browser_plugin_available?' do
-    it 'is true when mdfind finds the plugin by bundle identifier' do
-      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'darwin23'))
-      allow(described_class).to receive(:`).and_return("/Applications/iTermBrowserPlugin.app\n")
+# The probes live in ITerm2::Browser (iterm2_ruby 0.4+); this class only
+# delegates. No mdfind or defaults shelling out happens here any more.
+describe '.browser_plugin_available?' do
+  it 'delegates to ITerm2::Browser.plugin_installed?' do
+    allow(ITerm2::Browser).to receive(:plugin_installed?).and_return(true)
+    expect(described_class.browser_plugin_available?).to be(true)
 
-      expect(described_class.browser_plugin_available?).to be(true)
-    end
-
-    it 'is false when mdfind finds nothing' do
-      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'darwin23'))
-      allow(described_class).to receive(:`).and_return("")
-
-      expect(described_class.browser_plugin_available?).to be(false)
-    end
-
-    it 'is false on non-macOS hosts, without even shelling out' do
-      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'linux-gnu'))
-      allow(described_class).to receive(:`)
-
-      expect(described_class.browser_plugin_available?).to be(false)
-      expect(described_class).not_to have_received(:`)
-    end
-
-    it 'is false rather than raising when mdfind blows up' do
-      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'darwin23'))
-      allow(described_class).to receive(:`).and_raise(Errno::ENOENT)
-
-      expect(described_class.browser_plugin_available?).to be(false)
-    end
+    allow(ITerm2::Browser).to receive(:plugin_installed?).and_return(false)
+    expect(described_class.browser_plugin_available?).to be(false)
   end
 
-  # "Enable browser-style profiles" (Settings -> Advanced -> Experimental
-  # Features) ships enabled -- an unset preference (the common case) must
-  # read as enabled, not disabled.
-  describe '.browser_style_profiles_enabled?' do
-    it 'is true when the preference is unset (the default, common case)' do
-      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'darwin23'))
-      allow(described_class).to receive(:`).and_return("")
+  it 'is false rather than raising when the gem probe blows up' do
+    allow(ITerm2::Browser).to receive(:plugin_installed?).and_raise(Errno::ENOENT)
 
-      expect(described_class.browser_style_profiles_enabled?).to be(true)
-    end
-
-    it 'is false only when the preference is explicitly "0"' do
-      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'darwin23'))
-      allow(described_class).to receive(:`).and_return("0\n")
-
-      expect(described_class.browser_style_profiles_enabled?).to be(false)
-    end
-
-    it 'is false on non-macOS hosts' do
-      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'linux-gnu'))
-
-      expect(described_class.browser_style_profiles_enabled?).to be(false)
-    end
+    expect(described_class.browser_plugin_available?).to be(false)
   end
+
+  it 'does not shell out itself' do
+    allow(ITerm2::Browser).to receive(:plugin_installed?).and_return(true)
+    allow(described_class).to receive(:`)
+
+    described_class.browser_plugin_available?
+
+    expect(described_class).not_to have_received(:`)
+  end
+
+  it 'does not claim the plugin is missing when the gem predates ITerm2::Browser' do
+    hide_const('ITerm2::Browser')
+
+    expect(described_class.browser_plugin_available?).to be(true)
+  end
+end
+
+describe '.browser_style_profiles_enabled?' do
+  it 'delegates to ITerm2::Browser.profiles_enabled?' do
+    allow(ITerm2::Browser).to receive(:profiles_enabled?).and_return(false)
+    expect(described_class.browser_style_profiles_enabled?).to be(false)
+
+    allow(ITerm2::Browser).to receive(:profiles_enabled?).and_return(true)
+    expect(described_class.browser_style_profiles_enabled?).to be(true)
+  end
+
+  it 'is true (do not block) when the gem probe blows up' do
+    allow(ITerm2::Browser).to receive(:profiles_enabled?).and_raise(RuntimeError)
+
+    expect(described_class.browser_style_profiles_enabled?).to be(true)
+  end
+
+  it 'does not block when the gem predates ITerm2::Browser' do
+    hide_const('ITerm2::Browser')
+
+    expect(described_class.browser_style_profiles_enabled?).to be(true)
+  end
+end
+
+describe '.current_session_guid' do
+  it 'delegates to ITerm2.current_session_id' do
+    allow(described_class).to receive(:available?).and_return(true)
+    allow(ITerm2).to receive(:current_session_id).and_return('abc')
+
+    expect(described_class.current_session_guid).to eq('abc')
+  end
+
+  it 'is nil when the gem is unavailable' do
+    allow(described_class).to receive(:available?).and_return(false)
+
+    expect(described_class.current_session_guid).to be_nil
+  end
+end
+
+describe 'browser panes with an iterm2_ruby older than 0.4' do
+  let(:client) { instance_double(ITerm2::Client) }
+
+  before do
+    allow(described_class).to receive(:available?).and_return(true)
+    allow(ITerm2).to receive(:connect).and_yield(client)
+    allow(described_class).to receive(:current_session_guid).and_return('calling')
+    allow(described_class).to receive(:browser_split_supported?).and_return(false)
+    allow(described_class).to receive(:system)
+    allow(ENV).to receive(:[]).and_call_original
+    allow(ENV).to receive(:[]).with("SW_NO_OPEN").and_return(nil)
+  end
+
+  it 'split_vertical_with_url falls back to the system browser, says 0.4 is needed, and never raises' do
+    result = nil
+    expect { result = described_class.split_vertical_with_url('http://x/c') }
+      .to output(/iterm2_ruby 0\.4 or newer/).to_stderr
+
+    expect(result).to eq(type: :external, pane_id: nil)
+    expect(described_class).to have_received(:system).with('open', 'http://x/c')
+  end
+
+  it 'open_browser_window returns nil and records why' do
+    allow(client).to receive(:create_tab).and_return(session_id: 's', window_id: 'w')
+    allow(client).to receive(:close_session)
+    allow(client).to receive(:set_window_frame)
+
+    expect(described_class.open_browser_window('http://x/c')).to be_nil
+    expect(described_class.last_error.message).to match(/0\.4/)
+  end
+end
+
+describe 'fallbacks outside iTerm' do
+  it 'opens the system browser when the gem is unavailable (unchanged)' do
+    allow(described_class).to receive(:available?).and_return(false)
+
+    expect(described_class.split_vertical_with_url('http://x/c')).to eq(type: nil, pane_id: nil)
+  end
+
+  it 'opens the system browser when the split yields no pane (unchanged)' do
+    allow(described_class).to receive(:available?).and_return(true)
+    allow(described_class).to receive(:current_session_guid).and_return(nil)
+    allow(described_class).to receive(:system)
+    allow(ENV).to receive(:[]).and_call_original
+    allow(ENV).to receive(:[]).with("SW_NO_OPEN").and_return(nil)
+
+    expect(described_class.split_vertical_with_url('http://x/c')).to eq(type: :external, pane_id: nil)
+    expect(described_class).to have_received(:system).with('open', 'http://x/c')
+  end
+end
 
   describe '.open_worker_tab' do
     # A new iTerm2 tab starts in $HOME, not the caller's cwd -- regression
@@ -625,7 +687,7 @@ RSpec.describe StreamWeaver::ITerm do
       allow(ITerm2).to receive(:connect).and_yield(client)
       allow(client).to receive(:create_tab)
         .and_return(session_id: 'shell-1', window_id: 'win-new', tab_id: 'tab-1')
-      allow(client).to receive(:split_pane).and_return('browser-1')
+      allow(client).to receive(:split_browser_pane).and_return('browser-1')
       allow(client).to receive(:close_session).and_return(true)
       allow(client).to receive(:set_window_frame)
     end
@@ -641,9 +703,8 @@ RSpec.describe StreamWeaver::ITerm do
     it 'puts the browser in that window, pointed at the url' do
       described_class.open_browser_window('http://example/canvas/university')
 
-      expect(client).to have_received(:split_pane).with(
-        'shell-1', vertical: true,
-        profile_customizations: { 'Custom Command' => 'Browser', 'Initial URL' => 'http://example/canvas/university' }
+      expect(client).to have_received(:split_browser_pane).with(
+        'shell-1', 'http://example/canvas/university', vertical: true
       )
     end
 
@@ -668,14 +729,14 @@ RSpec.describe StreamWeaver::ITerm do
     # The real client RAISES on a failed split; it returns nil only for an
     # OK response carrying no session. Both mean the same thing here.
     it 'takes the window down with it when the browser split raises' do
-      allow(client).to receive(:split_pane).and_raise(ITerm2::Error, 'boom')
+      allow(client).to receive(:split_browser_pane).and_raise(ITerm2::Error, 'boom')
 
       expect(described_class.open_browser_window('http://example/canvas')).to be_nil
       expect(client).to have_received(:close_session).with('shell-1', force: true)
     end
 
     it 'takes the window down with it when the browser split returns nothing' do
-      allow(client).to receive(:split_pane).and_return(nil)
+      allow(client).to receive(:split_browser_pane).and_return(nil)
 
       expect(described_class.open_browser_window('http://example/canvas')).to be_nil
       expect(client).to have_received(:close_session).with('shell-1', force: true)
@@ -699,7 +760,7 @@ RSpec.describe StreamWeaver::ITerm do
     # silent nil this method returned before -- regression coverage for
     # the swallowed-exception bug a fresh-macOS field report surfaced.
     it 'records the underlying exception in last_error when the browser split raises' do
-      allow(client).to receive(:split_pane).and_raise(ITerm2::RPCError, 'SplitPane failed: BAD_REQUEST')
+      allow(client).to receive(:split_browser_pane).and_raise(ITerm2::RPCError, 'SplitPane failed: BAD_REQUEST')
 
       described_class.open_browser_window('http://example/canvas')
 
@@ -716,11 +777,11 @@ RSpec.describe StreamWeaver::ITerm do
     end
 
     it 'clears last_error on a call that succeeds' do
-      allow(client).to receive(:split_pane).and_raise(ITerm2::Error, 'boom')
+      allow(client).to receive(:split_browser_pane).and_raise(ITerm2::Error, 'boom')
       described_class.open_browser_window('http://example/canvas')
       expect(described_class.last_error).not_to be_nil
 
-      allow(client).to receive(:split_pane).and_return('browser-1')
+      allow(client).to receive(:split_browser_pane).and_return('browser-1')
       described_class.open_browser_window('http://example/canvas')
 
       expect(described_class.last_error).to be_nil
@@ -777,28 +838,26 @@ RSpec.describe StreamWeaver::ITerm do
 
     it 'splits the given target_session, not the calling session, when target_session is passed' do
       allow(described_class).to receive(:current_session_guid).and_return('calling-session-guid')
-      allow(client).to receive(:split_pane).and_return('canvas-pane-1')
+      allow(client).to receive(:split_browser_pane).and_return('canvas-pane-1')
 
       result = described_class.split_vertical_with_url(
         'http://example/canvas', open_browser: false, target_session: 'worker-session-guid'
       )
 
-      expect(client).to have_received(:split_pane).with(
-        'worker-session-guid', vertical: true,
-        profile_customizations: { 'Custom Command' => 'Browser', 'Initial URL' => 'http://example/canvas' }
+      expect(client).to have_received(:split_browser_pane).with(
+        'worker-session-guid', 'http://example/canvas', vertical: true
       )
       expect(result).to eq(type: :browser, pane_id: 'canvas-pane-1')
     end
 
     it 'falls back to current_session_guid when target_session is not given (original panel behavior)' do
       allow(described_class).to receive(:current_session_guid).and_return('calling-session-guid')
-      allow(client).to receive(:split_pane).and_return('some-pane')
+      allow(client).to receive(:split_browser_pane).and_return('some-pane')
 
       described_class.split_vertical_with_url('http://example/canvas', open_browser: false)
 
-      expect(client).to have_received(:split_pane).with(
-        'calling-session-guid', vertical: true,
-        profile_customizations: { 'Custom Command' => 'Browser', 'Initial URL' => 'http://example/canvas' }
+      expect(client).to have_received(:split_browser_pane).with(
+        'calling-session-guid', 'http://example/canvas', vertical: true
       )
     end
   end

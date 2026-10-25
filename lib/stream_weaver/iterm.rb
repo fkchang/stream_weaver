@@ -8,41 +8,6 @@ module StreamWeaver
   # (`gem install iterm2_ruby` — https://rubygems.org/gems/iterm2_ruby).
   # Falls back to system browser when iTerm2 API is unavailable.
   class ITerm
-    # A pane renders a web view instead of a shell when its profile's
-    # "Custom Command" property is the literal string "Browser" -- this is
-    # exactly how iTerm2's own built-in "Web Browser" profile is defined
-    # (confirmed by reading it out of `defaults read com.googlecode.iterm2
-    # "New Bookmarks"`). Passing it as a profile_customizations override on
-    # split_pane/create_tab produces a genuine browser pane from ANY base
-    # profile -- verified live (title came back as the loaded page's own
-    # <title>, not a shell prompt) -- so nothing here depends on a
-    # "Web Browser" profile actually being installed. A fresh macOS/iTerm2
-    # install with only "Default" in its profile list works identically.
-    #
-    # This still needs iTerm2's own browser feature to be usable, which
-    # (per iterm2.com/documentation-preferences-profiles-general.html) is
-    # gated on TWO things this override cannot bypass: the separately
-    # downloaded Browser Plugin (browser_plugin_available? below), and the
-    # "Enable browser-style profiles" Advanced setting (enabled by default;
-    # browser_style_profiles_enabled? below). The live verification above
-    # ran on a machine with both already satisfied -- a fresh install
-    # lacking the plugin needs it installed regardless of this override.
-    BROWSER_TYPE_PROPERTY = { "Custom Command" => "Browser" }.freeze
-
-    # iTerm2's bundle identifier for its own separately-downloaded Browser
-    # Plugin (iterm2.com/browser-plugin.html: unzip into /Applications,
-    # "you don't need to run it; iTerm2 will locate it automatically").
-    # Matches the plugin's own Info.plist CFBundleIdentifier, confirmed on
-    # a machine that has it installed.
-    BROWSER_PLUGIN_BUNDLE_ID = "com.googlecode.iterm2.iTermBrowserPlugin"
-
-    # The Advanced setting's persisted preference key (found in the app
-    # binary's strings: "advancedSettingsModelDictionary_browserProfiles" /
-    # "browserProfilesUserDefaultsKey", labeled in Settings → Advanced as
-    # "Experimental Features: Enable browser-style profiles?"). Unset on a
-    # machine that has never touched it -- iTerm2 defaults it to enabled.
-    BROWSER_STYLE_PROFILES_PREF_KEY = "browserProfiles"
-
     # Default window frames (points) for the two windows this class ever
     # creates from scratch -- the University controller (narrow, tall) and a
     # worker tab that couldn't inherit the caller's window (wide, short).
@@ -54,6 +19,8 @@ module StreamWeaver
     # everything between these two sequences as one pasted block and takes
     # the block whole, rather than interpreting each byte as it arrives --
     # which is what lets the Return that follows read as a keypress.
+    GEM_TOO_OLD_MESSAGE = "StreamWeaver: browser panes need iterm2_ruby 0.4 or newer (gem update iterm2_ruby); using the system browser."
+
     PASTE_START = "\e[200~"
     PASTE_END = "\e[201~"
 
@@ -63,21 +30,15 @@ module StreamWeaver
         @available = check_availability
       end
 
-      # iTerm2's real value always has the shape "w0t0p0:<UUID>" -- the part
-      # after the colon is the session id every RPC in this file actually
-      # wants. A value with no colon at all (missing entirely, or garbled by
-      # something outside iTerm2) is never that shape, so it returns nil
-      # rather than passing the raw, meaningless string through as if it
-      # were a real session id (code review, round-9 UAT: `focus-me` calls
-      # this blind on every course prompt and must never mistake garbage
-      # for a target).
-      def current_session_guid
-        raw = ENV["ITERM_SESSION_ID"]
-        return nil unless raw&.include?(":")
+# The calling pane's session id, found by the gem (ITerm2.current_session_id);
+# nil outside iTerm2, when ITERM_SESSION_ID is garbled, or with the gem
+# absent. `focus-me` calls this blind on every course prompt and must
+# never mistake garbage for a target.
+def current_session_guid
+  return nil unless available?
 
-        guid = raw.split(":", 2).last
-        guid.empty? ? nil : guid
-      end
+  ITerm2.current_session_id
+end
 
       # True only when the user is inside iTerm2 on macOS but the optional gem
       # isn't installed — the one case where a "gem install iterm2_ruby" hint
@@ -88,44 +49,29 @@ module StreamWeaver
           !ENV["ITERM_SESSION_ID"].to_s.empty?
       end
 
-      # True when iTerm2's Browser Plugin is installed -- checked the same
-      # way iTerm2 itself locates it (by bundle identifier via Launch
-      # Services/Spotlight, not a fixed path), so this is accurate
-      # regardless of which folder the user unzipped it into. Needs no
-      # Python API connection at all -- darwin-only, since mdfind is a
-      # macOS tool. False on any doubt (not darwin, mdfind missing/erroring,
-      # timeout), same spirit as every other probe in this file.
-      def browser_plugin_available?
-        return false unless RbConfig::CONFIG["host_os"].match?(/darwin/)
+# Browser-plugin and browser-profile checks belong to ITerm2::Browser
+# (iterm2_ruby 0.4+). On a gem too old to have it they report "fine" so
+# callers do not print a wrong "install the plugin" message; the split
+# itself then falls back with the "needs 0.4" notice.
+def browser_plugin_available?
+  return true unless defined?(ITerm2::Browser)
 
-        with_timeout(5, default: false) do
-          out = `mdfind "kMDItemCFBundleIdentifier == '#{BROWSER_PLUGIN_BUNDLE_ID}'" 2>/dev/null`
-          !out.strip.empty?
-        end
-      rescue StandardError
-        false
-      end
+  ITerm2::Browser.plugin_installed?
+rescue StandardError
+  false
+end
 
-      # True unless the user has explicitly turned off iTerm2's "Enable
-      # browser-style profiles" Advanced setting -- an "Experimental
-      # Features" toggle that ships enabled, so an unset preference (the
-      # common case) reads as enabled rather than disabled. Reads the
-      # plist directly via `defaults`, not the Python API -- this is a
-      # plain macOS preference, no RPC involved.
-      def browser_style_profiles_enabled?
-        return false unless RbConfig::CONFIG["host_os"].match?(/darwin/)
+def browser_style_profiles_enabled?
+  return true unless defined?(ITerm2::Browser)
 
-        with_timeout(5, default: true) do
-          out = `defaults read com.googlecode.iterm2 #{BROWSER_STYLE_PROFILES_PREF_KEY} 2>/dev/null`.strip
-          out != "0"
-        end
-      rescue StandardError
-        true
-      end
+  ITerm2::Browser.profiles_enabled?
+rescue StandardError
+  true
+end
 
       # Split a browser pane with the URL into `target_session` (any session
       # id, e.g. a just-created worker tab's session -- not necessarily the
-      # calling pane). Defaults to the calling session (current_session_guid)
+      # calling pane). Defaults to the calling session (ITerm2.current_session_id)
       # when target_session is nil, matching the original single-pane
       # `panel` behavior. Returns Hash with :type (:browser, :external, or
       # nil) and :pane_id.
@@ -375,22 +321,22 @@ module StreamWeaver
       # unconditionally rather than sniffing what is running in the pane.
       def bracketed_paste(text) = "#{PASTE_START}#{text}#{PASTE_END}"
 
-      # The browser pane for `url`, or nil. The real client raises on a
-      # failed split (and returns nil only for an OK response with no
-      # session), so both spellings of failure are caught here rather than
-      # unwinding past the shell cleanup above. No profile_name: the split
-      # inherits whatever profile `shell` already has, and BROWSER_TYPE_PROPERTY
-      # overrides it into a browser pane regardless (see that constant).
-      def browser_pane_in(client, shell, url)
-        client.split_pane(
-          shell,
-          vertical: true,
-          profile_customizations: BROWSER_TYPE_PROPERTY.merge("Initial URL" => url)
-        )
-      rescue StandardError => e
-        @last_error = e
-        nil
-      end
+# The browser pane for `url`, or nil. The real client raises on a
+# failed split (and returns nil only for an OK response with no
+# session), so both spellings of failure are caught here rather than
+# unwinding past the shell cleanup above. The split inherits whatever
+# profile `shell` already has; the gem overrides it into a browser pane.
+def browser_pane_in(client, shell, url)
+  unless browser_split_supported?
+    note_gem_too_old
+    return nil
+  end
+
+  client.split_browser_pane(shell, url, vertical: true)
+rescue StandardError => e
+  @last_error = e
+  nil
+end
 
       def close_quietly(client, session_id)
         client.close_session(session_id, force: true)
@@ -516,20 +462,33 @@ module StreamWeaver
 
       def connect(&) = ITerm2.connect(app_name: APP_NAME, &)
 
-      def split_browser_pane(url, horizontal: false, target_session: nil)
-        guid = target_session || current_session_guid or return nil
-        with_timeout(8, default: nil) do
-          connect do |c|
-            c.split_pane(
-              guid,
-              vertical: !horizontal,
-              profile_customizations: BROWSER_TYPE_PROPERTY.merge("Initial URL" => url)
-            )
-          end
-        end
-      rescue ITerm2::Error
-        nil
-      end
+def split_browser_pane(url, horizontal: false, target_session: nil)
+  guid = target_session || current_session_guid or return nil
+  unless browser_split_supported?
+    note_gem_too_old
+    return nil
+  end
+
+  with_timeout(8, default: nil) do
+    connect { |c| c.split_browser_pane(guid, url, vertical: !horizontal) }
+  end
+rescue ITerm2::Error
+  nil
+end
+
+# Feature-detected, not version-compared: iterm2_ruby 0.4 added
+# Client#split_browser_pane, ITerm2::Browser and ITerm2.current_session_id.
+def browser_split_supported?
+  ITerm2::Client.method_defined?(:split_browser_pane)
+end
+
+def note_gem_too_old
+  @last_error = StandardError.new(GEM_TOO_OLD_MESSAGE)
+  return if @gem_old_hint_shown
+
+  @gem_old_hint_shown = true
+  warn GEM_TOO_OLD_MESSAGE
+end
 
       def with_timeout(seconds, default: nil)
         Timeout.timeout(seconds) { yield }
