@@ -1,0 +1,35 @@
+#+TITLE: iterm-delegates-to-gem: epic wiki (read FIRST via `tyrion epic-context show --story <slug>`)
+#+DATE: 2026-10-24
+
+* Where the knowledge already is
+- iterm2_ruby 0.4.0 is published (rubygems.org) and installed. Its API: docs/api.md and llms.txt in the iterm2_ruby repo. New there: `client.split_browser_pane(session_id, url, vertical: true)`, `ITerm2.current_session_id`, `ITerm2::Browser.plugin_installed?`, `.profiles_enabled?`, `.available?`, `.pane_properties(url)`.
+- Origin: the Tyrion side-panel run (project tyrion, epic side-panel). It moved this class's browser-pane trick into the gem, then found StreamWeaver still carries its own copy. Decision record: that epic's wiki, Gotchas, DECIDED 2026-10-23.
+- Discovery recall: no open discovery in this project overlaps this work. disc-172 (iterm2_ruby focus parsing is unreliable with multiple windows) is about a different method and stays open.
+
+* Verified facts
+- The copy to delete is in lib/stream_weaver/iterm.rb: BROWSER_TYPE_PROPERTY (:30), BROWSER_PLUGIN_BUNDLE_ID (:37), BROWSER_STYLE_PROFILES_PREF_KEY (:44), current_session_guid (:74), browser_plugin_available? (:98, an mdfind probe with a 5s timeout), browser_style_profiles_enabled? (:115, a `defaults read` probe), split_browser_pane (:519), and the two places that merge BROWSER_TYPE_PROPERTY with Initial URL by hand: browser_pane_in (:388) and split_browser_pane (:526).
+- Callers outside iterm.rb: lib/stream_weaver/cli.rb:2539 (ITerm.split_vertical_with_url), :2959 (browser_plugin_available?), :2967 (browser_style_profiles_enabled?), :3738 (plugin check at get-started). Keep those public method names working unless every caller is updated together.
+- check_availability (:504) already guards macOS, ITERM_SESSION_ID and `require "iterm2"` with a LoadError rescue; the gem stays an OPTIONAL dependency. It does not check the gem's version, which is what the too-old-gem fallback needs (feature-detect with defined?(ITerm2::Browser) or ITerm2::Client.method_defined?(:split_browser_pane), not a version string compare).
+- Specs: spec/iterm_spec.rb stubs these methods heavily (browser_plugin_available? at :59-90, browser_style_profiles_enabled? at :93-111, current_session_guid at many sites). Updating them is part of the story; do not weaken them.
+- Gemfile pins iterm2_ruby "~> 0.3" (Gemfile:16); the gemspec has an optional-gem comment at stream_weaver.gemspec:61-62. `bundle config local.iterm2_ruby ~/work/iterm2_ruby` is no longer needed now that 0.4.0 is published; run `bundle update iterm2_ruby`.
+
+* Gotchas already paid for
+- iTerm control is Ruby only through iterm2_ruby; never Python or osascript (global CLAUDE.md; the repo's visual-companion skill says so).
+- The gem's probes run commands without a shell and kill the child on timeout; the old copy here did not (a hung mdfind could linger). Do not re-add a local timeout wrapper around them.
+- Under a repo bundle the optional gem can be invisible; in this repo it is in the Gemfile, so `bundle exec streamweaver` sees it. A user's installed streamweaver gem relies on the system gem; keep the LoadError fallback.
+- The working tree has unrelated uncommitted changes (docs and skill edits by other work). Build in a worktree and stage explicit paths only; never git add -A.
+- Live check needs the real iTerm: `streamweaver panel <name>` should split a browser pane beside the calling session. Run it with SW_NO_OPEN unset in a scratch session, then close the pane; never leave panes or servers behind.
+- Subagent builders share the parent session's lane token: prefix every tyrion command with TYRION_LANE=<label>.
+- Git hygiene policy (CLAUDE.md): explicit paths only, no home-directory paths, personal emails or employer names in committed files.
+
+* Lanes
+| Lane | Stories | Builder | Why one lane |
+|---|---|---|---|
+| iTerm | iterm-delegates-browser-split-to-gem | strict-tier builder, own worktree | One file and its specs; the coordinator runs the live check |
+
+* Instrument
+| Story | Builder | Start | End | Wall-clock | Gate attempts | Rediscoveries |
+|---|---|---|---|---|---|---|
+
+* Learnings
+# Append only via: tyrion epic-context append --story <slug> "<what you learned> (file:line)"

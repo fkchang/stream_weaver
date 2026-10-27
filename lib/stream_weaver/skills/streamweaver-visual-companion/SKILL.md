@@ -63,6 +63,19 @@ streamweaver panel brainstorm --layout=wide      # 1100px
 streamweaver panel brainstorm --layout=full      # 1400px
 ```
 
+## First Screen Of A Canvas (Cold Open)
+
+The first screen of any canvas you push for the user to read or decide on must work for someone arriving cold. Design it; do not describe it.
+
+- **Never** open with a sentence about the page ("Written for someone arriving cold. Tabs: A, B, C...", "Nothing is built until you decide"). It restates what the reader can see, adds no information, and is the least-effort stand-in for a Cold Open. Stating the obvious ("nothing is built until you decide": reading cannot build anything, the user is being shown this so that they can decide) reads as a disclaimer.
+- **Say what this is and what you need in the first lines**: one line of purpose ("Deciding what the side panel should show at the end of an epic") and the single ask ("Choose Now, Next or Later for 9 items").
+- **If there is a sequence, show it as steps and name the tabs by the action**: `1. Read what we found`, `2. Look at the sketches`, `3. Choose and send`. Tab labels name what the reader does there, not the genre of content ("Typical cases" is a genre; "2. The moments you hit" is closer). Number the tabs when order matters; repeat a one-line "next:" pointer at the end of each tab.
+- **Label things so the UI is obvious.** An occasional message is fine; a banner that tries to compensate for an unlabelled UI is not. Test: could someone who skipped the intro still tell what each tab and each control is for?
+- **Pre-fill the answer** (recommendations as defaults) and say so at the control ("leave an item alone to accept my recommendation"), where it applies, not at the top.
+- **Keep a long-lived listener running before you push** (see `references/many-clicks.md`); a click with no listener is lost and shows "Submitted". A bridge restart (some `canvas-push` calls trigger one when the bridge runs older code) blanks sessions and drops listeners, so re-push and restart the listener after one.
+
+Origin: 2026-10-27, a decision canvas opened with exactly the "Written for someone arriving cold. Tabs: ..." sentence and the user called it "the least effort" Cold Open attempt.
+
 ## The Loop
 
 1. Push DSL content via `canvas-push`
@@ -147,5 +160,7 @@ Keep this skill small: read [the SlimGraphR diagram guide](references/slim-graph
 | Porting a claude.ai Artifact 1:1, or building a long-form doc | `references/example-gallery.md` |
 | Ending a push with more than one question | `references/checkpoints-and-forms.md` |
 | Saving/persisting a canvas doc, sharing DSL across two docs | `references/persistence.md` |
-| Cleaning up orphaned processes, or how `panel` opens the browser | `references/cleanup-and-panel.md` |
+| Cleaning up orphaned processes, how `panel` opens the browser, or opening ANY iTerm split / browser pane (canvas or not) | `references/cleanup-and-panel.md` |
 | Choosing or writing a SlimGraphR diagram | `references/slim-graph-r-diagrams.md` |
+
+**iTerm control is Ruby only:** the `iterm2_ruby` gem, reached through `StreamWeaver::ITerm` (`lib/stream_weaver/iterm.rb`, e.g. `split_vertical_with_url`) or `streamweaver panel`. Never write Python or osascript for an iTerm split; the browser-pane split and the current-pane lookup (`ITERM_SESSION_ID`) already exist.
