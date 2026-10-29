@@ -70,6 +70,8 @@ module StreamWeaver
           handle_drain_notes(message[:name])
         when 'wait_submit'
           handle_wait_submit(message[:name], alive, message[:timeout])
+        when 'notes_reply'
+          handle_notes_reply(message[:name], message[:summary])
         when 'set_pane_id'
           handle_set_pane_id(message[:name], message[:pane_id])
         when 'reset'
@@ -144,6 +146,7 @@ module StreamWeaver
           session.set_dsl(dsl)
           session.set_stylesheets(result.stylesheets)
           session.set_source_dir(source_dir)
+          session.doc_pushed!
           { type: 'push_ok' }
         end
       end
@@ -207,6 +210,13 @@ module StreamWeaver
         return { type: 'closed', name: name } if result[:closed]
 
         { type: 'submitted', name: name, notes: result[:notes], ended: result[:ended] }
+      end
+
+      def handle_notes_reply(name, summary)
+        session = get_session(name)
+        return { type: 'error', message: "Session not found: #{name}" } unless session
+
+        { type: 'notes_replied', name: name, done: session.reply(summary) }
       end
 
       def handle_set_pane_id(name, pane_id)

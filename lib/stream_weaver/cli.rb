@@ -661,6 +661,8 @@ module StreamWeaver
           streamweaver canvas-notes <name> --wait-submit
                                                   Block until the person presses Send to Agent, print
                                                      the batch, exit (run in the background to be woken)
+          streamweaver canvas-notes reply <name> "summary"
+                                                  Show a one-line summary in the panel; marks the batch Done
           streamweaver canvas-close <name>        Close a canvas session
           streamweaver canvas-raise <name>        Surface an already-pushed canvas (its iTerm pane if
                                                      tracked, else the URL in the default browser)
@@ -1470,6 +1472,8 @@ module StreamWeaver
     def self.canvas_notes(args)
       require_relative 'canvas/client'
 
+      return canvas_notes_reply(args.drop(1)) if args.first == 'reply'
+
       wait = args.delete('--wait-submit')
       name = args.first
       if help_flag?(name) || (wait && name.nil?)
@@ -1490,6 +1494,33 @@ module StreamWeaver
       end
 
       puts format_canvas_notes(response[:notes] || {})
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
+    # Tell the person (in the panel) what was done about the sent comments and
+    # mark them Done. The summary is shown as escaped plain text.
+    def self.canvas_notes_reply(args)
+      require_relative 'canvas/client'
+
+      name, *rest = args
+      summary = rest.join(' ').strip
+      if name.nil? || summary.empty?
+        $stderr.puts 'Usage: streamweaver canvas-notes reply <session-name> "one-line summary"'
+        exit 1
+      end
+
+      response = Canvas::Client.send_message(Canvas::Protocol::Messages.notes_reply(name, summary))
+      case response&.dig(:type)
+      when 'notes_replied'
+        puts "Posted summary to #{name}; #{response[:done]} comment(s) marked done"
+      else
+        message = response&.dig(:message)
+        message = 'The running bridge predates canvas-notes reply. Run: streamweaver canvas-restart' if message.to_s.start_with?('Unknown message type:')
+        $stderr.puts(message || 'No response from canvas bridge')
+        exit 1
+      end
     rescue Canvas::Client::NotRunningError => e
       $stderr.puts "Error: #{e.message}"
       exit 1

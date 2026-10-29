@@ -86,6 +86,33 @@ RSpec.describe StreamWeaver::CLI, '.canvas_notes' do
     expect(err).to include('streamweaver canvas-restart')
   end
 
+  describe 'reply' do
+    it 'posts the joined summary to the bridge and reports how many comments are done' do
+      sent = nil
+      allow(StreamWeaver::Canvas::Client).to receive(:send_message) do |msg|
+        sent = msg
+        bridge.handle_claude_message(msg)
+      end
+      bridge.get_session('plan').send_queued
+      out, = capture_io { described_class.canvas_notes(%w[reply plan Retitled the page]) }
+      expect(sent).to eq(type: 'notes_reply', name: 'plan', summary: 'Retitled the page')
+      expect(out).to include('2 comment(s) marked done')
+    end
+
+    it 'needs a name and a summary' do
+      status = nil
+      _, err = capture_io do
+        begin
+          described_class.canvas_notes(%w[reply plan])
+        rescue SystemExit => e
+          status = e.status
+        end
+      end
+      expect(status).to eq(1)
+      expect(err).to include('Usage: streamweaver canvas-notes reply')
+    end
+  end
+
   describe '--wait-submit' do
     let(:client) { StreamWeaver::Canvas::Client }
 

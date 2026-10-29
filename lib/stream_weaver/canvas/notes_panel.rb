@@ -22,11 +22,13 @@ module StreamWeaver
 
       # @param notes [Array<Hash>] session notes, each with :id, :state, :text
       # @param agent_waiting [Boolean] a wait for this canvas is connected
-      def initialize(session_name:, notes:, agent_waiting: false, review_ended: false)
+      def initialize(session_name:, notes:, agent_waiting: false, review_ended: false, doc_updated: false, summary: nil)
         @session_name = session_name
         @notes = notes
         @agent_waiting = agent_waiting
         @review_ended = review_ended
+        @doc_updated = doc_updated
+        @summary = summary
       end
 
       def view_template
@@ -42,6 +44,8 @@ module StreamWeaver
             end
           end
           p(class: 'sw-notes-ended') { 'Review ended' } if @review_ended
+          p(class: 'sw-notes-updated') { 'Doc updated just now' } if @doc_updated
+          p(class: 'sw-notes-summary') { "Agent: #{@summary}" } if @summary && !@summary.empty?
           comments_list
           div(class: 'sw-notes-actions') do
             button(type: 'button', data: { sw_action: 'send' }, disabled: queued_count.zero?) { 'Send to Agent' }

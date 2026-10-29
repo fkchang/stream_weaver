@@ -78,6 +78,12 @@ module StreamWeaver
           { type: 'wait_submit', name: name }
         end
 
+        # Claude → Bridge: the agent's one-line summary of what it did about
+        # the sent comments; marks them done.
+        def self.notes_reply(name, summary)
+          { type: 'notes_reply', name: name, summary: summary }
+        end
+
         # Claude → Bridge: Set iTerm pane ID for a session
         def self.set_pane_id(name, pane_id)
           { type: 'set_pane_id', name: name, pane_id: pane_id }

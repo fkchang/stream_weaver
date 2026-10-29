@@ -11,6 +11,7 @@ module StreamWeaver
 
       attr_reader :name, :state, :websockets, :created_at, :layout, :dsl, :theme, :stylesheets, :source_dir
       PENDING_STATES = %w[queued sent].freeze
+      SUMMARY_MAX = 500
 
       attr_accessor :html, :html_version, :pane_id
 
@@ -37,6 +38,8 @@ module StreamWeaver
         @ended_unread = false
         @review_ended = false
         @closed = false
+        @doc_updated = false
+        @summary = nil
         @cv = ConditionVariable.new
         @pane_id = nil
         @mutex = Mutex.new
@@ -157,6 +160,10 @@ module StreamWeaver
         @mutex.synchronize do
           queued = @notes.select { |n| n[:state] == 'queued' }
           queued.each { |n| n[:state] = 'sent' }
+          unless queued.empty?
+            @doc_updated = false
+            @summary = nil
+          end
           if end_review
             @ended_unread = true
             @review_ended = true
@@ -188,6 +195,33 @@ module StreamWeaver
           end
         ensure
           @mutex.synchronize { @waiters -= 1; refresh_side_region }
+        end
+      end
+
+      # The main doc was re-pushed. Comments the agent has read move to
+      # Working, and if a batch is in flight the panel says the doc changed.
+      # Region markup is untouched by the push itself; only this state is.
+      def doc_pushed!
+        @mutex.synchronize do
+          in_flight = @notes.select { |n| %w[sent seen working].include?(n[:state]) }
+          next if in_flight.empty?
+
+          in_flight.each { |n| n[:state] = 'working' if n[:state] == 'seen' }
+          @doc_updated = true
+          refresh_side_region
+        end
+      end
+
+      # The agent's one-line answer to the batch: shown (escaped) in the panel,
+      # and every in-flight comment becomes Done.
+      # @return [Integer] how many comments were marked done
+      def reply(summary)
+        @mutex.synchronize do
+          done = @notes.select { |n| %w[sent seen working].include?(n[:state]) }
+          done.each { |n| n[:state] = 'done' }
+          @summary = summary.to_s.gsub(/\s+/, ' ').strip[0, SUMMARY_MAX]
+          refresh_side_region
+          done.size
         end
       end
 
@@ -249,7 +283,8 @@ module StreamWeaver
       # Re-render the bridge-owned "side" region from the notes state. Caller
       # holds @mutex. The version only moves when the markup does.
       def refresh_side_region
-        html = NotesPanel.render(session_name: @name, notes: @notes, agent_waiting: @waiters.positive?, review_ended: @review_ended)
+        html = NotesPanel.render(session_name: @name, notes: @notes, agent_waiting: @waiters.positive?, review_ended: @review_ended,
+                                 doc_updated: @doc_updated, summary: @summary)
         current = @regions['side']
         return if current && current[:html] == html
 
