@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'protocol'
+require_relative 'notes_panel'
 
 module StreamWeaver
   module Canvas
@@ -9,6 +10,8 @@ module StreamWeaver
       VALID_LAYOUTS = %i[default wide full fluid].freeze
 
       attr_reader :name, :state, :websockets, :created_at, :layout, :dsl, :theme, :stylesheets, :source_dir
+      PENDING_STATES = %w[queued sent].freeze
+
       attr_accessor :html, :html_version, :pane_id
 
       # @param name [String] Session name
@@ -27,9 +30,12 @@ module StreamWeaver
         @stylesheets = []
         @source_dir = nil
         @pending_toasts = []
-        @pending_notes = []
+        @notes = []
+        @next_note_id = 0
+        @regions = {}
         @pane_id = nil
         @mutex = Mutex.new
+        @mutex.synchronize { refresh_side_region }
       end
 
       # Set the rendered HTML content and increment version
@@ -115,23 +121,45 @@ module StreamWeaver
         end
       end
 
-      # Hold a viewer comment until the agent drains it. Notes never touch
-      # websockets or event sinks; they wait here for the drain_notes command.
+      # Hold a viewer comment as `queued` until the agent takes it. Notes never
+      # touch websockets or event sinks; they wait here for drain_notes.
       # @return [Integer] pending note count after the append
       def add_note(note)
         @mutex.synchronize do
-          @pending_notes << note
-          @pending_notes.size
+          @notes << note.merge(id: (@next_note_id += 1), state: 'queued')
+          refresh_side_region
+          pending_count
         end
       end
 
-      # Return all pending notes and clear them in one locked step.
+      # Return every pending (queued or sent) note and mark them seen, in one
+      # locked step.
       def drain_notes
         @mutex.synchronize do
-          notes = @pending_notes
-          @pending_notes = []
-          notes
+          taken = @notes.select { |n| PENDING_STATES.include?(n[:state]) }
+          taken.each { |n| n[:state] = 'seen' }
+          refresh_side_region unless taken.empty?
+          taken.map(&:dup)
         end
+      end
+
+      # A copy of every note with its state, oldest first.
+      def notes_snapshot
+        @mutex.synchronize { @notes.map(&:dup) }
+      end
+
+      # Named page regions (html + version) that the browser swaps on their
+      # own, independent of the main doc. Only the bridge writes them.
+      # @return [Hash{String=>Hash}] the regions newer than the page's versions
+      def regions_newer_than(versions = {})
+        @mutex.synchronize do
+          @regions.select { |name, r| r[:version] > versions[name].to_i }
+                  .transform_values(&:dup)
+        end
+      end
+
+      def region(name)
+        @mutex.synchronize { @regions[name.to_s]&.dup }
       end
 
       # Return session info as a hash
@@ -146,6 +174,21 @@ module StreamWeaver
           theme: @theme,
           layout: @layout
         }
+      end
+      private
+
+      def pending_count
+        @notes.count { |n| PENDING_STATES.include?(n[:state]) }
+      end
+
+      # Re-render the bridge-owned "side" region from the notes state. Caller
+      # holds @mutex. The version only moves when the markup does.
+      def refresh_side_region
+        html = NotesPanel.render(session_name: @name, notes: @notes)
+        current = @regions['side']
+        return if current && current[:html] == html
+
+        @regions['side'] = { html: html, version: (current ? current[:version] : 0) + 1 }
       end
     end
   end

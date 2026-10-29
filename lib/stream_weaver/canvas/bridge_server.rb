@@ -160,7 +160,8 @@ module StreamWeaver
           state: session.state,
           html: session.html,
           version: session.html_version,
-          toasts: session.pop_toasts
+          toasts: session.pop_toasts,
+          regions: session.regions_newer_than(region_versions_param)
         }.to_json
       end
 
@@ -276,6 +277,16 @@ module StreamWeaver
 
       private
 
+      # The page's last-seen region versions, sent as ?rv[side]=3. Anything
+      # that is not a hash counts as "seen nothing"; versions are coerced to
+      # integers.
+      def region_versions_param
+        rv = params[:rv]
+        return {} unless rv.is_a?(Hash)
+
+        rv.to_h { |name, version| [name.to_s, version.to_s.to_i] }
+      end
+
       def render_canvas_page(session_name, session)
         # Create adapter in websocket mode
         adapter = StreamWeaver::Adapter::AlpineJS.new(
@@ -343,11 +354,13 @@ module StreamWeaver
             <div id="app-container" #{container_attrs(session.state, adapter)}>
               #{initial_content}
             </div>
+            <!-- Bridge-owned region: swapped on its own by the poll script, never by a doc push; the composer lives outside it -->
+            <aside data-sw-region="side">#{session.region('side')[:html]}</aside>
             #{save_doc_widget(session_name, session)}
             <!-- Comment overlay: outside #app-container so the poll swap cannot remove it or an open composer -->
             <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-canvas-notes.js'), encoding: 'UTF-8')}</script>
             <script>
-              #{polling_script(session_name, session.html_version)}
+              #{polling_script(session_name, session.html_version, session.regions_newer_than.transform_values { |r| r[:version] })}
             </script>
           </body>
           </html>
@@ -420,12 +433,13 @@ module StreamWeaver
         }
       end
 
-      def polling_script(session_name, current_version)
+      def polling_script(session_name, current_version, region_versions = {})
         <<~JS
           (function() {
             let currentVersion = #{current_version};
             let sessionClosed = false;
-            const pollUrl = '/canvas/#{session_name}/poll';
+            const regionVersions = #{region_versions.to_json};
+            const pollBase = '/canvas/#{session_name}/poll';
             const container = document.getElementById('app-container');
             const closedHtml = '<div style="text-align:center;padding:60px;color:#374151;"><div style="font-size:3rem;margin-bottom:16px;">✓</div><h2 style="margin:0 0 12px">Session Complete</h2><p style="color:#666;margin:0">This StreamWeaver canvas session has closed.</p></div>';
 
@@ -480,7 +494,8 @@ module StreamWeaver
 
             async function poll() {
               try {
-                const resp = await fetch(pollUrl);
+                const rv = Object.keys(regionVersions).map(n => 'rv[' + encodeURIComponent(n) + ']=' + regionVersions[n]).join('&');
+                const resp = await fetch(rv ? pollBase + '?' + rv : pollBase);
                 if (!resp.ok) {
                   if (resp.status === 404 && !sessionClosed) {
                     sessionClosed = true;
@@ -495,6 +510,18 @@ module StreamWeaver
                 if (data.toasts && data.toasts.length > 0) {
                   data.toasts.forEach(toast => showToast(toast));
                 }
+
+                // Swap only the regions newer than this page's copy. A region
+                // is its own element: this never reads or writes
+                // #app-container, and the doc swap below never touches a region.
+                Object.keys(data.regions || {}).forEach(name => {
+                  const r = data.regions[name];
+                  const el = document.querySelector('[data-sw-region="' + name + '"]');
+                  if (el && r.version > (regionVersions[name] || 0)) {
+                    regionVersions[name] = r.version;
+                    el.innerHTML = r.html;
+                  }
+                });
 
                 // Update if version changed and there's HTML
                 if (data.version > currentVersion && data.html) {
