@@ -92,7 +92,7 @@ Every push auto-saves to history; the user can promote it to a permanent doc wit
 
 ## Reading the person's comments
 
-The person can comment on any element of a live canvas page: Alt-click it, long-press on touch, or use the floating "comment" button. Nothing wakes you; notes wait on the bridge until you pull them (in memory only, lost if the bridge restarts).
+The person can comment on any element of a live canvas page: Alt-click it, long-press on touch, or use the floating "comment" button. Nothing wakes you here; notes wait on the bridge until you pull them (in memory only, lost if the bridge restarts). For a full review where the person presses Send to Agent and that wakes you, use the `sw-annotate` skill (`/sw-annotate`) instead.
 
 When they say they left comments:
 

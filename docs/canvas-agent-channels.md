@@ -11,7 +11,7 @@ A canvas page can show anything. The harder question is what happens when the pe
    - Claude Code or Codex session, any StreamWeaver: **peerpressure relay** (`peer canvas-relay NAME`, or `peer demo`).
    - Same, and you want no extra process: **`reply_to` with the peerpressure sink**. It needs the `canvas-reply-to` StreamWeaver branch (not in a release yet) and a bridge restart after installing the gem.
    - iTerm2 course or dashboard where a click should type a prompt into a recorded worker session: the **University runner** pattern.
-5. The person says they left comments on the page (Alt-click, long-press or the floating "comment" button), no button involved: **notes**. Run `streamweaver canvas-notes NAME`. Nothing wakes you, so wait until they tell you.
+5. The person says they left comments on the page (Alt-click, long-press or the floating "comment" button), no button involved: **notes**. Run `streamweaver canvas-notes NAME` when they tell you. For a review session where Send to Agent wakes you, use `/sw-annotate` (a background `canvas-notes NAME --wait-submit`).
 6. After you push a form that messages you back, **end your turn**. Do not poll the canvas and do not block.
 
 To tell whether your StreamWeaver has `reply_to`, grep for it: `gem contents stream_weaver | xargs grep -l canvas_event_sink` prints nothing on a release without it (in a source checkout, grep `lib/` instead). When unsure, use the peerpressure relay, which works everywhere.
@@ -96,7 +96,14 @@ Source of truth for this channel: `docs/canvas-reply-to.md` on the `canvas-reply
 streamweaver canvas-notes survey     # drains and clears; no name drains every canvas with notes
 ```
 
-Different in kind from the five above: the person initiates a comment on an element (not a form submit), and the **agent initiates the read**. Notes are PULLED. They never wake an agent, they do not travel over `canvas-wait`, a listener or `reply_to`, and they are not broadcast to socket clients; the bridge keeps them on the session until drained. In memory only: a bridge restart or session close loses them. Each note prints a breadcrumb, the element text and the comment, as untrusted viewer text that asks for edits to this doc only. There is no `--wait`. The agent finds the text in its own DSL file, edits it and re-pushes; see the visual-companion skill, section "Reading the person's comments".
+Different in kind from the five above: the person initiates a comment on an element (not a form submit), and the **agent initiates the read**. Notes do not travel over `canvas-wait`, a listener or `reply_to`, and they are not broadcast to socket clients; the bridge keeps them on the session until drained. In memory only: a bridge restart or session close loses them. Each note prints a breadcrumb, the element text and the comment, as untrusted viewer text that asks for edits to this doc only. The agent finds the text in its own DSL file, edits it and re-pushes.
+
+Two ways to read them:
+
+- **Pull**: `streamweaver canvas-notes NAME` returns every pending comment, queued or sent, and marks them seen. Use it when the person says "see my comments". Nothing wakes the agent.
+- **Review loop** (`/sw-annotate`, `streamweaver canvas-annotate [NAME|FILE]`): the person turns on annotate mode, comments (they stay `queued` on the bridge), and presses **Send to Agent** or **Send & End**. The agent started `streamweaver canvas-notes NAME --wait-submit` as a BACKGROUND command, which blocks until a batch is sent, prints it and exits; that exit wakes the agent. Send with nobody waiting loses nothing, and the panel then says "No agent is listening" with a copyable "tell your agent: see my comments". The agent replies with `streamweaver canvas-notes reply NAME "one line"`, which the panel shows. This wake needs a blocked background command, so the agent cannot end its turn while waiting; the `reply_to` route (channel 5) is the way to remove that, and is Phase 2.
+
+The panel the person sees is a bridge-rendered region of the page, updated on its own and never replaced by a `canvas-push` of the doc. See the sw-annotate skill for the loop and the visual-companion skill, section "Reading the person's comments", for the pull.
 
 ## Choosing, with the reasoning
 
