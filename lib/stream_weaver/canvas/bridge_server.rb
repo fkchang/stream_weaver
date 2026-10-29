@@ -276,6 +276,33 @@ module StreamWeaver
         { ok: true, count: session.add_note(note) }.to_json
       end
 
+      # Edit or remove a comment that is still queued; a sent comment is the
+      # agent's now, so both answer 404. Same size caps as POST.
+      patch '/canvas/:name/note/:id' do
+        content_type :json
+        session = self.class.bridge.get_session(params[:name])
+        halt 404, { error: 'Session not found' }.to_json unless session
+
+        raw = request.body.read(NOTE_MAX_BODY + 1).to_s
+        halt 413, { error: 'Note body too large' }.to_json if raw.bytesize > NOTE_MAX_BODY
+
+        body = JSON.parse(raw, symbolize_names: true) rescue nil
+        halt 422, { error: 'Invalid note' }.to_json unless body.is_a?(Hash) && body[:text].is_a?(String) && !body[:text].strip.empty?
+        halt 413, { error: 'Note text too large' }.to_json if body[:text].bytesize > NOTE_MAX_TEXT
+        halt 404, { error: 'Note not found or already sent' }.to_json unless session.update_note(params[:id].to_i, body[:text])
+
+        { ok: true }.to_json
+      end
+
+      delete '/canvas/:name/note/:id' do
+        content_type :json
+        session = self.class.bridge.get_session(params[:name])
+        halt 404, { error: 'Session not found' }.to_json unless session
+        halt 404, { error: 'Note not found or already sent' }.to_json unless session.remove_note(params[:id].to_i)
+
+        { ok: true }.to_json
+      end
+
       # The person pressed Send to Agent (or Send & End with {"end": true}).
       # All queued comments become sent in one locked step; a waiting agent is
       # released once. Like notes, never forwarded to socket clients.

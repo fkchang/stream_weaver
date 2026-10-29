@@ -51,6 +51,7 @@ module StreamWeaver
           p(class: 'sw-notes-ended') { 'Review ended' } if @review_ended
           p(class: 'sw-notes-updated') { 'Doc updated just now' } if @doc_updated
           p(class: 'sw-notes-summary') { "Agent: #{@summary}" } if @summary && !@summary.empty?
+          p(class: 'sw-notes-count') { "#{queued_count} unsent" }
           comments_list
           div(class: 'sw-notes-actions') do
             button(type: 'button', data: { sw_action: 'send' }, disabled: queued_count.zero?) { 'Send to Agent' }
@@ -72,10 +73,16 @@ module StreamWeaver
         end
         ul(class: 'sw-notes-list') do
           @notes.each do |n|
-            li(data: { sw_note: n[:id], sw_state: n[:state] }) do
+            li(data: { sw_note: n[:id], sw_state: n[:state], sw_kind: n[:kind].to_s,
+                       sw_element_text: n[:element_text].to_s, sw_breadcrumb: n[:breadcrumb].to_s }) do
               span(class: 'sw-notes-state') { STATE_LABELS.fetch(n[:state], n[:state].to_s) }
               plain ' '
-              span(class: 'sw-notes-text') { n[:text].to_s }
+              span(class: 'sw-notes-text', data: { sw_action: 'goto' }) { n[:text].to_s }
+              span(class: 'sw-notes-gone', hidden: true) { ' (element changed)' }
+              if n[:state] == 'queued'
+                button(type: 'button', class: 'sw-notes-edit', data: { sw_action: 'edit' }, title: 'Edit') { 'Edit' }
+                button(type: 'button', class: 'sw-notes-remove', data: { sw_action: 'remove' }, title: 'Remove') { 'Remove' }
+              end
             end
           end
         end

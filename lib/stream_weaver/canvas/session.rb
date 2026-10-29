@@ -142,6 +142,29 @@ module StreamWeaver
         end
       end
 
+      # Change the text of a note that has not been sent yet.
+      # @return [Boolean] false when the note is unknown or no longer queued
+      def update_note(id, text)
+        @mutex.synchronize do
+          note = @notes.find { |n| n[:id] == id && n[:state] == 'queued' }
+          next false unless note
+
+          note[:text] = text
+          refresh_side_region
+          true
+        end
+      end
+
+      # Remove a note that has not been sent yet.
+      # @return [Boolean] false when the note is unknown or no longer queued
+      def remove_note(id)
+        @mutex.synchronize do
+          removed = @notes.reject! { |n| n[:id] == id && n[:state] == 'queued' }
+          refresh_side_region if removed
+          !removed.nil?
+        end
+      end
+
       # Return every pending (queued or sent) note and mark them seen, in one
       # locked step.
       def drain_notes
