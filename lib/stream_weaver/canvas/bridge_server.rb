@@ -161,7 +161,8 @@ module StreamWeaver
           html: session.html,
           version: session.html_version,
           toasts: session.pop_toasts,
-          regions: session.regions_newer_than(region_versions_param)
+          regions: session.regions_newer_than(region_versions_param),
+          annotate: session.annotate?
         }.to_json
       end
 
@@ -288,6 +289,19 @@ module StreamWeaver
         { ok: true }.merge(session.send_queued(end_review: end_review)).to_json
       end
 
+      # Turn annotate mode on or off ({"on": true}). Held on the session; the
+      # poll carries it to every open tab.
+      post '/canvas/:name/annotate' do
+        content_type :json
+        session = self.class.bridge.get_session(params[:name])
+        halt 404, { error: 'Session not found' }.to_json unless session
+
+        body = JSON.parse(request.body.read(1024).to_s) rescue {}
+        halt 422, { error: 'Invalid body' }.to_json unless body.is_a?(Hash) && [true, false].include?(body['on'])
+        session.annotate = body['on']
+        { ok: true, annotate: session.annotate? }.to_json
+      end
+
       private
 
       # The page's last-seen region versions, sent as ?rv[side]=3. Anything
@@ -363,7 +377,7 @@ module StreamWeaver
             <!-- Kick off CDN fetch immediately so mermaid is ready before first push arrives -->
             <script>if (window.swMermaidPreload) window.swMermaidPreload();</script>
           </head>
-          <body class="sw-theme-#{session.theme} sw-layout-#{session.layout}">
+          <body class="sw-theme-#{session.theme} sw-layout-#{session.layout}#{' sw-annotate-on' if session.annotate?}">
             <div id="app-container" #{container_attrs(session.state, adapter)}>
               #{initial_content}
             </div>
@@ -525,6 +539,8 @@ module StreamWeaver
                 if (data.toasts && data.toasts.length > 0) {
                   data.toasts.forEach(toast => showToast(toast));
                 }
+
+                if (window.swSetAnnotate) window.swSetAnnotate(data.annotate === true);
 
                 // Swap only the regions newer than this page's copy. A region
                 // is its own element: this never reads or writes

@@ -40,6 +40,7 @@ module StreamWeaver
         @closed = false
         @doc_updated = false
         @summary = nil
+        @annotate = false
         @cv = ConditionVariable.new
         @pane_id = nil
         @mutex = Mutex.new
@@ -225,6 +226,19 @@ module StreamWeaver
         end
       end
 
+      # Annotate mode (a click comments instead of pressing) is held here so a
+      # reload or a second tab shows the same state.
+      def annotate?
+        @mutex.synchronize { @annotate }
+      end
+
+      def annotate=(on)
+        @mutex.synchronize do
+          @annotate = on ? true : false
+          refresh_side_region
+        end
+      end
+
       def close!
         @mutex.synchronize { @closed = true; @cv.broadcast }
       end
@@ -284,7 +298,7 @@ module StreamWeaver
       # holds @mutex. The version only moves when the markup does.
       def refresh_side_region
         html = NotesPanel.render(session_name: @name, notes: @notes, agent_waiting: @waiters.positive?, review_ended: @review_ended,
-                                 doc_updated: @doc_updated, summary: @summary)
+                                 doc_updated: @doc_updated, summary: @summary, annotate: @annotate)
         current = @regions['side']
         return if current && current[:html] == html
 

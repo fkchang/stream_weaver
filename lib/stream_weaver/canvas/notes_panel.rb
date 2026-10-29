@@ -22,18 +22,23 @@ module StreamWeaver
 
       # @param notes [Array<Hash>] session notes, each with :id, :state, :text
       # @param agent_waiting [Boolean] a wait for this canvas is connected
-      def initialize(session_name:, notes:, agent_waiting: false, review_ended: false, doc_updated: false, summary: nil)
+      def initialize(session_name:, notes:, agent_waiting: false, review_ended: false, doc_updated: false, summary: nil, annotate: false)
         @session_name = session_name
         @notes = notes
         @agent_waiting = agent_waiting
         @review_ended = review_ended
         @doc_updated = doc_updated
         @summary = summary
+        @annotate = annotate
       end
 
       def view_template
         div(class: 'sw-notes-panel') do
-          h2(class: 'sw-notes-title') { 'Comments' }
+          div(class: 'sw-notes-head') do
+            h2(class: 'sw-notes-title') { 'Comments' }
+            button(type: 'button', class: 'sw-annotate-toggle', data: { sw_action: 'annotate-toggle' },
+                   aria: { pressed: @annotate.to_s }) { @annotate ? 'Annotate: on' : 'Annotate: off' }
+          end
           p(class: 'sw-notes-presence', data: { sw_presence: @agent_waiting ? 'waiting' : 'none' }) do
             @agent_waiting ? 'Your agent is waiting' : 'No agent is listening'
           end
