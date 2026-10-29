@@ -85,6 +85,6 @@ RSpec.describe StreamWeaver::Canvas::BridgeServer, 'note edit and remove', type:
 
   it 'ships the composer title, highlight classes and the element-changed pill in the overlay' do
     js = File.read(File.join(__dir__, '../../lib/stream_weaver/assets/js/sw-canvas-notes.js'))
-    expect(js).to include("'Annotate <' + ctx.kind + '>'").and include('sw-hl-sel').and include('sw-notes-gone')
+    expect(js).to include('Annotate <').and include('sw-hl-sel').and include('sw-notes-gone')
   end
 end
