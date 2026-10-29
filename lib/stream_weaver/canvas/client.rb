@@ -158,6 +158,43 @@ module StreamWeaver
           socket&.close
         end
 
+        # Send a message and block for the first reply whose type is in
+        # `types`, skipping every other frame. The bridge forwards browser
+        # events to every connected client, so a long wait sees them mid-flight;
+        # send_message would take one for the reply. nil timeout waits forever.
+        # @return [Hash, nil] the typed reply, or nil on timeout or hang-up
+        def request_typed(message, types:, timeout: nil)
+          StalenessGuard.ensure_current!
+          raise NotRunningError, "Canvas bridge is not running" unless bridge_running?
+
+          socket = UNIXSocket.new(socket_path)
+          socket.write(Protocol.encode(message))
+          deadline = timeout && (Time.now + timeout)
+          buffer = +''
+
+          loop do
+            wait = deadline ? [deadline - Time.now, 1].min : 1
+            return nil if wait <= 0
+
+            next unless IO.select([socket], nil, nil, wait)
+
+            chunk = socket.read_nonblock(4096, exception: false)
+            next if chunk == :wait_readable
+            return nil if chunk.nil?
+
+            buffer << chunk
+            messages, buffer = Protocol.parse_buffer(buffer)
+            reply = messages.find { |m| types.include?(m[:type]) }
+            return reply if reply
+          end
+        rescue Errno::ECONNREFUSED, Errno::ENOENT => e
+          raise ConnectionError, "Cannot connect to canvas bridge: #{e.message}"
+        rescue EOFError, Errno::ECONNRESET
+          nil
+        ensure
+          socket&.close
+        end
+
         # Hold ONE connection open and yield every event for `name` until the
         # bridge closes it or the block breaks. This is what a long-lived
         # listener wants: `send_and_wait` takes a single event and closes the

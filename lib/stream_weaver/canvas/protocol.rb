@@ -72,6 +72,12 @@ module StreamWeaver
           { type: 'drain_notes', name: name }
         end
 
+        # Claude → Bridge: block until the person sends a batch of comments
+        # (replies with type 'submitted'; see Client.request_typed).
+        def self.wait_submit(name)
+          { type: 'wait_submit', name: name }
+        end
+
         # Claude → Bridge: Set iTerm pane ID for a session
         def self.set_pane_id(name, pane_id)
           { type: 'set_pane_id', name: name, pane_id: pane_id }

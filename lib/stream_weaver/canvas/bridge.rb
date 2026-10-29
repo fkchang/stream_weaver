@@ -38,7 +38,9 @@ module StreamWeaver
       # @param name [String] Session name
       # @return [Boolean] true if session existed
       def close_session(name)
-        !!@sessions.delete(name)
+        session = @sessions.delete(name)
+        session&.close!
+        !!session
       end
 
       # List all sessions
@@ -50,7 +52,9 @@ module StreamWeaver
       # Handle a message from Claude Code (via Unix socket)
       # @param message [Hash] Message from Claude
       # @return [Hash] Response message
-      def handle_claude_message(message)
+      # @param alive [#call] liveness of the requesting connection; only the
+      #   blocking wait_submit command consults it
+      def handle_claude_message(message, alive = -> { true })
         case message[:type]
         when 'create'
           handle_create(message[:name], layout: (message[:layout] || :fluid).to_sym, theme: (message[:theme] || :default).to_sym)
@@ -64,6 +68,8 @@ module StreamWeaver
           handle_get_dsl(message[:name])
         when 'drain_notes'
           handle_drain_notes(message[:name])
+        when 'wait_submit'
+          handle_wait_submit(message[:name], alive, message[:timeout])
         when 'set_pane_id'
           handle_set_pane_id(message[:name], message[:pane_id])
         when 'reset'
@@ -187,6 +193,20 @@ module StreamWeaver
 
         notes = @sessions.values.to_h { |s| [s.name, s.drain_notes] }.reject { |_, v| v.empty? }
         { type: 'notes', notes: notes }
+      end
+
+      # Blocks the calling connection thread until a batch is sent. Replies
+      # 'submitted' with the batch, 'closed' if the canvas closed, or nothing
+      # when the waiting client went away.
+      def handle_wait_submit(name, alive, timeout)
+        session = get_session(name)
+        return { type: 'error', message: "Session not found: #{name}" } unless session
+
+        result = session.wait_for_submit(alive: alive, timeout: timeout)
+        return nil if result.nil?
+        return { type: 'closed', name: name } if result[:closed]
+
+        { type: 'submitted', name: name, notes: result[:notes], ended: result[:ended] }
       end
 
       def handle_set_pane_id(name, pane_id)

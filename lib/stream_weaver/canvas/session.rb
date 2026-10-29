@@ -33,6 +33,11 @@ module StreamWeaver
         @notes = []
         @next_note_id = 0
         @regions = {}
+        @waiters = 0
+        @ended_unread = false
+        @review_ended = false
+        @closed = false
+        @cv = ConditionVariable.new
         @pane_id = nil
         @mutex = Mutex.new
         @mutex.synchronize { refresh_side_region }
@@ -127,6 +132,7 @@ module StreamWeaver
       def add_note(note)
         @mutex.synchronize do
           @notes << note.merge(id: (@next_note_id += 1), state: 'queued')
+          @review_ended = false
           refresh_side_region
           pending_count
         end
@@ -141,6 +147,52 @@ module StreamWeaver
           refresh_side_region unless taken.empty?
           taken.map(&:dup)
         end
+      end
+
+      # Send to Agent / Send & End: move EVERY queued note to sent in one locked
+      # step and wake any waiting agent. A batch nobody waits for stays sent
+      # until a wait or a pull takes it, so a Send with no waiter loses nothing.
+      # @return [Hash] { sent: Integer, ended: Boolean }
+      def send_queued(end_review: false)
+        @mutex.synchronize do
+          queued = @notes.select { |n| n[:state] == 'queued' }
+          queued.each { |n| n[:state] = 'sent' }
+          if end_review
+            @ended_unread = true
+            @review_ended = true
+          end
+          refresh_side_region
+          @cv.broadcast
+          { sent: queued.size, ended: end_review }
+        end
+      end
+
+      # Block until a batch has been sent (or the review ended), hand it over
+      # exactly once and mark it seen. A wait started after Send returns at
+      # once with the unread batch. While this runs the panel says the agent is
+      # waiting; `alive` is polled so a killed wait clears quickly.
+      # @param alive [#call] false once the waiting client is gone
+      # @return [Hash, nil] { notes:, ended: }, { closed: true }, or nil on
+      #   timeout or a vanished client
+      def wait_for_submit(alive: -> { true }, timeout: nil, poll: 0.25)
+        deadline = timeout && (Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout)
+        @mutex.synchronize { @waiters += 1; refresh_side_region }
+        begin
+          loop do
+            batch = @mutex.synchronize do
+              take_batch || (@closed ? { closed: true } : (@cv.wait(@mutex, poll) && nil))
+            end
+            return batch if batch
+            return nil unless alive.call
+            return nil if deadline && Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+          end
+        ensure
+          @mutex.synchronize { @waiters -= 1; refresh_side_region }
+        end
+      end
+
+      def close!
+        @mutex.synchronize { @closed = true; @cv.broadcast }
       end
 
       # A copy of every note with its state, oldest first.
@@ -177,6 +229,19 @@ module StreamWeaver
       end
       private
 
+      # Caller holds @mutex. Sent notes (and a pending end-of-review) are
+      # handed to exactly one taker; they become seen.
+      def take_batch
+        sent = @notes.select { |n| n[:state] == 'sent' }
+        return nil if sent.empty? && !@ended_unread
+
+        sent.each { |n| n[:state] = 'seen' }
+        ended = @ended_unread
+        @ended_unread = false
+        refresh_side_region
+        { notes: sent.map(&:dup), ended: ended }
+      end
+
       def pending_count
         @notes.count { |n| PENDING_STATES.include?(n[:state]) }
       end
@@ -184,7 +249,7 @@ module StreamWeaver
       # Re-render the bridge-owned "side" region from the notes state. Caller
       # holds @mutex. The version only moves when the markup does.
       def refresh_side_region
-        html = NotesPanel.render(session_name: @name, notes: @notes)
+        html = NotesPanel.render(session_name: @name, notes: @notes, agent_waiting: @waiters.positive?, review_ended: @review_ended)
         current = @regions['side']
         return if current && current[:html] == html
 

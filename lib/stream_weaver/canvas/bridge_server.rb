@@ -275,6 +275,19 @@ module StreamWeaver
         { ok: true, count: session.add_note(note) }.to_json
       end
 
+      # The person pressed Send to Agent (or Send & End with {"end": true}).
+      # All queued comments become sent in one locked step; a waiting agent is
+      # released once. Like notes, never forwarded to socket clients.
+      post '/canvas/:name/send' do
+        content_type :json
+        session = self.class.bridge.get_session(params[:name])
+        halt 404, { error: 'Session not found' }.to_json unless session
+
+        body = JSON.parse(request.body.read(1024).to_s) rescue {}
+        end_review = body.is_a?(Hash) && body['end'] == true
+        { ok: true }.merge(session.send_queued(end_review: end_review)).to_json
+      end
+
       private
 
       # The page's last-seen region versions, sent as ?rv[side]=3. Anything
@@ -357,6 +370,21 @@ module StreamWeaver
             <!-- Bridge-owned region: swapped on its own by the poll script, never by a doc push; the composer lives outside it -->
             <aside data-sw-region="side">#{session.region('side')[:html]}</aside>
             #{save_doc_widget(session_name, session)}
+            <!-- Region buttons: delegated, so a region swap never needs rewiring. Posts to this page's own path. -->
+            <script>
+              document.addEventListener('click', function (ev) {
+                var el = ev.target.closest && ev.target.closest('[data-sw-region] [data-sw-action]');
+                if (!el || el.disabled) return;
+                var action = el.getAttribute('data-sw-action');
+                var base = location.pathname.replace(/\/$/, '');
+                if (action === 'send' || action === 'send-end') {
+                  fetch(base + '/send', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ end: action === 'send-end' }) });
+                } else if (action === 'copy' && navigator.clipboard) {
+                  navigator.clipboard.writeText(el.textContent.trim());
+                }
+              });
+            </script>
             <!-- Comment overlay: outside #app-container so the poll swap cannot remove it or an open composer -->
             <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-canvas-notes.js'), encoding: 'UTF-8')}</script>
             <script>
@@ -658,7 +686,7 @@ module StreamWeaver
               messages, buffer = Protocol.parse_buffer(buffer)
 
               messages.each do |msg|
-                response = @bridge.handle_claude_message(msg)
+                response = @bridge.handle_claude_message(msg, -> { connection_alive?(client) })
 
                 if response
                   client.write(Protocol.encode(response))
@@ -679,6 +707,18 @@ module StreamWeaver
           @claude_connections.delete(client)
           client.close rescue nil
         end
+      end
+
+      # True while the peer has not hung up. Peeks without consuming: a closed
+      # peer reads as EOF, pending bytes mean it is still there.
+      def self.connection_alive?(client)
+        return false if client.closed?
+        return true unless IO.select([client], nil, nil, 0)
+
+        chunk = client.recv_nonblock(1, Socket::MSG_PEEK, exception: false)
+        chunk == :wait_readable || !(chunk.nil? || chunk.empty?)
+      rescue SystemCallError, IOError
+        false
       end
 
       def self.broadcast_to_browsers(session_name)

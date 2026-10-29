@@ -658,6 +658,9 @@ module StreamWeaver
           streamweaver canvas-toast <name> <msg>  Show toast overlay (doesn't replace content)
           streamweaver canvas-notes [name]        Take (and clear) comments viewers left on a canvas;
                                                      no name = every session that has notes
+          streamweaver canvas-notes <name> --wait-submit
+                                                  Block until the person presses Send to Agent, print
+                                                     the batch, exit (run in the background to be woken)
           streamweaver canvas-close <name>        Close a canvas session
           streamweaver canvas-raise <name>        Surface an already-pushed canvas (its iTerm pane if
                                                      tracked, else the URL in the default browser)
@@ -1467,11 +1470,14 @@ module StreamWeaver
     def self.canvas_notes(args)
       require_relative 'canvas/client'
 
+      wait = args.delete('--wait-submit')
       name = args.first
-      if help_flag?(name)
+      if help_flag?(name) || (wait && name.nil?)
         $stderr.puts "Usage: streamweaver canvas-notes [session-name]"
+        $stderr.puts "       streamweaver canvas-notes <session-name> --wait-submit"
         exit 1
       end
+      return canvas_notes_wait_submit(name) if wait
 
       response = Canvas::Client.send_message(Canvas::Protocol::Messages.drain_notes(name))
 
@@ -1484,6 +1490,35 @@ module StreamWeaver
       end
 
       puts format_canvas_notes(response[:notes] || {})
+    rescue Canvas::Client::NotRunningError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
+    # Block until the person presses Send to Agent (or Send & End), print the
+    # batch and exit. Run it in the background: its exit wakes the agent.
+    def self.canvas_notes_wait_submit(name)
+      response = Canvas::Client.request_typed(
+        Canvas::Protocol::Messages.wait_submit(name), types: %w[submitted error closed]
+      )
+
+      case response&.dig(:type)
+      when 'submitted'
+        puts format_canvas_notes(name => response[:notes] || []) unless (response[:notes] || []).empty?
+        puts "The person ended the review." if response[:ended]
+      when 'closed'
+        puts "The canvas #{name} was closed before anything was sent."
+      when 'error'
+        if response[:message].to_s.start_with?('Unknown message type:')
+          $stderr.puts "The running bridge predates --wait-submit. Run: streamweaver canvas-restart"
+        else
+          $stderr.puts response[:message]
+        end
+        exit 1
+      else
+        $stderr.puts "Lost the connection to the canvas bridge while waiting"
+        exit 1
+      end
     rescue Canvas::Client::NotRunningError => e
       $stderr.puts "Error: #{e.message}"
       exit 1

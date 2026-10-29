@@ -22,10 +22,11 @@ module StreamWeaver
 
       # @param notes [Array<Hash>] session notes, each with :id, :state, :text
       # @param agent_waiting [Boolean] a wait for this canvas is connected
-      def initialize(session_name:, notes:, agent_waiting: false)
+      def initialize(session_name:, notes:, agent_waiting: false, review_ended: false)
         @session_name = session_name
         @notes = notes
         @agent_waiting = agent_waiting
+        @review_ended = review_ended
       end
 
       def view_template
@@ -40,10 +41,11 @@ module StreamWeaver
               code(class: 'sw-notes-copy', data: { sw_action: 'copy' }) { 'see my comments' }
             end
           end
+          p(class: 'sw-notes-ended') { 'Review ended' } if @review_ended
           comments_list
           div(class: 'sw-notes-actions') do
             button(type: 'button', data: { sw_action: 'send' }, disabled: queued_count.zero?) { 'Send to Agent' }
-            button(type: 'button', data: { sw_action: 'send-end' }, disabled: queued_count.zero?) { 'Send & End' }
+            button(type: 'button', data: { sw_action: 'send-end' }) { 'Send & End' }
           end
         end
       end

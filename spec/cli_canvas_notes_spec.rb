@@ -86,6 +86,51 @@ RSpec.describe StreamWeaver::CLI, '.canvas_notes' do
     expect(err).to include('streamweaver canvas-restart')
   end
 
+  describe '--wait-submit' do
+    let(:client) { StreamWeaver::Canvas::Client }
+
+    def exit_status
+      yield
+      nil
+    rescue SystemExit => e
+      e.status
+    end
+
+    it 'prints the sent batch under the trusted header and exits' do
+      allow(client).to receive(:request_typed) do |msg, types:, **|
+        expect(msg).to eq(type: 'wait_submit', name: 'plan')
+        expect(types).to include('submitted')
+        { type: 'submitted', name: 'plan', ended: false,
+          notes: [{ text: "do\nthis", breadcrumb: 'Intro', kind: 'heading' }] }
+      end
+      out, = capture_io { described_class.canvas_notes(['plan', '--wait-submit']) }
+      expect(out).to start_with('Viewer notes for canvas plan (1).')
+      expect(out).to include('comment:  "do\nthis"'.gsub("\n", '\\n'))
+      expect(out).not_to include('ended the review')
+    end
+
+    it 'says when the person ended the review' do
+      allow(client).to receive(:request_typed).and_return(type: 'submitted', name: 'plan', notes: [], ended: true)
+      out, = capture_io { described_class.canvas_notes(['plan', '--wait-submit']) }
+      expect(out).to include('The person ended the review.')
+    end
+
+    it 'needs a canvas name' do
+      status = nil
+      _, err = capture_io { status = exit_status { described_class.canvas_notes(['--wait-submit']) } }
+      expect(status).to eq(1)
+      expect(err).to include('--wait-submit')
+    end
+
+    it 'exits nonzero when the connection drops with no reply' do
+      allow(client).to receive(:request_typed).and_return(nil)
+      status = nil
+      _, err = capture_io { status = exit_status { described_class.canvas_notes(['plan', '--wait-submit']) } }
+      expect(status).to eq(1)
+      expect(err).to include('Lost the connection')
+    end
+  end
+
   it 'is listed in the help block' do
     expect(File.read(File.expand_path('../lib/stream_weaver/cli.rb', __dir__))).to include('streamweaver canvas-notes [name]')
   end
