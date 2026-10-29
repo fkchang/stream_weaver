@@ -3,6 +3,7 @@
 require 'spec_helper'
 require 'json'
 require 'rack/test'
+require 'tmpdir'
 require 'stream_weaver/canvas/bridge_server'
 
 # Named page regions (canvas-annotate-review): the bridge renders a "side"
@@ -104,8 +105,21 @@ RSpec.describe StreamWeaver::Canvas::BridgeServer, 'regions', type: :request do
     push('plan', 'text "hello"')
     session = bridge.get_session('plan')
     expect(session.dsl).not_to include('data-sw-region')
-    post '/canvas/plan/save-doc', { name: 'x' }.to_json, 'CONTENT_TYPE' => 'application/json'
-    expect(last_response.body).not_to include('data-sw-region')
+    # save-doc writes a real file: point the doc store at a tmpdir so the spec
+    # never leaves a doc in the repo or the home store.
+    Dir.mktmpdir do |dir|
+      prev = ENV['STREAMWEAVER_DOC_ROOT']
+      ENV['STREAMWEAVER_DOC_ROOT'] = dir
+      begin
+        post '/canvas/plan/save-doc', { name: 'x' }.to_json, 'CONTENT_TYPE' => 'application/json'
+        expect(last_response.status).to eq(200)
+        expect(last_response.body).not_to include('data-sw-region')
+        expect(Dir[File.join(dir, '**/x.rb')]).not_to be_empty
+        expect(File.read(Dir[File.join(dir, '**/x.rb')].first)).not_to include('data-sw-region')
+      ensure
+        ENV['STREAMWEAVER_DOC_ROOT'] = prev
+      end
+    end
     expect(bridge.handle_claude_message(type: 'get_dsl', name: 'plan').to_json).not_to include('data-sw-region')
   end
 

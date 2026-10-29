@@ -370,21 +370,8 @@ module StreamWeaver
             <!-- Bridge-owned region: swapped on its own by the poll script, never by a doc push; the composer lives outside it -->
             <aside data-sw-region="side">#{session.region('side')[:html]}</aside>
             #{save_doc_widget(session_name, session)}
-            <!-- Region buttons: delegated, so a region swap never needs rewiring. Posts to this page's own path. -->
-            <script>
-              document.addEventListener('click', function (ev) {
-                var el = ev.target.closest && ev.target.closest('[data-sw-region] [data-sw-action]');
-                if (!el || el.disabled) return;
-                var action = el.getAttribute('data-sw-action');
-                var base = location.pathname.replace(/\/$/, '');
-                if (action === 'send' || action === 'send-end') {
-                  fetch(base + '/send', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ end: action === 'send-end' }) });
-                } else if (action === 'copy' && navigator.clipboard) {
-                  navigator.clipboard.writeText(el.textContent.trim());
-                }
-              });
-            </script>
+            <!-- Region buttons: delegated, so a region swap never needs rewiring -->
+            <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-region-actions.js'), encoding: 'UTF-8')}</script>
             <!-- Comment overlay: outside #app-container so the poll swap cannot remove it or an open composer -->
             <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-canvas-notes.js'), encoding: 'UTF-8')}</script>
             <script>
