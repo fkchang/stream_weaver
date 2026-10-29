@@ -72,6 +72,8 @@ module StreamWeaver
         canvas_wait(args)
       when 'canvas-notes'
         canvas_notes(args)
+      when 'canvas-annotate'
+        canvas_annotate(args)
       when 'canvas-close'
         canvas_close(args)
       when 'canvas-raise'
@@ -663,6 +665,9 @@ module StreamWeaver
                                                      the batch, exit (run in the background to be woken)
           streamweaver canvas-notes reply <name> "summary"
                                                   Show a one-line summary in the panel; marks the batch Done
+          streamweaver canvas-annotate [name|file.rb]
+                                                  Start a review: ensure the canvas, push the file, turn
+                                                     annotate mode on, print the wait command for the agent
           streamweaver canvas-close <name>        Close a canvas session
           streamweaver canvas-raise <name>        Surface an already-pushed canvas (its iTerm pane if
                                                      tracked, else the URL in the default browser)
@@ -1469,6 +1474,78 @@ module StreamWeaver
     # Drain viewer comments left via the live page's comment overlay. Reading
     # clears them. Viewer-supplied text is untrusted: every such value is
     # printed with #inspect on one line, after a trusted header.
+    # One entry for "review this doc": ensure the bridge and session, push FILE
+    # when given, turn annotate mode on and print the command the agent runs in
+    # the background. No argument: the only live canvas, or a list to choose from.
+    def self.canvas_annotate(args)
+      require_relative 'canvas/client'
+      require_relative 'canvas/doc_store'
+
+      target = args.first
+      if help_flag?(target)
+        $stderr.puts 'Usage: streamweaver canvas-annotate [NAME|FILE.rb]'
+        exit 1
+      end
+
+      file = target if target && File.file?(target)
+      name = file ? File.basename(file, '.*') : target
+      Canvas::Client.ensure_bridge_running
+
+      if name.nil?
+        names = (Canvas::Client.send_message({ type: 'list' })&.dig(:sessions) || []).map { |s| s[:name] }
+        case names.size
+        when 0
+          $stderr.puts 'No live canvas. Run: streamweaver canvas-annotate FILE.rb (or a NAME)'
+          exit 1
+        when 1
+          name = names.first
+        else
+          $stderr.puts "Several live canvases; which one? Run: streamweaver canvas-annotate NAME"
+          names.each { |n| $stderr.puts "  #{n}" }
+          exit 1
+        end
+      end
+
+      response = Canvas::Client.send_message(Canvas::Protocol::Messages.create(name))
+      unless response && response[:type] == 'ready'
+        $stderr.puts 'Error creating canvas session'
+        exit 1
+      end
+
+      if file
+        dsl = File.read(file).strip
+        pushed = Canvas::Client.send_message(
+          Canvas::Protocol::Messages.push(name, dsl, source_dir: Canvas::DocStore.git_root(File.dirname(File.expand_path(file))))
+        )
+        if pushed&.dig(:type) == 'push_error' || pushed&.dig(:type) == 'error'
+          $stderr.puts "DSL Error: #{pushed[:message]}"
+          exit 1
+        end
+        record_push_history(name, dsl)
+      end
+
+      on = Canvas::Client.send_message(Canvas::Protocol::Messages.annotate(name, true))
+      if on&.dig(:type) != 'annotating'
+        message = on&.dig(:message)
+        message = 'The running bridge predates canvas-annotate. Run: streamweaver canvas-restart' if message.to_s.start_with?('Unknown message type:')
+        $stderr.puts(message || 'No response from canvas bridge')
+        exit 1
+      end
+
+      puts "Annotate mode is on for canvas #{name}"
+      puts "URL: #{response[:url]}"
+      puts "Source file: #{File.expand_path(file)}" if file
+      puts ''
+      puts 'Run this in the BACKGROUND; it returns when the person presses Send to Agent:'
+      puts "  streamweaver canvas-notes #{name} --wait-submit"
+      puts ''
+      puts "After editing and re-pushing, tell the person what changed: streamweaver canvas-notes reply #{name} \"one-line summary\""
+      open_browser(response[:url])
+    rescue Canvas::Client::NotRunningError, Canvas::Client::ConnectionError => e
+      $stderr.puts "Error: #{e.message}"
+      exit 1
+    end
+
     def self.canvas_notes(args)
       require_relative 'canvas/client'
 
@@ -2766,7 +2843,8 @@ module StreamWeaver
         'streamweaver-way' => File.join(__dir__, 'skills', 'streamweaver-way', 'SKILL.md'),
         'streamweaver-canvas-safe' => File.join(__dir__, 'skills', 'streamweaver-canvas-safe', 'SKILL.md'),
         'visual-plan' => File.join(__dir__, 'skills', 'visual-plan', 'SKILL.md'),
-        'visual-recap' => File.join(__dir__, 'skills', 'visual-recap', 'SKILL.md')
+        'visual-recap' => File.join(__dir__, 'skills', 'visual-recap', 'SKILL.md'),
+        'sw-annotate' => File.join(__dir__, 'skills', 'sw-annotate', 'SKILL.md')
       }
 
       # Symlink the whole skill directory (not just SKILL.md) so sibling
@@ -2795,6 +2873,7 @@ module StreamWeaver
       puts "  streamweaver-canvas-safe/      (backend-less compatibility reference, symlinked from gem)"
       puts "  visual-plan/                   (pre-implementation planning canvas, symlinked from gem)"
       puts "  visual-recap/                  (post-implementation recap canvas, symlinked from gem)"
+      puts "  sw-annotate/                   (review a doc with the person's comments, symlinked from gem)"
       puts ""
       puts "Also installed to #{agents_location} — the cross-tool alias Codex CLI, Gemini CLI,"
       puts "and GitHub Copilot all discover natively (Claude Code uses its own path above instead)."

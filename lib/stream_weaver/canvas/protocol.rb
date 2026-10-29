@@ -84,6 +84,11 @@ module StreamWeaver
           { type: 'notes_reply', name: name, summary: summary }
         end
 
+        # Claude → Bridge: turn annotate mode on or off for a session.
+        def self.annotate(name, on)
+          { type: 'annotate', name: name, on: on }
+        end
+
         # Claude → Bridge: Set iTerm pane ID for a session
         def self.set_pane_id(name, pane_id)
           { type: 'set_pane_id', name: name, pane_id: pane_id }

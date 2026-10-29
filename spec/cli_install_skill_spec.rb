@@ -26,7 +26,7 @@ RSpec.describe StreamWeaver::CLI do
     before { described_class.install_skill([]) }
 
     it "symlinks every gem-sourced skill's whole directory into .claude/skills, not just SKILL.md" do
-      %w[streamweaver-visual-companion streamweaver-doc-builder streamweaver-way streamweaver-canvas-safe visual-plan visual-recap].each do |name|
+      %w[streamweaver-visual-companion streamweaver-doc-builder streamweaver-way streamweaver-canvas-safe visual-plan visual-recap sw-annotate].each do |name|
         dir_link = File.join(Dir.pwd, ".claude", "skills", name)
 
         expect(File.symlink?(dir_link)).to be(true), "#{dir_link} was not created as a symlink"

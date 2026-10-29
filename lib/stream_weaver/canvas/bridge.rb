@@ -72,6 +72,8 @@ module StreamWeaver
           handle_wait_submit(message[:name], alive, message[:timeout])
         when 'notes_reply'
           handle_notes_reply(message[:name], message[:summary])
+        when 'annotate'
+          handle_annotate(message[:name], message[:on])
         when 'set_pane_id'
           handle_set_pane_id(message[:name], message[:pane_id])
         when 'reset'
@@ -217,6 +219,14 @@ module StreamWeaver
         return { type: 'error', message: "Session not found: #{name}" } unless session
 
         { type: 'notes_replied', name: name, done: session.reply(summary) }
+      end
+
+      def handle_annotate(name, on)
+        session = get_session(name)
+        return { type: 'error', message: "Session not found: #{name}" } unless session
+
+        session.annotate = on == true
+        { type: 'annotating', name: name, on: session.annotate? }
       end
 
       def handle_set_pane_id(name, pane_id)
