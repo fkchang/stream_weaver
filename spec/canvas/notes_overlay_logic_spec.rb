@@ -10,7 +10,7 @@ RSpec.describe 'sw-canvas-notes.js helpers' do
   let(:src) { File.read(File.join(__dir__, '../../lib/stream_weaver/assets/js/sw-canvas-notes.js')) }
 
   def run_node(expr)
-    fns = src.scan(/^  function (?:titleFor|editKeyAction|activeAfter|badgeVisible|innermost)\(.*?^  \}|^  function titleFor\(el\) \{.*?\}$/m).join("\n")
+    fns = src.scan(/^  function (?:titleFor|editKeyAction|activeAfter|badgeVisible|innermost|dropHover)\(.*?^  \}|^  function titleFor\(el\) \{.*?\}$/m).join("\n")
     out, err, st = Open3.capture3('node', '-e', "#{fns}\nconsole.log(JSON.stringify(#{expr}))")
     raise "node failed: #{err}" unless st.success?
 
@@ -66,6 +66,42 @@ RSpec.describe 'sw-canvas-notes.js helpers' do
     nest = "const holds = {table: ['li', 'strong'], li: ['strong'], strong: []}; const c = (a, b) => holds[a].includes(b);"
     expect(run_node("(() => { #{nest} return [innermost(['table', 'li', 'strong'], c), innermost(['li', 'table'], c), innermost(['li'], c), innermost([], c)]; })()"))
       .to eq(['strong', 'li', 'li', nil])
+  end
+
+  it 'activating strips the hover preview classes from the selected element' do
+    js = <<~JS
+      (() => {
+        const set = new Set(['sw-hl', 'sw-hl-card', 'sw-hl-sel']);
+        const el = {classList: {remove: (c) => set.delete(c)}};
+        dropHover(el);
+        return [...set];
+      })()
+    JS
+    expect(run_node(js)).to eq(['sw-hl-sel'])
+  end
+
+  it 'CSS: the selected and composer outlines beat both hover previews in any pairing' do
+    css = src[/css\.textContent =(.*?);\n\s*document\.head/m, 1].scan(/'((?:[^'\\]|\\.)*)'/).flatten.join
+    rules = css.scan(/([^{}]+)\{([^}]*)\}/).map { |sel, body| [sel.split(','), body] }
+    winner = lambda do |classes|
+      best = nil
+      rules.each_with_index do |(sels, body), idx|
+        next unless body.include?('outline:') && !body.include?('outline:none')
+
+        sels.each do |sel|
+          needed = sel.strip.scan(/\.([\w-]+)/).flatten
+          next if needed.empty? || sel.strip =~ /[\s>]/ || !(needed - classes).empty?
+
+          key = [needed.size, idx]
+          best = [key, body] if best.nil? || (key <=> best[0]) == 1
+        end
+      end
+      best && best[1]
+    end
+    [%w[sw-hl-card sw-hl-sel], %w[sw-hl sw-hl-sel], %w[sw-hl-card sw-hl-comp], %w[sw-hl sw-hl-comp]].each do |pair|
+      expect(winner.call(pair)).to include('solid'), "#{pair.join(' + ')} resolves to #{winner.call(pair).inspect}"
+    end
+    expect(winner.call(%w[sw-hl-card])).to include('dashed')
   end
 
   it 'has no browser dialog and puts the inline input in the pill' do
