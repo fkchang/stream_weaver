@@ -136,7 +136,11 @@ module StreamWeaver
       def add_note(note)
         @mutex.synchronize do
           @notes << note.merge(id: (@next_note_id += 1), state: 'queued')
+          # A comment after Send & End starts a fresh review: clear the ended
+          # banner AND an unread end flag, or the next wait would stop the agent
+          # with the new batch.
           @review_ended = false
+          @ended_unread = false
           refresh_side_region
           pending_count
         end

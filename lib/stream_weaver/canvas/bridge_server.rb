@@ -253,7 +253,7 @@ module StreamWeaver
 
       NOTE_MAX_TEXT = 2 * 1024
       NOTE_MAX_BODY = 16 * 1024
-      NOTE_FIELDS = %i[text selected_text element_text breadcrumb kind index].freeze
+      NOTE_FIELDS = %i[text selected_text element_text breadcrumb kind tag index].freeze
 
       # A viewer comment on the live page. Held on the session until the agent
       # drains it (canvas-notes). Deliberately NOT routed through
