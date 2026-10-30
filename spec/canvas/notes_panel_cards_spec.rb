@@ -48,6 +48,10 @@ RSpec.describe StreamWeaver::Canvas::NotesPanel do
     expect(html).to include('Send &amp; End: send these and tell the agent the review is over; this page stays open.')
   end
 
+  it 'explains the dashed and solid outlines in plain words' do
+    expect(html).to include('Dashed outline: hover preview. Solid outline: the selected comment&#39;s element.').or include("Dashed outline: hover preview. Solid outline: the selected comment's element.")
+  end
+
   it 'a new comment after Send & End starts a fresh review, banner and unread end flag included' do
     session.send_queued(end_review: true)
     expect(html).to include('Review ended')

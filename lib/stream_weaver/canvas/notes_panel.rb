@@ -35,6 +35,8 @@ module StreamWeaver
       HINT = 'Send to Agent: send these and keep reviewing. Send & End: send these and tell the agent ' \
              'the review is over; this page stays open.'
 
+      LEGEND = 'Dashed outline: hover preview. Solid outline: the selected comment\'s element.'
+
       # Header and Send buttons are pinned (flex column); only the body scrolls.
       def view_template
         div(class: 'sw-notes-panel') do
@@ -65,6 +67,7 @@ module StreamWeaver
               button(type: 'button', data: { sw_action: 'send-end' }) { 'Send & End' }
             end
             p(class: 'sw-notes-hint') { HINT }
+            p(class: 'sw-notes-hint sw-notes-legend') { LEGEND }
           end
         end
       end

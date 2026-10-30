@@ -10,7 +10,7 @@ RSpec.describe 'sw-canvas-notes.js helpers' do
   let(:src) { File.read(File.join(__dir__, '../../lib/stream_weaver/assets/js/sw-canvas-notes.js')) }
 
   def run_node(expr)
-    fns = src.scan(/^  function (?:titleFor|editKeyAction|activeAfter|badgeVisible)\(.*?^  \}|^  function titleFor\(el\) \{.*?\}$/m).join("\n")
+    fns = src.scan(/^  function (?:titleFor|editKeyAction|activeAfter|badgeVisible|innermost)\(.*?^  \}|^  function titleFor\(el\) \{.*?\}$/m).join("\n")
     out, err, st = Open3.capture3('node', '-e', "#{fns}\nconsole.log(JSON.stringify(#{expr}))")
     raise "node failed: #{err}" unless st.success?
 
@@ -59,6 +59,13 @@ RSpec.describe 'sw-canvas-notes.js helpers' do
         ];
       })()
     JS
+  end
+
+  it 'picks the innermost commented element when several contain the click' do
+    # li holds strong; table holds li. contains(a, b): a's box holds b.
+    nest = "const holds = {table: ['li', 'strong'], li: ['strong'], strong: []}; const c = (a, b) => holds[a].includes(b);"
+    expect(run_node("(() => { #{nest} return [innermost(['table', 'li', 'strong'], c), innermost(['li', 'table'], c), innermost(['li'], c), innermost([], c)]; })()"))
+      .to eq(['strong', 'li', 'li', nil])
   end
 
   it 'has no browser dialog and puts the inline input in the pill' do
