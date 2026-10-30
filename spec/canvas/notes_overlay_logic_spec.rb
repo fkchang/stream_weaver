@@ -10,7 +10,7 @@ RSpec.describe 'sw-canvas-notes.js helpers' do
   let(:src) { File.read(File.join(__dir__, '../../lib/stream_weaver/assets/js/sw-canvas-notes.js')) }
 
   def run_node(expr)
-    fns = src.scan(/^  function (?:titleFor|editKeyAction)\(.*?^  \}|^  function titleFor\(el\) \{.*?\}$/m).join("\n")
+    fns = src.scan(/^  function (?:titleFor|editKeyAction|activeAfter|badgeVisible)\(.*?^  \}|^  function titleFor\(el\) \{.*?\}$/m).join("\n")
     out, err, st = Open3.capture3('node', '-e', "#{fns}\nconsole.log(JSON.stringify(#{expr}))")
     raise "node failed: #{err}" unless st.success?
 
@@ -24,6 +24,41 @@ RSpec.describe 'sw-canvas-notes.js helpers' do
   it 'maps editor keys: Enter saves non-empty text, Esc cancels' do
     expect(run_node("[editKeyAction('Enter','x'), editKeyAction('Enter','  '), editKeyAction('Escape','x'), editKeyAction('a','x')]"))
       .to eq(['save', nil, 'cancel', nil])
+  end
+
+  it 'keeps ONE active comment: only another comment, Esc with no editor, a page click, Send or removal change it' do
+    expect(run_node(<<~JS)).to eq(['2', '2', nil, nil, nil, '1', nil, '1', '3'])
+      (() => {
+        const a = activeAfter;
+        return [
+          a('1', {type: 'activate', id: '2'}),                      // another comment wins
+          a('2', {type: 'escape', editing: true}),                  // Esc inside the editor keeps it
+          a('2', {type: 'escape', editing: false}),                 // Esc with no editor clears it
+          a('2', {type: 'pageClick'}),                              // empty page click clears it
+          a('2', {type: 'send'}),                                   // Send clears it
+          a('1', {type: 'remove', id: '2'}),                        // removing another leaves it
+          a('2', {type: 'remove', id: '2'}),                        // removing the active clears it
+          a('1', {type: 'editEnd'}),                                // Save or Cancel leaves it active
+          a('3', {type: 'present', ids: ['1', '3']})                // still present after a region swap
+        ];
+      })()
+    JS
+    expect(run_node("activeAfter('9', {type: 'present', ids: ['1']})")).to be_nil
+  end
+
+  it 'shows a badge only when its anchor is clear of the right panel, the bottom sheet and the viewport' do
+    expect(run_node(<<~JS)).to eq([true, false, false, false, false])
+      (() => {
+        const desktop = {right: 928, bottom: 800}, mobile = {right: 390, bottom: 500};
+        return [
+          badgeVisible(100, 100, desktop),
+          badgeVisible(920, 100, desktop),   // under the 320px panel
+          badgeVisible(50, 495, mobile),     // under the bottom sheet
+          badgeVisible(50, -20, desktop),    // scrolled above the viewport
+          badgeVisible(-30, 100, desktop)
+        ];
+      })()
+    JS
   end
 
   it 'has no browser dialog and puts the inline input in the pill' do
