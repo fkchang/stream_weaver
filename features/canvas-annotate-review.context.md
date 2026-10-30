@@ -89,3 +89,13 @@ NOT in scope: source-line mapping, revision rings, LCS pin successors, "shown" r
 - `render_dsl` does not rescue SyntaxError (a ScriptError), so a pushed DSL with a syntax error raises out of Bridge#handle_push (lib/stream_weaver/canvas/bridge.rb:275). Pre-existing; not fixed here.
 - Phlex leaves `<` unescaped inside a quoted attribute value (safe) but escapes `"`; specs assert on `&quot;`.
 - Pill "element changed" is computed in the browser (MutationObserver on #app-container and the region), by matching stored element_text and breadcrumb.
+
+### Coordinator re-gate of the panel rework (2026-10-30)
+
+First real use by the person found the comment panel unusable: comments drawn as 999px pills (text spilled out), Send buttons scrolling away, no visible way out of Edit, no persistent link between a comment and its element. Reworked in 268023c and bda521c; each point was MEASURED in a real browser by the coordinator (isolated bridge, 1280 and 390px):
+
+- Cards are 8px rounded rectangles; 0 of 8 had text outside the box; header and Send footer stay pinned (footer top unchanged while the list scrolled to 1033; at 390px the footer bottom is the viewport bottom); no horizontal scroll.
+- Edit opens a textarea inside the card, focused, text selected, with Save and Cancel; Cancel changes nothing, Save replaces.
+- ONE active comment: clicking a card, a badge, focusing it or pressing Edit gives its element a solid outline and the card a 4px blue left border and tint; it persists after the pointer leaves and after Esc, Cancel or Save in the editor; the first Esc with no editor open clears it and keeps annotate on, the second leaves annotate mode (the bridge flag flips to false). Hover is only a dashed preview.
+- Numbered badges mark commented elements and match the card numbers; clicking a badge scrolls the list to its card; badges are hidden when their element is off-screen or under the right panel or the bottom sheet (verified at 390 and 1280, scrolled and not).
+- Lessons for the next builder: measure containment, persistence AFTER the pointer leaves, and the Esc ladder, not only the first interaction; a pill-shaped container with long text becomes an ellipse; hover-only highlights are not a "which element" cue.
