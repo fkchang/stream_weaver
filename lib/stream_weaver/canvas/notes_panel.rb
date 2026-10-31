@@ -36,6 +36,8 @@ module StreamWeaver
       HINT = 'Send to Agent: send these and keep reviewing. Send & End: send these and tell the agent ' \
              'the review is over; this page stays open.'
 
+      SEND_TITLE = 'Send these and keep reviewing'
+      END_TITLE = 'Send these and tell the agent the review is over; this page stays open'
       LEGEND = 'Dashed outline: hover preview. Solid outline: the selected comment\'s element.'
 
       # Header and Send buttons are pinned (flex column); only the body scrolls.
@@ -60,14 +62,13 @@ module StreamWeaver
             p(class: 'sw-notes-updated') { 'Doc updated just now' } if @doc_updated
             p(class: 'sw-notes-summary') { "Agent: #{@summary}" } if @summary && !@summary.empty?
             sections
+            help
           end
           div(class: 'sw-notes-foot') do
             div(class: 'sw-notes-actions') do
-              button(type: 'button', data: { sw_action: 'send' }, disabled: queued_count.zero?) { "Send to Agent (#{queued_count})" }
-              button(type: 'button', data: { sw_action: 'send-end' }) { 'Send & End' }
+              button(type: 'button', data: { sw_action: 'send' }, title: SEND_TITLE, disabled: queued_count.zero?) { "Send to Agent (#{queued_count})" }
+              button(type: 'button', data: { sw_action: 'send-end' }, title: END_TITLE) { 'Send & End' }
             end
-            p(class: 'sw-notes-hint') { HINT }
-            p(class: 'sw-notes-hint sw-notes-legend') { LEGEND }
           end
         end
       end
@@ -79,6 +80,16 @@ module StreamWeaver
       end
 
       # "td: Platform team" (tag or kind, then the start of the element text).
+      # Collapsed by default, at the end of the scrolling list, so the pinned
+      # footer holds only the two buttons.
+      def help
+        details(class: 'sw-notes-help', data: { sw_group: 'help' }) do
+          summary(class: 'sw-notes-h') { 'How this works' }
+          p(class: 'sw-notes-hint') { HINT }
+          p(class: 'sw-notes-hint sw-notes-legend') { LEGEND }
+        end
+      end
+
       def plural(count, word)
         "#{count} #{word}#{'s' unless count == 1}"
       end

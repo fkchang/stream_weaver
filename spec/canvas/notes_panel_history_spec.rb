@@ -93,6 +93,19 @@ RSpec.describe StreamWeaver::Canvas::NotesPanel, 'history' do
     expect(server.index('el.innerHTML = r.html')).to be < server.index('window.swRegionSwapped(name, kept)')
   end
 
+  it 'the pinned footer holds only the two buttons; hint and legend live in a collapsed help row at the end of the list' do
+    foot = html[html.index('class="sw-notes-foot"')..]
+    expect(foot).to include('Send to Agent (1)').and include('Send &amp; End')
+    expect(foot).not_to include('hint')
+    expect(foot).to include('title="Send these and keep reviewing"')
+    expect(foot).not_to include('Dashed outline')
+    help = html[/<details class="sw-notes-help"[^>]*>.*?<\/details>/m]
+    expect(help).not_to include(' open')
+    expect(help).to include('How this works').and include('Send to Agent: send these').and include('Dashed outline: hover preview')
+    expect(html.index('sw-notes-help')).to be > html.index('sw-notes-done')
+    expect(html.index('sw-notes-help')).to be < html.index('class="sw-notes-foot"')
+  end
+
   it 'done cards keep the .sw-card hooks and have no Edit or Remove' do
     expect(html.scan('data-sw-state="done"').size).to eq(3)
     done_html = html[html.index('sw-notes-done')..]
