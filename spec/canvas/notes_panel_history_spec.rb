@@ -100,7 +100,7 @@ RSpec.describe StreamWeaver::Canvas::NotesPanel, 'history' do
     expect(foot).to include('title="Send these and keep reviewing"')
     expect(foot).not_to include('Dashed outline')
     help = html[/<details class="sw-notes-help"[^>]*>.*?<\/details>/m]
-    expect(help).not_to include(' open')
+    expect(help[/\A<details[^>]*>/]).not_to include(' open')
     expect(help).to include('How this works').and include('Send to Agent: send these').and include('Dashed outline: hover preview')
     expect(html.index('sw-notes-help')).to be > html.index('sw-notes-done')
     expect(html.index('sw-notes-help')).to be < html.index('class="sw-notes-foot"')
