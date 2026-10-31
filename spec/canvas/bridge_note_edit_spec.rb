@@ -44,11 +44,11 @@ RSpec.describe StreamWeaver::Canvas::BridgeServer, 'note edit and remove', type:
   end
 
   it 'removes a queued note and the count drops' do
-    expect(session.region('side')[:html]).to include('2 unsent')
+    expect(session.region('side')[:html]).to include('Send to Agent (2)')
     delete '/canvas/plan/note/1'
     expect(last_response.status).to eq(200)
     expect(session.notes_snapshot.map { |n| n[:text] }).to eq(['second'])
-    expect(session.region('side')[:html]).to include('1 unsent')
+    expect(session.region('side')[:html]).to include('Send to Agent (1)')
   end
 
   it 'answers 404 for a sent, unknown or missing note, and for an unknown session' do
@@ -80,7 +80,7 @@ RSpec.describe StreamWeaver::Canvas::BridgeServer, 'note edit and remove', type:
     expect(html).not_to include('"x"')
     session.send_queued
     expect(session.region('side')[:html]).not_to include('data-sw-action="remove"')
-    expect(session.region('side')[:html]).to include('0 unsent')
+    expect(session.region('side')[:html]).to include('Send to Agent (0)')
   end
 
   it 'ships the composer title, highlight classes and the element-changed pill in the overlay' do

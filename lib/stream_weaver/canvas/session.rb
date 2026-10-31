@@ -40,6 +40,8 @@ module StreamWeaver
         @closed = false
         @doc_updated = false
         @summary = nil
+        @round = 0
+        @round_summaries = {}
         @annotate = false
         @cv = ConditionVariable.new
         @pane_id = nil
@@ -187,11 +189,11 @@ module StreamWeaver
       def send_queued(end_review: false)
         @mutex.synchronize do
           queued = @notes.select { |n| n[:state] == 'queued' }
-          queued.each { |n| n[:state] = 'sent' }
-          unless queued.empty?
-            @doc_updated = false
-            @summary = nil
-          end
+          # Each Send starts a round; the comments sent together share its number.
+          # Earlier summaries stay: only reply writes them, one per round it closes.
+          @round += 1 unless queued.empty?
+          queued.each { |n| n.merge!(state: 'sent', round: @round) }
+          @doc_updated = false unless queued.empty?
           if end_review
             @ended_unread = true
             @review_ended = true
@@ -248,6 +250,7 @@ module StreamWeaver
           done = @notes.select { |n| %w[sent seen working].include?(n[:state]) }
           done.each { |n| n[:state] = 'done' }
           @summary = summary.to_s.gsub(/\s+/, ' ').strip[0, SUMMARY_MAX]
+          done.filter_map { |n| n[:round] }.uniq.each { |r| @round_summaries[r] = @summary }
           refresh_side_region
           done.size
         end
@@ -325,7 +328,8 @@ module StreamWeaver
       # holds @mutex. The version only moves when the markup does.
       def refresh_side_region
         html = NotesPanel.render(session_name: @name, notes: @notes, agent_waiting: @waiters.positive?, review_ended: @review_ended,
-                                 doc_updated: @doc_updated, summary: @summary, annotate: @annotate)
+                                 doc_updated: @doc_updated, summary: @summary, annotate: @annotate,
+                                 round_summaries: @round_summaries)
         current = @regions['side']
         return if current && current[:html] == html
 

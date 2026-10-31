@@ -74,14 +74,14 @@ RSpec.describe 'canvas comment status and summary' do
     expect(side_html).to include('Doc updated just now')
   end
 
-  it 'the next Send starts a new round: marker and old summary clear' do
+  it 'the next Send starts a new round: the marker clears and the earlier summary is kept' do
     session.send_queued
     push
     reply('done it')
     session.add_note(text: 'another')
     session.send_queued
     expect(side_html).not_to include('Doc updated')
-    expect(side_html).not_to include('done it')
+    expect(side_html).to include('done it')
   end
 
   it 'shows the agent summary as escaped plain text' do

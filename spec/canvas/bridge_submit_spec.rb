@@ -171,7 +171,7 @@ RSpec.describe 'canvas submit and wait' do
     post_note('second')
     session.send_queued
     post_note('third')
-    expected = %w[Sent Sent Queued]
+    expected = %w[Queued Sent Sent] # grouped: ready to send first
     get '/canvas/plan'
     in_page = last_response.body[%r{<aside data-sw-region="side">.*?</aside>}m].scan(/sw-notes-state">(\w+)</)
     expect(in_page.flatten).to eq(expected)
