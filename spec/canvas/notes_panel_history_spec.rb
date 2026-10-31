@@ -86,6 +86,13 @@ RSpec.describe StreamWeaver::Canvas::NotesPanel, 'history' do
     expect(html).to include('<span class="sw-card-n">6</span>')
   end
 
+  it 'the page swaps regions through the before and after hooks in the same task' do
+    server = File.read(File.join(__dir__, '../../lib/stream_weaver/canvas/bridge_server.rb'))
+    expect(server).to include('window.swRegionBefore(name)').and include('window.swRegionSwapped(name, kept)')
+    expect(server.index('window.swRegionBefore(name)')).to be < server.index('el.innerHTML = r.html')
+    expect(server.index('el.innerHTML = r.html')).to be < server.index('window.swRegionSwapped(name, kept)')
+  end
+
   it 'done cards keep the .sw-card hooks and have no Edit or Remove' do
     expect(html.scan('data-sw-state="done"').size).to eq(3)
     done_html = html[html.index('sw-notes-done')..]

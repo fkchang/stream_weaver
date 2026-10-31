@@ -10,7 +10,7 @@ RSpec.describe 'sw-canvas-notes.js helpers' do
   let(:src) { File.read(File.join(__dir__, '../../lib/stream_weaver/assets/js/sw-canvas-notes.js')) }
 
   def run_node(expr)
-    fns = src.scan(/^  function (?:titleFor|editKeyAction|activeAfter|badgeVisible|innermost|dropHover)\(.*?^  \}|^  function titleFor\(el\) \{.*?\}$/m).join("\n")
+    fns = src.scan(/^  function (?:titleFor|editKeyAction|activeAfter|badgeVisible|innermost|dropHover|badgeShown|newIds|openFor)\(.*?^  \}|^  function titleFor\(el\) \{.*?\}$/m).join("\n")
     out, err, st = Open3.capture3('node', '-e', "#{fns}\nconsole.log(JSON.stringify(#{expr}))")
     raise "node failed: #{err}" unless st.success?
 
@@ -102,6 +102,27 @@ RSpec.describe 'sw-canvas-notes.js helpers' do
       expect(winner.call(pair)).to include('solid'), "#{pair.join(' + ')} resolves to #{winner.call(pair).inspect}"
     end
     expect(winner.call(%w[sw-hl-card])).to include('dashed')
+  end
+
+  it 'badge rule: live comments always show, Done ones only with Done and their round open or when selected' do
+    expect(run_node(<<~JS)).to eq([true, true, false, false, false, true, true])
+      (() => [
+        badgeShown('queued', false, false, false),
+        badgeShown('working', false, false, false),
+        badgeShown('done', false, false, false),
+        badgeShown('done', true, false, false),   // Done open, round closed
+        badgeShown('done', false, true, false),   // round open, Done closed
+        badgeShown('done', true, true, false),
+        badgeShown('done', false, false, true)    // selected Done comment keeps its badge
+      ])()
+    JS
+  end
+
+  it 'state restore: saved open keys reopen, everything else is closed; new ids are found' do
+    expect(run_node("[openFor({done: true, r2: true}, 'done'), openFor({done: true}, 'r2'), openFor(null, 'done'), openFor({}, 'r1')]"))
+      .to eq([true, false, false, false])
+    expect(run_node("[newIds(['1','2'], ['1','2','3']), newIds(['1','2'], ['2']), newIds([], ['4','5'])]"))
+      .to eq([['3'], [], %w[4 5]])
   end
 
   it 'has no browser dialog and puts the inline input in the pill' do

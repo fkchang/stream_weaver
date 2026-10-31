@@ -577,7 +577,11 @@ module StreamWeaver
                   const el = document.querySelector('[data-sw-region="' + name + '"]');
                   if (el && r.version > (regionVersions[name] || 0)) {
                     regionVersions[name] = r.version;
+                    // Hooks run in the same task as the swap, so there is no visible
+                    // collapse-then-reopen flash and the list scroll does not jump.
+                    const kept = window.swRegionBefore ? window.swRegionBefore(name) : null;
                     el.innerHTML = r.html;
+                    if (window.swRegionSwapped) window.swRegionSwapped(name, kept);
                   }
                 });
 
