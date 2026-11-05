@@ -127,27 +127,9 @@ module StreamWeaver
               output << emit_doc_header(chunk)
               emitted_doc_header = true
             else
-              marker = chunk[:lines].first.to_s
-              body = chunk[:lines].drop(1)
-
-              # Rule 2: before/after comparison pairing.
-              if (match = marker.match(/\A\*◀ Before — (.+)\*\z/))
-                following = chunk_list[i + 1]
-                after_marker = following[:lines].first.to_s if following&.dig(:type) == :quote
-                after_match = after_marker&.match(/\A\*▶ After — (.+)\*\z/)
-                raise ArgumentError, "malformed comparison: before block is not followed by an after block" unless after_match
-
-                output << emit_comparison(match[1], body, after_match[1], following[:lines].drop(1))
-                i += 1 # consume the paired 'after' chunk too
-              elsif marker.match?(/\A\*▶ After — /)
-                raise ArgumentError, "malformed comparison: after block has no preceding before block"
-              # Rule 3: reserved-emoji callout.
-              elsif (match = callout_marker_match(marker))
-                output << emit_callout(VARIANT_EMOJI.fetch(match[1]), match[2], body)
-              # Rule 4: card fallback.
-              else
-                output << emit_card(marker, body)
-              end
+              code, consumed = emit_quote(chunk_list, i)
+              output << code
+              i += consumed - 1 # consume a paired comparison chunk too
             end
 
           else
@@ -247,8 +229,13 @@ module StreamWeaver
 
           if line.casecmp?("#+begin_quote")
             body = []
+            depth = 1
             i += 1
-            while i < lines.length && !lines[i].casecmp?("#+end_quote")
+            while i < lines.length
+              depth += 1 if lines[i].casecmp?("#+begin_quote")
+              depth -= 1 if lines[i].casecmp?("#+end_quote")
+              break if depth.zero?
+
               body << lines[i]
               i += 1
             end
@@ -495,12 +482,53 @@ module StreamWeaver
       # alongside any surrounding md prose, instead of being swallowed into
       # one md heredoc.
       def emit_body(lines)
-        chunks(lines).map do |chunk|
+        chunk_list = chunks(lines)
+        parts = []
+        i = 0
+        while i < chunk_list.length
+          chunk = chunk_list[i]
           case chunk[:type]
-          when :paragraph, :table, :src then emit(chunk)
+          when :paragraph, :table, :src
+            parts << emit(chunk)
+          when :quote
+            # A callout/card/comparison nested in a card or callout body.
+            # Same marker rules as top level, minus the doc_header position
+            # rule (a nested block is never the preamble).
+            code, consumed = emit_quote(chunk_list, i)
+            parts << code
+            i += consumed - 1
           else raise ArgumentError, "unsupported #{chunk[:type]} block inside quote body"
           end
-        end.join("\n\n")
+          i += 1
+        end
+        parts.join("\n\n")
+      end
+
+      # Rules 2-4 for a quote chunk at chunk_list[i], shared by the top-level
+      # loop and nested bodies. Returns [dsl, chunks_consumed]; a comparison
+      # consumes its paired "after" chunk too.
+      def emit_quote(chunk_list, i)
+        chunk = chunk_list[i]
+        marker = chunk[:lines].first.to_s
+        body = chunk[:lines].drop(1)
+
+        # Rule 2: before/after comparison pairing.
+        if (match = marker.match(/\A\*◀ Before — (.+)\*\z/))
+          following = chunk_list[i + 1]
+          after_marker = following[:lines].first.to_s if following&.dig(:type) == :quote
+          after_match = after_marker&.match(/\A\*▶ After — (.+)\*\z/)
+          raise ArgumentError, "malformed comparison: before block is not followed by an after block" unless after_match
+
+          [emit_comparison(match[1], body, after_match[1], following[:lines].drop(1)), 2]
+        elsif marker.match?(/\A\*▶ After — /)
+          raise ArgumentError, "malformed comparison: after block has no preceding before block"
+        # Rule 3: reserved-emoji callout.
+        elsif (match = callout_marker_match(marker))
+          [emit_callout(VARIANT_EMOJI.fetch(match[1]), match[2], body), 1]
+        # Rule 4: card fallback.
+        else
+          [emit_card(marker, body), 1]
+        end
       end
 
       # THE fix for the doc_header misclassification bug. An earlier version
