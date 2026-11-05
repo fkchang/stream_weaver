@@ -1,6 +1,7 @@
 ---
 name: streamweaver-way
-description: Use when building or changing an interactive StreamWeaver app or feature — inline editing, live search/filtering, per-row buttons, hover cards, infinite scroll, tabs, or any region slow enough to hold up the page. Encodes "The StreamWeaver Way": the conventions (fragments, defer:/lazy:, form_for, interactive-id keying, dev-loud/prod-self-heal) that make app code zero-JavaScript by default. For one-off mockups, diagrams, or dashboards to look at, use streamweaver-visual-companion instead; for long-form editorial documents, use streamweaver-doc-builder.
+description: >-
+  Use when building or changing an interactive StreamWeaver app or feature — inline editing, live search/filtering, per-row buttons, hover cards, infinite scroll, tabs, or any region slow enough to hold up the page. Encodes "The StreamWeaver Way" conventions (fragments, defer:/lazy:, form_for, interactive-id keying, dev-loud/prod-self-heal) that make app code zero-JavaScript by default. For one-off mockups, diagrams, or dashboards to look at, use streamweaver-visual-companion instead; for long-form editorial documents, use streamweaver-doc-builder.
 ---
 
 # The StreamWeaver Way
