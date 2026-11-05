@@ -339,6 +339,12 @@ module StreamWeaver
           [utf8_locale_env, RbConfig.ruby, '-E', 'UTF-8', script_file]
         end
 
+        def shutdown_path(cause, detail)
+          query = URI.encode_www_form(cause: cause, detail: detail,
+                                      caller: JSON.generate(EventLog.caller_info))
+          "/shutdown?#{query}"
+        end
+
         # Read bridge info from PID file
         # @return [Hash] { pid: Integer, port: Integer, version: String, code: String }
         #   version/code are nil for a bridge started before the stamp existed
@@ -353,8 +359,10 @@ module StreamWeaver
         end
 
         # Stop the bridge process
+        # @param cause [String] why, for the lifecycle event log (EventLog::CAUSES)
+        # @param detail [String, nil] free-text refinement, e.g. 'staleness_heal'
         # @return [Boolean] true if stopped
-        def stop_bridge
+        def stop_bridge(cause: 'other', detail: nil)
           return false unless bridge_running?
 
           info = read_bridge_info
@@ -362,7 +370,7 @@ module StreamWeaver
             require 'net/http'
             begin
               Net::HTTP.start('127.0.0.1', info[:port], open_timeout: 2, read_timeout: 2) do |http|
-                http.post('/shutdown', '')
+                http.post(shutdown_path(cause, detail), '')
               end
               sleep 0.5
             rescue StandardError

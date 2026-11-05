@@ -188,7 +188,7 @@ RSpec.describe StreamWeaver::University::Cleanup do
       outcome = described_class.delete_entry!('session', 'doc-demo')
 
       expect(StreamWeaver::Canvas::Client).to have_received(:send_message)
-        .with(StreamWeaver::Canvas::Protocol::Messages.close('doc-demo'))
+        .with(StreamWeaver::Canvas::Protocol::Messages.close('doc-demo', cause: 'other'))
       expect(outcome.ok).to be(true)
       expect(artifacts.all).to eq([])
     end

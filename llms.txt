@@ -882,6 +882,7 @@ streamweaver canvas-close "$SESSION"
 | `streamweaver canvas-push SESSION` | Push DSL content (stdin or `<<'RUBY'`) |
 | `streamweaver canvas-wait SESSION [--event TYPE\|--any]` | Wait for a control to dispatch, return JSON (see the control table below) |
 | `streamweaver canvas-close SESSION` | Close the canvas session |
+| `streamweaver canvas-events [--session NAME] [--since 2h] [--json]` | Print the canvas lifecycle log (who or what closed a canvas); read-only, never touches the bridge |
 | `streamweaver canvas-read FILE [FILE\|DIR ...]` | Browse saved canvas DSL files in a local viewer (sidebar + prev/next nav) |
 | `streamweaver export FILE.rb [-o OUT.html] [--inline-images] [--offline]` | Write a canvas DSL doc out as standalone HTML |
 

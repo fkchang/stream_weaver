@@ -407,7 +407,7 @@ module StreamWeaver
 
         require 'stream_weaver/canvas/client'
         ::StreamWeaver::Canvas::Client.send_message(
-          ::StreamWeaver::Canvas::Protocol::Messages.close(name)
+          ::StreamWeaver::Canvas::Protocol::Messages.close(name, cause: 'other')
         )
         Outcome.new(ok: true, message: "closed canvas session '#{name}'")
       rescue ::StreamWeaver::Canvas::Client::NotRunningError,

@@ -44,6 +44,32 @@ Two things it deliberately will not do. It never restarts twice within a minute:
 
 Set `SW_NO_AUTO_RESTART=1` to be warned instead of healed everywhere; the command then continues against the old bridge.
 
+## Why did a canvas say "Session Complete"?
+
+A tab shows "Session Complete" in two cases: the bridge told it the session was closed, or the tab polled the bridge for a name the bridge does not know (which is what every open tab sees when the bridge restarts, because the page never recovers once it has shown the message). Neither used to leave a trace, so the bridge keeps an append-only lifecycle log at `~/.streamweaver/canvas-events.jsonl` (5 MB, then rotated once to `.1`):
+
+```bash
+streamweaver canvas-events                       # everything, oldest first
+streamweaver canvas-events --session today-focus # one canvas
+streamweaver canvas-events --since 2h --json     # last two hours, one JSON object per line
+```
+
+`canvas-events` only reads the file. It never contacts the bridge, so it can never trigger the staleness restart described above.
+
+Each line has `ts` (UTC), `event`, `session_name`, `pane_id`, `cause`, `caller`, `bridge_pid` and `version`:
+
+| Event | Meaning |
+|---|---|
+| `bridge_start` / `bridge_stop` | The bridge booted or exited. A stop carries the `cause` and `caller` passed to `/shutdown`; any other exit (kill, crash) is `unknown`. |
+| `session_create` | New session; `via` is `cli_create` (`panel`, restore) or `tab_get` (a browser opened the URL of a name the bridge did not hold). |
+| `session_close` | A close, with `cause` and `caller`. |
+| `pane_create` / `pane_duplicate` | `panel` registered an iTerm pane; a duplicate means the session already had a different pane. |
+| `poll_not_found` | A tab polled a name the bridge does not know (at most one line per name per minute). |
+
+`cause` is one of `cli_close` (`canvas-close`, and the auto-close after `canvas pick` / `confirm`), `fresh_panel`, `bridge_restart` (`canvas-restart` or the automatic staleness heal; `detail` says which), `listener_exit`, `user_tab`, `other` (`canvas-stop`) or `unknown`. A close from a client that sends no cause is `unknown`, never a guess; `user_tab` and `listener_exit` are reserved, because nothing in the bridge closes a session for those reasons today.
+
+`caller` is the process that ran the command: pid, command line (credentials redacted, 200 characters at most), three levels of parent processes, cwd, and `claude_code_session_id` / `codex_thread_id` when set, so a close is attributed to the session that made it. No other environment value is recorded. The log starts when the bridge is restarted onto code that has it.
+
 ## Reaching the bridge from your phone (tailnet)
 
 The bridge listens on `127.0.0.1:4700` and answers only loopback `Host` headers, so a proxy such as `tailscale serve` gets `403 Host not permitted` until you name the hosts it will present. Name them in `STREAMWEAVER_CANVAS_ALLOWED_HOSTS` (comma separated, host part only, no port) in the environment the bridge starts in, or, better because it survives an automatic bridge restart from a shell without the variable, one host per line in `~/.streamweaver/canvas_allowed_hosts` (`#` comments allowed; both are unioned). Then restart the bridge with `streamweaver canvas-restart` (snapshot, stop, start, restore: sessions keep their content):

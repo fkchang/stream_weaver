@@ -2,6 +2,7 @@
 
 require_relative 'protocol'
 require_relative 'session'
+require_relative 'event_log'
 
 module StreamWeaver
   module Canvas
@@ -23,8 +24,10 @@ module StreamWeaver
       # Create or get an existing session
       # @param name [String] Session name
       # @return [Session]
-      def create_session(name, layout: :fluid, theme: :default)
-        @sessions[name] ||= Session.new(name, layout: layout, theme: theme)
+      def create_session(name, layout: :fluid, theme: :default, via: 'api')
+        @sessions[name] ||= Session.new(name, layout: layout, theme: theme).tap do
+          EventLog.record(:session_create, session_name: name, via: via)
+        end
       end
 
       # Get a session by name
@@ -63,7 +66,7 @@ module StreamWeaver
         when 'toast'
           handle_toast(message[:name], message[:message], message[:variant], message[:duration])
         when 'close'
-          handle_close(message[:name])
+          handle_close(message[:name], cause: message[:cause], caller_info: message[:caller])
         when 'get_dsl'
           handle_get_dsl(message[:name])
         when 'drain_notes'
@@ -115,7 +118,7 @@ module StreamWeaver
       private
 
       def handle_create(name, layout: :fluid, theme: :default)
-        create_session(name, layout: layout, theme: theme)
+        create_session(name, layout: layout, theme: theme, via: 'cli_create')
         {
           type: 'ready',
           name: name,
@@ -166,9 +169,11 @@ module StreamWeaver
         nil # No response to Claude for toast
       end
 
-      def handle_close(name)
+      def handle_close(name, cause: nil, caller_info: nil)
         session = get_session(name)
         pane_id = session&.pane_id
+        EventLog.record(:session_close, session_name: name, pane_id: pane_id, cause: cause,
+                        caller_info: caller_info, existed: !session.nil?)
         session&.broadcast(type: 'closed')
         close_session(name)
         { type: 'closed', name: name, pane_id: pane_id }
@@ -233,6 +238,11 @@ module StreamWeaver
         session = get_session(name)
         return { type: 'error', message: "Session not found: #{name}" } unless session
 
+        previous = session.pane_id
+        unless previous == pane_id
+          EventLog.record(previous ? :pane_duplicate : :pane_create,
+                          session_name: name, pane_id: pane_id, previous_pane_id: previous)
+        end
         session.pane_id = pane_id
         { type: 'pane_id_set', name: name }
       end

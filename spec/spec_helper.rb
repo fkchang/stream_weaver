@@ -31,6 +31,9 @@ require "stream_weaver/university/listener"
 # passing a host on every request across dozens of spec files.
 # The developer's real ~/.streamweaver/canvas_allowed_hosts must not leak in.
 ENV['STREAMWEAVER_CANVAS_ALLOWED_HOSTS_FILE'] = '/nonexistent/canvas_allowed_hosts'
+# Specs must never append to the developer's real canvas lifecycle log.
+require 'tmpdir'
+ENV['STREAMWEAVER_CANVAS_EVENTS'] = File.join(Dir.mktmpdir('sw-canvas-events'), 'canvas-events.jsonl')
 ENV.delete('STREAMWEAVER_CANVAS_ALLOWED_HOSTS')
 
 require 'rack/test'

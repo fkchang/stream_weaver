@@ -125,6 +125,7 @@ module StreamWeaver
 
       post '/shutdown' do
         content_type :json
+        self.class.note_shutdown(params[:cause], params[:detail], params[:caller])
         Thread.new { sleep 0.1; exit(0) }
         { status: 'shutting_down' }.to_json
       end
@@ -140,7 +141,7 @@ module StreamWeaver
         session_name = params[:name]
 
         # Create or get session
-        session = self.class.bridge.create_session(session_name)
+        session = self.class.bridge.create_session(session_name, via: 'tab_get')
 
         # Render the canvas page
         content_type :html
@@ -153,7 +154,10 @@ module StreamWeaver
         session_name = params[:name]
         session = self.class.bridge.get_session(session_name)
 
-        halt 404, { error: 'Session not found' }.to_json unless session
+        unless session
+          self.class.record_poll_not_found(session_name)
+          halt 404, { error: 'Session not found' }.to_json
+        end
 
         content_type :json
         {
@@ -772,8 +776,41 @@ module StreamWeaver
                    "pid=#{Process.pid}\nport=#{@port || DEFAULT_PORT}\n#{CodeStamp.pid_file_stanza}")
       end
 
+      POLL_NOT_FOUND_INTERVAL = 60
+
+      # A tab polls about once a second, so a name the bridge does not know
+      # would write a line a second. One line per name per minute is enough to
+      # show which names were being polled and roughly when it stopped.
+      def self.record_poll_not_found(name)
+        @poll_not_found_at ||= {}
+        @poll_not_found_at.clear if @poll_not_found_at.size > 1000
+        now = Time.now
+        last = @poll_not_found_at[name]
+        return if last && now - last < POLL_NOT_FOUND_INTERVAL
+
+        @poll_not_found_at[name] = now
+        Canvas::EventLog.record(:poll_not_found, session_name: name)
+      end
+
+      # Remembers who asked the bridge to stop, so the at_exit stop event can
+      # say why. A bridge that exits any other way (kill, crash, Ctrl-C) logs
+      # cause unknown.
+      def self.note_shutdown(cause, detail, caller_json)
+        caller_info = caller_json.to_s.empty? ? nil : JSON.parse(caller_json)
+        @stop_info = { cause: cause, detail: detail, caller_info: caller_info }
+      rescue StandardError
+        @stop_info = { cause: cause, detail: detail }
+      end
+
+      def self.record_stop
+        info = @stop_info || {}
+        Canvas::EventLog.record(:bridge_stop, cause: info[:cause], caller_info: info[:caller_info],
+                                detail: info[:detail], port: @port)
+      end
+
       # Cleanup on shutdown
       def self.cleanup
+        record_stop
         File.delete(socket_path) if File.exist?(socket_path)
         File.delete(pid_file_path) if File.exist?(pid_file_path)
         @unix_server&.close
@@ -789,6 +826,7 @@ module StreamWeaver
         write_pid_file
         start_unix_socket_server
 
+        Canvas::EventLog.record(:bridge_start, port: @port)
         at_exit { cleanup }
 
         # Start Sinatra
