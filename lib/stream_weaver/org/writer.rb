@@ -23,6 +23,8 @@ module StreamWeaver
         @called = false
         @nesting_depth = 0
         @replay_count = 0
+        @escape_hatches = 0
+        @headline_tabs = Set.new
       end
 
       # Top-level DSL statements RecordingContext deliberately no-ops (see
@@ -329,7 +331,11 @@ module StreamWeaver
       # recognized go negative. @nesting_depth (incremented/decremented
       # around render_quote's recursive walk) tracks whether we're inside
       # such a nested render, and every hatch counts through here.
+      #
+      # @escape_hatches counts every hatch at ANY depth, so #lossless_tabs?
+      # can tell whether a trial render of a tabs group hit one.
       def count(bucket)
+        @escape_hatches += 1 unless bucket == :total
         @coverage_counts[bucket] += 1 if @nesting_depth.zero?
       end
 
@@ -391,6 +397,11 @@ module StreamWeaver
       #   are one clean line with no options of their own;
       # - no tab holds a nested tabs group or a section header directly
       #   (both would need headlines inside a headline-delimited group);
+      # - every descendant renders without an escape hatch (see
+      #   #lossless_tabs?). Below top level there is no source to recover,
+      #   so a chart or a headerless card inside a tab would become a bare
+      #   placeholder, and a button would be dropped, all invisible to
+      #   #coverage. The whole statement's verbatim source keeps it instead;
       # - what FOLLOWS it ends the group on the way back: EOF, a numbered
       #   section headline, or another qualifying group with a different key
       #   (same-key neighbours would merge into one group). Anything else
@@ -403,7 +414,7 @@ module StreamWeaver
         following = nil
         components.reverse_each.with_object(Set.new) do |component, ok|
           if component.is_a?(Components::Tabs) && plain_tabs?(component) &&
-             closes_tab_group?(following, component.key, ok)
+             lossless_tabs?(component) && closes_tab_group?(following, component.key, ok)
             ok << component.object_id
           end
           following = component
@@ -418,10 +429,24 @@ module StreamWeaver
         end
       end
 
+      # An empty group would render as nothing at all, so it needs a tab.
       def plain_tabs?(tabs)
         tabs.key.is_a?(Symbol) && tabs.key.match?(/\A\w+\z/) &&
           tabs.variant == :line && !tabs.lazy && !tabs.url && tabs.options.empty? &&
-          tabs.children.all? { |tab| plain_tab?(tab) }
+          tabs.children.any? && tabs.children.all? { |tab| plain_tab?(tab) }
+      end
+
+      # A trial render, thrown away: render_component is the one place that
+      # knows which components hit an escape hatch, so asking it beats a
+      # second copy of that dispatch here. Only the replay counter is a side
+      # effect worth undoing (coverage is untouched below top level).
+      def lossless_tabs?(tabs)
+        hatches = @escape_hatches
+        replays = @replay_count
+        render_tabs(tabs)
+        @escape_hatches == hatches
+      ensure
+        @replay_count = replays
       end
 
       def plain_tab?(tab)

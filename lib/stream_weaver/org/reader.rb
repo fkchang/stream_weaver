@@ -52,7 +52,8 @@ module StreamWeaver
       # PREAMBLE_RE, which would otherwise swallow it as plain metadata.
       NAME_RE = /\A#\+NAME:\s*(\S+)\s*\z/i
       # The tabs group key in a tab headline's drawer (see Writer#render_tabs).
-      TAB_PROPERTY_RE = /\A:STREAMWEAVER_TAB:\s*(\w+)\s*\z/
+      TAB_PROPERTY_RE = /\A:STREAMWEAVER_TAB:(.*)\z/
+      TAB_KEY_RE = /\A\w+\z/
 
       REPLAY_RESERVED_COLUMNS = %w[at lane text milestone].freeze
       REPLAY_LANES_COLUMNS = %w[id name].freeze
@@ -236,11 +237,13 @@ module StreamWeaver
             key = nil
             i += 2
             while i < lines.length && lines[i] != ":END:"
-              key = $1 if lines[i] =~ TAB_PROPERTY_RE
+              key = $1.strip if lines[i] =~ TAB_PROPERTY_RE
               i += 1
             end
             raise ArgumentError, "unterminated property drawer for tab #{label.inspect}" if i >= lines.length
-            raise ArgumentError, "tab #{label.inspect} has an empty :STREAMWEAVER_TAB: key" unless key
+            unless key.match?(TAB_KEY_RE)
+              raise ArgumentError, "tab #{label.inspect} has an invalid :STREAMWEAVER_TAB: key #{key.inspect} (need letters, digits or _)"
+            end
 
             i += 1
             result << { type: :tab, label: label, key: key }

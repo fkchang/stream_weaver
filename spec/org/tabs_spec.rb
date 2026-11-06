@@ -202,7 +202,12 @@ RSpec.describe "org tabs" do
 
     it "rejects a tab drawer with no key" do
       bad = "* Lonely\n:PROPERTIES:\n:STREAMWEAVER_TAB:\n:END:\n"
-      expect { to_dsl(bad) }.to raise_error(ArgumentError, /empty :STREAMWEAVER_TAB: key/)
+      expect { to_dsl(bad) }.to raise_error(ArgumentError, /invalid :STREAMWEAVER_TAB: key ""/)
+    end
+
+    it "rejects a key that is not a plain word, naming it" do
+      bad = "* Lonely\n:PROPERTIES:\n:STREAMWEAVER_TAB: foo-bar\n:END:\n"
+      expect { to_dsl(bad) }.to raise_error(ArgumentError, /invalid :STREAMWEAVER_TAB: key "foo-bar"/)
     end
 
     it "rejects an unterminated tab drawer" do
@@ -213,7 +218,7 @@ RSpec.describe "org tabs" do
 
   describe "tab children" do
     let(:dsl) do
-      <<~'RUBY'
+      <<~'DSL'
         tabs :views do
           tab "Mixed" do
             md "Intro prose."
@@ -225,10 +230,9 @@ RSpec.describe "org tabs" do
                 A --> B
             MERMAID
             table headers: ["Name", "Status"], rows: [["api", "up"]]
-            bar_chart labels: ["a"], values: [1]
           end
         end
-      RUBY
+      DSL
     end
 
     it "keeps md, callout, mermaid and table as real components inside the tab" do
@@ -242,18 +246,7 @@ RSpec.describe "org tabs" do
       ])
     end
 
-    it "falls back to a raw passthrough block inside its tab for an unsupported component" do
-      org = to_org(dsl)
-
-      tab_body = org.split(":STREAMWEAVER_TAB: views\n:END:\n", 2).last
-      expect(tab_body).to include("#+begin_src ruby :streamweaver-raw t\n# unrecognized component: bar_chart (unsupported call)\n#+end_src")
-      expect(to_dsl(org)).to include("  tab \"Mixed\" do\n").and include("    # unrecognized component: bar_chart (unsupported call)")
-    end
-
-    # Writer#count only counts at @nesting_depth zero; render_tabs raises the
-    # depth, so the nested passthrough is not counted on its own and
-    # `recognized` cannot go below zero.
-    it "counts the tabs group once and never lets coverage go negative" do
+    it "counts the tabs group once, as one recognized statement" do
       writer = StreamWeaver::Org::Writer.new(dsl)
       writer.call
       expect(writer.coverage).to eq(total: 1, recognized: 1, passthrough_verbatim: 0, passthrough_lossy: 0, omitted: 0)
@@ -351,6 +344,70 @@ RSpec.describe "org tabs" do
       RUBY
       expect(org).to include("#+begin_src ruby :streamweaver-raw t\ntabs :views do")
       expect(org.scan(":STREAMWEAVER_TAB: views").size).to eq(1)
+    end
+
+    it "keeps two same-key neighbours apart through org -> rb -> HTML" do
+      dsl = <<~RUBY
+        tabs :views do
+          tab("One") { md "one" }
+        end
+        tabs :views do
+          tab("Two") { md "two" }
+        end
+      RUBY
+      regenerated = to_dsl(to_org(dsl))
+      groups = record(regenerated).grep(StreamWeaver::Components::Tabs)
+
+      expect(groups.map { |g| g.children.map(&:label) }).to eq([["One"], ["Two"]])
+      expect(render(regenerated)).to eq(render(dsl))
+    end
+
+    it "an empty group (it would render as nothing at all)" do
+      expect_verbatim("tabs :views do\nend\n", "tabs :views do")
+    end
+
+    # Below top level there is no source to recover, so a child that needs an
+    # escape hatch would become a bare placeholder (or be dropped) inside the
+    # tab, invisible to coverage. The whole group's source keeps it instead.
+    describe "a tab holding a child headlines cannot carry" do
+      def tabs_holding(child)
+        <<~DSL
+          tabs :views do
+            tab "Mixed" do
+              md "Intro prose."
+              #{child}
+            end
+          end
+        DSL
+      end
+
+      it "an unsupported call" do
+        org = expect_verbatim(tabs_holding(%(bar_chart labels: ["a"], values: [1])), "tabs :views do")
+        expect(org).to include(%(bar_chart labels: ["a"], values: [1]))
+        expect(org).not_to include("unrecognized component")
+      end
+
+      it "a card with no header" do
+        org = expect_verbatim(tabs_holding(%(card { md "loose" })), "tabs :views do")
+        expect(org).to include(%(card { md "loose" }))
+      end
+
+      it "a live control (button)" do
+        org = expect_verbatim(tabs_holding(%(button "Go")), "tabs :views do")
+        expect(org).to include(%(button "Go"))
+        expect(org).not_to include("STREAMWEAVER_OMITTED")
+      end
+
+      it "a live control (select)" do
+        org = expect_verbatim(tabs_holding(%(select :pick, ["a", "b"])), "tabs :views do")
+        expect(org).to include(%(select :pick, ["a", "b"]))
+      end
+
+      it "counts the group as one verbatim passthrough" do
+        writer = StreamWeaver::Org::Writer.new(tabs_holding(%(bar_chart labels: ["a"], values: [1])))
+        writer.call
+        expect(writer.coverage).to eq(total: 1, recognized: 0, passthrough_verbatim: 1, passthrough_lossy: 0, omitted: 0)
+      end
     end
 
     it "a tabs group nested in a callout is the existing nested-passthrough placeholder" do
