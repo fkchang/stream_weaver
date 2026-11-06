@@ -6,6 +6,7 @@ require 'fileutils'
 require_relative 'protocol'
 require_relative 'code_stamp'
 require_relative 'staleness_guard'
+require_relative 'event_log'
 
 module StreamWeaver
   module Canvas
@@ -336,7 +337,22 @@ module StreamWeaver
         # Broken out so a spec can assert on it directly instead of stubbing
         # Process.spawn and waiting out the readiness poll above.
         def bridge_spawn_command(script_file)
-          [utf8_locale_env, RbConfig.ruby, '-E', 'UTF-8', script_file]
+          [utf8_locale_env.merge(take_start_env), RbConfig.ruby, '-E', 'UTF-8', script_file]
+        end
+
+        # The bridge reads these at boot to say why it started and who asked
+        # (bridge_start event). Environment, because start_bridge spawns it.
+        # Held for the next start_bridge only and cleared when it spawns, so a
+        # long-lived caller cannot hand a stale cause to an unrelated start.
+        def announce_start(cause:, detail: nil)
+          @pending_start_env = { 'SW_BRIDGE_START_CAUSE' => cause, 'SW_BRIDGE_START_DETAIL' => detail,
+                                 'SW_BRIDGE_START_CALLER' => JSON.generate(EventLog.caller_info) }.compact
+        end
+
+        def take_start_env
+          env = @pending_start_env || {}
+          @pending_start_env = nil
+          env
         end
 
         def shutdown_path(cause, detail)

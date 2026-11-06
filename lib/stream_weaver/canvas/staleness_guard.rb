@@ -3,6 +3,7 @@
 require 'fileutils'
 require 'stringio'
 require_relative 'code_stamp'
+require_relative 'event_log'
 
 module StreamWeaver
   module Canvas
@@ -26,6 +27,7 @@ module StreamWeaver
       # after the first restart instead of thrashing on every command; short
       # enough that a genuine second upgrade in the same session still heals.
       COOLDOWN_SECONDS = 60
+      TOAST_COMMAND_MAX = 80
 
       module_function
 
@@ -54,6 +56,8 @@ module StreamWeaver
 
         if auto_restart_disabled?
           warn_only("canvas bridge is running older code")
+        elsif (live = live_session_names).nil? || !live.empty?
+          skip_heal!(live)
         elsif recently_healed?
           # Two installs cannot land inside a minute; a second mismatch this
           # soon means two callers disagree about which code is current
@@ -65,6 +69,35 @@ module StreamWeaver
         else
           heal!
         end
+      end
+
+      # Names of the sessions the bridge holds, or nil when it cannot say.
+      # nil is treated like "has sessions": a restart we cannot size is a
+      # restart we do not take (it closes every open canvas).
+      def live_session_names
+        response = Client.send_message({ type: 'list' })
+        sessions = response && response[:sessions]
+        sessions ? sessions.map { |s| s[:name].to_s } : nil
+      rescue StandardError
+        nil
+      end
+
+      # A stale bridge that is holding live sessions is left alone. Two
+      # installs of this gem (a dev checkout and the installed copy) each see
+      # the other's bridge as stale, and healing on sight made them restart
+      # it onto themselves every few minutes, past the cooldown, dropping
+      # whatever the snapshot could not carry. The restart is now the
+      # operator's call.
+      def skip_heal!(names)
+        EventLog.record(:heal_skipped, cause: 'bridge_restart', caller_info: EventLog.caller_info,
+                                       detail: 'live_sessions', sessions: names,
+                                       bridge_stamp: Client.read_bridge_info, my_stamp: my_stamp)
+        $stderr.puts "StreamWeaver: canvas bridge is running older code but holds #{names ? names.size : 'an unknown number of'} live " \
+                     "session(s); not restarting it. Run `streamweaver canvas-restart` when you choose."
+      end
+
+      def my_stamp
+        { version: CodeStamp.version, code: CodeStamp.fingerprint }
       end
 
       def auto_restart_disabled?
@@ -87,17 +120,28 @@ module StreamWeaver
       def heal!
         require_relative '../cli'
 
-        $stderr.puts "StreamWeaver: canvas bridge was running older code — restarting it (sessions preserved)…"
+        $stderr.puts "StreamWeaver: idle canvas bridge was running older code — restarting it…"
         record_heal!
+        announce_heal
 
         result = silently { StreamWeaver::CLI.restart_bridge_preserving_sessions }
         report(result)
+        toast_sessions(result)
         result
       rescue StandardError => e
         # A cure that cannot finish must not take down the command it was
         # trying to help: the caller only wanted to push a canvas.
         $stderr.puts "StreamWeaver: automatic bridge restart failed (#{e.class}: #{e.message}) — run `streamweaver canvas-restart`."
         { ok: false, dir: nil, unconfirmed: [] }
+      end
+
+      # Who is restarting the bridge and from which stamp to which, in the event
+      # log now and in the new bridge's bridge_start after.
+      def announce_heal
+        EventLog.record(:bridge_heal, cause: 'bridge_restart', caller_info: EventLog.caller_info,
+                                      detail: 'staleness_heal', old_stamp: Client.read_bridge_info,
+                                      new_stamp: my_stamp)
+        Client.announce_start(cause: 'bridge_restart', detail: 'staleness_heal')
       end
 
       # Everything that qualifies the "sessions preserved" the announcement
@@ -118,6 +162,28 @@ module StreamWeaver
         return if result[:ok]
 
         $stderr.puts "StreamWeaver: automatic bridge restart did not complete — snapshot at #{result[:dir]}; run `streamweaver canvas-restart` if sessions look wrong."
+      end
+
+      # Every open canvas gets a toast saying the bridge was restarted, by
+      # whom, and which sessions came back empty, so a tab that suddenly
+      # changed is not a mystery. Best effort: never fails the command.
+      def toast_sessions(result)
+        names = (result[:kept] || []) + (result[:dropped] || [])
+        return if names.empty?
+
+        message = heal_toast_message(result[:dropped] || [])
+        names.each do |name|
+          Client.send_message({ type: 'toast', name: name, message: message, variant: 'warning', duration: 0 })
+        end
+      rescue StandardError
+        nil
+      end
+
+      def heal_toast_message(dropped)
+        who = EventLog.caller_info
+        command = who.is_a?(Hash) ? who[:command].to_s[0, TOAST_COMMAND_MAX] : 'an unknown command'
+        text = "Canvas bridge was restarted (older code) by `#{command}`."
+        dropped.empty? ? text : "#{text} Came back empty: #{dropped.join(', ')}."
       end
 
       def silently

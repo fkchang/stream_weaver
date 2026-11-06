@@ -796,10 +796,22 @@ module StreamWeaver
       # say why. A bridge that exits any other way (kill, crash, Ctrl-C) logs
       # cause unknown.
       def self.note_shutdown(cause, detail, caller_json)
-        caller_info = caller_json.to_s.empty? ? nil : JSON.parse(caller_json)
-        @stop_info = { cause: cause, detail: detail, caller_info: caller_info }
-      rescue StandardError
-        @stop_info = { cause: cause, detail: detail }
+        @stop_info = { cause: cause, detail: detail, caller_info: parse_caller(caller_json) }
+      end
+
+      def self.parse_caller(json)
+        json.to_s.empty? ? nil : JSON.parse(json)
+      rescue JSON::ParserError
+        nil
+      end
+
+      # Why this bridge started and who asked, handed down by Client.announce_start
+      # through the environment the bridge was spawned with.
+      def self.record_start
+        Canvas::EventLog.record(:bridge_start, port: @port, cause: ENV['SW_BRIDGE_START_CAUSE'],
+                                detail: ENV['SW_BRIDGE_START_DETAIL'],
+                                caller_info: parse_caller(ENV['SW_BRIDGE_START_CALLER']),
+                                code: CodeStamp.fingerprint)
       end
 
       def self.record_stop
@@ -826,7 +838,7 @@ module StreamWeaver
         write_pid_file
         start_unix_socket_server
 
-        Canvas::EventLog.record(:bridge_start, port: @port)
+        record_start
         at_exit { cleanup }
 
         # Start Sinatra
