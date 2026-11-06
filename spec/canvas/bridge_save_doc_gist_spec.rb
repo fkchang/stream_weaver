@@ -92,6 +92,37 @@ RSpec.describe StreamWeaver::Canvas::BridgeServer, type: :request do
       expect(StreamWeaver::Canvas::GistStore.lookup('shared-doc')['id']).to eq('abc123')
     end
 
+    # A tabbed canvas session used to publish an .org holding only
+    # "# unrecognized component: tabs (unsupported call)" for its whole body.
+    it "publishes a tabbed session's .org with its tabs and without canvas_continue" do
+      calls = stub_capture3([gh_response, '', ok_status])
+      session = described_class.bridge.create_session('s1')
+      session.set_dsl(<<~RUBY)
+        tabs :chat do
+          tab "Start here" do
+            md "Where to begin."
+          end
+          tab "1 PRD protocol" do
+            md "What the PRD says."
+          end
+        end
+        canvas_continue message: "Received."
+      RUBY
+
+      post '/canvas/s1/save-doc',
+           { name: 'tabbed-doc', scope: 'gist' }.to_json,
+           'CONTENT_TYPE' => 'application/json'
+
+      expect(last_response.status).to eq(200)
+      org = JSON.parse(calls[0][:stdin])['files']['tabbed-doc.org']['content']
+      expect(org).not_to include('unrecognized component')
+      expect(org).not_to include('canvas_continue')
+      expect(org).to include("* Start here\n:PROPERTIES:\n:STREAMWEAVER_TAB: chat\n:END:")
+      expect(org).to include("* 1 PRD protocol\n:PROPERTIES:\n:STREAMWEAVER_TAB: chat\n:END:")
+      expect(JSON.parse(last_response.body)['coverage'])
+        .to include('total' => 1, 'recognized' => 1, 'passthrough_lossy' => 0)
+    end
+
     it 'returns 404 when the session is not found (unaffected by the gist branch)' do
       post '/canvas/missing/save-doc',
            { name: 'foo', scope: 'gist' }.to_json,
