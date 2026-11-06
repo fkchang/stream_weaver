@@ -131,6 +131,8 @@ end
 # state[:selected_items] = ["id1", "id3", ...] (array of selected values)
 ```
 
+**Empty selection:** unchecking every box (or pressing the select_none button) makes the state `[]` on the next request, whether it is an `/update` or a button action. A browser sends nothing for an empty group, so each `checkbox_group` and multi `chip_group` also sends a hidden presence marker (`_sw_present[]=<key>`); "marker present, no values" is `[]`, and a request without the marker leaves the selection untouched. A hand-written `hx-include` must use `input_selector` (`[x-model], [data-sw-present]`), not a bare `[x-model]`, or an emptied group is not reported.
+
 ## Buttons
 
 ```ruby

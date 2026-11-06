@@ -62,7 +62,7 @@ RSpec.describe "live input fragment wiring (stream_weaver-tv4)" do
     expect(attrs["hx-trigger"]).to eq("keyup changed delay:250ms")
     expect(attrs["hx-post"]).to match(%r{\A/update\?_sw_fragment=})
     expect(attrs["hx-target"]).to eq("#sw-frag-people")
-    expect(attrs["hx-include"]).to eq("[x-model]")
+    expect(attrs["hx-include"]).to eq("[x-model], [data-sw-present]")
     expect(attrs["hx-swap"]).to eq("morph:innerHTML")
     expect(attrs["x-model"]).to eq("query")
   end

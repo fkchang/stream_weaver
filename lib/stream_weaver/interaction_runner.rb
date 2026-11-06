@@ -30,7 +30,7 @@ module StreamWeaver
   class InteractionRunner
     # The framework-wide routing params, plus the ones only interaction dispatch
     # puts on the wire.
-    ROUTE_PARAMS = (App::ROUTE_OWNED_PARAMS + %w[key form_name _sw_fragment]).freeze
+    ROUTE_PARAMS = (App::ROUTE_OWNED_PARAMS + %w[key form_name _sw_fragment] + [App::PRESENCE_PARAM]).freeze
 
     def initialize(app:, state:, params:, interaction:, target: nil, adapter:, agentic: false,
                    persist:, prepare_state: nil, result_container: nil, auto_close: false,
@@ -349,6 +349,33 @@ module StreamWeaver
           state[key.to_sym] = coerce_param_value(value, state[key.to_sym])
         end
       end
+      apply_presence_markers
+    end
+
+    # A marker whose group sent no values means "present, nothing checked":
+    # the selection is []. A group with no marker was not part of this request
+    # and is left alone. A path is "key", or "scope.key" for a group inside a
+    # scope block.
+    def apply_presence_markers
+      Array(params[App::PRESENCE_PARAM]).each do |path|
+        scope, key = path.to_s.split(".", 2)
+        next if scope.to_s.empty?
+
+        if key
+          next if params[scope].is_a?(Hash) && params[scope].key?(key)
+
+          bucket = (state[scope.to_sym] ||= {})
+          clear_selection(bucket, key.to_sym) if bucket.is_a?(Hash)
+        else
+          clear_selection(state, scope.to_sym) unless params.key?(scope)
+        end
+      end
+    end
+
+    # Only an unset slot or an array becomes [], so a forged marker cannot blank
+    # a scalar field.
+    def clear_selection(slots, key)
+      slots[key] = [] if slots[key] in nil | Array
     end
 
     def coerce_param_value(value, current_value)

@@ -123,7 +123,7 @@ RSpec.describe 'canvas action parity' do
       html = http(clickable_app)
 
       expect(html).to include(
-        %(<div class="sw-clickable" hx-post="/action/#{token(html)}" hx-include="[x-model]" ) +
+        %(<div class="sw-clickable" hx-post="/action/#{token(html)}" hx-include="[x-model], [data-sw-present]" ) +
         %(hx-target="#app-container" hx-swap="morph:innerHTML" ) +
         %(hx-indicator="##{html[/id="(clickable_open_row_\w+)"/, 1]}, #app-container" hx-disabled-elt="this" ) +
         %(hx-trigger="click[!event.target.closest('a,button,input,select,textarea,label,[data-sw-stop]')], ) +
@@ -174,7 +174,7 @@ RSpec.describe 'canvas action parity' do
 
     it 'leaves http-mode markup byte-for-byte unchanged' do
       expect(http(menu_app)).to include(
-        '<button type="button" class="sw-menu-item " hx-post="/action/menu_item_1" hx-include="[x-model]" ' \
+        '<button type="button" class="sw-menu-item " hx-post="/action/menu_item_1" hx-include="[x-model], [data-sw-present]" ' \
         'hx-target="#app-container" hx-swap="morph:innerHTML" hx-indicator="#app-container" ' \
         '@click="open = false">Archive</button>'
       )
@@ -264,7 +264,7 @@ RSpec.describe 'canvas action parity' do
 
     it 'leaves http-mode markup byte-for-byte unchanged' do
       expect(http(tag_buttons_app)).to include(
-        '<button type="button" class="tag-btn " hx-post="/update" hx-include="[x-model]" ' \
+        '<button type="button" class="tag-btn " hx-post="/update" hx-include="[x-model], [data-sw-present]" ' \
         'hx-target="#app-container" hx-swap="morph:innerHTML" hx-indicator="#app-container" ' \
         'hx-vals="{&quot;reason&quot;:&quot;too_dark&quot;}">Too dark</button>'
       )
@@ -330,7 +330,7 @@ RSpec.describe 'canvas action parity' do
     it 'leaves http-mode markup byte-for-byte unchanged' do
       expect(http(chip_group_app)).to include(
         '<input type="checkbox" name="langs[]" value="ruby" x-model="langs" class="sw-chip__input" ' \
-        'hx-post="/update" hx-include="[x-model]" hx-target="#app-container" hx-swap="morph:innerHTML" ' \
+        'hx-post="/update" hx-include="[x-model], [data-sw-present]" hx-target="#app-container" hx-swap="morph:innerHTML" ' \
         'hx-indicator="#app-container" hx-trigger="change">'
       )
     end
