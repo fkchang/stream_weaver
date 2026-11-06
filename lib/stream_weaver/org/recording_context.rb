@@ -24,6 +24,8 @@ module StreamWeaver
     # part of DisplayDSL, so any real saved doc crashes instance_eval without
     # them. No-ops here: the Writer only needs the component tree, not
     # theme/layout state (org format doesn't represent either).
+    # #canvas_continue is the same kind of no-op, for canvas sessions saved
+    # as docs.
     #
     # Everything ELSE the DSL can say -- App's whole interactive vocabulary
     # (radio_group, text_field, form, ...), charts, layout shells -- is
@@ -56,6 +58,23 @@ module StreamWeaver
         @state = @_state = {}
         @render_state = StreamWeaver::App::RenderState.new
       end
+
+      # tabs/tab are App methods (App's versions also manage the active-tab
+      # index, URL sync and lazy evaluation, none of which a static document
+      # has). Here they only record the Tabs -> Tab -> children tree, every
+      # block evaluated, so the Writer can decide how to write it out.
+      def tabs(key, **options, &block)
+        with_container(Components::Tabs.new(key, **options), &block)
+      end
+
+      def tab(label, **options, &block)
+        with_container(Components::Tab.new(label, **options), &block)
+      end
+
+      # The canvas "agent is still working" spinner: session chrome, not
+      # document content, so it records nothing. Writer::NO_OP_STATEMENT_RE
+      # lists it too, keeping source recovery aligned.
+      def canvas_continue(**); end
 
       def use_theme(_name); end
       def use_layout(_name); end

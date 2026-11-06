@@ -53,6 +53,25 @@ image_block File.join(__dir__, "assets/example.png"), base64: true,
 #+end_src
 ```
 
+Tabs are headlines too. Each tab is a level-1 headline whose property drawer names
+the tab group's key; consecutive tabs with the same key form one `tabs` group, which
+ends at the next numbered section headline or the end of the file:
+
+```org
+* 1 PRD protocol
+:PROPERTIES:
+:STREAMWEAVER_TAB: chat
+:END:
+
+What the PRD says.
+```
+
+A generic Org viewer (GitHub included) hides the drawer and shows one section per tab.
+Tabs that a headline can't hold without loss (`url:`, `lazy:`, a non-default
+`variant:`, nested tabs, or tabs followed by content other than a numbered section)
+are written as a passthrough block instead. `canvas_continue` is dropped: it is
+canvas session chrome, not document content.
+
 `.rb` (the DSL source) is the other option — canonical, always lossless, and what
 `org-export`/`org-render` convert to and from.
 
