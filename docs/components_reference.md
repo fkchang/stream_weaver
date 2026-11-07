@@ -386,6 +386,7 @@ end
 
 Switching tabs is client-side (History API `pushState`/`popstate`) — zero requests.
 Multiple `url: true` groups compose, one param per key: `/?view=2&panel=1`.
+A click that stays on the same path keeps that query: the `HX-Push-Url` on the response carries the page's own `?view=2` along (`StreamWeaver::PushUrl`), so the selected tab survives every POST.
 
 **The URL is authoritative on a full GET.** Param present and valid → that index.
 Absent or invalid → tab 0, *never* the session value. The same URL always renders the

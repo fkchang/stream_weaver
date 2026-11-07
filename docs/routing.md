@@ -9,7 +9,7 @@ StreamWeaver supports URL-addressable views — deep links, browser back/forward
 StreamWeaver uses a bidirectional URL ↔ state contract:
 
 - **On GET `/*`**: The path is parsed into a partial state hash and merged into session state before render. This seeds the right view on direct URL load.
-- **After POST actions**: The current state is converted to a path and sent as `HX-Push-Url`, updating the browser URL bar without a full page load.
+- **After POST actions**: The current state is converted to a path and sent as `HX-Push-Url`, updating the browser URL bar without a full page load. When the pushed path is the page the browser is already on, the page's own query string rides along (`/?view=2` stays `/?view=2`), so a click never drops a `url: true` tab selection; a push to a different path carries no old query.
 
 This means **routing is just state**. A URL like `/goals` means `state[:main_nav] = 2`. A URL like `/initiative/init-001` means `state[:main_nav] = 2, state[:initiative_id] = "init-001"`.
 

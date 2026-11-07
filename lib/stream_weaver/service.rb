@@ -1096,7 +1096,14 @@ module StreamWeaver
       next unless streamlit_app.routable?
 
       new_path = streamlit_app.path_for_state(app_state(app_id))
-      headers['HX-Push-Url'] = "/apps/#{app_id}#{new_path}" if new_path
+      if new_path
+        current_url = request.env['HTTP_HX_CURRENT_URL']
+        # Keep the mount prefix the browser is on (slug or hex id) so the same-page match can succeed, but only
+        # when it names THIS app: a stale HX-Current-URL from a different mounted app must not decide the push.
+        seen = StreamWeaver::PushUrl.mount_prefix(current_url)
+        prefix = seen && self.class.resolve_app_id(seen.delete_prefix('/apps/')) == app_id ? seen : "/apps/#{app_id}"
+        headers['HX-Push-Url'] = StreamWeaver::PushUrl.keep_query("#{prefix}#{new_path}", current_url)
+      end
     end
 
     # Update state from form inputs

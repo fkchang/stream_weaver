@@ -399,7 +399,7 @@ app "My App" do
 end.run!
 ```
 
-**How it works:** When `state[:page]` changes (via button callback or nav click), StreamWeaver emits an `HX-Push-Url` header that updates the browser URL. Visiting `/dashboard` directly seeds `state[:page] = :dashboard` before render. Back/forward uses HTMX to re-fetch the page at the popped URL.
+**How it works:** When `state[:page]` changes (via button callback or nav click), StreamWeaver emits an `HX-Push-Url` header that updates the browser URL. Visiting `/dashboard` directly seeds `state[:page] = :dashboard` before render. When the pushed path is the page the browser is already on, the page's own query string rides along (`/?view=2` stays `/?view=2`), so a click never drops a `url: true` tab selection; a push to a different path carries no old query. When the pushed path is the page the browser is already on, the page's own query string rides along (`/?view=2` stays `/?view=2`), so a click never drops a `url: true` tab selection; a push to a different path carries no old query. Back/forward uses HTMX to re-fetch the page at the popped URL.
 
 **Important:** `route_by` is opt-in — apps without it are unaffected.
 
