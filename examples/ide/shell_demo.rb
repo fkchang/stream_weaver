@@ -31,8 +31,22 @@ App = StreamWeaver::App.new("IDE shell demo", chrome: false, theme: :ide) do
     ) { text "SW" }
 
     ide_rail_left do
-      text "Pages"
-      %w[README.md GETTING_STARTED.md COMPONENTS.md THEMES.md CANVAS.md].each { |page| text page }
+      ide_tree(
+        heading: "Projects",
+        action: { label: "New project", icon: :plus },
+        rows: [
+          { label: "stream_weaver", icon: :folder, active: true, children: [
+            { label: "examples", icon: :branch, active: true, children: [
+              { label: "Shell demo", icon: :file, href: "/", selected: true },
+              { label: "Components", icon: :file_text, href: "/?page=components" },
+              { label: "Docs", icon: :book, disabled: true, tag: "Coming soon" }
+            ] }
+          ] }
+        ]
+      )
+      ide_note(dismiss: "Understood", remember: "shell-demo") do
+        text "Each region of the shell is an ide_* call, so a page keeps only the parts it needs."
+      end
     end
 
     ide_editor do

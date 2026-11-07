@@ -283,6 +283,16 @@ module StreamWeaver
       with_container(Components::IdeStatusbar.new(**options), &block)
     end
 
+    # Projects-style tree for ide_rail_left; see Components::IdeTree.
+    def ide_tree(heading: nil, action: nil, rows: [], **options)
+      components << Components::IdeTree.new(heading: heading, action: action, rows: rows, **options)
+    end
+
+    # Dismissible note card; see Components::IdeNote.
+    def ide_note(**options, &block)
+      with_container(Components::IdeNote.new(**options), &block)
+    end
+
     # =========================================
     # Visual skills content blocks
     # =========================================

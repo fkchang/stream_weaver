@@ -1842,6 +1842,46 @@ module StreamWeaver
         end
       end
 
+      # Render an ide_tree: heading with its action, then one row per node,
+      # indented by depth.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeTree]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_tree(view, component, _state)
+        attrs = framework_attrs("sw-ide-tree", component.options)
+        attrs["aria-label"] = component.heading if component.heading
+        view.nav(**attrs) do
+          render_ide_tree_heading(view, component) if component.heading
+          view.div(class: "sw-ide-tree__rows") do
+            component.rows.each { |row| render_ide_tree_row(view, row) }
+          end
+        end
+      end
+
+      # Render an ide_note: icon, body, and a dismiss button that hides the
+      # card (and, with remember:, keeps it hidden on later visits).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeNote]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_note(view, component, state)
+        attrs = framework_attrs("sw-ide-note", component.options).merge(
+          role: "note",
+          "x-data" => ide_note_data(component.remember),
+          "x-show" => "!dismissed"
+        )
+        view.div(**attrs) do
+          render_ide_icon(view, component.icon, "sw-ide-note__icon")
+          view.div(class: "sw-ide-note__body") do
+            component.children.each { |child| child.render(view, state) }
+          end
+          view.button(type: "button", class: "sw-ide-note__dismiss", "@click" => "dismiss()") { component.dismiss_label }
+        end
+      end
+
       # Render a single board card.
       #
       # @param view [Phlex::HTML] The Phlex view instance
@@ -8465,6 +8505,69 @@ end
           end
           view.span(class: "sw-ide-titlebar__link-label") { link[:label] }
         end
+      end
+
+      # A Symbol names one of Components::Ide::ICONS; a String is text or an
+      # image URL, as everywhere else.
+      def render_ide_icon(view, icon, css_class)
+        return unless icon
+
+        svg = Components::Ide.svg(icon, css_class) if icon.is_a?(Symbol)
+        if svg
+          view.raw(view.safe(svg))
+        else
+          view.span("aria-hidden" => "true") { render_icon_hook(view, icon.to_s, css_class) }
+        end
+      end
+
+      def render_ide_tree_heading(view, component)
+        view.div(class: "sw-ide-tree__heading") do
+          view.span { component.heading }
+          action = component.action
+          next unless action
+
+          attrs = { class: "sw-ide-tree__action", "aria-label" => action[:label], title: action[:label] }
+          icon = action.fetch(:icon, :plus)
+          if action[:href]
+            view.a(**attrs, href: action[:href]) { render_ide_icon(view, icon, "sw-ide-tree__icon") }
+          else
+            view.button(**attrs, type: "button") { render_ide_icon(view, icon, "sw-ide-tree__icon") }
+          end
+        end
+      end
+
+      # A row is a link only when it has an href and is not disabled.
+      def render_ide_tree_row(view, row)
+        classes = ["sw-ide-tree__row"]
+        classes << "sw-ide-tree__row--active" if row[:active]
+        classes << "sw-ide-tree__row--selected" if row[:selected]
+        classes << "sw-ide-tree__row--disabled" if row[:disabled]
+        attrs = { class: classes.join(" "), style: "--sw-ide-depth: #{row[:depth]}" }
+
+        link = row[:href] && !row[:disabled]
+        if link
+          attrs[:href] = row[:href]
+          attrs["aria-current"] = "page" if row[:selected]
+        elsif row[:disabled]
+          attrs["aria-disabled"] = "true"
+        end
+
+        view.public_send(link ? :a : :div, **attrs) do
+          render_ide_icon(view, row[:icon], "sw-ide-tree__icon")
+          view.span(class: "sw-ide-tree__label") { row[:label] }
+          view.b(class: "sw-ide-tree__tag") { row[:tag] } if row[:tag]
+        end
+      end
+
+      # Alpine state for ide_note. With a remember key the dismissal is kept
+      # in localStorage; storage that throws (private mode, blocked site
+      # data) just means the note shows again next visit.
+      def ide_note_data(remember)
+        return "{ dismissed: false, dismiss() { this.dismissed = true } }" unless remember
+
+        key = JSON.generate("sw-ide-note:#{remember}")
+        "{ dismissed: (() => { try { return localStorage.getItem(#{key}) === '1' } catch (e) { return false } })(), " \
+          "dismiss() { this.dismissed = true; try { localStorage.setItem(#{key}, '1') } catch (e) {} } }"
       end
 
       def render_ide_status_item(view, item)
