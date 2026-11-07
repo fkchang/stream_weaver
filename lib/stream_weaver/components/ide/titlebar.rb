@@ -24,7 +24,7 @@ module StreamWeaver
         super(**options)
         @crumbs = Array(crumbs)
         @branch = branch
-        @links = Array(links)
+        @links = links.is_a?(Hash) ? [links] : Array(links)
         @theme_toggle = theme_toggle
       end
 

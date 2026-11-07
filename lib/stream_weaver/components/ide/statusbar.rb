@@ -3,11 +3,12 @@
 module StreamWeaver
   module Components
     # Status bar of an ide_shell: left items, then right items pushed to the
-    # far end. An item is a String, or { text:, href: } for a link. Block
-    # children render after the left items.
+    # far end. An item is a String, or { label:, href: } for a link (the
+    # same keys as ide_titlebar links). Block children render after the
+    # left items.
     #
     # @example
-    #   ide_statusbar(left: ["MIT", { text: "StreamWeaver", href: "https://..." }],
+    #   ide_statusbar(left: ["MIT", { label: "StreamWeaver", href: "https://..." }],
     #                 right: ["Ruby 3.3"])
     class IdeStatusbar < IdeRegion
       TAG = :footer
@@ -17,12 +18,19 @@ module StreamWeaver
 
       def initialize(left: [], right: [], **options)
         super(**options)
-        @left = Array(left)
-        @right = Array(right)
+        @left = items(left)
+        @right = items(right)
       end
 
       def render(view, state)
         view.adapter.render_ide_statusbar(view, self, state)
+      end
+
+      private
+
+      # A lone Hash is one item, not a list of key/value pairs.
+      def items(value)
+        value.is_a?(Hash) ? [value] : Array(value)
       end
     end
   end

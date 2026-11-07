@@ -171,7 +171,8 @@ module StreamWeaver
           color: var(--ide-muted, var(--sw-color-text-muted));
           text-decoration: none;
         }
-        .sw-ide-titlebar__link:hover {
+        .sw-ide-titlebar__link:hover,
+        .sw-ide-titlebar__link:focus-visible {
           background: var(--ide-hover, var(--sw-color-bg-hover));
           color: var(--ide-text, var(--sw-color-text));
         }
@@ -194,7 +195,8 @@ module StreamWeaver
           color: var(--ide-muted, var(--sw-color-text-muted));
           cursor: pointer;
         }
-        .sw-ide-titlebar__theme-toggle:hover {
+        .sw-ide-titlebar__theme-toggle:hover,
+        .sw-ide-titlebar__theme-toggle:focus-visible {
           background: var(--ide-hover, var(--sw-color-bg-hover));
           color: var(--ide-text, var(--sw-color-text));
         }
@@ -220,9 +222,17 @@ module StreamWeaver
           color: inherit;
           text-decoration: none;
         }
-        a.sw-ide-statusbar__item:hover {
+        a.sw-ide-statusbar__item:hover,
+        a.sw-ide-statusbar__item:focus-visible {
           color: var(--ide-text, var(--sw-color-text));
           text-decoration: underline;
+        }
+        .sw-ide-titlebar__link:focus-visible,
+        .sw-ide-titlebar__theme-toggle:focus-visible,
+        a.sw-ide-statusbar__item:focus-visible,
+        .sw-ide-shell__nav-toggle:focus-visible {
+          outline: 2px solid var(--ide-accent, var(--sw-color-primary));
+          outline-offset: 1px;
         }
         .sw-ide-statusbar__spacer {
           flex: 1;
@@ -254,7 +264,8 @@ module StreamWeaver
           color: var(--ide-muted, var(--sw-color-text-muted));
           cursor: pointer;
         }
-        .sw-ide-shell__nav-toggle:hover {
+        .sw-ide-shell__nav-toggle:hover,
+        .sw-ide-shell__nav-toggle:focus-visible {
           background: var(--ide-hover, var(--sw-color-bg-hover));
           color: var(--ide-text, var(--sw-color-text));
         }

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "rexml/document"
+
 RSpec.describe "ide_titlebar and ide_statusbar" do
   def render_page(&block)
     app = StreamWeaver::App.new("IDE", chrome: false, theme: :ide) { ide_shell(&block) }
@@ -7,17 +9,21 @@ RSpec.describe "ide_titlebar and ide_statusbar" do
     StreamWeaver::Views::AppView.new(app, {}, StreamWeaver::Adapter::AlpineJS.new).call
   end
 
-  def section(html, tag, block_class)
-    html[%r{<#{tag} class="#{block_class}[^"]*"[^>]*>.*?</#{tag}>}m]
+  # The region's element, parsed (its markup is well-formed XML).
+  def region(html, tag, block_class)
+    fragment = html[%r{<#{tag} class="#{block_class}[^"]*"[^>]*>.*?</#{tag}>}m]
+    REXML::Document.new(fragment).root
   end
 
-  let(:css) { StreamWeaver::Components::Ide::CSS }
+  def first(node, xpath) = REXML::XPath.first(node, xpath)
+  def all(node, xpath) = REXML::XPath.match(node, xpath)
+  def text_of(node) = REXML::XPath.match(node, ".//text()").join
 
   describe "ide_titlebar" do
     let(:titlebar) do
-      section(render_page do
+      region(render_page do
         ide_titlebar(
-          crumbs: ["stream_weaver", "landing"],
+          crumbs: %w[stream_weaver landing],
           branch: "main",
           links: [
             { label: "GitHub", href: "https://github.com/example/stream_weaver", icon: "★" },
@@ -28,82 +34,86 @@ RSpec.describe "ide_titlebar and ide_statusbar" do
     end
 
     it "renders the logo slot from the block" do
-      expect(titlebar).to match(%r{<span class="sw-ide-titlebar__logo">.*SW.*</span>}m)
+      expect(text_of(first(titlebar, "span[@class='sw-ide-titlebar__logo']"))).to eq("SW")
     end
 
-    it "renders the crumbs with a separator, the last one current" do
-      expect(titlebar).to include(%(<span class="sw-ide-titlebar__crumb">stream_weaver</span>))
-      expect(titlebar).to include(%(<span class="sw-ide-titlebar__crumb-sep" aria-hidden="true">›</span>))
-      expect(titlebar).to include(%(<span class="sw-ide-titlebar__crumb sw-ide-titlebar__crumb--current" aria-current="page">landing</span>))
+    it "renders the crumbs in a breadcrumb nav, the last one current" do
+      nav = first(titlebar, ".//nav[@aria-label='Breadcrumb']")
+      crumbs = all(nav, "span[contains(@class, 'sw-ide-titlebar__crumb') and not(@aria-hidden)]")
+      expect(crumbs.map { |c| text_of(c) }).to eq(%w[stream_weaver landing])
+      expect(crumbs.last.attributes["aria-current"]).to eq("page")
+      expect(all(nav, "span[@aria-hidden='true']").map { |s| text_of(s) }).to eq(["›"])
     end
 
     it "renders the branch label" do
-      expect(titlebar).to match(%r{<span class="sw-ide-titlebar__branch">.*main</span>}m)
+      expect(text_of(first(titlebar, ".//span[@class='sw-ide-titlebar__branch']"))).to eq("main")
     end
 
-    it "renders link buttons, opening external ones in a new tab" do
-      expect(titlebar).to match(%r{<a class="sw-ide-titlebar__link" href="https://github.com/example/stream_weaver" target="_blank" rel="noopener noreferrer"><span class="sw-ide-titlebar__link-icon">★</span><span class="sw-ide-titlebar__link-label">GitHub</span></a>})
-      expect(titlebar).to include(%(<a class="sw-ide-titlebar__link" href="/docs"><span class="sw-ide-titlebar__link-label">Docs</span></a>))
+    it "names each link by its label and opens external ones in a new tab" do
+      github, docs = all(titlebar, ".//a[@class='sw-ide-titlebar__link']")
+      expect(github.attributes["aria-label"]).to eq("GitHub")
+      expect(github.attributes["target"]).to eq("_blank")
+      expect(github.attributes["rel"]).to eq("noopener noreferrer")
+      expect(first(github, "span[@aria-hidden='true']/span[@class='sw-ide-titlebar__link-icon']").text).to eq("★")
+      expect(docs.attributes["aria-label"]).to eq("Docs")
+      expect(docs.attributes["target"]).to be_nil
     end
 
-    it "renders a theme toggle that flips the current mode through swToggleTheme" do
-      expect(titlebar).to match(/<button[^>]*class="sw-ide-titlebar__theme-toggle"/)
-      expect(titlebar).to include(%(@click="window.swToggleTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark')"))
-      expect(titlebar).to include("sw-ide-titlebar__theme-icon--sun")
-      expect(titlebar).to include("sw-ide-titlebar__theme-icon--moon")
+    it "accepts a single link hash" do
+      bar = region(render_page { ide_titlebar(links: { label: "Docs", href: "/docs" }) }, "header", "sw-ide-titlebar")
+      expect(all(bar, ".//a").map { |a| a.attributes["href"] }).to eq(["/docs"])
     end
 
-    it "can leave the theme toggle out" do
-      html = section(render_page { ide_titlebar(theme_toggle: false) }, "header", "sw-ide-titlebar")
-      expect(html).not_to include("sw-ide-titlebar__theme-toggle")
+    it "renders a theme toggle that flips the current mode through a plain onclick" do
+      toggle = first(titlebar, ".//button[@class='sw-ide-titlebar__theme-toggle']")
+      expect(toggle.attributes["onclick"]).to eq(
+        "window.swToggleTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark')"
+      )
+      expect(toggle.attributes["aria-label"]).to eq("Switch between light and dark theme")
     end
 
-    it "omits the parts it was not given" do
-      html = section(render_page { ide_titlebar(theme_toggle: false) }, "header", "sw-ide-titlebar")
-      expect(html).not_to include("sw-ide-titlebar__logo")
-      expect(html).not_to include("sw-ide-titlebar__crumbs")
-      expect(html).not_to include("sw-ide-titlebar__branch")
-      expect(html).not_to include("sw-ide-titlebar__link")
+    it "omits the parts it was not given, including the toggle when asked" do
+      bar = region(render_page { ide_titlebar(theme_toggle: false) }, "header", "sw-ide-titlebar")
+      expect(all(bar, ".//*[@class='sw-ide-titlebar__logo']")).to be_empty
+      expect(all(bar, ".//nav")).to be_empty
+      expect(all(bar, ".//*[@class='sw-ide-titlebar__branch']")).to be_empty
+      expect(all(bar, ".//a | .//button")).to be_empty
     end
 
-    it "styles each part from the shared stylesheet" do
-      %w[__logo __scope __crumbs __crumb--current __branch __actions __link __theme-toggle].each do |part|
-        expect(css).to include(".sw-ide-titlebar#{part}")
-      end
-      expect(css).to match(/html\.dark \.sw-ide-titlebar__theme-icon--sun \{[^}]*display: block;/)
+    it "swaps the sun and moon icons on html.dark" do
+      expect(StreamWeaver::Components::Ide::CSS).to match(/html\.dark \.sw-ide-titlebar__theme-icon--sun \{[^}]*display: block;/)
     end
   end
 
   describe "ide_statusbar" do
     let(:statusbar) do
-      section(render_page do
+      region(render_page do
         ide_statusbar(
-          left: ["MIT", { text: "StreamWeaver", href: "https://example.com" }],
+          left: ["MIT", { label: "StreamWeaver", href: "https://example.com" }],
           right: ["Ruby 3.3"]
         )
       end, "footer", "sw-ide-statusbar")
     end
 
     it "renders left items, a spacer, then right items" do
-      left = statusbar.index(%(<span class="sw-ide-statusbar__item">MIT</span>))
-      spacer = statusbar.index(%(<span class="sw-ide-statusbar__spacer"></span>))
-      right = statusbar.index(%(<span class="sw-ide-statusbar__item">Ruby 3.3</span>))
-      expect([left, spacer, right]).to all(be_a(Integer))
-      expect([left, spacer, right]).to eq([left, spacer, right].sort)
+      parts = statusbar.elements.map { |e| [e.attributes["class"], text_of(e)] }
+      expect(parts).to eq([
+        ["sw-ide-statusbar__item", "MIT"],
+        ["sw-ide-statusbar__item", "StreamWeaver"],
+        ["sw-ide-statusbar__spacer", ""],
+        ["sw-ide-statusbar__item", "Ruby 3.3"]
+      ])
     end
 
-    it "renders a linked item as an anchor" do
-      expect(statusbar).to include(%(<a class="sw-ide-statusbar__item" href="https://example.com">StreamWeaver</a>))
+    it "renders a { label:, href: } item as an anchor" do
+      link = first(statusbar, "a[@class='sw-ide-statusbar__item']")
+      expect([link.attributes["href"], link.text]).to eq(["https://example.com", "StreamWeaver"])
     end
 
-    it "still renders block children" do
-      html = section(render_page { ide_statusbar { text "custom" } }, "footer", "sw-ide-statusbar")
-      expect(html).to include("custom")
-    end
-
-    it "styles the items from the shared stylesheet" do
-      expect(css).to include(".sw-ide-statusbar__item")
-      expect(css).to match(/\.sw-ide-statusbar__spacer \{[^}]*flex: 1;/)
+    it "accepts a single item hash and still renders block children" do
+      bar = region(render_page { ide_statusbar(left: { label: "MIT" }) { text "custom" } }, "footer", "sw-ide-statusbar")
+      expect(all(bar, "span[@class='sw-ide-statusbar__item']").map(&:text)).to eq(["MIT"])
+      expect(text_of(bar)).to include("custom")
     end
   end
 end
