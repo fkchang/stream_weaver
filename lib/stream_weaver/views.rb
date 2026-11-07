@@ -10,9 +10,6 @@ module StreamWeaver
       attr_reader :adapter, :app
       attr_reader :current_fragment_id
 
-      # Text and chrome fonts for the :ide theme, loaded only when it is active.
-      IDE_FONTS_HREF = "https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-
       # @param app [StreamWeaver::App] The app instance
       # @param state [Hash] The current state
       # @param adapter [StreamWeaver::Adapter::Base] The adapter for rendering
@@ -72,8 +69,8 @@ module StreamWeaver
               style { raw(safe(StreamWeaver::CSS.layer_wrap(component_css_registry.values.join("\n")))) }
             end
 
-            # Add custom stylesheets
-            @stylesheets.each do |href|
+            # Add custom stylesheets, then any the active theme declares
+            (@stylesheets + StreamWeaver.theme_stylesheets(effective_theme)).each do |href|
               link(rel: "stylesheet", href: href)
             end
 
@@ -107,13 +104,13 @@ module StreamWeaver
               @adapter.render_routing_scripts(self)
             end
 
-            # Google Fonts: Source Sans 3 + Crimson Pro (for document theme) + any app-declared fonts
+            # Google Fonts: Source Sans 3 + Crimson Pro (for document theme) + any app- or theme-declared fonts
             link(rel: "preconnect", href: "https://fonts.googleapis.com")
             link(rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "anonymous")
             link(rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap")
-            link(rel: "stylesheet", href: IDE_FONTS_HREF) if effective_theme == :ide
-            if @app.fonts.any?
-              custom_href = Fonts.google_fonts_href(@app.fonts)
+            fonts = @app.fonts + StreamWeaver.theme_fonts(effective_theme)
+            if fonts.any?
+              custom_href = Fonts.google_fonts_href(fonts)
               link(rel: "stylesheet", href: custom_href) if custom_href
             end
             style do
@@ -797,7 +794,7 @@ module StreamWeaver
                    dark palette below.
                    =========================================== */
                 body.sw-theme-ide {
-                  --ide-font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                  --ide-font-sans: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                   --ide-font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', monospace;
 
                   --ide-chrome: #f2f3f5;

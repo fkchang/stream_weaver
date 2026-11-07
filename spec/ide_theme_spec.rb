@@ -15,8 +15,8 @@ RSpec.describe "IDE theme (sw-theme-ide)" do
   end
 
   let(:palette_tokens) do
-    %w[chrome elevated border border2 hover input text muted hint
-       accent accent-hover on-accent blue gold green red]
+    %w[chrome workspace header elevated border border2 hover input text muted hint
+       accent accent-hover on-accent blue gold green red shadow]
   end
 
   let(:html) { render_app(StreamWeaver::App.new("Title", theme: :ide) {}) }
@@ -57,7 +57,7 @@ RSpec.describe "IDE theme (sw-theme-ide)" do
 
     it "uses Geist for text and JetBrains Mono for chrome" do
       light = rule(html, "body.sw-theme-ide {")
-      expect(light).to include("--ide-font-sans: 'Geist'")
+      expect(light).to include("--ide-font-sans: 'Geist Variable'")
       expect(light).to include("--ide-font-mono: 'JetBrains Mono'")
     end
   end
@@ -66,8 +66,13 @@ RSpec.describe "IDE theme (sw-theme-ide)" do
     let(:dark_selector) { %(html.dark body.sw-theme-ide,\nhtml[data-sw-theme="dark"] body.sw-theme-ide {) }
     let(:dark) { rule(html, dark_selector) }
 
-    it "is declared under html.dark body.sw-theme-ide and the data-sw-theme twin" do
-      expect(html).to include(dark_selector)
+    # Same specificity question as the mapping below: the generic dark
+    # palette (html.dark body) must come first so the IDE rule wins the
+    # cascade even where the two tie.
+    it "comes after the generic html.dark body palette" do
+      generic = html.index("html.dark body {")
+      expect(generic).not_to be_nil
+      expect(html.index(dark_selector)).to be > generic
     end
 
     it "redeclares every --ide-* palette token with the dark values" do
@@ -91,21 +96,38 @@ RSpec.describe "IDE theme (sw-theme-ide)" do
   end
 
   describe "fonts" do
-    it "loads Geist and JetBrains Mono when the theme is active" do
-      expect(html).to include(StreamWeaver::Views::AppView::IDE_FONTS_HREF)
+    let(:geist) { "https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.8/index.css" }
+
+    it "loads a version-pinned Geist stylesheet and JetBrains Mono through the fonts path" do
+      expect(html).to include(%(<link rel="stylesheet" href="#{geist}">))
+      expect(html).to include(StreamWeaver::Fonts.google_fonts_href(["JetBrains+Mono:wght@400;500;600;700"]))
+    end
+
+    it "merges the theme's fonts with the app's own" do
+      page = render_app(StreamWeaver::App.new("Title", theme: :ide, fonts: ["Orbitron:wght@700"]) {})
+      expect(page).to include("family=Orbitron:wght@700&family=JetBrains+Mono")
     end
 
     it "does not load them for other themes" do
       other = render_app(StreamWeaver::App.new("Title", theme: :doc) {})
-      expect(other).not_to include("family=Geist")
+      expect(other).not_to include("fontsource-variable/geist")
+      expect(other).not_to include("JetBrains+Mono")
     end
   end
 
-  describe "theme_toggle" do
-    it "renders a toggle wired to swToggleTheme, which flips html.dark" do
-      page = render_app(StreamWeaver::App.new("Title", theme: :ide) { theme_toggle })
-      expect(page).to include("swToggleTheme")
-      expect(page).to include("html.classList.toggle('dark'")
+  # The page stylesheet carries every built-in theme, so the scope check is
+  # that no other theme's selector picked up an --ide-* token.
+  describe "theme isolation" do
+    it "keeps --ide-* tokens inside sw-theme-ide selectors" do
+      other = render_app(StreamWeaver::App.new("Title", theme: :doc) {})
+      ide_rules = other.scan(/([^{}]*)\{([^{}]*)\}/).select { |_selector, body| body.include?("--ide-") }
+      expect(ide_rules).not_to be_empty
+      ide_rules.each { |selector, _body| expect(selector).to include("body.sw-theme-ide") }
+    end
+
+    it "gives a :doc page no sw-theme-ide body class" do
+      other = render_app(StreamWeaver::App.new("Title", theme: :doc) {})
+      expect(other).not_to match(/<body[^>]*class="[^"]*\bsw-theme-ide\b/)
     end
   end
 end

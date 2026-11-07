@@ -214,9 +214,12 @@ module StreamWeaver
       ide: {
         name: "IDE",
         description: "Editor Workspace",
+        # Loaded by the page head whenever this theme is active.
+        fonts: ["JetBrains+Mono:wght@400;500;600;700"],
+        stylesheets: ["https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.8/index.css"],
         variables: {
-          font_display: "'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-          font_body: "'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          font_display: "'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          font_body: "'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
           font_size_base: "15px",
           line_height: "1.6",
           color_primary: "#2e7d16",
@@ -618,6 +621,22 @@ module StreamWeaver
         label: Theme::BUILT_IN_THEMES[name][:name],
         description: Theme::BUILT_IN_THEMES[name][:description]
       ))
+    end
+
+    # Google Fonts entries (Fonts.google_fonts_href format) a built-in theme loads.
+    #
+    # @param name [Symbol, nil] Theme name
+    # @return [Array<String>]
+    def theme_fonts(name)
+      Theme::BUILT_IN_THEMES.dig(name&.to_sym, :fonts) || []
+    end
+
+    # Stylesheet URLs a built-in theme loads (version-pinned CDN fonts).
+    #
+    # @param name [Symbol, nil] Theme name
+    # @return [Array<String>]
+    def theme_stylesheets(name)
+      Theme::BUILT_IN_THEMES.dig(name&.to_sym, :stylesheets) || []
     end
 
     # Check if a theme exists (custom or built-in)
