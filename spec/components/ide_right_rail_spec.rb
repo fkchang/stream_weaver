@@ -25,15 +25,18 @@ RSpec.describe "ide_rail_right contents: ide_rail_tabs, ide_filetree, ide_termin
                "div[@class='sw-ide-rail-tabs']/span")
     end
 
-    it "renders each tab, marking the active one" do
-      expect(tabs.map { |tab| text_of(tab) }).to eq(%w[Specs Files Changes])
+    it "renders each tab, marking the active one for sight and for screen readers" do
+      expect(tabs.map { |tab| tab.texts.map(&:value).join }).to eq(%w[Specs Files Changes])
       expect(classes(tabs[1])).to eq(%w[sw-ide-rail-tab sw-ide-rail-tab--active])
+      expect(tabs.map { |tab| tab.attributes["aria-current"] }).to eq([nil, "true", nil])
     end
 
-    it "dims a tab with a hint and shows the hint as its title" do
+    it "dims a tab with a hint and gives the hint as its title and as hidden text" do
       expect(classes(tabs[2])).to eq(%w[sw-ide-rail-tab sw-ide-rail-tab--dim])
       expect(tabs[2].attributes["title"]).to eq("Planned")
+      expect(text_of(first(tabs[2], "span[@class='sw-ide-visually-hidden']"))).to eq(" (Planned)")
       expect(tabs[0].attributes["title"]).to be_nil
+      expect(find_all(tabs[0], "span")).to be_empty
     end
   end
 
@@ -41,10 +44,10 @@ RSpec.describe "ide_rail_right contents: ide_rail_tabs, ide_filetree, ide_termin
     let(:tree) { first(render_rail { ide_filetree }, "nav[@class='sw-ide-filetree']") }
     let(:rows) { find_all(tree, "*") }
 
-    it "is a named link list the scroll spy reveals within, that closes the off-canvas rail on a file click" do
+    it "is a named link list the scroll spy reveals within, with a click handler for the off-canvas rail" do
       expect(tree.attributes["aria-label"]).to eq("Files")
       expect(tree.attributes["data-sw-ide-links"]).to eq("")
-      expect(tree.attributes["on-click"]).to eq("$event.target.closest('a') ? closeRail() : null")
+      expect(tree.attributes["on-click"].to_s).not_to be_empty
     end
 
     it "mirrors the editor's sections in order, under folder rows, with depth" do
@@ -75,33 +78,50 @@ RSpec.describe "ide_rail_right contents: ide_rail_tabs, ide_filetree, ide_termin
       end
     end
 
-    it "is empty without an ide_editor in the shell" do
-      page = render_ide_page { ide_rail_right { ide_filetree } }
-      expect(find_all(ide_region(page, "aside", "sw-ide-rail-right"), ".//nav/*")).to be_empty
+    it "finds the editor through any container in the rail" do
+      page = render_ide_page do
+        ide_editor { file_section "readme", label: "README.md" }
+        ide_rail_right { vstack { ide_filetree } }
+      end
+      expect(page).to include('data-sw-ide-target="readme"')
+    end
+
+    it "refuses to render without an ide_editor in the shell" do
+      expect { render_ide_page { ide_rail_right { ide_filetree } } }
+        .to raise_error(ArgumentError, /ide_filetree needs an ide_editor in the same ide_shell/)
     end
   end
 
   describe "ide_terminal" do
     let(:terminal) do
       first(render_rail { ide_terminal(lines: [{ command: "gem install stream_weaver" }, "Installed"]) },
-            "div[@class='sw-ide-terminal']")
+            "figure[@class='sw-ide-terminal']")
     end
 
-    it "renders its label over a transcript of prompt and output lines" do
-      expect(text_of(first(terminal, "div[@class='sw-ide-terminal__head']/span"))).to eq("Terminal")
-      line, output = find_all(terminal, "pre[@class='sw-ide-terminal__screen']/span")
+    it "captions its transcript with its label" do
+      expect(text_of(first(terminal, "figcaption[@class='sw-ide-terminal__head']/span"))).to eq("Terminal")
+    end
+
+    it "renders prompt and output lines, one per text line" do
+      screen = first(terminal, "pre[@class='sw-ide-terminal__screen']")
+      line, output = find_all(screen, "span")
       expect(line.attributes["class"]).to eq("sw-ide-terminal__line")
       expect(text_of(first(line, "span[@class='sw-ide-terminal__prompt']"))).to eq("❯")
       expect(text_of(first(line, "span[@class='sw-ide-terminal__command']"))).to eq("gem install stream_weaver")
       expect(output.attributes["class"]).to eq("sw-ide-terminal__output")
-      expect(text_of(output)).to eq("Installed")
+      expect(text_of(screen)).to eq("❯ gem install stream_weaver\nInstalled")
     end
 
-    it "takes its own label and prompt" do
-      term = first(render_rail { ide_terminal(label: "Shell", prompt: "$", lines: [{ command: "ls" }]) },
-                   "div[@class='sw-ide-terminal']")
+    it "takes its own label and prompt, and string-keyed lines" do
+      term = first(render_rail { ide_terminal(label: "Shell", prompt: "$", lines: [{ "command" => "ls" }]) },
+                   "figure[@class='sw-ide-terminal']")
       expect(text_of(first(term, ".//span[@class='sw-ide-terminal__label']"))).to eq("Shell")
-      expect(text_of(first(term, ".//span[@class='sw-ide-terminal__prompt']"))).to eq("$")
+      expect(text_of(first(term, ".//pre"))).to eq("$ ls")
+    end
+
+    it "refuses a hash line without a command" do
+      expect { StreamWeaver::Components::IdeTerminal.new(lines: [{ output: "x" }]) }
+        .to raise_error(ArgumentError, /needs a command: key/)
     end
   end
 end

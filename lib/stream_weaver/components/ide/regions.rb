@@ -46,6 +46,9 @@ module StreamWeaver
       TAG = :main
       BLOCK = "sw-ide-editor"
 
+      # Only the editor's direct children count: a file_section nested in
+      # another container gets no tab and no file tree row.
+      #
       # @return [Array<IdeFileSection>] the sections the tab strip lists
       def file_sections
         children.grep(IdeFileSection)

@@ -1775,9 +1775,6 @@ module StreamWeaver
       def render_ide_shell(view, component, state)
         inject_component_css(view, :ide, Components::Ide::CSS)
         has_right_rail = component.children.any? { |c| c.is_a?(Components::IdeRailRight) }
-        editor = component.children.find { |c| c.is_a?(Components::IdeEditor) }
-        # Read by render_ide_filetree, which renders in a sibling region.
-        view.instance_variable_set(:@_ide_file_sections, editor ? editor.file_sections : [])
 
         attrs = framework_attrs("sw-ide-shell", component.options).merge(
           "x-data" => IDE_SHELL_DATA,
@@ -1890,7 +1887,7 @@ module StreamWeaver
       end
 
       # Render the tab row of an ide_rail_right. Tabs with a hint are dimmed
-      # and carry it as their tooltip.
+      # and carry it as their tooltip and as text for screen readers.
       #
       # @param view [Phlex::HTML] The Phlex view instance
       # @param component [Components::IdeRailTabs]
@@ -1903,29 +1900,33 @@ module StreamWeaver
             classes << "sw-ide-rail-tab--active" if tab[:active]
             classes << "sw-ide-rail-tab--dim" if tab[:hint]
             attrs = { class: classes.join(" ") }
+            attrs["aria-current"] = "true" if tab[:active]
             attrs[:title] = tab[:hint] if tab[:hint]
-            view.span(**attrs) { tab[:label] }
+            view.span(**attrs) do
+              view.plain(tab[:label])
+              view.span(class: "sw-ide-visually-hidden") { " (#{tab[:hint]})" } if tab[:hint]
+            end
           end
         end
       end
 
-      # Render an ide_filetree from the file sections of the shell's
-      # ide_editor (see render_ide_shell): folder rows, then file links the
-      # editor's scroll spy keeps in step.
+      # Render an ide_filetree from the file sections of the editor in its
+      # ide_shell: folder rows, then file links the editor's scroll spy keeps
+      # in step.
       #
       # @param view [Phlex::HTML] The Phlex view instance
       # @param component [Components::IdeFiletree]
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_ide_filetree(view, component, _state)
-        sections = view.instance_variable_get(:@_ide_file_sections) || []
         attrs = framework_attrs("sw-ide-filetree", component.options).merge(
           "aria-label" => component.label, "data-sw-ide-links" => "",
-          # Off-canvas, the rail covers the editor: opening a file closes it.
-          "@click" => "$event.target.closest('a') ? closeRail() : null"
+          # Off-canvas, the rail covers the editor: opening a file closes it,
+          # leaving focus with the section the link moves it to.
+          "@click" => "$event.target.closest('a') ? closeRail(false) : null"
         )
         view.nav(**attrs) do
-          component.rows(sections).each do |row|
+          component.rows.each do |row|
             style = "--sw-ide-depth: #{row[:depth]}"
             if row[:folder]
               view.div(class: "sw-ide-filetree__row sw-ide-filetree__row--folder", style: style) do
@@ -1942,28 +1943,29 @@ module StreamWeaver
         end
       end
 
-      # Render an ide_terminal: a labelled head over a transcript of command
-      # and output lines.
+      # Render an ide_terminal: a figure whose caption labels a transcript of
+      # command and output lines, one per text line.
       #
       # @param view [Phlex::HTML] The Phlex view instance
       # @param component [Components::IdeTerminal]
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_ide_terminal(view, component, _state)
-        view.div(**framework_attrs("sw-ide-terminal", component.options)) do
-          view.div(class: "sw-ide-terminal__head") do
+        view.figure(**framework_attrs("sw-ide-terminal", component.options)) do
+          view.figcaption(class: "sw-ide-terminal__head") do
             view.span(class: "sw-ide-terminal__label") { component.label }
           end
           view.pre(class: "sw-ide-terminal__screen") do
-            component.lines.each do |line|
-              if line.is_a?(Hash)
+            component.lines.each_with_index do |line, index|
+              view.plain("\n") if index.positive?
+              if line[:command]
                 view.span(class: "sw-ide-terminal__line") do
                   view.span(class: "sw-ide-terminal__prompt", "aria-hidden" => "true") { component.prompt }
                   view.plain(" ")
                   view.span(class: "sw-ide-terminal__command") { line[:command] }
                 end
               else
-                view.span(class: "sw-ide-terminal__output") { line }
+                view.span(class: "sw-ide-terminal__output") { line[:output] }
               end
             end
           end
@@ -8553,9 +8555,11 @@ end
       # =========================================
 
       # Shell state: closeRail is a no-op when the rail is already closed, so
-      # Escape elsewhere on the page never steals focus.
-      IDE_SHELL_DATA = "{ railOpen: false, closeRail() { if (!this.railOpen) return; " \
-                       "this.railOpen = false; this.$nextTick(() => this.$refs.toggle?.focus()) } }"
+      # Escape elsewhere on the page never steals focus. Escape and the
+      # backdrop return focus to the toggle; opening a file from the rail
+      # passes false, as the file link moves focus itself.
+      IDE_SHELL_DATA = "{ railOpen: false, closeRail(focusToggle = true) { if (!this.railOpen) return; " \
+                       "this.railOpen = false; if (focusToggle) this.$nextTick(() => this.$refs.toggle?.focus()) } }"
 
       IDE_MENU_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" ' \
                       'stroke-width="1.5" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg>'

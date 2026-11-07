@@ -28,16 +28,32 @@ module StreamWeaver
     #     end
     #   end
     class IdeShell < Base
-      attr_accessor :children
-      attr_reader :options
+      attr_reader :children, :options
 
       def initialize(**options)
         @options = options
         @children = []
       end
 
+      # Hands the shell's ide_editor to every ide_filetree inside it, which
+      # renders in a sibling region.
+      def children=(children)
+        @children = children
+        editor = children.find { |child| child.is_a?(IdeEditor) }
+        filetrees(children).each { |tree| tree.editor = editor }
+      end
+
       def render(view, state)
         view.adapter.render_ide_shell(view, self, state)
+      end
+
+      private
+
+      def filetrees(components)
+        components.flat_map do |component|
+          nested = component.respond_to?(:children) ? filetrees(Array(component.children)) : []
+          component.is_a?(IdeFiletree) ? [component, *nested] : nested
+        end
       end
     end
   end

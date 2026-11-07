@@ -22,16 +22,17 @@ module StreamWeaver
       end
     end
 
-    # File tree of the editor's file sections, built at render time from the
-    # ide_editor in the same ide_shell: one row per section, nested under a
-    # folder row for each directory in its label. The row of the section on
-    # screen is marked by the editor's scroll spy, and a click scrolls the
-    # editor to it.
+    # File tree of the editor's file sections: one row per section, nested
+    # under a folder row for each directory in its label. The ide_shell it
+    # sits in hands it the shell's ide_editor (IdeShell#children=). The row
+    # of the section on screen is marked by the editor's scroll spy, and a
+    # click scrolls the editor to it.
     #
     # @example
     #   ide_rail_right { ide_filetree }
     class IdeFiletree < Base
       attr_reader :label, :options
+      attr_writer :editor
 
       # @param label [String] accessible name of the tree
       def initialize(label: "Files", **options)
@@ -39,14 +40,17 @@ module StreamWeaver
         @options = options
       end
 
-      # Folder and file rows for these sections, in order. A folder row is
-      # emitted when a section's directory first differs from the one above.
+      # Folder and file rows for the editor's sections, in order. A folder
+      # row is emitted when a section's directory first differs from the one
+      # above.
       #
-      # @param sections [Array<IdeFileSection>]
       # @return [Array<Hash>] { folder: name, depth: } or { section:, depth: }
-      def rows(sections)
+      # @raise [ArgumentError] when the tree is not in an ide_shell with an ide_editor
+      def rows
+        raise ArgumentError, "ide_filetree needs an ide_editor in the same ide_shell" unless @editor
+
         open_folders = []
-        sections.flat_map do |section|
+        @editor.file_sections.flat_map do |section|
           folders = section.label.split("/")[0...-1]
           shared = open_folders.zip(folders).take_while { |open, folder| open == folder }.size
           open_folders = folders
@@ -69,8 +73,9 @@ module StreamWeaver
     class IdeTerminal < Base
       attr_reader :label, :prompt, :lines, :options
 
+      # @raise [ArgumentError] for a Hash line without a command
       def initialize(lines: [], label: "Terminal", prompt: "❯", **options)
-        @lines = Array(lines)
+        @lines = Array(lines).map { |line| normalize(line) }
         @label = label
         @prompt = prompt
         @options = options
@@ -78,6 +83,18 @@ module StreamWeaver
 
       def render(view, state)
         view.adapter.render_ide_terminal(view, self, state)
+      end
+
+      private
+
+      # @return [Hash] { command: } or { output: }
+      def normalize(line)
+        return { output: line.to_s } unless line.is_a?(Hash)
+
+        command = line[:command] || line["command"]
+        raise ArgumentError, "ide_terminal line #{line.inspect} needs a command: key" unless command
+
+        { command: command.to_s }
       end
     end
   end

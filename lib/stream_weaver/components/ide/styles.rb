@@ -395,10 +395,22 @@ module StreamWeaver
         .sw-ide-filetree__row.sw-is-active .sw-ide-filetree__icon {
           color: var(--ide-accent, var(--sw-color-primary));
         }
+        .sw-ide-visually-hidden {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          padding: 0;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+          white-space: nowrap;
+          border: 0;
+        }
         .sw-ide-terminal {
           display: flex;
           flex: none;
           flex-direction: column;
+          margin: 0;
           height: 375px;
           max-height: 47vh;
           border-top: 1px solid var(--ide-border2, var(--sw-color-border-strong));
@@ -432,10 +444,6 @@ module StreamWeaver
           white-space: pre-wrap;
           word-break: break-all;
           color: var(--ide-muted, var(--sw-color-text-muted));
-        }
-        .sw-ide-terminal__line,
-        .sw-ide-terminal__output {
-          display: block;
         }
         .sw-ide-terminal__prompt {
           font-weight: 600;
