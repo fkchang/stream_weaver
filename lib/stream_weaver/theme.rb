@@ -210,6 +210,21 @@ module StreamWeaver
           spacing_md: "1rem",
           card_border_left: "none"
         }
+      },
+      ide: {
+        name: "IDE",
+        description: "Editor Workspace",
+        variables: {
+          font_display: "'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          font_body: "'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          font_size_base: "15px",
+          line_height: "1.6",
+          color_primary: "#2e7d16",
+          color_bg: "#ffffff",
+          color_text: "#1a1a1e",
+          spacing_md: "1rem",
+          card_border_left: "none"
+        }
       }
     }.freeze
 

@@ -40,7 +40,7 @@ module StreamWeaver
     end
 
     # Built-in themes (custom themes checked via StreamWeaver.theme_exists?)
-    BUILT_IN_THEMES = [:default, :dashboard, :document, :dark, :doc].freeze
+    BUILT_IN_THEMES = [:default, :dashboard, :document, :dark, :doc, :ide].freeze
     # For backwards compatibility
     VALID_THEMES = BUILT_IN_THEMES
 

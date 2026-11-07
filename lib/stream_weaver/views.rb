@@ -10,6 +10,9 @@ module StreamWeaver
       attr_reader :adapter, :app
       attr_reader :current_fragment_id
 
+      # Text and chrome fonts for the :ide theme, loaded only when it is active.
+      IDE_FONTS_HREF = "https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+
       # @param app [StreamWeaver::App] The app instance
       # @param state [Hash] The current state
       # @param adapter [StreamWeaver::Adapter::Base] The adapter for rendering
@@ -108,6 +111,7 @@ module StreamWeaver
             link(rel: "preconnect", href: "https://fonts.googleapis.com")
             link(rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "anonymous")
             link(rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap")
+            link(rel: "stylesheet", href: IDE_FONTS_HREF) if effective_theme == :ide
             if @app.fonts.any?
               custom_href = Fonts.google_fonts_href(@app.fonts)
               link(rel: "stylesheet", href: custom_href) if custom_href
@@ -784,6 +788,115 @@ module StreamWeaver
                   background: var(--sw-doc-code-bg-elevated);
                   border-color: var(--sw-doc-code-border);
                   color: var(--sw-doc-code-text-dim);
+                }
+
+                /* ===========================================
+                   Theme: IDE (editor-style workspace)
+                   Geist text, JetBrains Mono chrome. The --ide-* tokens are the
+                   palette; the --sw-* tokens map onto them. Light palette here,
+                   dark palette below.
+                   =========================================== */
+                body.sw-theme-ide {
+                  --ide-font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                  --ide-font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', monospace;
+
+                  --ide-chrome: #f2f3f5;
+                  --ide-workspace: #ffffff;
+                  --ide-header: #f2f3f5;
+                  --ide-elevated: #ffffff;
+                  --ide-border: #dcdfe4;
+                  --ide-border2: #c7ccd6;
+                  --ide-hover: #e9eaee;
+                  --ide-input: #ffffff;
+                  --ide-text: #1a1a1e;
+                  --ide-muted: #5a5f6a;
+                  --ide-hint: #667085;
+                  --ide-accent: #2e7d16;
+                  --ide-accent-hover: #25640f;
+                  --ide-on-accent: #ffffff;
+                  --ide-blue: #2265cf;
+                  --ide-gold: #946300;
+                  --ide-green: #1a7f37;
+                  --ide-red: #d02533;
+                  --ide-shadow: 0 24px 80px rgba(15, 20, 40, 0.18);
+
+                  --sw-font-display: var(--ide-font-sans);
+                  --sw-font-body: var(--ide-font-sans);
+                  --sw-font-family: var(--ide-font-sans);
+                  --sw-font-mono: var(--ide-font-mono);
+                  --sw-font-size-base: 15px;
+                  --sw-line-height: 1.6;
+
+                  --sw-radius-sm: 3px;
+                  --sw-radius-md: 4px;
+                  --sw-radius-lg: 6px;
+                  --sw-radius-xl: 8px;
+
+                  --sw-card-border-left: none;
+                  color-scheme: light;
+                }
+
+                /* IDE theme -- dark palette. Both dark signals are matched:
+                   auto_mode sets html.dark and html[data-sw-theme="dark"]
+                   together, and either selector outranks html.dark body. */
+                html.dark body.sw-theme-ide,
+                html[data-sw-theme="dark"] body.sw-theme-ide {
+                  --ide-chrome: #171719;
+                  --ide-workspace: #09090b;
+                  --ide-header: #18181b;
+                  --ide-elevated: #2b2d30;
+                  --ide-border: #2b2d30;
+                  --ide-border2: #43454a;
+                  --ide-hover: #393b40;
+                  --ide-input: #272830;
+                  --ide-text: #dfe1e5;
+                  --ide-muted: #a8adb5;
+                  --ide-hint: #71757c;
+                  --ide-accent: #8dff4f;
+                  --ide-accent-hover: #59d915;
+                  --ide-on-accent: #0a0a0a;
+                  --ide-blue: #6ac8ff;
+                  --ide-gold: #ffd54b;
+                  --ide-green: #41cb66;
+                  --ide-red: #ff4b75;
+                  --ide-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+                  color-scheme: dark;
+                }
+
+                /* IDE theme -- --sw-* colours read the --ide-* palette. Matched in
+                   dark mode too, so html.dark body's generic dark colours never
+                   win over the IDE palette. */
+                body.sw-theme-ide,
+                html.dark body.sw-theme-ide,
+                html[data-sw-theme="dark"] body.sw-theme-ide {
+                  --sw-color-primary: var(--ide-accent);
+                  --sw-color-primary-hover: var(--ide-accent-hover);
+                  --sw-color-primary-light: color-mix(in srgb, var(--ide-accent) 12%, transparent);
+                  --sw-color-primary-glow: color-mix(in srgb, var(--ide-accent) 18%, transparent);
+                  --sw-color-accent: var(--ide-accent);
+                  --sw-color-accent-light: color-mix(in srgb, var(--ide-accent) 12%, transparent);
+
+                  --sw-color-text: var(--ide-text);
+                  --sw-color-text-muted: var(--ide-muted);
+                  --sw-color-text-light: var(--ide-hint);
+                  --sw-color-bg: var(--ide-workspace);
+                  --sw-color-bg-card: var(--ide-elevated);
+                  --sw-color-bg-elevated: var(--ide-chrome);
+                  --sw-color-bg-hover: var(--ide-hover);
+                  --sw-color-border: var(--ide-border);
+                  --sw-color-border-strong: var(--ide-border2);
+                  --sw-color-border-focus: var(--ide-accent);
+
+                  --sw-color-secondary: var(--ide-muted);
+                  --sw-color-secondary-hover: var(--ide-text);
+                  --sw-color-secondary-foreground: var(--ide-workspace);
+
+                  --sw-color-status-green: var(--ide-green);
+                  --sw-color-status-yellow: var(--ide-gold);
+                  --sw-color-status-red: var(--ide-red);
+
+                  --sw-term-color: var(--ide-accent);
+                  --sw-term-bg-hover: var(--ide-hover);
                 }
 
                 /* ===========================================
