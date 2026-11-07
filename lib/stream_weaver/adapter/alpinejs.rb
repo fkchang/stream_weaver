@@ -1730,6 +1730,73 @@ module StreamWeaver
         end
       end
 
+      # Render the ide_shell grid. One Alpine flag, railOpen, drives the
+      # off-canvas right rail below the mobile breakpoint: the nav toggle
+      # flips it, the backdrop and Escape clear it.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeShell]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_shell(view, component, state)
+        inject_component_css(view, :ide, Components::Ide::CSS)
+        has_right_rail = component.children.any? { |c| c.is_a?(Components::IdeRailRight) }
+
+        attrs = ide_attrs("sw-ide-shell", component.options).merge(
+          "x-data" => "{ railOpen: false }",
+          ":class" => "{ 'sw-ide-shell--rail-open': railOpen }",
+          "@keydown.escape.window" => "railOpen = false"
+        )
+
+        view.div(**attrs) do
+          component.children.each { |child| child.render(view, state) }
+          render_ide_rail_toggle(view) if has_right_rail
+        end
+      end
+
+      # Render one ide_shell region (titlebar, rails, editor, statusbar).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeRegion]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_region(view, component, state)
+        inject_component_css(view, :ide, Components::Ide::CSS)
+        attrs = ide_attrs(component.block_class, component.options).merge(component.region_attributes)
+
+        view.public_send(component.tag, **attrs) do
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      private
+
+      # Framework class first, then the author's class:/style: appended.
+      def ide_attrs(block_class, options)
+        attrs = { class: [block_class, options[:class]].compact.join(" ") }
+        attrs[:style] = options[:style] if options[:style]
+        attrs
+      end
+
+      def render_ide_rail_toggle(view)
+        view.button(
+          type: "button",
+          class: "sw-ide-shell__nav-toggle",
+          "aria-controls" => Components::IdeRailRight::DOM_ID,
+          "aria-label" => "Toggle side panel",
+          ":aria-expanded" => "railOpen.toString()",
+          "@click" => "railOpen = !railOpen"
+        ) do
+          view.raw(view.safe(IDE_MENU_ICON))
+        end
+        view.div(class: "sw-ide-shell__backdrop", "aria-hidden" => "true", "@click" => "railOpen = false")
+      end
+
+      IDE_MENU_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" ' \
+                      'stroke-width="1.5" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg>'
+
+      public
+
       # Render a single board card.
       #
       # @param view [Phlex::HTML] The Phlex view instance

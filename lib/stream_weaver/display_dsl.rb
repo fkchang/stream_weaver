@@ -257,6 +257,32 @@ module StreamWeaver
       components << Components::NavItem.new(label, href: href, active: active, **options)
     end
 
+    # Editor-style full-viewport frame; its regions are the ide_* calls in
+    # the block. Pair with chrome: false and theme: :ide.
+    def ide_shell(**options, &block)
+      with_container(Components::IdeShell.new(**options), &block)
+    end
+
+    def ide_titlebar(**options, &block)
+      with_container(Components::IdeTitlebar.new(**options), &block)
+    end
+
+    def ide_rail_left(**options, &block)
+      with_container(Components::IdeRailLeft.new(**options), &block)
+    end
+
+    def ide_editor(**options, &block)
+      with_container(Components::IdeEditor.new(**options), &block)
+    end
+
+    def ide_rail_right(**options, &block)
+      with_container(Components::IdeRailRight.new(**options), &block)
+    end
+
+    def ide_statusbar(**options, &block)
+      with_container(Components::IdeStatusbar.new(**options), &block)
+    end
+
     # =========================================
     # Visual skills content blocks
     # =========================================
