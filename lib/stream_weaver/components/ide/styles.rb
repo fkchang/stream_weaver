@@ -713,7 +713,7 @@ module StreamWeaver
            Landing-page content: hero, pills, buttons, cards, transcript.
            Plain divs with these classes; no component behind them.
            =========================================== */
-        .sw-ide-file-section--last {
+        .sw-ide-editor > .sw-ide-file-section:last-child {
           /* Tall enough that the last tab can scroll to the top. */
           min-height: calc(100vh - var(--sw-ide-tabstrip-height, 36px));
         }
@@ -728,7 +728,7 @@ module StreamWeaver
           color: var(--ide-text, var(--sw-color-text));
         }
         .sw-ide-lead {
-          margin: 0 0 28px;
+          margin: 0 0 var(--sw-spacing-lg, 24px);
           font-size: 17px;
           line-height: 1.55;
           color: var(--ide-muted, var(--sw-color-text-muted));
@@ -750,7 +750,7 @@ module StreamWeaver
         }
         .sw-ide-hero__lede {
           max-width: 620px;
-          margin: 0 0 28px;
+          margin: 0 0 var(--sw-spacing-lg, 24px);
           font-size: 17px;
           line-height: 1.6;
           color: var(--ide-muted, var(--sw-color-text-muted));
@@ -764,7 +764,7 @@ module StreamWeaver
         .sw-ide-pills {
           display: flex;
           flex-wrap: wrap;
-          gap: 8px;
+          gap: var(--sw-spacing-sm, 8px);
         }
         .sw-ide-pill {
           padding: 3px 10px;
@@ -783,8 +783,8 @@ module StreamWeaver
           margin: 0;
           color: inherit;
         }
-        .sw-ide-file-section h3 {
-          margin: 28px 0 8px;
+        .sw-ide-h3 {
+          margin: var(--sw-spacing-lg, 24px) 0 var(--sw-spacing-sm, 8px);
         }
         .sw-ide-actions {
           display: flex;
@@ -818,7 +818,7 @@ module StreamWeaver
           outline-offset: 2px;
         }
         .sw-ide-beat {
-          margin: 0 0 28px;
+          margin: 0 0 var(--sw-spacing-lg, 24px);
         }
         .sw-ide-beat h3 {
           margin: 0 0 6px;
@@ -834,10 +834,10 @@ module StreamWeaver
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
           gap: 14px;
-          margin: 0 0 36px;
+          margin: 0 0 var(--sw-spacing-xl, 32px);
         }
         .sw-ide-card {
-          padding: 16px 18px;
+          padding: var(--sw-spacing-md, 16px) 18px;
           border: 1px solid var(--ide-border2, var(--sw-color-border-strong));
           border-radius: 4px;
           background: var(--ide-header, var(--sw-color-bg-card));
@@ -845,7 +845,7 @@ module StreamWeaver
         .sw-ide-card__head {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: var(--sw-spacing-sm, 8px);
           margin-bottom: 8px;
         }
         .sw-ide-card__head h3 {
@@ -867,7 +867,7 @@ module StreamWeaver
         .sw-ide-transcript {
           display: grid;
           gap: 14px;
-          margin: 0 0 28px;
+          margin: 0 0 var(--sw-spacing-lg, 24px);
         }
         .sw-ide-transcript__panel {
           border: 1px solid var(--ide-border2, var(--sw-color-border-strong));

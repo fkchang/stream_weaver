@@ -12,76 +12,79 @@
 
 require_relative "../../lib/stream_weaver"
 
-DSL_SAMPLE = <<~RUBY
-  require "stream_weaver"
+module StreamWeaverLanding
+  DSL_SAMPLE = <<~RUBY
+    require "stream_weaver"
 
-  app "Standup" do
-    text_field :name, placeholder: "Who is reporting?"
-    select :mood, %w[Great Fine Stuck]
+    app "Standup" do
+      text_field :name, placeholder: "Who is reporting?"
+      select :mood, %w[Great Fine Stuck]
 
-    button "Post update" do |state|
-      state[:updates] ||= []
-      state[:updates] << { who: state[:name], mood: state[:mood] }
-    end
+      button "Post update" do |state|
+        state[:updates] ||= []
+        state[:updates] << { who: state[:name], mood: state[:mood] }
+      end
 
-    table(state[:updates] || [], headers: %w[Who Mood])
-  end.run!
-RUBY
-
-PUSH_SCRIPT = <<~SH
-  $ streamweaver canvas-push review <<'RUBY'
-  header2 "Pick a layout"
-  columns 2 do
-    column { card { text "A: sidebar nav" } }
-    column { card { text "B: top tabs" } }
-  end
-  button "Ship B"
+      table(state[:updates] || [], headers: %w[Who Mood])
+    end.run!
   RUBY
-SH
 
-FEATURES = [
-  { icon: "{ }", title: "A Ruby DSL", body: "Text, inputs, tables, charts and containers are method calls. A block is a page; there is no template language to learn." },
-  { icon: "@", title: "Server-side state", body: "A click runs your Ruby, the block re-renders, and only the changed markup goes back to the browser." },
-  { icon: ">_", title: "The agent canvas", body: "An agent pushes the same DSL to a page you already have open, then waits for your click with canvas-wait." },
-  { icon: "#", title: "Themes", body: "Themes are CSS custom properties with a light and a dark palette. Switch with one line, or register your own." },
-  { icon: "~", title: "Live updates", body: "Streaming output and deferred fragments render as they arrive, so slow work never blocks the page." },
-  { icon: "<>", title: "Exports", body: "A page exports to standalone HTML, so what you built for yourself can be sent to someone without Ruby." }
-].freeze
-
-WHY_BEATS = [
-  ["Say what you need",
-   "A small UI is some text, a few inputs and a button. StreamWeaver lets the code say exactly that, and nothing else."],
-  ["Spend fewer tokens",
-   "An agent writes a short DSL instead of HTML, CSS and JavaScript, so a mockup costs a fraction of the usual output."],
-  ["Keep the result on screen",
-   "Terminal output scrolls away. A canvas stays open beside your terminal and updates in place."]
-].freeze
-
-def beat(title, body)
-  div(class: "sw-ide-beat") do
-    header3 title
-    text body
-  end
-end
-
-def feature_card(icon:, title:, body:)
-  div(class: "sw-ide-card") do
-    div(class: "sw-ide-card__head") do
-      div(class: "sw-ide-card__icon") { text icon }
-      header3 title
+  PUSH_SCRIPT = <<~SH
+    $ streamweaver canvas-push review <<'RUBY'
+    header2 "Pick a layout"
+    columns 2 do
+      column { card { text "A: sidebar nav" } }
+      column { card { text "B: top tabs" } }
     end
-    text body
+    button "Ship B"
+    RUBY
+  SH
+
+  FEATURES = [
+    { icon: "{ }", title: "A Ruby DSL", body: "Text, inputs, tables, charts and containers are method calls. A block is a page; there is no template language to learn." },
+    { icon: "@", title: "Server-side state", body: "A click runs your Ruby, the block re-renders, and only the changed markup goes back to the browser." },
+    { icon: ">_", title: "The agent canvas", body: "An agent pushes the same DSL to a page you already have open, then waits for your click with canvas-wait." },
+    { icon: "#", title: "Themes", body: "Themes are CSS custom properties with a light and a dark palette. Switch with one line, or register your own." },
+    { icon: "~", title: "Live updates", body: "Streaming output and deferred fragments render as they arrive, so slow work never blocks the page." },
+    { icon: "<>", title: "Exports", body: "A page exports to standalone HTML, so what you built for yourself can be sent to someone without Ruby." }
+  ].freeze
+
+  WHY_BEATS = [
+    ["Say what you need",
+     "A small UI is some text, a few inputs and a button. StreamWeaver lets the code say exactly that, and nothing else."],
+    ["Spend fewer tokens",
+     "An agent writes a short DSL instead of HTML, CSS and JavaScript, so a mockup costs a fraction of the usual output."],
+    ["Keep the result on screen",
+     "Terminal output scrolls away. A canvas stays open beside your terminal and updates in place."]
+  ].freeze
+
+  # Content blocks take the DSL receiver, so nothing is defined on Object.
+  def self.beat(dsl, title, body)
+    dsl.div(class: "sw-ide-beat") do
+      header3 title
+      text body
+    end
+  end
+
+  def self.feature_card(dsl, icon:, title:, body:)
+    dsl.div(class: "sw-ide-card") do
+      div(class: "sw-ide-card__head") do
+        div(class: "sw-ide-card__icon") { text icon }
+        header3 title
+      end
+      text body
+    end
+  end
+
+  def self.transcript_panel(dsl, label, variant: nil, &block)
+    dsl.div(class: ["sw-ide-transcript__panel", variant && "sw-ide-transcript__panel--#{variant}"].compact.join(" ")) do
+      div(class: "sw-ide-transcript__label") { text label }
+      div(class: "sw-ide-transcript__body", &block)
+    end
   end
 end
 
-def transcript_panel(label, css_class = nil, &block)
-  div(class: ["sw-ide-transcript__panel", css_class].compact.join(" ")) do
-    div(class: "sw-ide-transcript__label") { text label }
-    div(class: "sw-ide-transcript__body", &block)
-  end
-end
-
-App = StreamWeaver::App.new("StreamWeaver", chrome: false, theme: :ide) do
+StreamWeaverLanding::APP = StreamWeaver::App.new("StreamWeaver", chrome: false, theme: :ide) do
   ide_shell do
     ide_titlebar(
       crumbs: %w[stream_weaver landing],
@@ -122,7 +125,7 @@ App = StreamWeaver::App.new("StreamWeaver", chrome: false, theme: :ide) do
           div(class: "sw-ide-actions") do
             link_to "Get started", href: "#install", class: "sw-ide-btn sw-ide-btn--primary"
             link_to "View on GitHub", href: "https://github.com/fkchang/stream_weaver", class: "sw-ide-btn"
-            link_to "Read the docs", href: "#features", class: "sw-ide-btn"
+            link_to "See features", href: "#features", class: "sw-ide-btn"
           end
           text "Tested on macOS with iTerm2 and Chrome; the canvas also runs in a plain browser tab.",
                class: "sw-ide-hero__meta"
@@ -134,8 +137,8 @@ App = StreamWeaver::App.new("StreamWeaver", chrome: false, theme: :ide) do
         text "Streamlit showed that an interface can be just text, inputs and a button. " \
              "StreamWeaver brings that idea to Ruby, and it turns out to suit AI agents as well.",
              class: "sw-ide-lead"
-        WHY_BEATS.each { |title, body| beat(title, body) }
-        callout "Every example in this page is real StreamWeaver DSL. The page you are reading is one too.",
+        StreamWeaverLanding::WHY_BEATS.each { |title, body| StreamWeaverLanding.beat(self, title, body) }
+        callout "The code samples on this page are real StreamWeaver DSL, and so is the page itself. The canvas panel below is a drawing of what a push looks like.",
                 variant: :info
       end
 
@@ -144,11 +147,11 @@ App = StreamWeaver::App.new("StreamWeaver", chrome: false, theme: :ide) do
         text "One DSL covers the page, the state behind it, and the way an agent talks to it.",
              class: "sw-ide-lead"
         div(class: "sw-ide-cards") do
-          FEATURES.each { |card| feature_card(**card) }
+          StreamWeaverLanding::FEATURES.each { |card| StreamWeaverLanding.feature_card(self, **card) }
         end
-        header3 "A whole app, in one file"
+        header3 "A whole app, in one file", class: "sw-ide-h3"
         text "This is the entire program: a form, a button with a Ruby handler, and a table that follows the state."
-        code_block DSL_SAMPLE, lang: "ruby", copy: true
+        code_block StreamWeaverLanding::DSL_SAMPLE, lang: "ruby", copy: true
         text "Save it as standup.rb and run ruby standup.rb. StreamWeaver picks a free port from 4567 and prints the URL."
       end
 
@@ -157,10 +160,10 @@ App = StreamWeaver::App.new("StreamWeaver", chrome: false, theme: :ide) do
         text "Instead of a wall of terminal text, an agent pushes a small page and reads back your answer.",
              class: "sw-ide-lead"
         div(class: "sw-ide-transcript") do
-          transcript_panel("1. The agent pushes") do
-            PUSH_SCRIPT.each_line { |line| div(class: "sw-ide-transcript__line") { text line.chomp } }
+          StreamWeaverLanding.transcript_panel(self, "1. The agent pushes") do
+            StreamWeaverLanding::PUSH_SCRIPT.each_line { |line| div(class: "sw-ide-transcript__line") { text line.chomp } }
           end
-          transcript_panel("2. You see, on the canvas", "sw-ide-transcript__panel--page") do
+          StreamWeaverLanding.transcript_panel(self, "2. You see, on the canvas", variant: "page") do
             header3 "Pick a layout"
             div(class: "sw-ide-transcript__choices") do
               div(class: "sw-ide-transcript__choice") { text "A: sidebar nav" }
@@ -168,7 +171,7 @@ App = StreamWeaver::App.new("StreamWeaver", chrome: false, theme: :ide) do
             end
             div(class: "sw-ide-transcript__cta") { text "Ship B" }
           end
-          transcript_panel("3. The agent gets your answer") do
+          StreamWeaverLanding.transcript_panel(self, "3. The agent gets your answer") do
             div(class: "sw-ide-transcript__line") { text "$ streamweaver canvas-wait review" }
             div(class: "sw-ide-transcript__line sw-ide-transcript__line--out") { text '{"clicked":"Ship B"}' }
           end
@@ -195,12 +198,12 @@ App = StreamWeaver::App.new("StreamWeaver", chrome: false, theme: :ide) do
             text "Run any example with bundle exec ruby examples/basic/hello_world.rb."
           end
         end
-        header3 "Platform support"
+        header3 "Platform support", class: "sw-ide-h3"
         text "streamweaver panel and the worker-tab automation are macOS and iTerm2 only. " \
              "canvas-read is a plain local web server and works anywhere Ruby does."
       end
 
-      file_section "contributing", label: "CONTRIBUTING", icon: :branch, comment: "CONTRIBUTING", class: "sw-ide-file-section--last" do
+      file_section "contributing", label: "CONTRIBUTING", icon: :branch, comment: "CONTRIBUTING" do
         header2 "Contributing", class: "sw-ide-h2"
         text "StreamWeaver is MIT licensed and developed in the open. Run the suite with bundle exec rspec " \
              "before you send a change, and keep each commit to one purpose.", class: "sw-ide-lead"
@@ -231,4 +234,4 @@ App = StreamWeaver::App.new("StreamWeaver", chrome: false, theme: :ide) do
   end
 end
 
-App.generate.run! if __FILE__ == $PROGRAM_NAME
+StreamWeaverLanding::APP.generate.run! if __FILE__ == $PROGRAM_NAME

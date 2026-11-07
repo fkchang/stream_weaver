@@ -824,9 +824,9 @@ module StreamWeaver
                   --sw-font-size-base: 15px;
                   --sw-line-height: 1.6;
 
-                  /* Spacing: the :ide theme must declare its own, or every
-                     component that reads --sw-spacing-* (tab triggers, cards)
-                     computes to 0 padding. */
+                  /* Spacing: copied from the default theme (:379) because themes
+                     are separate rules and cannot inherit one another's tokens;
+                     without it --sw-spacing-* readers (tab triggers) get 0 padding. */
                   --sw-spacing-xs: 0.375rem;
                   --sw-spacing-sm: 0.5rem;
                   --sw-spacing-md: 1rem;
