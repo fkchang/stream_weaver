@@ -294,6 +294,22 @@ module StreamWeaver
       with_container(Components::IdeFileSection.new(name, **options), &block)
     end
 
+    # Tab row for ide_rail_right; see Components::IdeRailTabs.
+    def ide_rail_tabs(tabs, **options)
+      components << Components::IdeRailTabs.new(tabs, **options)
+    end
+
+    # File tree mirroring the editor's file sections; see
+    # Components::IdeFiletree.
+    def ide_filetree(**options)
+      components << Components::IdeFiletree.new(**options)
+    end
+
+    # Terminal transcript panel; see Components::IdeTerminal.
+    def ide_terminal(**options)
+      components << Components::IdeTerminal.new(**options)
+    end
+
     # Dismissible note card; see Components::IdeNote.
     def ide_note(**options, &block)
       with_container(Components::IdeNote.new(**options), &block)

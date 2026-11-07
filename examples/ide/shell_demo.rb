@@ -75,9 +75,21 @@ App = StreamWeaver::App.new("IDE shell demo", chrome: false, theme: :ide) do
       end
     end
 
+    # The file tree is built from the editor's sections and follows the
+    # same scroll spy as the tab strip.
     ide_rail_right do
-      text "Files"
-      %w[lib/stream_weaver.rb lib/stream_weaver/app.rb lib/stream_weaver/components.rb].each { |file| text file }
+      ide_rail_tabs([
+        { label: "Outline", hint: "Planned: headings of the open file" },
+        { label: "Files", active: true },
+        { label: "Changes", hint: "Planned: the live diff" }
+      ])
+      ide_filetree
+      ide_terminal(lines: [
+        { command: "gem install stream_weaver" },
+        "Successfully installed stream_weaver",
+        { command: "ruby examples/ide/shell_demo.rb" },
+        "StreamWeaver App Running"
+      ])
     end
 
     ide_statusbar(left: ["MIT", "StreamWeaver"], right: ["Ruby"])

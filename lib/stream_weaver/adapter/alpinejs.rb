@@ -1775,6 +1775,9 @@ module StreamWeaver
       def render_ide_shell(view, component, state)
         inject_component_css(view, :ide, Components::Ide::CSS)
         has_right_rail = component.children.any? { |c| c.is_a?(Components::IdeRailRight) }
+        editor = component.children.find { |c| c.is_a?(Components::IdeEditor) }
+        # Read by render_ide_filetree, which renders in a sibling region.
+        view.instance_variable_set(:@_ide_file_sections, editor ? editor.file_sections : [])
 
         attrs = framework_attrs("sw-ide-shell", component.options).merge(
           "x-data" => IDE_SHELL_DATA,
@@ -1859,7 +1862,9 @@ module StreamWeaver
           if sections.any?
             view.nav(class: "sw-ide-tabstrip", "aria-label" => "Open files", "data-sw-ide-links" => "") do
               sections.each do |section|
-                ide_link(view, section, "sw-ide-tab") { view.span(class: "sw-ide-tab__label") { section.file_name } }
+                ide_link(view, section, "sw-ide-tab", "sw-ide-tab__icon") do
+                  view.span(class: "sw-ide-tab__label") { section.file_name }
+                end
               end
             end
           end
@@ -1880,6 +1885,87 @@ module StreamWeaver
         view.section(**attrs) do
           view.p(class: "sw-ide-file-section__comment") { "<!-- #{component.comment} -->" } if component.comment
           component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # Render the tab row of an ide_rail_right. Tabs with a hint are dimmed
+      # and carry it as their tooltip.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeRailTabs]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_rail_tabs(view, component, _state)
+        view.div(**framework_attrs("sw-ide-rail-tabs", component.options)) do
+          component.tabs.each do |tab|
+            classes = ["sw-ide-rail-tab"]
+            classes << "sw-ide-rail-tab--active" if tab[:active]
+            classes << "sw-ide-rail-tab--dim" if tab[:hint]
+            attrs = { class: classes.join(" ") }
+            attrs[:title] = tab[:hint] if tab[:hint]
+            view.span(**attrs) { tab[:label] }
+          end
+        end
+      end
+
+      # Render an ide_filetree from the file sections of the shell's
+      # ide_editor (see render_ide_shell): folder rows, then file links the
+      # editor's scroll spy keeps in step.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeFiletree]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_filetree(view, component, _state)
+        sections = view.instance_variable_get(:@_ide_file_sections) || []
+        attrs = framework_attrs("sw-ide-filetree", component.options).merge(
+          "aria-label" => component.label, "data-sw-ide-links" => "",
+          # Off-canvas, the rail covers the editor: opening a file closes it.
+          "@click" => "$event.target.closest('a') ? closeRail() : null"
+        )
+        view.nav(**attrs) do
+          component.rows(sections).each do |row|
+            style = "--sw-ide-depth: #{row[:depth]}"
+            if row[:folder]
+              view.div(class: "sw-ide-filetree__row sw-ide-filetree__row--folder", style: style) do
+                render_ide_icon(view, :folder, "sw-ide-filetree__icon")
+                view.plain(row[:folder])
+              end
+            else
+              section = row[:section]
+              ide_link(view, section, "sw-ide-filetree__row", "sw-ide-filetree__icon", style: style) do
+                view.plain(section.file_name)
+              end
+            end
+          end
+        end
+      end
+
+      # Render an ide_terminal: a labelled head over a transcript of command
+      # and output lines.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeTerminal]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_terminal(view, component, _state)
+        view.div(**framework_attrs("sw-ide-terminal", component.options)) do
+          view.div(class: "sw-ide-terminal__head") do
+            view.span(class: "sw-ide-terminal__label") { component.label }
+          end
+          view.pre(class: "sw-ide-terminal__screen") do
+            component.lines.each do |line|
+              if line.is_a?(Hash)
+                view.span(class: "sw-ide-terminal__line") do
+                  view.span(class: "sw-ide-terminal__prompt", "aria-hidden" => "true") { component.prompt }
+                  view.plain(" ")
+                  view.span(class: "sw-ide-terminal__command") { line[:command] }
+                end
+              else
+                view.span(class: "sw-ide-terminal__output") { line }
+              end
+            end
+          end
         end
       end
 
@@ -8563,10 +8649,10 @@ end
 
       # A link to an ide_editor file section that the scroll spy keeps in
       # step with the editor: an in-page href, so it still works without JS.
-      def ide_link(view, section, css_class, &block)
-        attrs = { class: css_class, href: "##{section.name}", "data-sw-ide-target" => section.name }
+      def ide_link(view, section, css_class, icon_class, **attrs, &block)
+        attrs = attrs.merge(class: css_class, href: "##{section.name}", "data-sw-ide-target" => section.name)
         view.a(**attrs) do
-          render_ide_icon(view, section.icon, "#{css_class}__icon")
+          render_ide_icon(view, section.icon, icon_class)
           block.call
         end
       end

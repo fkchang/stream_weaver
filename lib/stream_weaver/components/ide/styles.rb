@@ -319,6 +319,127 @@ module StreamWeaver
           color: var(--ide-hint, var(--sw-color-text-light));
         }
 
+        /* Right rail: tabs, file tree, terminal */
+        .sw-ide-rail-tabs {
+          display: flex;
+          flex: none;
+          align-items: center;
+          gap: 18px;
+          padding: 8px 16px;
+          border-bottom: 1px solid var(--ide-border, var(--sw-color-border));
+          font-size: 11.5px;
+          font-weight: 500;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+        }
+        .sw-ide-rail-tab {
+          color: var(--ide-hint, var(--sw-color-text-light));
+        }
+        .sw-ide-rail-tab--active {
+          color: var(--ide-text, var(--sw-color-text));
+        }
+        .sw-ide-rail-tab--dim {
+          cursor: help;
+        }
+        .sw-ide-filetree {
+          display: flex;
+          flex: 1;
+          flex-direction: column;
+          gap: 1px;
+          min-height: 0;
+          padding: 8px;
+          overflow-y: auto;
+          scrollbar-width: thin;
+          scrollbar-color: var(--ide-border2, var(--sw-color-border-strong)) transparent;
+        }
+        .sw-ide-filetree__row {
+          display: flex;
+          flex: none;
+          align-items: center;
+          gap: 7px;
+          padding: 4.5px 8px 4.5px calc(8px + var(--sw-ide-depth, 0) * 20px);
+          border-radius: 4px;
+          white-space: nowrap;
+          font-family: var(--ide-font-mono, var(--sw-font-mono));
+          font-size: 12.5px;
+          color: var(--ide-muted, var(--sw-color-text-muted));
+          text-decoration: none;
+        }
+        a.sw-ide-filetree__row:hover {
+          background: var(--ide-hover, var(--sw-color-bg-hover));
+          color: var(--ide-text, var(--sw-color-text));
+          text-decoration: none;
+        }
+        a.sw-ide-filetree__row:focus-visible {
+          outline: 2px solid var(--ide-accent, var(--sw-color-primary));
+          outline-offset: -2px;
+        }
+        .sw-ide-filetree__icon {
+          flex: none;
+          width: 14px;
+          height: 14px;
+          color: var(--ide-hint, var(--sw-color-text-light));
+        }
+        .sw-ide-filetree__row.sw-is-active {
+          background: color-mix(in srgb, var(--ide-accent, var(--sw-color-primary)) 16%, transparent);
+          color: var(--ide-text, var(--sw-color-text));
+        }
+        .sw-ide-filetree__row.sw-is-active .sw-ide-filetree__icon {
+          color: var(--ide-accent, var(--sw-color-primary));
+        }
+        .sw-ide-terminal {
+          display: flex;
+          flex: none;
+          flex-direction: column;
+          height: 375px;
+          max-height: 47vh;
+          border-top: 1px solid var(--ide-border2, var(--sw-color-border-strong));
+        }
+        .sw-ide-terminal__head {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 8px 12px;
+          border-bottom: 1px solid var(--ide-border, var(--sw-color-border));
+        }
+        .sw-ide-terminal__label {
+          font-size: 11px;
+          font-weight: 500;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+          color: var(--ide-hint, var(--sw-color-text-light));
+        }
+        .sw-ide-terminal__screen {
+          flex: 1;
+          min-height: 0;
+          margin: 0;
+          padding: 4px 14px 14px;
+          overflow-y: auto;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          font-family: var(--ide-font-mono, var(--sw-font-mono));
+          font-size: 12px;
+          line-height: 1.75;
+          white-space: pre-wrap;
+          word-break: break-all;
+          color: var(--ide-muted, var(--sw-color-text-muted));
+        }
+        .sw-ide-terminal__line,
+        .sw-ide-terminal__output {
+          display: block;
+        }
+        .sw-ide-terminal__prompt {
+          font-weight: 600;
+          color: var(--ide-accent, var(--sw-color-primary));
+        }
+        .sw-ide-terminal__command {
+          color: var(--ide-text, var(--sw-color-text));
+        }
+        .sw-ide-terminal__output {
+          color: var(--ide-hint, var(--sw-color-text-light));
+        }
+
         /* Left rail: tree and note card */
         .sw-ide-tree {
           display: flex;
