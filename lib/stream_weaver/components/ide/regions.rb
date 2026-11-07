@@ -39,9 +39,21 @@ module StreamWeaver
       BLOCK = "sw-ide-rail-left"
     end
 
+    # The editor column, and the shell's scroll container. Its file_section
+    # children get a generated tab strip and a scroll spy (see
+    # Components::IdeFileSection).
     class IdeEditor < IdeRegion
       TAG = :main
       BLOCK = "sw-ide-editor"
+
+      # @return [Array<IdeFileSection>] the sections the tab strip lists
+      def file_sections
+        children.grep(IdeFileSection)
+      end
+
+      def render(view, state)
+        view.adapter.render_ide_editor(view, self, state)
+      end
     end
 
     class IdeRailRight < IdeRegion

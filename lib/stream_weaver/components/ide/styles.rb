@@ -239,6 +239,86 @@ module StreamWeaver
           flex: 1;
         }
 
+        /* Editor: tab strip (sticky inside the scrolling editor) and file
+           sections */
+        .sw-ide-tabstrip {
+          position: sticky;
+          top: 0;
+          z-index: 1;
+          flex: none;
+          display: flex;
+          align-items: stretch;
+          overflow-x: auto;
+          overflow-y: hidden;
+          scrollbar-width: none;
+          background: var(--ide-header, var(--sw-color-bg-elevated));
+        }
+        .sw-ide-tabstrip::-webkit-scrollbar {
+          display: none;
+        }
+        .sw-ide-tabstrip::after {
+          content: "";
+          flex: 1 1 0;
+          min-width: 0;
+          border-bottom: 1px solid var(--ide-border, var(--sw-color-border));
+        }
+        .sw-ide-tab {
+          flex: none;
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          padding: 8px 12px;
+          border-right: 1px solid var(--ide-border, var(--sw-color-border));
+          border-bottom: 1px solid var(--ide-border, var(--sw-color-border));
+          font-family: var(--ide-font-mono, var(--sw-font-mono));
+          font-size: 12.5px;
+          white-space: nowrap;
+          color: var(--ide-muted, var(--sw-color-text-muted));
+          text-decoration: none;
+        }
+        .sw-ide-tab:hover {
+          background: var(--ide-hover, var(--sw-color-bg-hover));
+          color: var(--ide-text, var(--sw-color-text));
+          text-decoration: none;
+        }
+        .sw-ide-tab:focus-visible {
+          outline: 2px solid var(--ide-accent, var(--sw-color-primary));
+          outline-offset: -2px;
+        }
+        .sw-ide-tab__icon {
+          flex: none;
+          width: 14px;
+          height: 14px;
+          color: var(--ide-hint, var(--sw-color-text-light));
+        }
+        .sw-ide-tab.sw-is-active {
+          background: var(--ide-workspace, var(--sw-color-bg));
+          border-bottom-color: var(--ide-workspace, var(--sw-color-bg));
+          color: var(--ide-text, var(--sw-color-text));
+        }
+        .sw-ide-tab.sw-is-active .sw-ide-tab__icon {
+          color: var(--ide-text, var(--sw-color-text));
+        }
+        .sw-ide-file-section {
+          box-sizing: border-box;
+          width: 100%;
+          max-width: 860px;
+          margin: 0 auto;
+          padding: clamp(40px, 7vh, 84px) clamp(20px, 5vw, 56px);
+          scroll-margin-top: 36px;
+        }
+        .sw-ide-file-section + .sw-ide-file-section {
+          border-top: 1px solid var(--ide-border, var(--sw-color-border));
+        }
+        .sw-ide-file-section__comment {
+          margin: 0 0 18px;
+          font-family: var(--ide-font-mono, var(--sw-font-mono));
+          font-size: 12px;
+          /* JetBrains Mono would draw "<!--" as an arrow */
+          font-variant-ligatures: none;
+          color: var(--ide-hint, var(--sw-color-text-light));
+        }
+
         /* Left rail: tree and note card */
         .sw-ide-tree {
           display: flex;

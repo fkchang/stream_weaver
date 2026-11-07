@@ -19,7 +19,7 @@ module IdeMarkup
   end
 
   def first(node, xpath) = REXML::XPath.first(node, xpath)
-  def all(node, xpath) = REXML::XPath.match(node, xpath)
-  def text_of(node) = REXML::XPath.match(node, ".//text()").join
+  def find_all(node, xpath) = REXML::XPath.match(node, xpath)
+  def text_of(node) = REXML::XPath.match(node, ".//text()").map(&:value).join
   def classes(node) = node.attributes["class"].split
 end

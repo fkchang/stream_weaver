@@ -1842,6 +1842,47 @@ module StreamWeaver
         end
       end
 
+      # Render the ide_editor: a tab strip generated from its file sections
+      # (sticky at the top of the scrolling editor), then its children. The
+      # scroll spy in sw-sidebar-toc.js marks the tab of the section on
+      # screen, and every other [data-sw-ide-target] link in the shell.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeEditor]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_editor(view, component, state)
+        sections = component.file_sections
+        inject_asset_script(view, :sidebar_toc, "sw-sidebar-toc.js") if sections.any?
+
+        view.main(**framework_attrs(component.block_class, component.options)) do
+          if sections.any?
+            view.nav(class: "sw-ide-tabstrip", "aria-label" => "Open files", "data-sw-ide-links" => "") do
+              sections.each do |section|
+                ide_link(view, section, "sw-ide-tab") { view.span(class: "sw-ide-tab__label") { section.file_name } }
+              end
+            end
+          end
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # Render one ide_editor file section: its comment line, then children.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeFileSection]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_file_section(view, component, state)
+        attrs = framework_attrs("sw-ide-file-section", component.options).merge(
+          id: component.name, "data-file" => component.label
+        )
+        view.section(**attrs) do
+          view.p(class: "sw-ide-file-section__comment") { "<!-- #{component.comment} -->" } if component.comment
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
       # Render an ide_tree: heading with its action, then one row per node,
       # indented by depth.
       #
@@ -8517,6 +8558,16 @@ end
           view.raw(view.safe(svg))
         else
           view.span("aria-hidden" => "true") { render_icon_hook(view, icon.to_s, css_class) }
+        end
+      end
+
+      # A link to an ide_editor file section that the scroll spy keeps in
+      # step with the editor: an in-page href, so it still works without JS.
+      def ide_link(view, section, css_class, &block)
+        attrs = { class: css_class, href: "##{section.name}", "data-sw-ide-target" => section.name }
+        view.a(**attrs) do
+          render_ide_icon(view, section.icon, "#{css_class}__icon")
+          block.call
         end
       end
 

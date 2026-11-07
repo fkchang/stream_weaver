@@ -25,7 +25,7 @@ RSpec.describe "ide_tree and ide_note" do
       end
     end
     let(:tree) { first(rail, "nav[@class='sw-ide-tree']") }
-    let(:rows) { all(tree, "div[@class='sw-ide-tree__rows']/*") }
+    let(:rows) { find_all(tree, "div[@class='sw-ide-tree__rows']/*") }
 
     it "names the tree by its heading and gives the action button an accessible name" do
       expect(tree.attributes["aria-label"]).to eq("Projects")
@@ -77,14 +77,14 @@ RSpec.describe "ide_tree and ide_note" do
     end
 
     it "renders named icons as inline SVG and text icons as hidden text" do
-      expect(all(rows[0], "*[local-name()='svg'][@class='sw-ide-tree__icon']").size).to eq(1)
+      expect(find_all(rows[0], "*[local-name()='svg'][@class='sw-ide-tree__icon']").size).to eq(1)
       text_row = first(render_rail { ide_tree(rows: [{ label: "x", icon: "*" }]) }, ".//div[@class='sw-ide-tree__row']")
       expect(text_of(first(text_row, "span[@aria-hidden='true']/span[@class='sw-ide-tree__icon']"))).to eq("*")
     end
 
     it "omits the heading when none is given" do
       tree = render_rail { ide_tree(rows: [{ label: "x" }]) }
-      expect(all(tree, ".//div[@class='sw-ide-tree__heading']")).to be_empty
+      expect(find_all(tree, ".//div[@class='sw-ide-tree__heading']")).to be_empty
       expect(first(tree, ".//nav").attributes["aria-label"]).to be_nil
     end
   end

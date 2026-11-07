@@ -49,11 +49,30 @@ App = StreamWeaver::App.new("IDE shell demo", chrome: false, theme: :ide) do
       end
     end
 
+    # Each file_section becomes a tab; the tab of the section on screen is
+    # marked as you scroll. Lengths vary, and the last two are short, to
+    # exercise the scroll spy at the bottom of the editor.
     ide_editor do
-      header2 "README.md"
-      3.times { FILLER.each { |paragraph| text paragraph } }
-      header2 "GETTING_STARTED.md"
-      3.times { FILLER.each { |paragraph| text paragraph } }
+      file_section "readme", label: "README.md", icon: :file do
+        header2 "StreamWeaver"
+        2.times { FILLER.each { |paragraph| text paragraph } }
+      end
+      file_section "getting-started", label: "docs/GETTING_STARTED.md", icon: :book, comment: "GETTING STARTED" do
+        header2 "Getting started"
+        3.times { FILLER.each { |paragraph| text paragraph } }
+      end
+      file_section "components", label: "docs/COMPONENTS.md", icon: :file_text do
+        header2 "Components"
+        FILLER.each { |paragraph| text paragraph }
+      end
+      file_section "themes", label: "docs/THEMES.md", icon: :file_text do
+        header2 "Themes"
+        text FILLER[2]
+      end
+      file_section "install", label: "INSTALL.md", icon: :package do
+        header2 "Install"
+        text "gem install stream_weaver"
+      end
     end
 
     ide_rail_right do

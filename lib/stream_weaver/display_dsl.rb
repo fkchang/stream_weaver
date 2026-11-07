@@ -288,6 +288,12 @@ module StreamWeaver
       components << Components::IdeTree.new(heading: heading, action: action, rows: rows, **options)
     end
 
+    # One file of an ide_editor, listed in its tab strip; see
+    # Components::IdeFileSection.
+    def file_section(name, **options, &block)
+      with_container(Components::IdeFileSection.new(name, **options), &block)
+    end
+
     # Dismissible note card; see Components::IdeNote.
     def ide_note(**options, &block)
       with_container(Components::IdeNote.new(**options), &block)
