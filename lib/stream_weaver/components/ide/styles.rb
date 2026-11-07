@@ -34,6 +34,7 @@ module StreamWeaver
 
         .sw-ide-shell {
           --sw-ide-titlebar-height: 48px;
+          --sw-ide-tabstrip-height: 37px;
           display: grid;
           height: 100dvh;
           grid-template-columns: 220px minmax(0, 1fr) 380px;
@@ -248,6 +249,8 @@ module StreamWeaver
           flex: none;
           display: flex;
           align-items: stretch;
+          box-sizing: border-box;
+          height: var(--sw-ide-tabstrip-height);
           overflow-x: auto;
           overflow-y: hidden;
           scrollbar-width: none;
@@ -267,7 +270,7 @@ module StreamWeaver
           display: flex;
           align-items: center;
           gap: 7px;
-          padding: 8px 12px;
+          padding: 0 12px;
           border-right: 1px solid var(--ide-border, var(--sw-color-border));
           border-bottom: 1px solid var(--ide-border, var(--sw-color-border));
           font-family: var(--ide-font-mono, var(--sw-font-mono));
@@ -305,7 +308,12 @@ module StreamWeaver
           max-width: 860px;
           margin: 0 auto;
           padding: clamp(40px, 7vh, 84px) clamp(20px, 5vw, 56px);
-          scroll-margin-top: 36px;
+          /* Lands just below the sticky tab strip; the scroll spy reads the
+             strip's height for the top of its band too. */
+          scroll-margin-top: var(--sw-ide-tabstrip-height);
+        }
+        .sw-ide-file-section:focus {
+          outline: none;
         }
         .sw-ide-file-section + .sw-ide-file-section {
           border-top: 1px solid var(--ide-border, var(--sw-color-border));

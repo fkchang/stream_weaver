@@ -606,7 +606,8 @@ RSpec.describe 'extension live runtime wiring' do
         closest: () => null
       };
       const links = [link];
-      const nav = { dataset: {}, querySelectorAll: () => links, scrollWidth: 0, clientWidth: 0 };
+      const nav = { dataset: {}, querySelectorAll: () => links, scrollWidth: 0, clientWidth: 0,
+                    addEventListener: (type) => listenerAdds.push(type) };
 
       globalThis.window = globalThis;
       globalThis.IntersectionObserver = function () {

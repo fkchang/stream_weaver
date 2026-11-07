@@ -1880,7 +1880,8 @@ module StreamWeaver
       # @return [void] Renders to view
       def render_ide_file_section(view, component, state)
         attrs = framework_attrs("sw-ide-file-section", component.options).merge(
-          id: component.name, "data-file" => component.label
+          # tabindex: a tab or tree link moves focus here, as the anchor would.
+          id: component.name, "data-file" => component.label, tabindex: "-1"
         )
         view.section(**attrs) do
           view.p(class: "sw-ide-file-section__comment") { "<!-- #{component.comment} -->" } if component.comment
