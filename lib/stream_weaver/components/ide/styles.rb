@@ -107,6 +107,122 @@ module StreamWeaver
           border-top: 1px solid var(--ide-border2, var(--sw-color-border-strong));
         }
 
+        /* Titlebar parts */
+        .sw-ide-titlebar__logo {
+          display: inline-flex;
+          flex: none;
+          align-items: center;
+          color: var(--ide-accent, var(--sw-color-primary));
+          font-family: var(--ide-font-mono, var(--sw-font-mono));
+          font-weight: 700;
+        }
+        .sw-ide-titlebar__logo > * {
+          margin: 0;
+        }
+        .sw-ide-titlebar__scope {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          min-width: 0;
+          font-size: 13px;
+          white-space: nowrap;
+        }
+        .sw-ide-titlebar__crumbs,
+        .sw-ide-titlebar__branch {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding-left: 14px;
+          border-left: 1px solid var(--ide-border2, var(--sw-color-border-strong));
+          font-family: var(--ide-font-mono, var(--sw-font-mono));
+        }
+        .sw-ide-titlebar__crumb,
+        .sw-ide-titlebar__crumb-sep {
+          color: var(--ide-hint, var(--sw-color-text-light));
+        }
+        .sw-ide-titlebar__crumb--current {
+          color: var(--ide-text, var(--sw-color-text));
+        }
+        .sw-ide-titlebar__branch {
+          color: var(--ide-muted, var(--sw-color-text-muted));
+        }
+        .sw-ide-titlebar__branch-icon {
+          width: 14px;
+          height: 14px;
+        }
+        .sw-ide-titlebar__actions {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-left: auto;
+        }
+        .sw-ide-titlebar__link {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          padding: 6px 8px;
+          border-radius: 4px;
+          font-size: 13px;
+          color: var(--ide-muted, var(--sw-color-text-muted));
+          text-decoration: none;
+        }
+        .sw-ide-titlebar__link:hover {
+          background: var(--ide-hover, var(--sw-color-bg-hover));
+          color: var(--ide-text, var(--sw-color-text));
+        }
+        .sw-ide-titlebar__link-icon {
+          width: 16px;
+          height: 16px;
+          line-height: 16px;
+          text-align: center;
+        }
+        .sw-ide-titlebar__theme-toggle {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          padding: 0;
+          border: 1px solid var(--ide-border2, var(--sw-color-border-strong));
+          border-radius: 4px;
+          background: transparent;
+          color: var(--ide-muted, var(--sw-color-text-muted));
+          cursor: pointer;
+        }
+        .sw-ide-titlebar__theme-toggle:hover {
+          background: var(--ide-hover, var(--sw-color-bg-hover));
+          color: var(--ide-text, var(--sw-color-text));
+        }
+        .sw-ide-titlebar__theme-icon {
+          width: 16px;
+          height: 16px;
+        }
+        .sw-ide-titlebar__theme-icon--sun {
+          display: none;
+        }
+        html.dark .sw-ide-titlebar__theme-icon--sun {
+          display: block;
+        }
+        html.dark .sw-ide-titlebar__theme-icon--moon {
+          display: none;
+        }
+
+        /* Statusbar items */
+        .sw-ide-statusbar__item {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          color: inherit;
+          text-decoration: none;
+        }
+        a.sw-ide-statusbar__item:hover {
+          color: var(--ide-text, var(--sw-color-text));
+          text-decoration: underline;
+        }
+        .sw-ide-statusbar__spacer {
+          flex: 1;
+        }
+
         .sw-ide-rail-left,
         .sw-ide-editor {
           scrollbar-width: thin;
@@ -197,9 +313,19 @@ module StreamWeaver
           .sw-ide-rail-left {
             display: none;
           }
+          .sw-ide-titlebar__branch {
+            display: none;
+          }
           .sw-ide-statusbar {
             flex-wrap: wrap;
             white-space: normal;
+          }
+        }
+
+        @media (max-width: 560px) {
+          .sw-ide-titlebar__scope,
+          .sw-ide-titlebar__link-label {
+            display: none;
           }
         }
 

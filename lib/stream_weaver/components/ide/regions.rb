@@ -34,11 +34,6 @@ module StreamWeaver
       end
     end
 
-    class IdeTitlebar < IdeRegion
-      TAG = :header
-      BLOCK = "sw-ide-titlebar"
-    end
-
     class IdeRailLeft < IdeRegion
       TAG = :aside
       BLOCK = "sw-ide-rail-left"
@@ -58,11 +53,6 @@ module StreamWeaver
       def region_attributes
         { id: DOM_ID }
       end
-    end
-
-    class IdeStatusbar < IdeRegion
-      TAG = :footer
-      BLOCK = "sw-ide-statusbar"
     end
   end
 end
