@@ -233,7 +233,7 @@ dialect's reader has none of those (`reader.rb:29` numbered headlines only,
 
 ### 6.1 Principle: the components self-identify, the genre needs no reader
 
-The four new components each get one org construct that (a) is a real org element
+The three new components (and the to-do list) each get one org construct that (a) is a real org element
 every generic renderer already shows, (b) is discriminated by the dialect's existing
 mechanisms (quote-block marker line, `#+ATTR_STREAMWEAVER:` on a table), and (c)
 degrades to the nearest plain construct in a viewer that does not know StreamWeaver.

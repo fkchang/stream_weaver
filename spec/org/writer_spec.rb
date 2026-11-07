@@ -170,6 +170,38 @@ RSpec.describe StreamWeaver::Org::Writer do
     ORG
   end
 
+  it "nests a callout inside a card as a quote inside a quote, and Reader restores it as a callout" do
+    org = write(<<~RUBY)
+      card do
+        card_header "Title"
+        card_body do
+          callout(variant: :warning, title: "Heads up") { md "Inner." }
+        end
+      end
+    RUBY
+    expect(org.scan("#+begin_quote").size).to eq(2)
+    expect(org.scan("#+end_quote").size).to eq(2)
+    dsl = StreamWeaver::Org::Reader.to_dsl(org)
+    expect(dsl).to include(%q(callout(variant: :warning, title: "Heads up") do))
+    expect(dsl).to include("Inner.")
+  end
+
+  it "round-trips a before/after comparison nested inside a card" do
+    org = write(<<~RUBY)
+      card do
+        card_header "Title"
+        card_body do
+          comparison(before_label: "Old", after_label: "New") do
+            before { md "old text" }
+            after { md "new text" }
+          end
+        end
+      end
+    RUBY
+    dsl = StreamWeaver::Org::Reader.to_dsl(org)
+    expect(dsl).to include("old text").and include("new text")
+  end
+
   it "emits a card with no badge/meta as a plain bold marker line" do
     org = write(<<~RUBY)
       card do

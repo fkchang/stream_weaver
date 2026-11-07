@@ -283,7 +283,7 @@ module StreamWeaver
         DEMO_SESSION_NAMES.each do |name|
           begin
             ::StreamWeaver::Canvas::Client.send_message(
-              ::StreamWeaver::Canvas::Protocol::Messages.close(name)
+              ::StreamWeaver::Canvas::Protocol::Messages.close(name, cause: 'other')
             )
           rescue ::StreamWeaver::Canvas::Client::NotRunningError, ::StreamWeaver::Canvas::Client::ConnectionError
             nil

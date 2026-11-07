@@ -674,14 +674,22 @@ module StreamWeaver
         # getFormState reads this class to tell an array-valued group item from a
         # lone boolean checkbox -- renaming it changes the canvas payload shape.
         view.div(class: "checkbox-group") do
-          # Render select all/none buttons if options provided
+          # checkbox_group is never form-scoped (its names are `key[]`, not
+          # `form[key][]`), so unlike a chip_group it always reports presence.
+          render_group_presence_marker(view, key.to_s)
+
+          # Render select all/none buttons if options provided. Assigning the
+          # Alpine array fires no `change`, so no request would tell the server
+          # what the gesture did; after Alpine has repainted the boxes, fire the
+          # same `change` a manual check fires so All and None reach the server
+          # exactly like a click on a box does.
           if options[:select_all] || options[:select_none]
             view.div(class: "checkbox-group-actions") do
               if options[:select_all]
                 view.button(
                   type: "button",
                   class: "btn btn-sm",
-                  "@click" => "#{key} = #{JSON.generate(all_values)}"
+                  "@click" => "#{key} = #{JSON.generate(all_values)}; #{fire_group_change_js}"
                 ) { options[:select_all] }
               end
 
@@ -689,7 +697,7 @@ module StreamWeaver
                 view.button(
                   type: "button",
                   class: "btn btn-sm",
-                  "@click" => "#{key} = []"
+                  "@click" => "#{key} = []; #{fire_group_change_js}"
                 ) { options[:select_none] }
               end
             end
@@ -736,6 +744,29 @@ module StreamWeaver
       end
 
       private
+
+      # A multi-select group (checkbox_group, multi chip_group) stores an array,
+      # and a browser sends nothing for a group with no box checked -- which the
+      # server cannot tell from a request that never carried the group. This
+      # hidden input is the difference: it is always sent (input_selector
+      # reaches it), so "marker present, no values" means the group is empty.
+      # It deliberately has no x-model: Alpine would write the group's array
+      # into its scalar value, and getFormState would harvest it as a field.
+      #
+      # @param model [String] the group's state path as the runner resolves it
+      #   ("key", or "scope.key" for a chip_group inside a scope block)
+      def render_group_presence_marker(view, model)
+        view.input(type: "hidden", name: "#{StreamWeaver::App::PRESENCE_PARAM}[]", value: model, "data-sw-present" => true)
+      end
+
+      # Fires the `change` a manual check fires, once Alpine has repainted the
+      # boxes, on the group's first checkbox (htmx posts /update on change; the
+      # request carries every box's checked state and the marker). Alpine's own
+      # change handler is a no-op here because the array already matches.
+      def fire_group_change_js
+        "$nextTick(() => $el.closest('.checkbox-group').querySelector('input[type=checkbox]')" \
+          "?.dispatchEvent(new Event('change', {bubbles: true})))"
+      end
 
       # A value as a JavaScript string literal, for the canvas dispatch
       # handlers. Every one of them interpolates author-supplied words -- a tag
@@ -1379,9 +1410,10 @@ module StreamWeaver
 
       # Get the CSS selector for Alpine.js bound inputs
       #
-      # @return [String] CSS selector "[x-model]"
+      # @return [String] CSS selector for every bound input plus the presence
+      #   markers of multi-select groups (see render_group_presence_marker)
       def input_selector
-        "[x-model]"  # Alpine.js selector for all bound inputs
+        "[x-model], [data-sw-present]"
       end
 
       # Standard HTMX attributes for server interactions
@@ -2364,6 +2396,10 @@ module StreamWeaver
 
         wrap_with_label(view, options[:label]) do
           view.div(class: "sw-chip-group") do
+            # Inside a form the whole form is submitted and replaces its state
+            # hash, so an empty chip group simply has no key; elsewhere it must
+            # say it is present (see render_group_presence_marker).
+            render_group_presence_marker(view, model) if multi && !form_context
             choices.each do |choice|
               chip_label, value = choice.is_a?(Array) ? choice : [choice, choice]
               checked = multi ? current.include?(value) : current == value

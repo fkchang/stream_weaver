@@ -104,7 +104,7 @@ RSpec.describe 'lazy tabs deprecation' do
       expect(html.scan('hx-post="/update"').size).to eq(2)
       expect(html).to include('hx-vals="{&quot;nav&quot;:0}"')
       expect(html).to include('hx-vals="{&quot;nav&quot;:1}"')
-      expect(html.scan('hx-include="[x-model]"').size).to eq(2)
+      expect(html.scan('hx-include="[x-model], [data-sw-present]"').size).to eq(2)
       expect(html.scan('hx-target="#app-container"').size).to eq(2)
       expect(html.scan('hx-swap="morph:innerHTML"').size).to eq(2)
     end

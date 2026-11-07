@@ -57,6 +57,15 @@ module StreamWeaver
     # here and then silently never receive its value.
     ROUTE_OWNED_PARAMS = %w[app_id splat captures button_id].freeze
 
+    # Each multi-select group (checkbox_group, multi chip_group) sends its state
+    # path under this name, as `_sw_present[]=<path>`. A browser sends nothing for
+    # a group with no box checked, so without it an emptied group is
+    # indistinguishable from a request that never carried the group. The adapter
+    # renders the marker (AlpineJS#render_group_presence_marker) and
+    # InteractionRunner#apply_presence_markers reads it; this is the one place
+    # the name is written down.
+    PRESENCE_PARAM = "_sw_present"
+
     # `deferred_target:` value meaning "run every deferred block inline". For
     # renders with no client to fetch anything afterwards -- a static export.
     # Never collides with a real target: fragment ids are all `sw-frag-`-prefixed.

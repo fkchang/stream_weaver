@@ -981,7 +981,7 @@ module StreamWeaver
         next unless request.post? && settings.streamlit_app.routable?
         state = session[:streamlit_state] || {}
         new_path = settings.streamlit_app.path_for_state(state)
-        headers['HX-Push-Url'] = new_path if new_path
+        headers['HX-Push-Url'] = StreamWeaver::PushUrl.keep_query(new_path, request.env['HTTP_HX_CURRENT_URL']) if new_path
       end
 
       # Return the class itself (it's the Rack app)

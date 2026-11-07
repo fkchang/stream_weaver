@@ -92,6 +92,8 @@ module StreamWeaver
         canvas_restore(args)
       when 'canvas-restart'
         canvas_restart(args)
+      when 'canvas-events'
+        canvas_events(args)
       when 'canvas-read'
         canvas_read(args)
       when 'export'
@@ -681,6 +683,8 @@ module StreamWeaver
                        [--force]                    Overwrite sessions that already have content
           streamweaver canvas-restart              snapshot + stop + start + restore, one command
                        [--yes]                       Skip the confirm prompt for unconfirmed sessions
+          streamweaver canvas-events              Print the canvas lifecycle log (who/what closed a canvas)
+                       [--session NAME] [--since 2h] [--json]  Read-only: never contacts the bridge
           streamweaver canvas-read <file|dir> [...]  Browse canvas DSL docs in a local viewer
                        [--theme=NAME] [--layout=NAME]  Fallback for docs with no use_theme/use_layout
           streamweaver export <file.rb>           Write a canvas DSL doc out as standalone HTML
@@ -1652,8 +1656,50 @@ module StreamWeaver
       end.join("\n")
     end
 
+    # Print ~/.streamweaver/canvas-events.jsonl (see Canvas::EventLog). Reads
+    # the file only: it must never reach the bridge, because any bridge call
+    # can run the staleness guard and restart it.
+    def self.canvas_events(args)
+      require_relative 'canvas/event_log'
+
+      session = option_value(args, '--session')
+      since_text = option_value(args, '--since')
+      since = since_text && Canvas::EventLog.parse_since(since_text)
+      if since_text && since.nil?
+        $stderr.puts "Usage: streamweaver canvas-events [--session NAME] [--since 30m|2h|1d] [--json]"
+        exit 1
+      end
+
+      entries = Canvas::EventLog.read(session: session, since: since)
+      if args.include?('--json')
+        entries.each { |e| puts JSON.generate(e) }
+      elsif entries.empty?
+        puts "No canvas events recorded in #{Canvas::EventLog.path}"
+      else
+        entries.each { |e| puts format_canvas_event(e) }
+      end
+    end
+
+    def self.format_canvas_event(entry)
+      origin = entry['caller']
+      who = origin.is_a?(Hash) ? "#{origin['command']} (pid #{origin['pid']})" : origin.to_s
+      sid = origin.is_a?(Hash) ? (origin['claude_code_session_id'] || origin['codex_thread_id']) : nil
+      who += " session=#{sid}" if sid
+      [entry['ts'], entry['event'].ljust(14), (entry['session_name'] || '-').ljust(24),
+       "cause=#{entry['cause']}", "caller=#{who}"].join('  ')
+    end
+
+    # Value of "--flag value" or "--flag=value", else nil.
+    def self.option_value(args, flag)
+      i = args.index(flag)
+      return args[i + 1] if i
+
+      args.find { |a| a.start_with?("#{flag}=") }&.split('=', 2)&.last
+    end
+
     # Close a canvas session
     def self.canvas_close(args)
+
       # See canvas_session for why this require comes before the guard.
       require_relative 'canvas/client'
 
@@ -1665,7 +1711,7 @@ module StreamWeaver
       end
 
       response = Canvas::Client.send_message(
-        Canvas::Protocol::Messages.close(session_name)
+        Canvas::Protocol::Messages.close(session_name, cause: 'cli_close')
       )
 
       if response&.dig(:type) == 'closed'
@@ -1766,7 +1812,7 @@ module StreamWeaver
       require_relative 'canvas/client'
       Canvas::StalenessGuard.disable!
 
-      if Canvas::Client.stop_bridge
+      if Canvas::Client.stop_bridge(cause: 'other', detail: 'canvas_stop')
         puts "Canvas bridge stopped"
       else
         puts "Canvas bridge is not running"
@@ -1841,7 +1887,7 @@ module StreamWeaver
           next
         end
 
-        dsl, source, unconfirmed = fetch_session_dsl(name)
+        dsl, source, unconfirmed = fetch_session_dsl(name, history: true)
         has_content = !(dsl.nil? || dsl.strip.empty?)
         manifest_sessions << { 'name' => name, 'theme' => theme, 'layout' => layout,
                                 'captured_at' => captured_at, 'has_content' => has_content,
@@ -1861,6 +1907,11 @@ module StreamWeaver
 
       not_preserved = manifest_sessions.reject { |s| s['has_content'] }.map { |s| s['name'] }
       unconfirmed_names = manifest_sessions.select { |s| s['unconfirmed'] }.map { |s| s['name'] }
+      not_preserved.each do |name|
+        reason = unconfirmed_names.include?(name) ? 'content could not be read' : 'no content held and none in history'
+        Canvas::EventLog.record(:session_dropped, session_name: name, cause: 'bridge_restart',
+                                                  detail: "#{reason}; restore recreates it empty")
+      end
       unless not_preserved.empty?
         puts ""
         puts "NOT preserved: #{not_preserved.join(', ')}"
@@ -1893,11 +1944,21 @@ module StreamWeaver
     # history trail -- the session may still hold real content we simply
     # couldn't reach (the chicken-and-egg this fix cycle exists to flag,
     # stream_weaver-ps84).
-    def self.fetch_session_dsl(name)
+    #
+    # history: true also falls back to the newest pushed DSL when a live
+    # session holds none (a session whose pushes this bridge never kept, or one
+    # a tab re-created empty): the page's last known content is in history/.
+    # Only snapshots ask for it; restore's "already has content" guard must
+    # not, or every session with a history would look occupied.
+    def self.fetch_session_dsl(name, history: false)
       response = Canvas::Client.send_message(Canvas::Protocol::Messages.get_dsl(name))
 
       if response && response[:type] == 'dsl'
         dsl = response[:dsl]
+        if dsl.to_s.strip.empty? && history && (kept = history_fallback_dsl(name))
+          return [kept, :history, false]
+        end
+
         [dsl, (dsl.nil? ? nil : :bridge), false]
       elsif response && response[:type] == 'error' && response[:message].to_s.start_with?('Unknown message type:')
         dsl = history_fallback_dsl(name)
@@ -1907,9 +1968,10 @@ module StreamWeaver
       end
     end
 
-    # Newest ~/.streamweaver/history/<name>/*.rb, or nil. Only consulted
-    # when the live bridge can't answer get_dsl at all (old code) --
-    # History.root already respects STREAMWEAVER_HISTORY_ROOT for specs.
+    # Newest ~/.streamweaver/history/<name>/*.rb, or nil. Consulted when the
+    # live bridge can't answer get_dsl at all (old code), and by snapshots
+    # (history: true) for a live session that holds no DSL -- never by the
+    # restore guard. History.root already respects STREAMWEAVER_HISTORY_ROOT.
     def self.history_fallback_dsl(name)
       require_relative 'canvas/history'
       dir = File.join(Canvas::History.root, name)
@@ -1988,7 +2050,9 @@ module StreamWeaver
         name = entry['name']
 
         unless entry['has_content']
-          puts "skip  #{name}  (empty snapshot)"
+          # An open tab polls this name; a bridge that does not know it makes
+          # the page latch "Session Complete". Keep the (empty) session.
+          ok &&= recreate_empty_session(name, entry)
           next
         end
 
@@ -2023,6 +2087,7 @@ module StreamWeaver
         else
           detail = push_resp && push_resp[:message] ? " (#{push_resp[:message]})" : ''
           puts "FAIL  #{name}#{detail}"
+          Canvas::EventLog.record(:session_restore_failed, session_name: name, cause: 'bridge_restart', detail: detail.strip)
           ok = false
         end
       end
@@ -2031,6 +2096,16 @@ module StreamWeaver
     rescue Canvas::Client::NotRunningError, Canvas::Client::ConnectionError => e
       $stderr.puts "Error: #{e.message}"
       false
+    end
+
+    def self.recreate_empty_session(name, entry)
+      resp = Canvas::Client.send_message(
+        Canvas::Protocol::Messages.create(name, layout: (entry['layout'] || 'fluid').to_sym,
+                                                theme: (entry['theme'] || 'default').to_sym)
+      )
+      created = resp && resp[:type] == 'ready'
+      puts(created ? "keep  #{name}  (empty, session recreated)" : "FAIL  #{name}  (create failed)")
+      created
     end
 
     # snapshot -> stop -> ensure bridge running (on the currently installed
@@ -2066,10 +2141,11 @@ module StreamWeaver
 
       puts ""
       puts "== Stopping canvas bridge =="
-      puts(Canvas::Client.stop_bridge ? "Canvas bridge stopped" : "Canvas bridge was not running")
+      puts(Canvas::Client.stop_bridge(cause: 'bridge_restart', detail: 'canvas_restart') ? "Canvas bridge stopped" : "Canvas bridge was not running")
 
       puts ""
       puts "== Starting canvas bridge =="
+      Canvas::Client.announce_start(cause: 'bridge_restart', detail: 'canvas_restart')
       new_info = Canvas::Client.ensure_bridge_running
       new_port = new_info[:port]
       puts "Canvas bridge running on port #{new_port} (pid #{new_info[:pid]})"
@@ -2116,12 +2192,15 @@ module StreamWeaver
 
       dir = default_snapshot_dir
       snapshot = do_canvas_snapshot(dir)
-      Canvas::Client.stop_bridge
+      Canvas::Client.stop_bridge(cause: 'bridge_restart', detail: 'staleness_heal')
       new_port = Canvas::Client.ensure_bridge_running[:port]
       wait_for_bridge_ready
 
+      sessions = snapshot[:sessions] || []
       { ok: do_canvas_restore(dir, force: false), dir: dir,
-        unconfirmed: snapshot[:unconfirmed] || [], old_port: old_port, port: new_port }
+        unconfirmed: snapshot[:unconfirmed] || [], old_port: old_port, port: new_port,
+        kept: sessions.select { |s| s['has_content'] }.map { |s| s['name'] },
+        dropped: sessions.reject { |s| s['has_content'] }.map { |s| s['name'] } }
     end
 
     # Bounded-wait retry on the bridge's liveness, called right after
@@ -2516,7 +2595,7 @@ module StreamWeaver
 
         # Close session
         Canvas::Client.send_message(
-          Canvas::Protocol::Messages.close(session_name)
+          Canvas::Protocol::Messages.close(session_name, cause: 'cli_close')
         )
 
         if result && result[:data]
@@ -2590,7 +2669,7 @@ module StreamWeaver
 
         # Close session
         Canvas::Client.send_message(
-          Canvas::Protocol::Messages.close(session_name)
+          Canvas::Protocol::Messages.close(session_name, cause: 'cli_close')
         )
 
         if result && result[:data]
@@ -2651,7 +2730,7 @@ module StreamWeaver
 
       if fresh
         $stderr.puts "[DEBUG] Closing existing session for fresh start..." if debug
-        Canvas::Client.send_message(Canvas::Protocol::Messages.close(session_name))
+        Canvas::Client.send_message(Canvas::Protocol::Messages.close(session_name, cause: 'fresh_panel'))
       end
 
       # Create session

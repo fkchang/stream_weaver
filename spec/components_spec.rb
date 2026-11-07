@@ -212,7 +212,7 @@ RSpec.describe StreamWeaver::Components do
           hash_including(
             class: "sw-button btn btn-primary",
             "hx-post" => "/action/btn_submit_1",
-            "hx-include" => "[x-model]",
+            "hx-include" => "[x-model], [data-sw-present]",
             "hx-target" => "#app-container",
             "hx-swap" => "morph:innerHTML"
           )

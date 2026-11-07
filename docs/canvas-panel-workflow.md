@@ -42,7 +42,41 @@ The canvas bridge is a long-lived process holding its classes in memory, so a `g
 
 Two things it deliberately will not do. It never restarts twice within a minute: a second mismatch that soon means two callers disagree about which code is current -- a dev checkout and the installed gem, typically -- and restarting again would just hand the bridge back and forth, taking your sessions with it each time. And it does not notice a single edited file deep in a dev checkout, because the fingerprint tracks `stream_weaver.rb`, which an install rewrites and a targeted edit does not. Both cases print a warning naming `streamweaver canvas-restart`, which is the answer.
 
+**It only restarts an idle bridge.** A stale bridge that holds any session (or cannot say) is left running: the command warns once, names `streamweaver canvas-restart`, and carries on, because a restart closes every open tab. And a stamp from a *different install* (a dev checkout versus the installed gem: different path, unrelated mtimes) counts as stale only when this copy has a strictly higher version, so the two copies cannot take turns restarting each other's bridge. Only a same-path rewrite (`rake install`, `gem update`) heals at the same version.
+
+**Two copies, one command.** `streamweaver` resolves by directory: inside a directory with a Gemfile that points at the checkout (cultiv-ai, the checkout itself) it runs the checkout; anywhere else (`~/.streamweaver`, `/tmp`) it runs the installed gem. If they differ you get different commands (`canvas-events` is "Unknown command" from the second) and, on older gem code, the restart loop above. Install the checkout (`rake install`) so both are the same code.
+
+When a restart does happen (auto-heal or `canvas-restart`), the snapshot keeps a session's content from the bridge, and where the bridge holds none, from the newest push in `~/.streamweaver/history/<name>/`; sessions with neither are recreated empty so an open tab keeps polling instead of showing "Session Complete". Every open canvas gets a toast naming the caller and the sessions that came back empty, and `canvas-events` records `bridge_heal` (caller, old and new code stamp), `heal_skipped`, `session_dropped` and `session_restore_failed`.
+
 Set `SW_NO_AUTO_RESTART=1` to be warned instead of healed everywhere; the command then continues against the old bridge.
+
+## Why did a canvas say "Session Complete"?
+
+A tab shows "Session Complete" in two cases: the bridge told it the session was closed, or the tab polled the bridge for a name the bridge does not know (which is what every open tab sees when the bridge restarts, because the page never recovers once it has shown the message). Neither used to leave a trace, so the bridge keeps an append-only lifecycle log at `~/.streamweaver/canvas-events.jsonl` (5 MB, then rotated once to `.1`):
+
+```bash
+streamweaver canvas-events                       # everything, oldest first
+streamweaver canvas-events --session today-focus # one canvas
+streamweaver canvas-events --since 2h --json     # last two hours, one JSON object per line
+```
+
+`canvas-events` only reads the file. It never contacts the bridge, so it can never trigger the staleness restart described above.
+
+Each line has `ts` (UTC), `event`, `session_name`, `pane_id`, `cause`, `caller`, `bridge_pid` and `version`:
+
+| Event | Meaning |
+|---|---|
+| `bridge_start` / `bridge_stop` | The bridge booted or exited. A stop carries the `cause` and `caller` passed to `/shutdown`; any other exit (kill, crash) is `unknown`. |
+| `session_create` | New session; `via` is `cli_create` (`panel`, restore) or `tab_get` (a browser opened the URL of a name the bridge did not hold). |
+| `session_close` | A close, with `cause` and `caller`. |
+| `bridge_heal` / `heal_skipped` | A command found the bridge on older code: it restarted it (idle bridge), or left it alone because it holds sessions. Both carry the caller and both code stamps; `bridge_start` after a heal carries the same caller. |
+| `session_dropped` / `session_restore_failed` | A restart could not carry a session's content (none held, none in history), or its restored push was refused. |
+| `pane_create` / `pane_duplicate` | `panel` registered an iTerm pane; a duplicate means the session already had a different pane. |
+| `poll_not_found` | A tab polled a name the bridge does not know (at most one line per name per minute). |
+
+`cause` is one of `cli_close` (`canvas-close`, and the auto-close after `canvas pick` / `confirm`), `fresh_panel`, `bridge_restart` (`canvas-restart` or the automatic staleness heal; `detail` says which), `listener_exit`, `user_tab`, `other` (`canvas-stop`) or `unknown`. A close from a client that sends no cause is `unknown`, never a guess; `user_tab` and `listener_exit` are reserved, because nothing in the bridge closes a session for those reasons today.
+
+`caller` is the process that ran the command: pid, command line (credentials redacted, 200 characters at most), three levels of parent processes, cwd, and `claude_code_session_id` / `codex_thread_id` when set, so a close is attributed to the session that made it. No other environment value is recorded. The log starts when the bridge is restarted onto code that has it.
 
 ## Reaching the bridge from your phone (tailnet)
 

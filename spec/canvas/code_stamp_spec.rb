@@ -76,8 +76,23 @@ RSpec.describe StreamWeaver::Canvas::CodeStamp do
       expect(described_class.stale?(current.merge(version: '0.0.1'))).to be(true)
     end
 
-    it 'is true when the bridge stamped the same version from different code' do
-      expect(described_class.stale?(current.merge(code: '/somewhere/else.rb:1'))).to be(true)
+    it 'is true when the same install was rewritten under the bridge (the rake-install case)' do
+      expect(described_class.stale?(current.merge(code: "#{described_class.library_path}:1"))).to be(true)
+    end
+
+    it 'is false for the same version stamped by a different install (gem vs checkout must not ping-pong)' do
+      expect(described_class.stale?(current.merge(code: '/somewhere/else/stream_weaver.rb:1'))).to be(false)
+    end
+
+    it 'is true only when this copy has a strictly higher version than another install' do
+      other = { code: '/somewhere/else/stream_weaver.rb:1' }
+
+      expect(described_class.stale?(other.merge(version: '0.0.1'))).to be(true)
+      expect(described_class.stale?(other.merge(version: '99.0.0'))).to be(false)
+    end
+
+    it 'is false rather than raising for an unparseable version from another install' do
+      expect(described_class.stale?(version: 'not-a-version', code: '/x/stream_weaver.rb:1')).to be(false)
     end
 
     it 'is true for a bridge that carries no stamp at all (the upgrade case)' do

@@ -147,6 +147,14 @@ RSpec.describe "StreamWeaver::Service — URL-routing DSLs (stream_weaver-oow)" 
       expect(last_response.headers['HX-Push-Url']).to eq("/apps/#{app_id}/about")
     end
 
+    it "keeps the page's own query string when the click stays on the same page" do
+      get "/apps/#{app_id}/about"
+      post "/apps/#{app_id}/update", {},
+        { 'HTTP_HX_CURRENT_URL' => "http://example.org/apps/#{app_id}/about?view=2" }
+
+      expect(last_response.headers['HX-Push-Url']).to eq("/apps/#{app_id}/about?view=2")
+    end
+
     it "ignores a stale HX-Current-URL belonging to a DIFFERENT mounted app" do
       other_app = StreamWeaver::App.new("Other App") { route_by :page, home: "/" }
       other_app.rebuild_with_state({})

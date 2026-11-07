@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative 'event_log'
 
 module StreamWeaver
   module Canvas
@@ -53,8 +54,10 @@ module StreamWeaver
         end
 
         # Claude → Bridge: Close a session
-        def self.close(name)
-          { type: 'close', name: name }
+        # cause/caller feed the lifecycle event log (EventLog). A caller that
+        # does not say why is logged as unknown, never guessed.
+        def self.close(name, cause: nil)
+          { type: 'close', name: name, cause: cause, caller: EventLog.caller_info }
         end
 
         # Claude → Bridge: Fetch a session's current raw DSL + theme/layout

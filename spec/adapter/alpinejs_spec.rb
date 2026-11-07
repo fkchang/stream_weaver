@@ -303,7 +303,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
         hash_including(
           class: "sw-button btn btn-primary",
           "hx-post" => "/action/btn_submit_1",
-          "hx-include" => "[x-model]",
+          "hx-include" => "[x-model], [data-sw-present]",
           "hx-target" => "#app-container",
           "hx-swap" => "morph:innerHTML"
         )
@@ -338,7 +338,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
 
     it "uses input_selector for hx-include" do
       expect(mock_view).to receive(:button).with(
-        hash_including("hx-include" => "[x-model]")
+        hash_including("hx-include" => "[x-model], [data-sw-present]")
       ).and_yield
 
       adapter.render_button(mock_view, "btn_submit_1", "Submit", {})
@@ -463,7 +463,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
 
   describe "#input_selector" do
     it "returns Alpine.js x-model selector" do
-      expect(adapter.input_selector).to eq("[x-model]")
+      expect(adapter.input_selector).to eq("[x-model], [data-sw-present]")
     end
   end
 
@@ -793,6 +793,23 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
       adapter.render_checkbox_group(mock_view, :selected, children, {}, state)
     end
 
+    # Every group also renders its hidden presence marker (see
+    # checkbox_group_empty_selection_spec.rb); these examples are about the
+    # checkboxes, so the marker is allowed and asserted in one place below.
+    before { allow(mock_view).to receive(:input).with(hash_including(type: "hidden")) }
+
+    it "renders a presence marker with no x-model, so an emptied group still reports in" do
+      allow(mock_view).to receive(:div).and_yield
+      allow(mock_view).to receive(:label)
+      allow(mock_view).to receive(:p)
+      expect(mock_view).to receive(:input).with(
+        hash_including(type: "hidden", name: "_sw_present[]", value: "selected", "data-sw-present" => true)
+      ) { |attrs| expect(attrs).not_to have_key("x-model") }
+      allow(mock_view).to receive(:input).with(hash_including(type: "checkbox"))
+
+      adapter.render_checkbox_group(mock_view, :selected, children, {}, state)
+    end
+
     it "renders checkbox input for each item with x-model binding to array" do
       allow(mock_view).to receive(:div).and_yield
       allow(mock_view).to receive(:p)
@@ -859,7 +876,8 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
       expect(mock_view).to receive(:button).with(
         hash_including(
           type: "button",
-          "@click" => 'selected = ["email_1","email_2"]'
+          # then it fires a `change` so the server hears about the gesture
+          "@click" => a_string_starting_with('selected = ["email_1","email_2"]; $nextTick(')
         )
       ).and_yield
 
@@ -875,7 +893,7 @@ RSpec.describe StreamWeaver::Adapter::AlpineJS do
       expect(mock_view).to receive(:button).with(
         hash_including(
           type: "button",
-          "@click" => "selected = []"
+          "@click" => a_string_starting_with("selected = []; $nextTick(")
         )
       ).and_yield
 

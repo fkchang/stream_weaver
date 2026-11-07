@@ -68,7 +68,7 @@ RSpec.describe "deferred fragments" do
       wrapper = html[/<div[^>]+hx-trigger="load"[^>]*>/]
 
       expect(wrapper).to include('hx-target="#sw-frag-stats"', 'hx-swap="morph:innerHTML"',
-                                 'hx-include="[x-model]"')
+                                 'hx-include="[x-model], [data-sw-present]"')
       # The whole fetch is declarative attributes: the only script tag in the
       # body is the framework's own JSON state carrier, never executable code.
       expect(html.scan(/<script[^>]*>/)).to all(include('type="application/json"'))

@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "set"
 require_relative "../components"
 require_relative "recording_context"
 require_relative "inline"
@@ -22,14 +23,17 @@ module StreamWeaver
         @called = false
         @nesting_depth = 0
         @replay_count = 0
+        @escape_hatches = 0
+        @headline_tabs = Set.new
       end
 
       # Top-level DSL statements RecordingContext deliberately no-ops (see
       # its class comment) -- these produce zero components, so they'd
       # otherwise break the 1:1 statement<->component correspondence
       # #build_raw_sources relies on. Every real saved doc has at least one
-      # of these prepended by DocStore.dsl_with_metadata.
-      NO_OP_STATEMENT_RE = /\Ause_(?:theme|layout)\b/
+      # of these prepended by DocStore.dsl_with_metadata, and a canvas session
+      # saved as a doc usually ends with a canvas_continue.
+      NO_OP_STATEMENT_RE = /\A(?:use_(?:theme|layout)|canvas_continue)\b/
 
       # A saved .org is a static document and cannot hold a live control, so
       # these are DROPPED rather than passed through as dead source (see
@@ -58,6 +62,7 @@ module StreamWeaver
 
         header = components.find { |c| c.is_a?(Components::DocHeader) }
         body_components = components.reject { |c| c.is_a?(Components::SidebarToc) || c.is_a?(Components::DocHeader) }
+        @headline_tabs = headline_tab_groups(body_components)
 
         out = [preamble(header), sections_and_body(body_components, toc_by_id)].join("\n").rstrip + "\n"
         @called = true
@@ -128,8 +133,8 @@ module StreamWeaver
       end
 
       # WARNING for future editors: #count (below) only counts at
-      # @nesting_depth zero, and only render_quote's recursive call currently
-      # increments that depth. If you add ANOTHER path that calls
+      # @nesting_depth zero, and only render_quote's and render_tabs's
+      # recursive calls currently increment that depth. If you add ANOTHER path that calls
       # render_component recursively (not via render_quote), wrap it in the
       # same @nesting_depth += 1 / ensure @nesting_depth -= 1 pattern --
       # otherwise a nested escape hatch there is silently counted as
@@ -148,6 +153,8 @@ module StreamWeaver
           render_card(component)
         when Components::Comparison
           render_comparison(component)
+        when Components::Tabs
+          @headline_tabs.include?(component.object_id) ? render_tabs(component) : raw_passthrough(component)
         when Components::Mermaid
           header = component.zoom ? "mermaid :zoom t" : "mermaid"
           "\n#+begin_src #{header}\n#{component.code.to_s.rstrip}\n#+end_src\n"
@@ -324,7 +331,11 @@ module StreamWeaver
       # recognized go negative. @nesting_depth (incremented/decremented
       # around render_quote's recursive walk) tracks whether we're inside
       # such a nested render, and every hatch counts through here.
+      #
+      # @escape_hatches counts every hatch at ANY depth, so #lossless_tabs?
+      # can tell whether a trial render of a tabs group hit one.
       def count(bucket)
+        @escape_hatches += 1 unless bucket == :total
         @coverage_counts[bucket] += 1 if @nesting_depth.zero?
       end
 
@@ -344,6 +355,104 @@ module StreamWeaver
         return "#{component.name} (unsupported call)" if component.is_a?(RecordingContext::UnsupportedCall)
 
         component.class
+      end
+
+      # Each tab becomes a level-1 headline whose property drawer carries the
+      # group's state key:
+      #
+      #   * 1 PRD protocol
+      #   :PROPERTIES:
+      #   :STREAMWEAVER_TAB: chat
+      #   :END:
+      #
+      # Any org viewer (org-ruby on GitHub included) hides the drawer and shows
+      # one section per tab, so the .org reads as a plain document;
+      # Org::Reader regroups consecutive same-key tab headlines into one
+      # `tabs` call. There is deliberately NO end-of-group marker: an org
+      # keyword line (#+STREAMWEAVER_TABS_END:) is the obvious candidate, but
+      # org-ruby renders it as a visible paragraph. The group instead ends at
+      # the next numbered section headline or at EOF -- which is why only
+      # groups followed by one of those are written this way (see
+      # #headline_tab_groups).
+      #
+      # Tab bodies render at @nesting_depth + 1 (see the WARNING above
+      # #render_component): the group counts once, as one top-level
+      # statement, and an escape hatch inside a tab never counts on its own.
+      def render_tabs(tabs)
+        @nesting_depth += 1
+        tabs.children.map do |tab|
+          body = tab.children.map { |c| render_component(c) }.join
+          "\n* #{tab.label}\n:PROPERTIES:\n:STREAMWEAVER_TAB: #{tabs.key}\n:END:\n#{body}"
+        end.join
+      ensure
+        @nesting_depth -= 1
+      end
+
+      # The top-level tabs groups render_tabs may write as headlines; every
+      # other tabs group falls back to raw passthrough (verbatim source)
+      # instead of a lossy rewrite. A group qualifies when:
+      #
+      # - it carries nothing a headline cannot hold: default variant, no
+      #   lazy:/url:/other options, a plain word key, and tabs whose labels
+      #   are one clean line with no options of their own;
+      # - no tab holds a nested tabs group or a section header directly
+      #   (both would need headlines inside a headline-delimited group);
+      # - every descendant renders without an escape hatch (see
+      #   #lossless_tabs?). Below top level there is no source to recover,
+      #   so a chart or a headerless card inside a tab would become a bare
+      #   placeholder, and a button would be dropped, all invisible to
+      #   #coverage. The whole statement's verbatim source keeps it instead;
+      # - what FOLLOWS it ends the group on the way back: EOF, a numbered
+      #   section headline, or another qualifying group with a different key
+      #   (same-key neighbours would merge into one group). Anything else
+      #   would be read back as part of the last tab.
+      #
+      # Walked last-to-first because the third rule depends on whether the
+      # NEXT group qualifies. Nested groups are never in the result: a
+      # headline inside a quote block would break the quote.
+      def headline_tab_groups(components)
+        following = nil
+        components.reverse_each.with_object(Set.new) do |component, ok|
+          if component.is_a?(Components::Tabs) && plain_tabs?(component) &&
+             lossless_tabs?(component) && closes_tab_group?(following, component.key, ok)
+            ok << component.object_id
+          end
+          following = component
+        end
+      end
+
+      def closes_tab_group?(following, key, ok)
+        case following
+        when nil, Components::DocSectionHeader then true
+        when Components::Tabs then following.key != key && ok.include?(following.object_id)
+        else false
+        end
+      end
+
+      # An empty group would render as nothing at all, so it needs a tab.
+      def plain_tabs?(tabs)
+        tabs.key.is_a?(Symbol) && tabs.key.match?(/\A\w+\z/) &&
+          tabs.variant == :line && !tabs.lazy && !tabs.url && tabs.options.empty? &&
+          tabs.children.any? && tabs.children.all? { |tab| plain_tab?(tab) }
+      end
+
+      # A trial render, thrown away: render_component is the one place that
+      # knows which components hit an escape hatch, so asking it beats a
+      # second copy of that dispatch here. Only the replay counter is a side
+      # effect worth undoing (coverage is untouched below top level).
+      def lossless_tabs?(tabs)
+        hatches = @escape_hatches
+        replays = @replay_count
+        render_tabs(tabs)
+        @escape_hatches == hatches
+      ensure
+        @replay_count = replays
+      end
+
+      def plain_tab?(tab)
+        tab.is_a?(Components::Tab) && tab.options.empty? &&
+          tab.label.is_a?(String) && tab.label.match?(/\A\S(?:[^\n]*\S)?\z/) &&
+          tab.children.none? { |c| c.is_a?(Components::Tabs) || c.is_a?(Components::DocSectionHeader) }
       end
 
       def render_comparison(comparison)

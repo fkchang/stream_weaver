@@ -51,6 +51,9 @@ module StreamWeaver
       # `#+begin_src replay :lanes x` block can reference it. Matched before
       # PREAMBLE_RE, which would otherwise swallow it as plain metadata.
       NAME_RE = /\A#\+NAME:\s*(\S+)\s*\z/i
+      # The tabs group key in a tab headline's drawer (see Writer#render_tabs).
+      TAB_PROPERTY_RE = /\A:STREAMWEAVER_TAB:(.*)\z/
+      TAB_KEY_RE = /\A\w+\z/
 
       REPLAY_RESERVED_COLUMNS = %w[at lane text milestone].freeze
       REPLAY_LANES_COLUMNS = %w[id name].freeze
@@ -111,11 +114,34 @@ module StreamWeaver
         emitted_doc_header = false
         i = 0
 
+        # Tab grouping (see Writer#render_tabs for the format). `group` is the
+        # open tabs group, { key:, tabs: [[label, parts], ...] }, and `sink`
+        # is where body content currently lands: the open tab's parts, or the
+        # top-level output. Consecutive tab headlines with one key are one
+        # group; the org has no end marker, so a group closes at a tab
+        # headline with another key, a numbered section headline, or EOF.
+        group = nil
+        sink = output
+
         while i < chunk_list.length
           chunk = chunk_list[i]
 
           case chunk[:type]
+          when :tab
+            seen_headline = true
+            if group.nil? || group[:key] != chunk[:key]
+              output << emit_tabs(group) if group
+              group = { key: chunk[:key], tabs: [] }
+            end
+            sink = []
+            group[:tabs] << [chunk[:label], sink]
+
           when :headline
+            if group
+              output << emit_tabs(group)
+              group = nil
+              sink = output
+            end
             seen_headline = true
             output << emit_headline(chunk)
 
@@ -124,38 +150,21 @@ module StreamWeaver
             # below for why): only the doc_header preamble block qualifies,
             # never an arbitrary headline-less callout/card.
             if !seen_headline && !emitted_doc_header && doc_header_chunk?(chunk, i)
-              output << emit_doc_header(chunk)
+              sink << emit_doc_header(chunk)
               emitted_doc_header = true
             else
-              marker = chunk[:lines].first.to_s
-              body = chunk[:lines].drop(1)
-
-              # Rule 2: before/after comparison pairing.
-              if (match = marker.match(/\A\*◀ Before — (.+)\*\z/))
-                following = chunk_list[i + 1]
-                after_marker = following[:lines].first.to_s if following&.dig(:type) == :quote
-                after_match = after_marker&.match(/\A\*▶ After — (.+)\*\z/)
-                raise ArgumentError, "malformed comparison: before block is not followed by an after block" unless after_match
-
-                output << emit_comparison(match[1], body, after_match[1], following[:lines].drop(1))
-                i += 1 # consume the paired 'after' chunk too
-              elsif marker.match?(/\A\*▶ After — /)
-                raise ArgumentError, "malformed comparison: after block has no preceding before block"
-              # Rule 3: reserved-emoji callout.
-              elsif (match = callout_marker_match(marker))
-                output << emit_callout(VARIANT_EMOJI.fetch(match[1]), match[2], body)
-              # Rule 4: card fallback.
-              else
-                output << emit_card(marker, body)
-              end
+              code, consumed = emit_quote(chunk_list, i)
+              sink << code
+              i += consumed - 1 # consume a paired comparison chunk too
             end
 
           else
-            output << emit(chunk)
+            sink << emit(chunk)
           end
 
           i += 1
         end
+        output << emit_tabs(group) if group
 
         # A doc_header with neither eyebrow nor pills has no quote block at
         # all (Writer only emits one when it has content to put in it), so
@@ -218,6 +227,30 @@ module StreamWeaver
             next
           end
 
+          # A headline whose property drawer carries :STREAMWEAVER_TAB: is a
+          # tab, whatever its text looks like. This MUST be checked before
+          # HEADLINE_RE: "1 PRD protocol" is a perfectly good tab label and
+          # also matches the numbered-section pattern, so the other order
+          # reads such a tab back as a doc_section_header.
+          if tab_headline_at?(lines, i)
+            label = line[/\A\*+\s+(.+)\z/, 1]
+            key = nil
+            i += 2
+            while i < lines.length && lines[i] != ":END:"
+              key = $1.strip if lines[i] =~ TAB_PROPERTY_RE
+              i += 1
+            end
+            raise ArgumentError, "unterminated property drawer for tab #{label.inspect}" if i >= lines.length
+            unless key.match?(TAB_KEY_RE)
+              raise ArgumentError, "tab #{label.inspect} has an invalid :STREAMWEAVER_TAB: key #{key.inspect} (need letters, digits or _)"
+            end
+
+            i += 1
+            result << { type: :tab, label: label, key: key }
+            pending_attr = nil
+            next
+          end
+
           if (match = line.match(HEADLINE_RE))
             depth = match[1].length
             number = match[2]
@@ -247,8 +280,13 @@ module StreamWeaver
 
           if line.casecmp?("#+begin_quote")
             body = []
+            depth = 1
             i += 1
-            while i < lines.length && !lines[i].casecmp?("#+end_quote")
+            while i < lines.length
+              depth += 1 if lines[i].casecmp?("#+begin_quote")
+              depth -= 1 if lines[i].casecmp?("#+end_quote")
+              break if depth.zero?
+
               body << lines[i]
               i += 1
             end
@@ -297,12 +335,12 @@ module StreamWeaver
           # component boundary -- keep collecting instead of splitting.
           paragraph = []
           loop do
-            break if i >= lines.length || structural_start?(lines[i])
+            break if i >= lines.length || structural_start?(lines[i]) || tab_headline_at?(lines, i)
 
             if lines[i].empty?
               j = i
               j += 1 while j < lines.length && lines[j].empty?
-              break if j >= lines.length || structural_start?(lines[j])
+              break if j >= lines.length || structural_start?(lines[j]) || tab_headline_at?(lines, j)
 
               paragraph << "" # normalize any blank-line run to one separator
               i = j
@@ -321,6 +359,24 @@ module StreamWeaver
         end
 
         result
+      end
+
+      # A paragraph also has to stop at a tab headline (see #chunks), and a
+      # tab label need not look like anything in particular, so this is
+      # decided by the drawer: any headline whose :PROPERTIES: drawer
+      # (directly below it) has a :STREAMWEAVER_TAB: line.
+      def tab_headline_at?(lines, index)
+        return false unless lines[index]&.match?(/\A\*+\s+\S/) && lines[index + 1] == ":PROPERTIES:"
+
+        drawer = lines.drop(index + 2).take_while { |l| l != ":END:" }
+        drawer.any? { |l| l.start_with?(":STREAMWEAVER_TAB:") }
+      end
+
+      def emit_tabs(group)
+        tabs = group[:tabs].map do |label, parts|
+          "tab #{label.inspect} do\n#{indent_block(parts.reject(&:empty?).join("\n\n"), 2)}\nend"
+        end
+        "tabs #{replay_symbol(group[:key])} do\n#{indent_block(tabs.join("\n\n"), 2)}\nend"
       end
 
       def structural_start?(line)
@@ -495,12 +551,53 @@ module StreamWeaver
       # alongside any surrounding md prose, instead of being swallowed into
       # one md heredoc.
       def emit_body(lines)
-        chunks(lines).map do |chunk|
+        chunk_list = chunks(lines)
+        parts = []
+        i = 0
+        while i < chunk_list.length
+          chunk = chunk_list[i]
           case chunk[:type]
-          when :paragraph, :table, :src then emit(chunk)
+          when :paragraph, :table, :src
+            parts << emit(chunk)
+          when :quote
+            # A callout/card/comparison nested in a card or callout body.
+            # Same marker rules as top level, minus the doc_header position
+            # rule (a nested block is never the preamble).
+            code, consumed = emit_quote(chunk_list, i)
+            parts << code
+            i += consumed - 1
           else raise ArgumentError, "unsupported #{chunk[:type]} block inside quote body"
           end
-        end.join("\n\n")
+          i += 1
+        end
+        parts.join("\n\n")
+      end
+
+      # Rules 2-4 for a quote chunk at chunk_list[i], shared by the top-level
+      # loop and nested bodies. Returns [dsl, chunks_consumed]; a comparison
+      # consumes its paired "after" chunk too.
+      def emit_quote(chunk_list, i)
+        chunk = chunk_list[i]
+        marker = chunk[:lines].first.to_s
+        body = chunk[:lines].drop(1)
+
+        # Rule 2: before/after comparison pairing.
+        if (match = marker.match(/\A\*◀ Before — (.+)\*\z/))
+          following = chunk_list[i + 1]
+          after_marker = following[:lines].first.to_s if following&.dig(:type) == :quote
+          after_match = after_marker&.match(/\A\*▶ After — (.+)\*\z/)
+          raise ArgumentError, "malformed comparison: before block is not followed by an after block" unless after_match
+
+          [emit_comparison(match[1], body, after_match[1], following[:lines].drop(1)), 2]
+        elsif marker.match?(/\A\*▶ After — /)
+          raise ArgumentError, "malformed comparison: after block has no preceding before block"
+        # Rule 3: reserved-emoji callout.
+        elsif (match = callout_marker_match(marker))
+          [emit_callout(VARIANT_EMOJI.fetch(match[1]), match[2], body), 1]
+        # Rule 4: card fallback.
+        else
+          [emit_card(marker, body), 1]
+        end
       end
 
       # THE fix for the doc_header misclassification bug. An earlier version

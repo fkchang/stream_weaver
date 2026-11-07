@@ -67,7 +67,30 @@ module StreamWeaver
         return false if mine.nil?
 
         stamped ||= {}
-        stamped[:version] != version || stamped[:code] != mine
+        return true if stamped[:code].nil?
+
+        if same_install?(stamped[:code])
+          stamped[:version] != version || stamped[:code] != mine
+        else
+          newer_than?(stamped[:version])
+        end
+      end
+
+      # The stamp is "path:mtime". Two copies of the gem (a dev checkout and
+      # the installed one) have different paths and unrelated mtimes, so
+      # neither can tell from a stamp which of them is newer, and each used to
+      # call the other's bridge stale and restart it onto itself, over and over.
+      # Across installs only a strictly higher version counts as newer: of two
+      # copies one can heal the other, never the reverse, so it cannot loop,
+      # and the comparison never makes a restart more likely than before.
+      def same_install?(code)
+        code.to_s.rpartition(':').first == library_path
+      end
+
+      def newer_than?(other_version)
+        Gem::Version.new(version) > Gem::Version.new(other_version.to_s)
+      rescue ArgumentError
+        false
       end
     end
   end

@@ -129,7 +129,12 @@ RSpec.describe 'canvas form state harvest' do
       group = html[%r{<div class="checkbox-group">.*?</div>}m]
 
       expect(group).not_to be_nil
-      expect(group.scan(/<input/).length).to eq(3)
+      expect(group.scan(/type="checkbox"/).length).to eq(3)
+      # The presence marker lives in the group but has no x-model, so the
+      # harvest (which walks [x-model]) never reads it as a field.
+      marker = group[/<input[^>]*data-sw-present[^>]*>/]
+      expect(marker).not_to be_nil
+      expect(marker).not_to include('x-model')
       expect(html.sub(group, '')).to include('x-model="subscribe"')
     end
 

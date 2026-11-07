@@ -9,6 +9,7 @@ require 'stream_weaver/canvas/staleness_guard'
 require 'stream_weaver/canvas/code_stamp'
 require_relative '../support/env_helper'
 require_relative '../support/output_helper'
+require_relative '../support/canvas_events_helper'
 
 # The guard that auto-restarts a canvas bridge left running on older code
 # (disc-171). It fires inside ordinary commands -- canvas-push, get-started,
@@ -21,6 +22,7 @@ require_relative '../support/output_helper'
 RSpec.describe StreamWeaver::Canvas::StalenessGuard do
   include EnvHelper
   include OutputHelper
+  include CanvasEventsHelper
 
   let(:tmpdir) { File.join(Dir.tmpdir, "sw-stale-#{Process.pid}-#{rand(100_000)}") }
   let(:pid_file) { File.join(tmpdir, 'canvas.pid') }
@@ -42,7 +44,12 @@ RSpec.describe StreamWeaver::Canvas::StalenessGuard do
     FileUtils.rm_rf(tmpdir)
   end
 
-  before { described_class.reset! }
+  # An idle bridge (no sessions) is the only one the guard restarts on sight;
+  # the live-sessions case has its own examples below.
+  before do
+    described_class.reset!
+    allow(described_class).to receive(:live_session_names).and_return([])
+  end
   after { described_class.reset! }
 
   # A pid file naming a live process (ours), with whatever stamp is passed --
@@ -107,7 +114,6 @@ RSpec.describe StreamWeaver::Canvas::StalenessGuard do
 
       expect(err.lines.size).to eq(1)
       expect(err).to include('canvas bridge was running older code')
-      expect(err).to include('sessions preserved')
     end
 
     it 'announces on stderr, never stdout -- canvas-wait emits JSON there' do
@@ -285,6 +291,66 @@ RSpec.describe StreamWeaver::Canvas::StalenessGuard do
       expect(described_class).to receive(:ensure_current!).and_call_original
 
       client.ensure_bridge_running
+    end
+  end
+
+  describe 'a stale bridge that holds live sessions' do
+    before { write_pid_file }
+
+    it 'is not restarted: it warns once and names the manual command' do
+      allow(described_class).to receive(:live_session_names).and_return(%w[today-focus efforts])
+      expect(StreamWeaver::CLI).not_to receive(:restart_bridge_preserving_sessions)
+
+      err = capture_stderr { described_class.ensure_current! }
+
+      expect(err).to include('holds 2 live session(s)').and include('not restarting it').and include('canvas-restart')
+    end
+
+    it 'is not restarted when the bridge cannot say what it holds' do
+      allow(described_class).to receive(:live_session_names).and_return(nil)
+      expect(StreamWeaver::CLI).not_to receive(:restart_bridge_preserving_sessions)
+
+      expect(capture_stderr { described_class.ensure_current! }).to include('unknown number')
+    end
+
+    it 'records heal_skipped with who asked and both code stamps' do
+      allow(described_class).to receive(:live_session_names).and_return(%w[efforts])
+      capture_stderr { described_class.ensure_current! }
+
+      skipped = last_canvas_event(:heal_skipped)
+      expect(skipped).to include('cause' => 'bridge_restart', 'detail' => 'live_sessions', 'sessions' => %w[efforts])
+      expect(skipped['caller']).to include('pid' => Process.pid)
+      expect(skipped).to include('bridge_stamp', 'my_stamp')
+    end
+  end
+
+  describe 'an idle stale bridge' do
+    it 'is healed, and the bridge_heal event names the caller and both stamps' do
+      write_pid_file
+      allow(StreamWeaver::CLI).to receive(:restart_bridge_preserving_sessions).and_return(healed)
+
+      capture_stderr { described_class.ensure_current! }
+
+      heal = last_canvas_event(:bridge_heal)
+      expect(heal).to include('detail' => 'staleness_heal', 'cause' => 'bridge_restart')
+      expect(heal['caller']).to include('pid' => Process.pid)
+      expect(heal).to include('old_stamp', 'new_stamp')
+      expect(client.take_start_env).to include('SW_BRIDGE_START_CAUSE' => 'bridge_restart',
+                                               'SW_BRIDGE_START_DETAIL' => 'staleness_heal')
+    end
+
+    it 'toasts every canvas the restart touched (sessions created between the idle check and the snapshot)' do
+      write_pid_file
+      allow(StreamWeaver::CLI).to receive(:restart_bridge_preserving_sessions)
+        .and_return(healed.merge(kept: %w[a], dropped: %w[b]))
+      toasts = []
+      allow(client).to receive(:send_message) { |msg| toasts << msg if msg[:type] == 'toast' }
+
+      capture_stderr { described_class.ensure_current! }
+
+      expect(toasts.map { |t| t[:name] }).to match_array(%w[a b])
+      expect(toasts.first).to include(variant: 'warning', duration: 0)
+      expect(toasts.first[:message]).to include('restarted', 'Came back empty: b')
     end
   end
 end

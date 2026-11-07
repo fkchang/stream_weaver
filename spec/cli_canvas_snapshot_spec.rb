@@ -234,7 +234,7 @@ RSpec.describe StreamWeaver::CLI do
                  YAML.dump('captured_at' => Time.now.utc.iso8601, 'sessions' => sessions))
     end
 
-    it 'recreates a session with its theme/layout and pushes its body, skipping empty snapshots' do
+    it 'recreates a session with its theme/layout and pushes its body, and recreates empty ones without a push' do
       dir = File.join(@tmp, 'restore1')
       write_manifest(dir, [
         { 'name' => 'full', 'theme' => 'doc', 'layout' => 'wide', 'has_content' => true },
@@ -263,9 +263,10 @@ RSpec.describe StreamWeaver::CLI do
       push_msg = sent.find { |m| m[:type] == 'push' && m[:name] == 'full' }
       expect(push_msg[:dsl]).to eq("header1 'Hi'")
 
-      expect(sent.none? { |m| m[:name] == 'empty' }).to eq(true)
+      expect(sent.any? { |m| m[:type] == 'create' && m[:name] == 'empty' }).to eq(true)
+      expect(sent.none? { |m| m[:type] == 'push' && m[:name] == 'empty' }).to eq(true)
       expect(stdout).to include('OK    full')
-      expect(stdout).to include('skip  empty')
+      expect(stdout).to include('keep  empty')
     end
 
     it 'skips a session that already exists with content unless --force' do
@@ -413,6 +414,8 @@ RSpec.describe StreamWeaver::CLI do
           { type: 'list', sessions: [{ name: 'oldbridge', theme: 'default', layout: 'fluid', websocket_count: 0 }] }
         when 'get_dsl'
           { type: 'error', message: 'Unknown message type: get_dsl' }
+        when 'create'
+          { type: 'ready' }
         end
       end
     end

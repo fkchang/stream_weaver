@@ -131,6 +131,8 @@ end
 # state[:selected_items] = ["id1", "id3", ...] (array of selected values)
 ```
 
+**Empty selection:** unchecking every box (or pressing the select_none button) makes the state `[]` on the next request, whether it is an `/update` or a button action. A browser sends nothing for an empty group, so each `checkbox_group` and multi `chip_group` also sends a hidden presence marker (`_sw_present[]=<key>`); "marker present, no values" is `[]`, and a request without the marker leaves the selection untouched. A hand-written `hx-include` must use `input_selector` (`[x-model], [data-sw-present]`), not a bare `[x-model]`, or an emptied group is not reported.
+
 ## Buttons
 
 ```ruby
@@ -384,6 +386,7 @@ end
 
 Switching tabs is client-side (History API `pushState`/`popstate`) — zero requests.
 Multiple `url: true` groups compose, one param per key: `/?view=2&panel=1`.
+A click that stays on the same path keeps that query: the `HX-Push-Url` on the response carries the page's own `?view=2` along (`StreamWeaver::PushUrl`), so the selected tab survives every POST.
 
 **The URL is authoritative on a full GET.** Param present and valid → that index.
 Absent or invalid → tab 0, *never* the session value. The same URL always renders the

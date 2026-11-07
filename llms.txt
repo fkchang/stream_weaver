@@ -180,6 +180,8 @@ end
 # state[:selected_items] = ["id1", "id3", ...] (array of selected IDs)
 ```
 
+**Empty selection:** unchecking every box (or pressing the select_none button) makes the state `[]` on the next request, whether it is an `/update` or a button action. A browser sends nothing for an empty group, so each `checkbox_group` and multi `chip_group` also sends a hidden presence marker (`_sw_present[]=<key>`); "marker present, no values" is `[]`, and a request without the marker leaves the selection untouched. A hand-written `hx-include` must use `input_selector` (`[x-model], [data-sw-present]`), not a bare `[x-model]`, or an emptied group is not reported.
+
 **CRITICAL:** Inside `checkbox_group`, ONLY `item` elements are allowed at the top level. You CANNOT use `text`, `header`, `div`, or other components directly inside `checkbox_group` - they must be nested inside an `item` block. If you need section headers, put them OUTSIDE the checkbox_group.
 
 ### Display
@@ -397,7 +399,7 @@ app "My App" do
 end.run!
 ```
 
-**How it works:** When `state[:page]` changes (via button callback or nav click), StreamWeaver emits an `HX-Push-Url` header that updates the browser URL. Visiting `/dashboard` directly seeds `state[:page] = :dashboard` before render. Back/forward uses HTMX to re-fetch the page at the popped URL.
+**How it works:** When `state[:page]` changes (via button callback or nav click), StreamWeaver emits an `HX-Push-Url` header that updates the browser URL. Visiting `/dashboard` directly seeds `state[:page] = :dashboard` before render. When the pushed path is the page the browser is already on, the page's own query string rides along (`/?view=2` stays `/?view=2`), so a click never drops a `url: true` tab selection; a push to a different path carries no old query. When the pushed path is the page the browser is already on, the page's own query string rides along (`/?view=2` stays `/?view=2`), so a click never drops a `url: true` tab selection; a push to a different path carries no old query. Back/forward uses HTMX to re-fetch the page at the popped URL.
 
 **Important:** `route_by` is opt-in — apps without it are unaffected.
 
@@ -882,6 +884,7 @@ streamweaver canvas-close "$SESSION"
 | `streamweaver canvas-push SESSION` | Push DSL content (stdin or `<<'RUBY'`) |
 | `streamweaver canvas-wait SESSION [--event TYPE\|--any]` | Wait for a control to dispatch, return JSON (see the control table below) |
 | `streamweaver canvas-close SESSION` | Close the canvas session |
+| `streamweaver canvas-events [--session NAME] [--since 2h] [--json]` | Print the canvas lifecycle log (who or what closed a canvas); read-only, never touches the bridge |
 | `streamweaver canvas-read FILE [FILE\|DIR ...]` | Browse saved canvas DSL files in a local viewer (sidebar + prev/next nav) |
 | `streamweaver export FILE.rb [-o OUT.html] [--inline-images] [--offline]` | Write a canvas DSL doc out as standalone HTML |
 

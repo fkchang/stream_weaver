@@ -290,6 +290,7 @@ A saved doc is browsed later via `canvas-read` and can be run through `streamwea
 
 - **`text` does not render markdown** — bold, italic, links, and lists all need `md` instead.
 - **`spacer`/`divider` don't exist** — use `div(style: "height:Npx")` for spacing.
+- **The first table column is `white-space: nowrap` in `:doc`** (`views.rb`, `body.sw-theme-doc .sw-table td:first-child`) — it's a key column by design. A sentence in the first cell renders on one line and starves every other column to a sliver (seen live 2026-09-15: a two-column "What happened / Evidence" table with prose first cells). Lead every row with a short label (`"1 · Shipped"`, `"Enforcement"`) and put prose in the later columns.
 - **Don't launch a new server per update** — use `canvas-push` to update a single persistent session, not `ruby app.rb` repeatedly.
 - **Don't assume port 4567** — StreamWeaver auto-picks a free port; read the actual URL from stdout.
 - **Don't pass `theme: :light`** — it's unrecognized and silently falls back to `:default`. Omit `theme:` entirely, or use `theme_toggle mode: :light` if you want to force light appearance within `:doc`.

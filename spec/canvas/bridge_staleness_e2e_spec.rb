@@ -90,9 +90,10 @@ RSpec.describe 'Canvas bridge staleness auto-heal end to end' do
   end
 
   # Exactly what an install underneath a running bridge looks like from the
-  # outside: same pid, same port, a code stamp that is no longer ours.
+  # outside: same pid, same port, our own install rewritten since (same path,
+  # different mtime). A stamp from a different install is deliberately not stale.
   def make_pid_file_look_stale
-    File.write(pid_file, File.read(pid_file).sub(/^code=.*$/, 'code=/gone/lib/stream_weaver.rb:1'))
+    File.write(pid_file, File.read(pid_file).sub(/^code=.*$/, "code=#{StreamWeaver::Canvas::CodeStamp.library_path}:1"))
     StreamWeaver::Canvas::StalenessGuard.reset!
   end
 
@@ -103,35 +104,34 @@ RSpec.describe 'Canvas bridge staleness auto-heal end to end' do
     [out, err]
   end
 
-  it 'restarts the bridge under a canvas-push, keeps the other sessions, and lands the push' do
-    start_bridge_with_two_sessions
-
-    # The stamp is what makes any of this possible.
+  it 'restarts an idle stale bridge (no sessions to lose) on the first command that talks to it' do
+    StreamWeaver::Canvas::Client.ensure_bridge_running
+    expect(wait_until { File.exist?(pid_file) && bridge_port.positive? }).to be_truthy
     expect(StreamWeaver::Canvas::CodeStamp.parse(File.read(pid_file)))
       .to eq(version: StreamWeaver::Canvas::CodeStamp.version,
              code: StreamWeaver::Canvas::CodeStamp.fingerprint)
-    expect(get("/canvas/#{keep_session}").body).to include('Original content')
-
     old_pid = bridge_pid
     make_pid_file_look_stale
 
-    out, err = run_canvas_push("header1 'Pushed after the heal'")
+    err = capture_stderr { StreamWeaver::Canvas::Client.send_message({ type: 'list' }) }
 
-    # One line about the restart, on stderr so a JSON-emitting command's
-    # stdout stays parseable, and the push the operator actually asked for.
-    heal_lines = err.lines.grep(/canvas bridge was running older code/)
-    expect(heal_lines.size).to eq(1)
-    expect(heal_lines.first).to include('sessions preserved')
-    expect(out).to eq("Pushed to #{push_session}\n")
-
-    # A different process is serving now, and it carries a current stamp.
+    expect(err.lines.grep(/canvas bridge was running older code/).size).to eq(1)
     expect(bridge_pid).not_to eq(old_pid)
     expect(StreamWeaver::Canvas::CodeStamp.stale?(StreamWeaver::Canvas::Client.read_bridge_info)).to be(false)
+  end
 
-    # The session nobody touched came back with its content...
+  it 'leaves a stale bridge that holds live sessions running, says so, and still lands the push' do
+    start_bridge_with_two_sessions
+    old_pid = bridge_pid
+    make_pid_file_look_stale
+
+    out, err = run_canvas_push("header1 'Pushed to the old bridge'")
+
+    expect(err).to include('not restarting it').and include('canvas-restart')
+    expect(out).to eq("Pushed to #{push_session}\n")
+    expect(bridge_pid).to eq(old_pid)
     expect(get("/canvas/#{keep_session}").body).to include('Original content')
-    # ...and the push landed on the new bridge, not the one that was killed.
-    expect(get("/canvas/#{push_session}").body).to include('Pushed after the heal')
+    expect(get("/canvas/#{push_session}").body).to include('Pushed to the old bridge')
   end
 
   it 'leaves a matching bridge completely alone' do
@@ -163,18 +163,16 @@ RSpec.describe 'Canvas bridge staleness auto-heal end to end' do
     expect(get("/canvas/#{push_session}").body).to include('Still pushed')
   end
 
-  it 'refuses to restart twice in a row, so two disagreeing installs cannot ping-pong the bridge' do
+  it 'never restarts a stale bridge that holds sessions, however often two installs ask' do
     start_bridge_with_two_sessions
-    make_pid_file_look_stale
-    run_canvas_push("header1 'First heal'")
+    old_pid = bridge_pid
 
-    healed_pid = bridge_pid
-    make_pid_file_look_stale
+    3.times do |i|
+      make_pid_file_look_stale
+      run_canvas_push("header1 'Push #{i}'")
+    end
 
-    _out, err = run_canvas_push("header1 'Second push'")
-
-    expect(err).to include('was just restarted')
-    expect(bridge_pid).to eq(healed_pid)
-    expect(get("/canvas/#{push_session}").body).to include('Second push')
+    expect(bridge_pid).to eq(old_pid)
+    expect(get("/canvas/#{push_session}").body).to include('Push 2')
   end
 end
