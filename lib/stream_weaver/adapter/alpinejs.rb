@@ -1764,7 +1764,9 @@ module StreamWeaver
 
       # Render the ide_shell grid. One Alpine flag, railOpen, drives the
       # off-canvas right rail below the mobile breakpoint: the nav toggle
-      # flips it, the backdrop and Escape clear it.
+      # opens it and focus moves into the rail; the backdrop and Escape
+      # close it and focus returns to the toggle. Adds the shared ide
+      # stylesheet for every ide_* region inside it.
       #
       # @param view [Phlex::HTML] The Phlex view instance
       # @param component [Components::IdeShell]
@@ -1774,15 +1776,16 @@ module StreamWeaver
         inject_component_css(view, :ide, Components::Ide::CSS)
         has_right_rail = component.children.any? { |c| c.is_a?(Components::IdeRailRight) }
 
-        attrs = ide_attrs("sw-ide-shell", component.options).merge(
-          "x-data" => "{ railOpen: false }",
+        attrs = framework_attrs("sw-ide-shell", component.options).merge(
+          "x-data" => IDE_SHELL_DATA,
           ":class" => "{ 'sw-ide-shell--rail-open': railOpen }",
-          "@keydown.escape.window" => "railOpen = false"
+          "x-effect" => "railOpen && $nextTick(() => $refs.rail?.focus())",
+          "@keydown.escape.window" => "closeRail()"
         )
 
         view.div(**attrs) do
-          component.children.each { |child| child.render(view, state) }
           render_ide_rail_toggle(view) if has_right_rail
+          component.children.each { |child| child.render(view, state) }
         end
       end
 
@@ -1793,8 +1796,7 @@ module StreamWeaver
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_ide_region(view, component, state)
-        inject_component_css(view, :ide, Components::Ide::CSS)
-        attrs = ide_attrs(component.block_class, component.options).merge(component.region_attributes)
+        attrs = framework_attrs(component.block_class, component.options).merge(component.region_attributes)
 
         view.public_send(component.tag, **attrs) do
           component.children.each { |child| child.render(view, state) }
@@ -1809,9 +1811,7 @@ module StreamWeaver
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_ide_titlebar(view, component, state)
-        inject_component_css(view, :ide, Components::Ide::CSS)
-
-        view.header(**ide_attrs(component.block_class, component.options)) do
+        view.header(**framework_attrs(component.block_class, component.options)) do
           unless component.children.empty?
             view.span(class: "sw-ide-titlebar__logo") do
               component.children.each { |child| child.render(view, state) }
@@ -1832,9 +1832,7 @@ module StreamWeaver
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_ide_statusbar(view, component, state)
-        inject_component_css(view, :ide, Components::Ide::CSS)
-
-        view.footer(**ide_attrs(component.block_class, component.options)) do
+        view.footer(**framework_attrs(component.block_class, component.options)) do
           component.left.each { |item| render_ide_status_item(view, item) }
           component.children.each { |child| child.render(view, state) }
           if component.right.any?
@@ -1843,102 +1841,6 @@ module StreamWeaver
           end
         end
       end
-
-      private
-
-      def render_ide_scope(view, component)
-        view.div(class: "sw-ide-titlebar__scope") do
-          if component.crumbs.any?
-            view.span(class: "sw-ide-titlebar__crumbs") do
-              last = component.crumbs.size - 1
-              component.crumbs.each_with_index do |crumb, index|
-                view.span(class: "sw-ide-titlebar__crumb-sep", "aria-hidden" => "true") { "›" } if index.positive?
-                if index == last
-                  view.span(class: "sw-ide-titlebar__crumb sw-ide-titlebar__crumb--current", "aria-current" => "page") { crumb }
-                else
-                  view.span(class: "sw-ide-titlebar__crumb") { crumb }
-                end
-              end
-            end
-          end
-          if component.branch
-            view.span(class: "sw-ide-titlebar__branch") do
-              view.raw(view.safe(IDE_BRANCH_ICON))
-              view.plain(component.branch)
-            end
-          end
-        end
-      end
-
-      def render_ide_titlebar_link(view, link)
-        attrs = { class: "sw-ide-titlebar__link", href: link[:href] }
-        attrs.merge!(target: "_blank", rel: "noopener noreferrer") if link[:href].to_s.match?(%r{\Ahttps?://}i)
-        view.a(**attrs) do
-          render_icon_hook(view, link[:icon], "sw-ide-titlebar__link-icon") if link[:icon]
-          view.span(class: "sw-ide-titlebar__link-label") { link[:label] }
-        end
-      end
-
-      # Always flips the mode on screen: swToggleTheme with no argument cycles
-      # auto -> light -> dark, which leaves one click with no visible change.
-      def render_ide_theme_toggle(view)
-        view.button(
-          type: "button",
-          class: "sw-ide-titlebar__theme-toggle",
-          "aria-label" => "Toggle light and dark theme",
-          "@click" => "window.swToggleTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark')"
-        ) do
-          view.raw(view.safe(IDE_SUN_ICON))
-          view.raw(view.safe(IDE_MOON_ICON))
-        end
-      end
-
-      def render_ide_status_item(view, item)
-        text, href = item.is_a?(Hash) ? item.values_at(:text, :href) : [item, nil]
-        if href
-          view.a(class: "sw-ide-statusbar__item", href: href) { text }
-        else
-          view.span(class: "sw-ide-statusbar__item") { text }
-        end
-      end
-
-      IDE_BRANCH_ICON = '<svg class="sw-ide-titlebar__branch-icon" viewBox="0 0 16 16" aria-hidden="true" fill="none" ' \
-                        'stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="4.5" cy="3.5" r="1.5"/>' \
-                        '<circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/>' \
-                        '<path d="M4.5 5v6M11.5 7c0 3-7 2-7 4"/></svg>'
-      IDE_SUN_ICON = '<svg class="sw-ide-titlebar__theme-icon sw-ide-titlebar__theme-icon--sun" viewBox="0 0 16 16" ' \
-                     'aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">' \
-                     '<circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1' \
-                     'M3.4 12.6l1-1M11.6 4.4l1-1"/></svg>'
-      IDE_MOON_ICON = '<svg class="sw-ide-titlebar__theme-icon sw-ide-titlebar__theme-icon--moon" viewBox="0 0 16 16" ' \
-                      'aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">' \
-                      '<path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg>'
-
-      # Framework class first, then the author's class:/style: appended.
-      def ide_attrs(block_class, options)
-        attrs = { class: [block_class, options[:class]].compact.join(" ") }
-        attrs[:style] = options[:style] if options[:style]
-        attrs
-      end
-
-      def render_ide_rail_toggle(view)
-        view.button(
-          type: "button",
-          class: "sw-ide-shell__nav-toggle",
-          "aria-controls" => Components::IdeRailRight::DOM_ID,
-          "aria-label" => "Toggle side panel",
-          ":aria-expanded" => "railOpen.toString()",
-          "@click" => "railOpen = !railOpen"
-        ) do
-          view.raw(view.safe(IDE_MENU_ICON))
-        end
-        view.div(class: "sw-ide-shell__backdrop", "aria-hidden" => "true", "@click" => "railOpen = false")
-      end
-
-      IDE_MENU_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" ' \
-                      'stroke-width="1.5" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg>'
-
-      public
 
       # Render a single board card.
       #
@@ -8475,6 +8377,108 @@ end
         CSS
       end
 
+
+      # ide_* helpers (render_ide_shell and friends)
+
+
+      def render_ide_scope(view, component)
+        view.div(class: "sw-ide-titlebar__scope") do
+          if component.crumbs.any?
+            view.span(class: "sw-ide-titlebar__crumbs") do
+              last = component.crumbs.size - 1
+              component.crumbs.each_with_index do |crumb, index|
+                view.span(class: "sw-ide-titlebar__crumb-sep", "aria-hidden" => "true") { "›" } if index.positive?
+                if index == last
+                  view.span(class: "sw-ide-titlebar__crumb sw-ide-titlebar__crumb--current", "aria-current" => "page") { crumb }
+                else
+                  view.span(class: "sw-ide-titlebar__crumb") { crumb }
+                end
+              end
+            end
+          end
+          if component.branch
+            view.span(class: "sw-ide-titlebar__branch") do
+              view.raw(view.safe(IDE_BRANCH_ICON))
+              view.plain(component.branch)
+            end
+          end
+        end
+      end
+
+      def render_ide_titlebar_link(view, link)
+        attrs = { class: "sw-ide-titlebar__link", href: link[:href] }
+        attrs.merge!(target: "_blank", rel: "noopener noreferrer") if link[:href].to_s.match?(%r{\Ahttps?://}i)
+        view.a(**attrs) do
+          render_icon_hook(view, link[:icon], "sw-ide-titlebar__link-icon") if link[:icon]
+          view.span(class: "sw-ide-titlebar__link-label") { link[:label] }
+        end
+      end
+
+      # Always flips the mode on screen: swToggleTheme with no argument cycles
+      # auto -> light -> dark, which leaves one click with no visible change.
+      def render_ide_theme_toggle(view)
+        view.button(
+          type: "button",
+          class: "sw-ide-titlebar__theme-toggle",
+          "aria-label" => "Toggle light and dark theme",
+          "@click" => "window.swToggleTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark')"
+        ) do
+          view.raw(view.safe(IDE_SUN_ICON))
+          view.raw(view.safe(IDE_MOON_ICON))
+        end
+      end
+
+      def render_ide_status_item(view, item)
+        text, href = item.is_a?(Hash) ? item.values_at(:text, :href) : [item, nil]
+        if href
+          view.a(class: "sw-ide-statusbar__item", href: href) { text }
+        else
+          view.span(class: "sw-ide-statusbar__item") { text }
+        end
+      end
+
+      IDE_BRANCH_ICON = '<svg class="sw-ide-titlebar__branch-icon" viewBox="0 0 16 16" aria-hidden="true" fill="none" ' \
+                        'stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="4.5" cy="3.5" r="1.5"/>' \
+                        '<circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/>' \
+                        '<path d="M4.5 5v6M11.5 7c0 3-7 2-7 4"/></svg>'
+      IDE_SUN_ICON = '<svg class="sw-ide-titlebar__theme-icon sw-ide-titlebar__theme-icon--sun" viewBox="0 0 16 16" ' \
+                     'aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">' \
+                     '<circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1' \
+                     'M3.4 12.6l1-1M11.6 4.4l1-1"/></svg>'
+      IDE_MOON_ICON = '<svg class="sw-ide-titlebar__theme-icon sw-ide-titlebar__theme-icon--moon" viewBox="0 0 16 16" ' \
+                      'aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">' \
+                      '<path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg>'
+
+      # Framework block class first, then the author's class:/style: appended.
+      def framework_attrs(block_class, options)
+        attrs = { class: [block_class, options[:class]].compact.join(" ") }
+        attrs[:style] = options[:style] if options[:style]
+        attrs
+      end
+
+      # Rendered before the regions so it comes first in the tab order.
+      def render_ide_rail_toggle(view)
+        view.button(
+          type: "button",
+          class: "sw-ide-shell__nav-toggle",
+          "x-ref" => "toggle",
+          "aria-controls" => Components::IdeRailRight::DOM_ID,
+          "aria-label" => "Toggle side panel",
+          ":aria-expanded" => "railOpen.toString()",
+          "@click" => "railOpen = !railOpen"
+        ) do
+          view.raw(view.safe(IDE_MENU_ICON))
+        end
+        view.div(class: "sw-ide-shell__backdrop", "aria-hidden" => "true", "@click" => "closeRail()")
+      end
+
+      # Shell state: closeRail is a no-op when the rail is already closed, so
+      # Escape elsewhere on the page never steals focus.
+      IDE_SHELL_DATA = "{ railOpen: false, closeRail() { if (!this.railOpen) return; " \
+                       "this.railOpen = false; this.$nextTick(() => this.$refs.toggle?.focus()) } }"
+
+      IDE_MENU_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" ' \
+                      'stroke-width="1.5" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg>'
     end
   end
 end

@@ -2,10 +2,11 @@
 
 module StreamWeaver
   module Components
-    # The one stylesheet shared by every ide_* component. A Ruby constant
-    # rather than a css_path file: css_path links are emitted only by the
-    # standalone AppView, while inject_component_css reaches the canvas
-    # (AppContentView) and the Opal build too.
+    # The one stylesheet shared by every ide_* component, added once by
+    # render_ide_shell. A Ruby constant rather than a css_path file:
+    # css_path links are emitted only by the standalone AppView, while
+    # inject_component_css also reaches the canvas (AppContentView). The
+    # Opal adapter has no ide renderers yet.
     #
     # Colours and fonts come from the :ide theme's --ide-* tokens, with
     # --sw-* fallbacks so the shell still reads under any other theme.
@@ -89,6 +90,10 @@ module StreamWeaver
           overflow: hidden;
           background: var(--ide-chrome, var(--sw-color-bg-elevated));
           border-left: 1px solid var(--ide-border, var(--sw-color-border));
+        }
+
+        .sw-ide-rail-right:focus {
+          outline: none;
         }
 
         .sw-ide-statusbar {
@@ -270,7 +275,7 @@ module StreamWeaver
               "left center"
               "status status";
           }
-          .sw-ide-titlebar {
+          .sw-ide-shell:has(> .sw-ide-shell__nav-toggle) .sw-ide-titlebar {
             padding-right: 58px;
           }
           .sw-ide-rail-right {

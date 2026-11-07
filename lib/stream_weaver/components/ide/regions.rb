@@ -47,11 +47,13 @@ module StreamWeaver
     class IdeRailRight < IdeRegion
       TAG = :aside
       BLOCK = "sw-ide-rail-right"
-      # Target of the shell's nav toggle (aria-controls).
+      # Target of the shell's nav toggle (aria-controls). A fixed id, so a
+      # page holds one ide_shell.
       DOM_ID = "sw-ide-rail-right"
 
+      # tabindex/x-ref let the shell move focus into the rail when it opens.
       def region_attributes
-        { id: DOM_ID }
+        { id: DOM_ID, tabindex: "-1", "x-ref" => "rail" }
       end
     end
   end

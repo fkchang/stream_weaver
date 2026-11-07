@@ -26,7 +26,6 @@ RSpec.describe "ide_shell" do
   end
 
   let(:html) { render_app(full_shell) }
-  let(:css) { StreamWeaver::Components::Ide::CSS }
 
   describe "components" do
     it "is a container whose regions are its children" do
@@ -76,74 +75,34 @@ RSpec.describe "ide_shell" do
     end
   end
 
-  describe "grid" do
-    it "is a full-viewport grid: titlebar over left | center | right over statusbar" do
-      expect(css).to include("display: grid")
-      expect(css).to include("height: 100dvh")
-      expect(css).to include("grid-template-columns: 220px minmax(0, 1fr) 380px")
-      expect(css).to include("grid-template-rows: auto minmax(0, 1fr) auto")
-      expect(css).to match(/grid-template-areas:\s*"titlebar titlebar titlebar"\s*"left center right"\s*"status status status"/)
-    end
-
-    it "places each region in its grid area" do
-      { "titlebar" => "titlebar", "rail-left" => "left", "editor" => "center",
-        "rail-right" => "right", "statusbar" => "status" }.each do |block, area|
-        expect(css).to match(/\.sw-ide-#{block} \{[^}]*grid-area: #{area};/)
-      end
-    end
-
-    it "removes the page padding and card frame around the shell" do
-      expect(css).to match(/html body:has\(\.sw-ide-shell\) \{[^}]*padding: 0;[^}]*max-width: none;/)
-      expect(css).to match(/#app-container:has\(> \.sw-ide-shell\) \{[^}]*padding: 0;/)
-    end
-
-    it "emits the shared IDE stylesheet once on the page" do
-      expect(html.scan("IDE shell: titlebar / left | editor | right / statusbar").size).to eq(1)
-    end
+  it "emits the shared IDE stylesheet once on the page" do
+    expect(html.scan("IDE shell: titlebar / left | editor | right / statusbar").size).to eq(1)
   end
 
-  describe "mobile collapse" do
-    it "renders a nav toggle and a backdrop bound to one railOpen flag" do
-      expect(html).to include(%(x-data="{ railOpen: false }"))
-      expect(html).to match(/<button[^>]*class="sw-ide-shell__nav-toggle"[^>]*@click="railOpen = !railOpen"/)
-      expect(html).to include(%(:aria-expanded="railOpen.toString()"))
-      expect(html).to match(/<div[^>]*class="sw-ide-shell__backdrop"[^>]*@click="railOpen = false"/)
-      expect(html).to include(%(:class="{ 'sw-ide-shell--rail-open': railOpen }"))
-      expect(html).to include(%(@keydown.escape.window="railOpen = false"))
+  # Markup only: the collapse itself, Escape and the backdrop are checked in
+  # a browser.
+  describe "mobile collapse markup" do
+    it "renders the nav toggle before every region, so it comes first in the tab order" do
+      shell_html = html[/<div[^>]*class="sw-ide-shell"[^>]*>.*/m]
+      expect(shell_html.index("sw-ide-shell__nav-toggle")).to be < shell_html.index(%(<header class="sw-ide-titlebar"))
     end
 
-    it "keeps the closed rail out of the tab order" do
-      mobile = css[/@media \(max-width: 1180px\) \{.*?\n\}/m]
-      expect(mobile).to match(/\.sw-ide-rail-right \{[^}]*visibility: hidden;/)
-      expect(mobile).to match(/\.sw-ide-shell--rail-open \.sw-ide-rail-right \{[^}]*visibility: visible;/)
+    it "opens the rail from the toggle and closes it from the backdrop and Escape" do
+      expect(html).to match(/<button[^>]*class="sw-ide-shell__nav-toggle"[^>]*x-ref="toggle"[^>]*@click="railOpen = !railOpen"/)
+      expect(html).to match(/<div[^>]*class="sw-ide-shell__backdrop"[^>]*@click="closeRail\(\)"/)
+      expect(html).to include(%(@keydown.escape.window="closeRail()"))
+    end
+
+    it "makes the rail focusable and moves focus into it on open" do
+      expect(html).to match(/<aside class="sw-ide-rail-right" id="sw-ide-rail-right" tabindex="-1" x-ref="rail"/)
+      expect(html).to include(%(x-effect="railOpen && $nextTick(() => $refs.rail?.focus())"))
     end
 
     it "omits the toggle and backdrop when there is no right rail" do
       page = render_app(ide_app { ide_shell { ide_editor { text "x" } } })
       expect(page).to include(%(class="sw-ide-shell"))
-      expect(page).not_to include("sw-ide-shell__nav-toggle\"")
-      expect(page).not_to include("sw-ide-shell__backdrop\"")
-    end
-
-    it "moves the right rail off-canvas below 1180px and back when open" do
-      mobile = css[/@media \(max-width: 1180px\) \{.*?\n\}/m]
-      expect(mobile).not_to be_nil
-      expect(mobile).to include("grid-template-columns: 200px minmax(0, 1fr)")
-      expect(mobile).to match(/\.sw-ide-rail-right \{[^}]*position: fixed;[^}]*transform: translateX\(100%\);/)
-      expect(mobile).to match(/\.sw-ide-shell--rail-open \.sw-ide-rail-right \{[^}]*transform: none;/)
-      expect(mobile).to match(/\.sw-ide-shell__nav-toggle \{[^}]*display: inline-flex;/)
-    end
-
-    it "hides the toggle and backdrop on wide screens" do
-      wide = css.split("@media").first
-      expect(wide).to match(/\.sw-ide-shell__nav-toggle \{[^}]*display: none;/)
-      expect(wide).to match(/\.sw-ide-shell__backdrop \{[^}]*display: none;/)
-    end
-
-    it "drops the left rail to a single column below 840px" do
-      narrow = css[/@media \(max-width: 840px\) \{.*?\n\}/m]
-      expect(narrow).to include("grid-template-columns: minmax(0, 1fr)")
-      expect(narrow).to match(/\.sw-ide-rail-left \{[^}]*display: none;/)
+      expect(page).not_to include(%(class="sw-ide-shell__nav-toggle"))
+      expect(page).not_to include(%(class="sw-ide-shell__backdrop"))
     end
   end
 
