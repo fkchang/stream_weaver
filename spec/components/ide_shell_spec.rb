@@ -81,6 +81,22 @@ RSpec.describe "ide_shell" do
 
   # Markup only: the collapse itself, Escape and the backdrop are checked in
   # a browser.
+  # Browser-verified at 1000px (focus lands in the rail, the toggle stays
+  # clickable); these pin the two CSS facts that made it work.
+  describe "rail layering in the page stylesheet" do
+    let(:mobile) { html[/@media \(max-width: 1180px\) \{.*?\n\}/m] }
+
+    it "starts the open rail and its backdrop below the titlebar, using the titlebar's own height" do
+      expect(html).to match(/\.sw-ide-titlebar \{[^}]*height: var\(--sw-ide-titlebar-height\);/)
+      expect(mobile).to match(/\.sw-ide-rail-right \{[^}]*top: var\(--sw-ide-titlebar-height\);/)
+      expect(mobile).to match(/\.sw-ide-shell__backdrop \{[^}]*inset: var\(--sw-ide-titlebar-height\) 0 0 0;/)
+    end
+
+    it "makes the rail visible at once on open, so focus() can land in it" do
+      expect(mobile).to match(/\.sw-ide-shell--rail-open \.sw-ide-rail-right \{[^}]*transition: transform 0\.2s, visibility 0s;/)
+    end
+  end
+
   describe "mobile collapse markup" do
     it "renders the nav toggle before every region, so it comes first in the tab order" do
       shell_html = html[/<div[^>]*class="sw-ide-shell"[^>]*>.*/m]

@@ -33,6 +33,7 @@ module StreamWeaver
         }
 
         .sw-ide-shell {
+          --sw-ide-titlebar-height: 48px;
           display: grid;
           height: 100dvh;
           grid-template-columns: 220px minmax(0, 1fr) 380px;
@@ -55,7 +56,7 @@ module StreamWeaver
           align-items: center;
           gap: 14px;
           min-width: 0;
-          min-height: 48px;
+          height: var(--sw-ide-titlebar-height);
           padding: 8px 14px;
           background: var(--ide-chrome, var(--sw-color-bg-elevated));
           border-bottom: 1px solid var(--ide-border2, var(--sw-color-border-strong));
@@ -289,9 +290,11 @@ module StreamWeaver
           .sw-ide-shell:has(> .sw-ide-shell__nav-toggle) .sw-ide-titlebar {
             padding-right: 58px;
           }
+          /* Rail and backdrop start below the titlebar, so the nav toggle
+             stays visible and can close the rail it opened. */
           .sw-ide-rail-right {
             position: fixed;
-            top: 0;
+            top: var(--sw-ide-titlebar-height);
             right: 0;
             bottom: 0;
             z-index: 60;
@@ -300,11 +303,14 @@ module StreamWeaver
             box-shadow: var(--ide-shadow, var(--sw-shadow-xl));
             transform: translateX(100%);
             visibility: hidden;
-            transition: transform 0.2s, visibility 0.2s;
+            transition: transform 0.2s, visibility 0s linear 0.2s;
           }
+          /* Visible at once on open, so the shell can focus the rail on the
+             next tick; hidden only after the slide-out on close. */
           .sw-ide-shell--rail-open .sw-ide-rail-right {
             transform: none;
             visibility: visible;
+            transition: transform 0.2s, visibility 0s;
           }
           .sw-ide-shell__nav-toggle {
             display: inline-flex;
@@ -312,7 +318,7 @@ module StreamWeaver
           .sw-ide-shell--rail-open .sw-ide-shell__backdrop {
             display: block;
             position: fixed;
-            inset: 0;
+            inset: var(--sw-ide-titlebar-height) 0 0 0;
             z-index: 50;
             background: rgba(0, 0, 0, 0.45);
           }
