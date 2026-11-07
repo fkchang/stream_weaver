@@ -284,9 +284,7 @@ module StreamWeaver
     end
 
     # Projects-style tree for ide_rail_left; see Components::IdeTree.
-    def ide_tree(heading: nil, action: nil, rows: [], **options)
-      components << Components::IdeTree.new(heading: heading, action: action, rows: rows, **options)
-    end
+    def ide_tree(**options) = components << Components::IdeTree.new(**options)
 
     # One file of an ide_editor, listed in its tab strip; see
     # Components::IdeFileSection.

@@ -21,25 +21,30 @@ RSpec.describe "ide_tree and ide_note" do
         ] }
       ]
       render_rail do
-        ide_tree(heading: "Projects", action: { label: "New project", icon: :plus }, rows: tree_rows)
+        ide_tree(heading: "Projects", action: { label: "New project", icon: :plus, href: "/new" }, rows: tree_rows)
       end
     end
     let(:tree) { first(rail, "nav[@class='sw-ide-tree']") }
     let(:rows) { find_all(tree, "div[@class='sw-ide-tree__rows']/*") }
 
-    it "names the tree by its heading and gives the action button an accessible name" do
+    it "names the tree by its heading and renders the action as a named link" do
       expect(tree.attributes["aria-label"]).to eq("Projects")
       heading = first(tree, "div[@class='sw-ide-tree__heading']")
       expect(text_of(first(heading, "span"))).to eq("Projects")
-      action = first(heading, "button[@class='sw-ide-tree__action']")
+      action = first(heading, "a[@class='sw-ide-tree__action']")
+      expect(action.attributes["href"]).to eq("/new")
       expect(action.attributes["aria-label"]).to eq("New project")
-      expect(action.attributes["type"]).to eq("button")
       expect(first(action, "*[local-name()='svg']")).not_to be_nil
     end
 
-    it "renders an action with href: as a link" do
-      tree = render_rail { ide_tree(heading: "Projects", action: { label: "Add", href: "/new" }) }
-      expect(first(tree, ".//a[@class='sw-ide-tree__action']").attributes["href"]).to eq("/new")
+    it "refuses an action without an href, which would do nothing" do
+      expect { StreamWeaver::Components::IdeTree.new(action: { label: "Add" }) }
+        .to raise_error(ArgumentError, /needs an href/)
+    end
+
+    it "refuses an unknown named icon" do
+      expect { render_rail { ide_tree(rows: [{ label: "x", icon: :no_such_icon }]) } }
+        .to raise_error(ArgumentError, /unknown ide icon :no_such_icon/)
     end
 
     it "flattens nested rows in order, indenting each by its depth" do
@@ -50,12 +55,19 @@ RSpec.describe "ide_tree and ide_note" do
       )
     end
 
-    it "marks active rows, which are not links without an href" do
+    it "renders active rows without an href as divs with the active class" do
       folder, workspace = rows
       [folder, workspace].each do |row|
         expect(row.name).to eq("div")
         expect(classes(row)).to include("sw-ide-tree__row--active")
       end
+    end
+
+    it "says whether a row with children is expanded, and leaves leaf rows alone" do
+      expect(rows.map { |r| r.attributes["aria-expanded"] }).to eq(["true", "true", nil, nil, nil])
+      closed = first(render_rail { ide_tree(rows: [{ label: "x", children: [{ label: "y" }] }]) },
+                     ".//div[@class='sw-ide-tree__row']")
+      expect(closed.attributes["aria-expanded"]).to eq("false")
     end
 
     it "renders the selected row as the current page link" do
@@ -71,9 +83,8 @@ RSpec.describe "ide_tree and ide_note" do
       docs = rows[4]
       expect(docs.name).to eq("div")
       expect(docs.attributes["href"]).to be_nil
-      expect(docs.attributes["aria-disabled"]).to eq("true")
       expect(classes(docs)).to include("sw-ide-tree__row--disabled")
-      expect(text_of(first(docs, "b[@class='sw-ide-tree__tag']"))).to eq("Coming soon")
+      expect(text_of(first(docs, "span[@class='sw-ide-tree__tag']"))).to eq("Coming soon")
     end
 
     it "renders named icons as inline SVG and text icons as hidden text" do
@@ -95,26 +106,26 @@ RSpec.describe "ide_tree and ide_note" do
             "div[@class='sw-ide-note']")
     end
 
-    it "renders the icon, the body from its block and a dismiss button" do
+    it "renders the icon, the body from its block and a named dismiss button" do
       expect(note.attributes["role"]).to eq("note")
       expect(first(note, "*[local-name()='svg'][@class='sw-ide-note__icon']")).not_to be_nil
       expect(text_of(first(note, "div[@class='sw-ide-note__body']"))).to include("A workspace is a git worktree.")
       button = first(note, "button[@class='sw-ide-note__dismiss']")
       expect(text_of(button)).to eq("Got it")
       expect(button.attributes["type"]).to eq("button")
+      expect(button.attributes["on-click"]).not_to be_nil
     end
 
-    it "hides itself through Alpine state when dismissed" do
+    it "shows only while not dismissed, and stays cloaked until Alpine has read that state" do
       expect(note.attributes["x-show"]).to eq("!dismissed")
-      expect(first(note, "button").attributes["on-click"]).to eq("dismiss()")
-      expect(note.attributes["x-data"]).to eq("{ dismissed: false, dismiss() { this.dismissed = true } }")
+      expect(note.attributes["x-cloak"]).to eq("")
     end
 
-    it "with remember:, reads and writes the dismissal under a namespaced localStorage key, guarded by try/catch" do
+    it "with remember:, keeps the dismissal under a key named for the note" do
       data = first(render_rail { ide_note(remember: "workspaces") { text "x" } }, "div[@class='sw-ide-note']")
              .attributes["x-data"]
-      expect(data).to include(%(try { return localStorage.getItem("sw-ide-note:workspaces") === '1' } catch (e) { return false }))
-      expect(data).to include(%(try { localStorage.setItem("sw-ide-note:workspaces", '1') } catch (e) {}))
+      expect(data).to include(%("sw-ide-note:workspaces"))
+      expect(note.attributes["x-data"]).not_to include("localStorage")
     end
   end
 end

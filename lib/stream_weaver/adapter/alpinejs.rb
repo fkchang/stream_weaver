@@ -1998,7 +1998,10 @@ module StreamWeaver
         attrs = framework_attrs("sw-ide-note", component.options).merge(
           role: "note",
           "x-data" => ide_note_data(component.remember),
-          "x-show" => "!dismissed"
+          "x-show" => "!dismissed",
+          # Hidden until Alpine has read a remembered dismissal, so a
+          # dismissed note never paints on load.
+          "x-cloak" => ""
         )
         view.div(**attrs) do
           render_ide_icon(view, component.icon, "sw-ide-note__icon")
@@ -8639,8 +8642,9 @@ end
       def render_ide_icon(view, icon, css_class)
         return unless icon
 
-        svg = Components::Ide.svg(icon, css_class) if icon.is_a?(Symbol)
-        if svg
+        if icon.is_a?(Symbol)
+          svg = Components::Ide.svg(icon, css_class) or
+            raise ArgumentError, "unknown ide icon :#{icon} (known: #{Components::Ide::ICONS.keys.join(', ')})"
           view.raw(view.safe(svg))
         else
           view.span("aria-hidden" => "true") { render_icon_hook(view, icon.to_s, css_class) }
@@ -8663,36 +8667,31 @@ end
           action = component.action
           next unless action
 
-          attrs = { class: "sw-ide-tree__action", "aria-label" => action[:label], title: action[:label] }
-          icon = action.fetch(:icon, :plus)
-          if action[:href]
-            view.a(**attrs, href: action[:href]) { render_ide_icon(view, icon, "sw-ide-tree__icon") }
-          else
-            view.button(**attrs, type: "button") { render_ide_icon(view, icon, "sw-ide-tree__icon") }
-          end
+          attrs = { class: "sw-ide-tree__action", href: action[:href], "aria-label" => action[:label], title: action[:label] }
+          view.a(**attrs) { render_ide_icon(view, action.fetch(:icon, :plus), "sw-ide-tree__icon") }
         end
       end
 
-      # A row is a link only when it has an href and is not disabled.
+      # A row is a link only when it has an href and is not disabled. A row
+      # with children says whether its branch is open (active:).
       def render_ide_tree_row(view, row)
         classes = ["sw-ide-tree__row"]
         classes << "sw-ide-tree__row--active" if row[:active]
         classes << "sw-ide-tree__row--selected" if row[:selected]
         classes << "sw-ide-tree__row--disabled" if row[:disabled]
         attrs = { class: classes.join(" "), style: "--sw-ide-depth: #{row[:depth]}" }
+        attrs["aria-expanded"] = (!!row[:active]).to_s if row[:parent]
 
         link = row[:href] && !row[:disabled]
         if link
           attrs[:href] = row[:href]
           attrs["aria-current"] = "page" if row[:selected]
-        elsif row[:disabled]
-          attrs["aria-disabled"] = "true"
         end
 
         view.public_send(link ? :a : :div, **attrs) do
           render_ide_icon(view, row[:icon], "sw-ide-tree__icon")
           view.span(class: "sw-ide-tree__label") { row[:label] }
-          view.b(class: "sw-ide-tree__tag") { row[:tag] } if row[:tag]
+          view.span(class: "sw-ide-tree__tag") { row[:tag] } if row[:tag]
         end
       end
 

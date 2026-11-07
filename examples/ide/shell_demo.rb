@@ -33,7 +33,7 @@ App = StreamWeaver::App.new("IDE shell demo", chrome: false, theme: :ide) do
     ide_rail_left do
       ide_tree(
         heading: "Projects",
-        action: { label: "New project", icon: :plus },
+        action: { label: "New project", icon: :plus, href: "/?page=new" },
         rows: [
           { label: "stream_weaver", icon: :folder, active: true, children: [
             { label: "examples", icon: :branch, active: true, children: [

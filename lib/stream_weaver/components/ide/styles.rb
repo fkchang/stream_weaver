@@ -532,6 +532,9 @@ module StreamWeaver
           letter-spacing: 0.4px;
           color: var(--ide-muted, var(--sw-color-text-muted));
         }
+        .sw-ide-note[x-cloak] {
+          display: none !important;
+        }
         .sw-ide-note {
           margin: auto 8px 8px;
           padding: 12px;
