@@ -848,7 +848,7 @@ The `:ide` theme and the `ide_*` components build a VS Code-style page: title ba
 | `ide_tree(heading:, action:, rows:)` | Rows are `{ label:, icon:, href:, active:, selected:, disabled:, tag:, children: }` |
 | `ide_note(dismiss:, remember:) { }` | Dismissible card; `remember:` keeps the dismissal in localStorage |
 | `ide_editor { }` | Scrolling center column; its `file_section`s get a generated tab strip and a scroll spy |
-| `file_section "id", label: "docs/X.md", icon:, comment: { }` | One tab, one file-tree row; the last section fills the viewport so every tab can reach the top |
+| `file_section "id", label: "docs/X.md", icon:, comment: "docs/X.md" { }` (`comment:` is the HTML-style comment line shown at the top; a String, or `false` for none) | One tab, one file-tree row; the last section fills the viewport so every tab can reach the top |
 | `ide_rail_right { }` | Right rail (off-canvas behind a menu button below 1180px) |
 | `ide_rail_tabs([...])`, `ide_filetree`, `ide_terminal(lines:)` | Tab row, file tree of the editor's sections, fixed terminal transcript |
 | `ide_statusbar(left:, right:)` | Items are strings or `{ label:, href: }` |
