@@ -1762,6 +1762,257 @@ module StreamWeaver
         end
       end
 
+      # Render the ide_shell grid. One Alpine flag, railOpen, drives the
+      # off-canvas right rail below the mobile breakpoint: the nav toggle
+      # opens it and focus moves into the rail; the backdrop and Escape
+      # close it and focus returns to the toggle. Adds the shared ide
+      # stylesheet for every ide_* region inside it.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeShell]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_shell(view, component, state)
+        inject_component_css(view, :ide, Components::Ide::CSS)
+        has_right_rail = component.children.any? { |c| c.is_a?(Components::IdeRailRight) }
+
+        attrs = framework_attrs("sw-ide-shell", component.options).merge(
+          "x-data" => IDE_SHELL_DATA,
+          ":class" => "{ 'sw-ide-shell--rail-open': railOpen }",
+          "x-effect" => "railOpen && $nextTick(() => $refs.rail?.focus())",
+          "@keydown.escape.window" => "closeRail()"
+        )
+
+        view.div(**attrs) do
+          render_ide_rail_toggle(view) if has_right_rail
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # Render one ide_shell region (titlebar, rails, editor, statusbar).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeRegion]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_region(view, component, state)
+        ide_region_tag(view, component) do
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # Render the ide_shell title bar: logo slot, crumbs, branch, links and
+      # the theme toggle.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeTitlebar]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_titlebar(view, component, state)
+        ide_region_tag(view, component) do
+          unless component.children.empty?
+            view.span(class: "sw-ide-titlebar__logo") do
+              component.children.each { |child| child.render(view, state) }
+            end
+          end
+          render_ide_scope(view, component) if component.crumbs.any? || component.branch
+          view.div(class: "sw-ide-titlebar__actions") do
+            component.links.each { |link| render_ide_titlebar_link(view, link) }
+            view.raw(view.safe(IDE_THEME_TOGGLE)) if component.theme_toggle?
+          end
+        end
+      end
+
+      # Render the ide_shell status bar: left items, a spacer, right items.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeStatusbar]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_statusbar(view, component, state)
+        ide_region_tag(view, component) do
+          component.left.each { |item| render_ide_status_item(view, item) }
+          component.children.each { |child| child.render(view, state) }
+          if component.right.any?
+            view.span(class: "sw-ide-statusbar__spacer")
+            component.right.each { |item| render_ide_status_item(view, item) }
+          end
+        end
+      end
+
+      # Render the ide_editor: a tab strip generated from its file sections
+      # (sticky at the top of the scrolling editor), then its children. The
+      # scroll spy in sw-sidebar-toc.js marks the tab of the section on
+      # screen, and every other [data-sw-ide-target] link in the shell.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeEditor]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_editor(view, component, state)
+        sections = component.file_sections
+        inject_asset_script(view, :sidebar_toc, "sw-sidebar-toc.js") if sections.any?
+
+        ide_region_tag(view, component) do
+          if sections.any?
+            view.nav(class: "sw-ide-tabstrip", "aria-label" => "Open files", "data-sw-ide-links" => "") do
+              sections.each do |section|
+                ide_link(view, section, "sw-ide-tab", "sw-ide-tab__icon") do
+                  view.span(class: "sw-ide-tab__label") { section.file_name }
+                end
+              end
+            end
+          end
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # Render one ide_editor file section: its comment line, then children.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeFileSection]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_file_section(view, component, state)
+        attrs = framework_attrs("sw-ide-file-section", component.options).merge(
+          # tabindex: a tab or tree link moves focus here, as the anchor would.
+          id: component.name, "data-file" => component.label, tabindex: "-1"
+        )
+        view.section(**attrs) do
+          view.p(class: "sw-ide-file-section__comment") { "<!-- #{component.comment} -->" } if component.comment
+          component.children.each { |child| child.render(view, state) }
+        end
+      end
+
+      # Render the tab row of an ide_rail_right. Tabs with a hint are dimmed
+      # and carry it as their tooltip and as text for screen readers.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeRailTabs]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_rail_tabs(view, component, _state)
+        view.div(**framework_attrs("sw-ide-rail-tabs", component.options)) do
+          component.tabs.each do |tab|
+            classes = ["sw-ide-rail-tab"]
+            classes << "sw-ide-rail-tab--active" if tab[:active]
+            classes << "sw-ide-rail-tab--dim" if tab[:hint]
+            attrs = { class: classes.join(" ") }
+            attrs["aria-current"] = "true" if tab[:active]
+            attrs[:title] = tab[:hint] if tab[:hint]
+            view.span(**attrs) do
+              view.plain(tab[:label])
+              view.span(class: "sw-ide-visually-hidden") { " (#{tab[:hint]})" } if tab[:hint]
+            end
+          end
+        end
+      end
+
+      # Render an ide_filetree from the file sections of the editor in its
+      # ide_shell: folder rows, then file links the editor's scroll spy keeps
+      # in step.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeFiletree]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_filetree(view, component, _state)
+        attrs = framework_attrs("sw-ide-filetree", component.options).merge(
+          "aria-label" => component.label, "data-sw-ide-links" => "",
+          # Off-canvas, the rail covers the editor: opening a file closes it,
+          # leaving focus with the section the link moves it to.
+          "@click" => "$event.target.closest('a') ? closeRail(false) : null"
+        )
+        view.nav(**attrs) do
+          component.rows.each do |row|
+            style = "--sw-ide-depth: #{row[:depth]}"
+            if row[:folder]
+              view.div(class: "sw-ide-filetree__row sw-ide-filetree__row--folder", style: style) do
+                render_ide_icon(view, :folder, "sw-ide-filetree__icon")
+                view.plain(row[:folder])
+              end
+            else
+              section = row[:section]
+              ide_link(view, section, "sw-ide-filetree__row", "sw-ide-filetree__icon", style: style) do
+                view.plain(section.file_name)
+              end
+            end
+          end
+        end
+      end
+
+      # Render an ide_terminal: a figure whose caption labels a transcript of
+      # command and output lines, one per text line.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeTerminal]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_terminal(view, component, _state)
+        view.figure(**framework_attrs("sw-ide-terminal", component.options)) do
+          view.figcaption(class: "sw-ide-terminal__head") do
+            view.span(class: "sw-ide-terminal__label") { component.label }
+          end
+          view.pre(class: "sw-ide-terminal__screen") do
+            component.lines.each_with_index do |line, index|
+              view.plain("\n") if index.positive?
+              if line[:command]
+                view.span(class: "sw-ide-terminal__line") do
+                  view.span(class: "sw-ide-terminal__prompt", "aria-hidden" => "true") { component.prompt }
+                  view.plain(" ")
+                  view.span(class: "sw-ide-terminal__command") { line[:command] }
+                end
+              else
+                view.span(class: "sw-ide-terminal__output") { line[:output] }
+              end
+            end
+          end
+        end
+      end
+
+      # Render an ide_tree: heading with its action, then one row per node,
+      # indented by depth.
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeTree]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_tree(view, component, _state)
+        attrs = framework_attrs("sw-ide-tree", component.options)
+        attrs["aria-label"] = component.heading if component.heading
+        view.nav(**attrs) do
+          render_ide_tree_heading(view, component) if component.heading
+          view.div(class: "sw-ide-tree__rows") do
+            component.rows.each { |row| render_ide_tree_row(view, row) }
+          end
+        end
+      end
+
+      # Render an ide_note: icon, body, and a dismiss button that hides the
+      # card (and, with remember:, keeps it hidden on later visits).
+      #
+      # @param view [Phlex::HTML] The Phlex view instance
+      # @param component [Components::IdeNote]
+      # @param state [Hash] Current state hash
+      # @return [void] Renders to view
+      def render_ide_note(view, component, state)
+        attrs = framework_attrs("sw-ide-note", component.options).merge(
+          role: "note",
+          "x-data" => ide_note_data(component.remember),
+          "x-show" => "!dismissed",
+          # Hidden until Alpine has read a remembered dismissal, so a
+          # dismissed note never paints on load.
+          "x-cloak" => ""
+        )
+        view.div(**attrs) do
+          render_ide_icon(view, component.icon, "sw-ide-note__icon")
+          view.div(class: "sw-ide-note__body") do
+            component.children.each { |child| child.render(view, state) }
+          end
+          view.button(type: "button", class: "sw-ide-note__dismiss", "@click" => "dismiss()") { component.dismiss_label }
+        end
+      end
+
       # Render a single board card.
       #
       # @param view [Phlex::HTML] The Phlex view instance
@@ -8297,6 +8548,175 @@ end
         CSS
       end
 
+      # =========================================
+      # ide_* helpers (render_ide_shell and friends)
+      # =========================================
+
+      # Shell state: closeRail is a no-op when the rail is already closed, so
+      # Escape elsewhere on the page never steals focus. Escape and the
+      # backdrop return focus to the toggle; opening a file from the rail
+      # passes false, as the file link moves focus itself.
+      IDE_SHELL_DATA = "{ railOpen: false, closeRail(focusToggle = true) { if (!this.railOpen) return; " \
+                       "this.railOpen = false; if (focusToggle) this.$nextTick(() => this.$refs.toggle?.focus()) } }"
+
+      IDE_MENU_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" ' \
+                      'stroke-width="1.5" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg>'
+
+      # A plain onclick, so the toggle works outside any Alpine scope. It
+      # passes the opposite of the current mode: swToggleTheme with no
+      # argument cycles auto -> light -> dark, which leaves one click with no
+      # visible change. Raw HTML because Phlex refuses on* attributes.
+      IDE_THEME_TOGGLE = '<button type="button" class="sw-ide-titlebar__theme-toggle" ' \
+                         'aria-label="Switch between light and dark theme" ' \
+                         "onclick=\"window.swToggleTheme(document.documentElement.classList.contains('dark') ? 'light' : 'dark')\">" \
+                         '<svg class="sw-ide-titlebar__theme-icon sw-ide-titlebar__theme-icon--sun" viewBox="0 0 16 16" ' \
+                         'aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">' \
+                         '<circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1' \
+                         'M3.4 12.6l1-1M11.6 4.4l1-1"/></svg>' \
+                         '<svg class="sw-ide-titlebar__theme-icon sw-ide-titlebar__theme-icon--moon" viewBox="0 0 16 16" ' \
+                         'aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">' \
+                         '<path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/></svg></button>'
+
+      # Framework block class first, then the author's class:/style: appended.
+      def framework_attrs(block_class, options)
+        attrs = { class: [block_class, options[:class]].compact.join(" ") }
+        attrs[:style] = options[:style] if options[:style]
+        attrs
+      end
+
+      # Every ide_shell region: its own element and block class, the author's
+      # class:/style:, and the attributes the region always carries.
+      def ide_region_tag(view, component, &block)
+        attrs = framework_attrs(component.block_class, component.options).merge(component.region_attributes)
+        view.public_send(component.tag, **attrs, &block)
+      end
+
+      # Rendered before the regions so it comes first in the tab order.
+      def render_ide_rail_toggle(view)
+        view.button(
+          type: "button",
+          class: "sw-ide-shell__nav-toggle",
+          "x-ref" => "toggle",
+          "aria-controls" => Components::IdeRailRight::DOM_ID,
+          "aria-label" => "Toggle side panel",
+          ":aria-expanded" => "railOpen.toString()",
+          "@click" => "railOpen = !railOpen"
+        ) do
+          view.raw(view.safe(IDE_MENU_ICON))
+        end
+        view.div(class: "sw-ide-shell__backdrop", "aria-hidden" => "true", "@click" => "closeRail()")
+      end
+
+      def render_ide_scope(view, component)
+        view.div(class: "sw-ide-titlebar__scope") do
+          render_ide_crumbs(view, component.crumbs) if component.crumbs.any?
+          if component.branch
+            view.span(class: "sw-ide-titlebar__branch") do
+              view.raw(view.safe(Components::Ide.svg(:branch, "sw-ide-titlebar__branch-icon")))
+              view.plain(component.branch)
+            end
+          end
+        end
+      end
+
+      def render_ide_crumbs(view, crumbs)
+        view.nav(class: "sw-ide-titlebar__crumbs", "aria-label" => "Breadcrumb") do
+          *trail, current = crumbs
+          trail.each do |crumb|
+            view.span(class: "sw-ide-titlebar__crumb") { crumb }
+            view.span(class: "sw-ide-titlebar__crumb-sep", "aria-hidden" => "true") { "›" }
+          end
+          view.span(class: "sw-ide-titlebar__crumb sw-ide-titlebar__crumb--current", "aria-current" => "page") { current }
+        end
+      end
+
+      # The label stays the accessible name when narrow screens hide it.
+      def render_ide_titlebar_link(view, link)
+        attrs = { class: "sw-ide-titlebar__link", href: link[:href], "aria-label" => link[:label] }
+        attrs.merge!(target: "_blank", rel: "noopener noreferrer") if link[:href].to_s.match?(%r{\Ahttps?://}i)
+        view.a(**attrs) do
+          render_ide_icon(view, link[:icon], "sw-ide-titlebar__link-icon")
+          view.span(class: "sw-ide-titlebar__link-label") { link[:label] }
+        end
+      end
+
+      # A Symbol names one of Components::Ide::ICONS; a String is text or an
+      # image URL, as everywhere else.
+      def render_ide_icon(view, icon, css_class)
+        return unless icon
+
+        if icon.is_a?(Symbol)
+          svg = Components::Ide.svg(icon, css_class) or
+            raise ArgumentError, "unknown ide icon :#{icon} (known: #{Components::Ide::ICONS.keys.join(', ')})"
+          view.raw(view.safe(svg))
+        else
+          view.span("aria-hidden" => "true") { render_icon_hook(view, icon.to_s, css_class) }
+        end
+      end
+
+      # A link to an ide_editor file section that the scroll spy keeps in
+      # step with the editor: an in-page href, so it still works without JS.
+      def ide_link(view, section, css_class, icon_class, **attrs, &block)
+        attrs = attrs.merge(class: css_class, href: "##{section.name}", "data-sw-ide-target" => section.name)
+        view.a(**attrs) do
+          render_ide_icon(view, section.icon, icon_class)
+          block.call
+        end
+      end
+
+      def render_ide_tree_heading(view, component)
+        view.div(class: "sw-ide-tree__heading") do
+          view.span { component.heading }
+          action = component.action
+          next unless action
+
+          attrs = { class: "sw-ide-tree__action", href: action[:href], "aria-label" => action[:label], title: action[:label] }
+          view.a(**attrs) { render_ide_icon(view, action.fetch(:icon, :plus), "sw-ide-tree__icon") }
+        end
+      end
+
+      # A row is a link only when it has an href and is not disabled. A row
+      # with children says whether its branch is open (active:).
+      def render_ide_tree_row(view, row)
+        classes = ["sw-ide-tree__row"]
+        classes << "sw-ide-tree__row--active" if row[:active]
+        classes << "sw-ide-tree__row--selected" if row[:selected]
+        classes << "sw-ide-tree__row--disabled" if row[:disabled]
+        attrs = { class: classes.join(" "), style: "--sw-ide-depth: #{row[:depth]}" }
+        attrs["aria-expanded"] = (!!row[:active]).to_s if row[:parent]
+
+        link = row[:href] && !row[:disabled]
+        if link
+          attrs[:href] = row[:href]
+          attrs["aria-current"] = "page" if row[:selected]
+        end
+
+        view.public_send(link ? :a : :div, **attrs) do
+          render_ide_icon(view, row[:icon], "sw-ide-tree__icon")
+          view.span(class: "sw-ide-tree__label") { row[:label] }
+          view.span(class: "sw-ide-tree__tag") { row[:tag] } if row[:tag]
+        end
+      end
+
+      # Alpine state for ide_note. With a remember key the dismissal is kept
+      # in localStorage; storage that throws (private mode, blocked site
+      # data) just means the note shows again next visit.
+      def ide_note_data(remember)
+        return "{ dismissed: false, dismiss() { this.dismissed = true } }" unless remember
+
+        key = JSON.generate("sw-ide-note:#{remember}")
+        "{ dismissed: (() => { try { return localStorage.getItem(#{key}) === '1' } catch (e) { return false } })(), " \
+          "dismiss() { this.dismissed = true; try { localStorage.setItem(#{key}, '1') } catch (e) {} } }"
+      end
+
+      def render_ide_status_item(view, item)
+        label, href = item.is_a?(Hash) ? item.values_at(:label, :href) : [item, nil]
+        if href
+          view.a(class: "sw-ide-statusbar__item", href: href) { label }
+        else
+          view.span(class: "sw-ide-statusbar__item") { label }
+        end
+      end
     end
   end
 end

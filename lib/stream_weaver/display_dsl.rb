@@ -257,6 +257,62 @@ module StreamWeaver
       components << Components::NavItem.new(label, href: href, active: active, **options)
     end
 
+    # Editor-style full-viewport frame; its regions are the ide_* calls in
+    # the block. Pair with chrome: false and theme: :ide.
+    def ide_shell(**options, &block)
+      with_container(Components::IdeShell.new(**options), &block)
+    end
+
+    def ide_titlebar(**options, &block)
+      with_container(Components::IdeTitlebar.new(**options), &block)
+    end
+
+    def ide_rail_left(**options, &block)
+      with_container(Components::IdeRailLeft.new(**options), &block)
+    end
+
+    def ide_editor(**options, &block)
+      with_container(Components::IdeEditor.new(**options), &block)
+    end
+
+    def ide_rail_right(**options, &block)
+      with_container(Components::IdeRailRight.new(**options), &block)
+    end
+
+    def ide_statusbar(**options, &block)
+      with_container(Components::IdeStatusbar.new(**options), &block)
+    end
+
+    # Projects-style tree for ide_rail_left; see Components::IdeTree.
+    def ide_tree(**options) = components << Components::IdeTree.new(**options)
+
+    # One file of an ide_editor, listed in its tab strip; see
+    # Components::IdeFileSection.
+    def file_section(name, **options, &block)
+      with_container(Components::IdeFileSection.new(name, **options), &block)
+    end
+
+    # Tab row for ide_rail_right; see Components::IdeRailTabs.
+    def ide_rail_tabs(tabs, **options)
+      components << Components::IdeRailTabs.new(tabs, **options)
+    end
+
+    # File tree mirroring the editor's file sections; see
+    # Components::IdeFiletree.
+    def ide_filetree(**options)
+      components << Components::IdeFiletree.new(**options)
+    end
+
+    # Terminal transcript panel; see Components::IdeTerminal.
+    def ide_terminal(**options)
+      components << Components::IdeTerminal.new(**options)
+    end
+
+    # Dismissible note card; see Components::IdeNote.
+    def ide_note(**options, &block)
+      with_container(Components::IdeNote.new(**options), &block)
+    end
+
     # =========================================
     # Visual skills content blocks
     # =========================================

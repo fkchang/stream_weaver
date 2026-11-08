@@ -279,3 +279,71 @@ hooks documented above. A bespoke look is "pretty DSL calls + one CSS
 file targeting these hooks" -- see
 `examples/parity/tyrion_warroom_components.rb` +
 `examples/parity/tyrion_components.css` for the proof.
+
+## IDE shell
+
+The `:ide` theme and the `ide_*` components build a VS Code-style page: a
+title bar, a left rail, an editor made of tabbed sections, a right rail with
+a file tree and a terminal, and a status bar. Every component emits `sw-ide-*`
+hooks, and all of them are styled by one stylesheet, `Components::Ide::CSS`,
+that `render_ide_shell` adds once per page. Colours and fonts come from the
+theme's `--ide-*` tokens (with `--sw-*` fallbacks), so another palette is a
+token change, not a rewrite.
+
+| Component | Element | Hook |
+|---|---|---|
+| `ide_shell` | Grid | `.sw-ide-shell`, `.sw-ide-shell--rail-open`, `.sw-ide-shell__nav-toggle`, `.sw-ide-shell__backdrop` |
+| `ide_titlebar` | Bar | `.sw-ide-titlebar` |
+| `ide_titlebar` | Parts | `__logo`, `__scope`, `__crumbs`, `__crumb`, `__crumb--current`, `__crumb-sep`, `__branch`, `__branch-icon`, `__actions`, `__link`, `__link-icon`, `__link-label`, `__theme-toggle`, `__theme-icon` |
+| `ide_rail_left` | Rail | `.sw-ide-rail-left` |
+| `ide_tree` | Tree | `.sw-ide-tree`, `__heading`, `__action`, `__rows`, `__row`, `__row--active`, `__row--selected`, `__row--disabled`, `__label`, `__tag` |
+| `ide_note` | Card | `.sw-ide-note`, `__icon`, `__body`, `__dismiss` |
+| `ide_editor` | Scroller | `.sw-ide-editor`, `.sw-ide-tabstrip`, `.sw-ide-tab` (`.sw-is-active` while its section is on screen) |
+| `file_section` | Section | `.sw-ide-file-section`, `__comment` (the section is the tab's target) |
+| `ide_rail_right` | Rail | `.sw-ide-rail-right` |
+| `ide_rail_tabs` | Tabs | `.sw-ide-rail-tabs`, `.sw-ide-rail-tab`, `--active`, `--dim` |
+| `ide_filetree` | Tree | `.sw-ide-filetree`, `__row` (`.sw-is-active`), `__icon` |
+| `ide_terminal` | Panel | `.sw-ide-terminal`, `__head`, `__label`, `__screen`, `__line`, `__command`, `__prompt`, `__output` |
+| `ide_statusbar` | Bar | `.sw-ide-statusbar`, `__item`, `__spacer` |
+
+Page content has hooks too, for plain `div`s (there is no component behind
+them): `.sw-ide-hero__title`, `__tagline`, `__lede`, `__meta`, `.sw-ide-pills` /
+`.sw-ide-pill`, `.sw-ide-actions` / `.sw-ide-btn` (`--primary`), `.sw-ide-h2`,
+`.sw-ide-h3`, `.sw-ide-lead`, `.sw-ide-beat`, `.sw-ide-cards` / `.sw-ide-card`
+(`__head`, `__icon`), and `.sw-ide-transcript` (`__panel`, `__panel--page`,
+`__label`, `__body`, `__line`, `__line--out`, `__choices`, `__choice`, `__cta`).
+`.sw-ide-visually-hidden` hides text from sight but not from screen readers.
+Text and phrase components render a `p`, so a wrapper hook needs
+`p { margin: 0; color: inherit }`.
+
+### Composing a shell
+
+```ruby
+App = StreamWeaver::App.new("My page", chrome: false, theme: :ide) do
+  ide_shell do
+    ide_titlebar(crumbs: %w[project page], branch: "main") { text "LOGO" }
+    ide_rail_left { ide_tree(heading: "Pages", rows: [{ label: "Home", icon: :file, href: "/", selected: true }]) }
+    ide_editor do
+      file_section "intro", label: "README.md", icon: :file do
+        header2 "Hello"
+      end
+    end
+    ide_rail_right { ide_rail_tabs([{ label: "Files", active: true }]); ide_filetree }
+    ide_statusbar(left: ["MIT"], right: ["Ruby"])
+  end
+end
+```
+
+- Use `chrome: false`; the shell owns the viewport. The theme toggle in the
+  title bar flips light and dark.
+- Each `file_section` is one tab and one `ide_filetree` row. The last section
+  is sized automatically (`.sw-ide-editor > .sw-ide-file-section:last-child`
+  fills the viewport), so its tab can reach the top of the editor.
+- Below 1180px the right rail goes off-canvas behind a menu button, and below
+  840px the left rail is hidden.
+- The `:ide` palette lives in `--ide-*` tokens on `body.sw-theme-ide`; the dark
+  palette is declared under `html.dark body.sw-theme-ide` (see
+  [the flexibility note](ide-shell-css-flexibility.md) for why).
+
+`examples/ide/streamweaver_landing.rb` is the full page; `examples/ide/shell_demo.rb`
+is the smallest working one.
