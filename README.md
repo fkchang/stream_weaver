@@ -550,7 +550,9 @@ app "Report", theme: :document do
 end
 ```
 
-**Built-in themes:** `:default`, `:dashboard`, `:document`, `:dark`
+**Built-in themes:** `:default`, `:dashboard`, `:document`, `:dark`, `:doc`, `:ide`
+
+`:ide` is a VS Code-style workspace (light and dark) with matching `ide_*` components: a title bar, file tree, tabbed editor sections with a scroll spy, a right rail with a terminal, and a status bar. Run `examples/ide/streamweaver_landing.rb` for a full landing page, or `examples/ide/shell_demo.rb` for the smallest shell; see `docs/theming-hooks.md` for the hooks.
 
 ---
 

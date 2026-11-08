@@ -829,12 +829,52 @@ end
 ```ruby
 app "Title",
   layout: :wide,        # :default, :wide, :full, :fluid
-  theme: :dashboard,    # :default, :dashboard, :document, :doc (artifact-exact editorial; supports dark via data-sw-theme="dark" on <html>)
+  theme: :dashboard,    # :default, :dashboard, :document, :dark, :doc (artifact-exact editorial; supports dark via data-sw-theme="dark" on <html>), :ide (VS Code-style workspace, light and dark; see "IDE Shell")
   strict_ids: true      # raise (dev) / warn (prod) on derived-id collisions -- see "Interactive IDs and keying"
 do
   # ...
 end
 ```
+
+## IDE Shell
+
+The `:ide` theme and the `ide_*` components build a VS Code-style page: title bar, left rail, an editor of tabbed sections, a right rail with a file tree and a terminal, and a status bar. Use `chrome: false`; the shell owns the viewport, and the title bar has a light/dark toggle.
+
+| Call | What it is |
+|---|---|
+| `ide_shell { }` | The grid; holds the five regions below and adds the shared CSS once |
+| `ide_titlebar(crumbs:, branch:, links:) { logo }` | Logo slot, breadcrumbs, branch label, link buttons (`icon:` is an icon name or text), theme toggle |
+| `ide_rail_left { }` | Left rail; typically `ide_tree` and `ide_note` |
+| `ide_tree(heading:, action:, rows:)` | Rows are `{ label:, icon:, href:, active:, selected:, disabled:, tag:, children: }` |
+| `ide_note(dismiss:, remember:) { }` | Dismissible card; `remember:` keeps the dismissal in localStorage |
+| `ide_editor { }` | Scrolling center column; its `file_section`s get a generated tab strip and a scroll spy |
+| `file_section "id", label: "docs/X.md", icon:, comment: { }` | One tab, one file-tree row; the last section fills the viewport so every tab can reach the top |
+| `ide_rail_right { }` | Right rail (off-canvas behind a menu button below 1180px) |
+| `ide_rail_tabs([...])`, `ide_filetree`, `ide_terminal(lines:)` | Tab row, file tree of the editor's sections, fixed terminal transcript |
+| `ide_statusbar(left:, right:)` | Items are strings or `{ label:, href: }` |
+
+```ruby
+app "Page", chrome: false, theme: :ide do
+  ide_shell do
+    ide_titlebar(crumbs: %w[project page], branch: "main") { text "SW" }
+    ide_rail_left do
+      ide_tree(heading: "Pages", rows: [{ label: "Home", icon: :file, href: "/", selected: true }])
+    end
+    ide_editor do
+      file_section("readme", label: "README.md", icon: :file) { header2 "Hello" }
+      file_section("install", label: "INSTALL.md", icon: :package) { text "gem install stream_weaver" }
+    end
+    ide_rail_right do
+      ide_rail_tabs([{ label: "Files", active: true }])
+      ide_filetree
+      ide_terminal(lines: [{ command: "gem install stream_weaver" }, "Successfully installed stream_weaver"])
+    end
+    ide_statusbar(left: ["MIT"], right: ["Ruby"])
+  end
+end.run!
+```
+
+Canvas: a pushed body's `use_theme` is ignored on a live canvas (disc-127), so create the canvas session with theme `:ide` first, then `canvas-push` a bare DSL body. The stylesheet is injected by `ide_shell`, so a push needs no extra CSS. Examples: `examples/ide/shell_demo.rb` (smallest shell), `examples/ide/streamweaver_landing.rb` (full landing page; its body, `streamweaver_landing_body.rb`, is also the canvas push). Hooks: `docs/theming-hooks.md`; flexibility notes: `docs/ide-shell-css-flexibility.md`.
 
 ## Session Persistence
 
