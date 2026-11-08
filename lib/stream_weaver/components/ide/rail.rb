@@ -13,7 +13,7 @@ module StreamWeaver
       attr_reader :tabs, :options
 
       def initialize(tabs, **options)
-        @tabs = Array(tabs).map { |tab| tab.is_a?(Hash) ? tab : { label: tab } }
+        @tabs = Ide.list(tabs).map { |tab| tab.is_a?(Hash) ? tab : { label: tab } }
         @options = options
       end
 
@@ -75,7 +75,7 @@ module StreamWeaver
 
       # @raise [ArgumentError] for a Hash line without a command
       def initialize(lines: [], label: "Terminal", prompt: "❯", **options)
-        @lines = Array(lines).map { |line| normalize(line) }
+        @lines = Ide.list(lines).map { |line| normalize(line) }
         @label = label
         @prompt = prompt
         @options = options

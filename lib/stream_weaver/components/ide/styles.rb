@@ -476,11 +476,8 @@ module StreamWeaver
         .sw-ide-tree__action {
           display: inline-flex;
           padding: 0;
-          border: 0;
           border-radius: 4px;
-          background: transparent;
           color: inherit;
-          cursor: pointer;
         }
         .sw-ide-tree__action:hover,
         .sw-ide-tree__action:focus-visible {
@@ -715,7 +712,7 @@ module StreamWeaver
            =========================================== */
         .sw-ide-editor > .sw-ide-file-section:last-child {
           /* Tall enough that the last tab can scroll to the top. */
-          min-height: calc(100vh - var(--sw-ide-tabstrip-height, 36px));
+          min-height: calc(100vh - var(--sw-ide-tabstrip-height));
         }
         .sw-ide-h2 {
           margin: 0 0 12px;

@@ -1796,9 +1796,7 @@ module StreamWeaver
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_ide_region(view, component, state)
-        attrs = framework_attrs(component.block_class, component.options).merge(component.region_attributes)
-
-        view.public_send(component.tag, **attrs) do
+        ide_region_tag(view, component) do
           component.children.each { |child| child.render(view, state) }
         end
       end
@@ -1811,7 +1809,7 @@ module StreamWeaver
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_ide_titlebar(view, component, state)
-        view.public_send(component.tag, **framework_attrs(component.block_class, component.options)) do
+        ide_region_tag(view, component) do
           unless component.children.empty?
             view.span(class: "sw-ide-titlebar__logo") do
               component.children.each { |child| child.render(view, state) }
@@ -1832,7 +1830,7 @@ module StreamWeaver
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_ide_statusbar(view, component, state)
-        view.public_send(component.tag, **framework_attrs(component.block_class, component.options)) do
+        ide_region_tag(view, component) do
           component.left.each { |item| render_ide_status_item(view, item) }
           component.children.each { |child| child.render(view, state) }
           if component.right.any?
@@ -1855,7 +1853,7 @@ module StreamWeaver
         sections = component.file_sections
         inject_asset_script(view, :sidebar_toc, "sw-sidebar-toc.js") if sections.any?
 
-        view.main(**framework_attrs(component.block_class, component.options)) do
+        ide_region_tag(view, component) do
           if sections.any?
             view.nav(class: "sw-ide-tabstrip", "aria-label" => "Open files", "data-sw-ide-links" => "") do
               sections.each do |section|
@@ -8564,11 +8562,6 @@ end
       IDE_MENU_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" ' \
                       'stroke-width="1.5" stroke-linecap="round"><path d="M2.5 4h11M2.5 8h11M2.5 12h11"/></svg>'
 
-      IDE_BRANCH_ICON = '<svg class="sw-ide-titlebar__branch-icon" viewBox="0 0 16 16" aria-hidden="true" fill="none" ' \
-                        'stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="4.5" cy="3.5" r="1.5"/>' \
-                        '<circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/>' \
-                        '<path d="M4.5 5v6M11.5 7c0 3-7 2-7 4"/></svg>'
-
       # A plain onclick, so the toggle works outside any Alpine scope. It
       # passes the opposite of the current mode: swToggleTheme with no
       # argument cycles auto -> light -> dark, which leaves one click with no
@@ -8589,6 +8582,13 @@ end
         attrs = { class: [block_class, options[:class]].compact.join(" ") }
         attrs[:style] = options[:style] if options[:style]
         attrs
+      end
+
+      # Every ide_shell region: its own element and block class, the author's
+      # class:/style:, and the attributes the region always carries.
+      def ide_region_tag(view, component, &block)
+        attrs = framework_attrs(component.block_class, component.options).merge(component.region_attributes)
+        view.public_send(component.tag, **attrs, &block)
       end
 
       # Rendered before the regions so it comes first in the tab order.
@@ -8612,7 +8612,7 @@ end
           render_ide_crumbs(view, component.crumbs) if component.crumbs.any?
           if component.branch
             view.span(class: "sw-ide-titlebar__branch") do
-              view.raw(view.safe(IDE_BRANCH_ICON))
+              view.raw(view.safe(Components::Ide.svg(:branch, "sw-ide-titlebar__branch-icon")))
               view.plain(component.branch)
             end
           end
@@ -8635,9 +8635,7 @@ end
         attrs = { class: "sw-ide-titlebar__link", href: link[:href], "aria-label" => link[:label] }
         attrs.merge!(target: "_blank", rel: "noopener noreferrer") if link[:href].to_s.match?(%r{\Ahttps?://}i)
         view.a(**attrs) do
-          if link[:icon]
-            view.span("aria-hidden" => "true") { render_icon_hook(view, link[:icon], "sw-ide-titlebar__link-icon") }
-          end
+          render_ide_icon(view, link[:icon], "sw-ide-titlebar__link-icon")
           view.span(class: "sw-ide-titlebar__link-label") { link[:label] }
         end
       end
