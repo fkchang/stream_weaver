@@ -121,10 +121,6 @@ RSpec.describe "Automatic loading indicators (FAC-P1.5)" do
   end
 
   describe "CSS" do
-    # NOTE: StreamWeaver::CSS.full_stylesheet regex-extracts a `raw(safe(<<~CSS))`
-    # pattern that no longer exists in views.rb (the stylesheet now lives in the
-    # `master_theme_css` class method) -- a pre-existing bug independent of this
-    # feature, so these assertions target the actual live source directly.
     it "views.rb's stylesheet includes .htmx-request rules for the swap target" do
       css = StreamWeaver::Views::AppView.master_theme_css
       expect(css).to include("#app-container.htmx-request")
