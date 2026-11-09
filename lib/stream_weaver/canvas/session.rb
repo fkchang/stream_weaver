@@ -2,6 +2,7 @@
 
 require_relative 'protocol'
 require_relative 'notes_panel'
+require_relative '../page_shell'
 
 module StreamWeaver
   module Canvas
@@ -22,6 +23,8 @@ module StreamWeaver
         @name = name
         @layout = VALID_LAYOUTS.include?(layout) ? layout : :fluid
         @theme = theme
+        @page_theme = nil
+        @page_layout = nil
         @state = {}
         @websockets = []
         @created_at = Time.now
@@ -73,6 +76,23 @@ module StreamWeaver
         @source_dir = dir
       end
 
+      # The theme and layout the last good push resolved to (its use_theme /
+      # use_layout, else the create-time ones). Called by Bridge#handle_push
+      # only on a successful render, so a failed push keeps the page it had.
+      def set_look(theme, layout)
+        @page_theme = theme
+        @page_layout = layout
+      end
+
+      # What the page needs for the current push: the same recipe as
+      # canvas-read's Reader.page_for, so the live canvas and canvas-read
+      # agree for the same body (disc-127).
+      # @return [StreamWeaver::PageShell::Page]
+      def page
+        StreamWeaver::PageShell.resolve(nil, theme: @page_theme || @theme, layout: @page_layout || @layout) +
+          StreamWeaver::Assets.of(user_css: @stylesheets)
+      end
+
       # Replace the inline stylesheets carried by the current DSL (stream_weaver-9uk).
       # Replacing rather than accumulating means a re-push with the same (or no)
       # `use_stylesheet` calls never stacks duplicate <style> tags across pushes.
@@ -110,6 +130,7 @@ module StreamWeaver
         @state.clear
         @html = nil
         @stylesheets = []
+        set_look(nil, nil)
         @html_version += 1
         @mutex.synchronize { @pending_toasts.clear }
         broadcast(type: 'reset')

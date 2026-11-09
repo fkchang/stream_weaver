@@ -8,7 +8,7 @@ sw-layout-fluid sw-theme-default
 <style>[css d3037a149254]</style>
 <style>[css 6732a632695e]</style>
 <style>[css 9daf8e10ee84]</style>
-<style>[css 6f95914459c9]</style>
+<style data-sw-push-css>[css 6f95914459c9]</style>
 <script>[script 1fecbf6d34b7, 2232 bytes]</script>
 <script src="https://unpkg.com/htmx.org@2.0.4">
 </script>
@@ -42,4 +42,4 @@ tags. Without this, only a chart present in the page's very first HTML render
 <style>[css 7fa80ed195d5]</style>
 <script>[script ba218c0b8a49, 826 bytes]</script>
 <script>[script d6fb14de67f3, 29347 bytes]</script>
-<script>[script 167a50926404, 7122 bytes]</script>
+<script>[script 9e1e6ee0597b, 8287 bytes]</script>

@@ -12,7 +12,7 @@ module StreamWeaver
       DEFAULT_PORT = 4568
 
       # Result of rendering DSL to HTML
-      RenderResult = Struct.new(:html, :error, :stylesheets, keyword_init: true)
+      RenderResult = Struct.new(:html, :error, :theme, :layout, :stylesheets, keyword_init: true)
 
       attr_reader :sessions, :port
 
@@ -130,30 +130,24 @@ module StreamWeaver
         session = get_session(name)
         return { type: 'error', message: "Session not found: #{name}" } unless session
 
-        # Render DSL to HTML
-        result = render_dsl(dsl, session_name: name)
+        result = render_dsl(dsl, session_name: name, theme: session.theme, layout: session.layout)
+        # A push that fails to evaluate changes nothing: the open page keeps
+        # its content, body class and assets, and the agent gets the error.
+        return { type: 'push_error', message: result.error } if result.error
 
-        # Store in session for polling clients
+        # The page (theme, layout, inline CSS) goes with the HTML, so a
+        # pushed use_theme reaches the open page (disc-127). The DSL and
+        # source_dir are the last good push's too: saving re-skins nothing
+        # (stream_weaver-9uk) and source_dir never desyncs from its DSL
+        # (canvas-doc-location-and-discovery.md).
+        session.set_look(result.theme, result.layout)
+        session.set_stylesheets(result.stylesheets)
         session.set_html(result.html)
-
-        # Broadcast to all websockets (if any connected)
+        session.set_dsl(dsl)
+        session.set_source_dir(source_dir)
         session.broadcast({ type: 'update', html: result.html })
-
-        # Return error info if rendering failed
-        if result.error
-          { type: 'push_error', message: result.error }
-        else
-          # Persist raw DSL, its inline stylesheets, and the directory it was
-          # pushed from only on successful render so a later failed push
-          # doesn't clobber the user's last-good content, re-skin
-          # (stream_weaver-9uk), or desync source_dir from the DSL it's
-          # paired with (canvas-doc-location-and-discovery.md).
-          session.set_dsl(dsl)
-          session.set_stylesheets(result.stylesheets)
-          session.set_source_dir(source_dir)
-          session.doc_pushed!
-          { type: 'push_ok' }
-        end
+        session.doc_pushed!
+        { type: 'push_ok' }
       end
 
       def handle_toast(name, message, variant, duration)
@@ -275,32 +269,27 @@ module StreamWeaver
         { type: 'list', sessions: list_sessions }
       end
 
-      # Render StreamWeaver DSL to HTML
+      # Render StreamWeaver DSL to HTML. The body is evaluated in an App
+      # seeded with the session's theme and layout, so its own use_theme /
+      # use_layout win and the session's stand in otherwise, the same
+      # precedence canvas-read uses (Reader.render_doc).
       # @param dsl [String] DSL code
-      # @param session_name [String] Session name for routing
-      # @return [RenderResult] Result with html and optional error
-      def render_dsl(dsl, session_name:)
-        # Create a mini app to evaluate the DSL
-        mini_app = StreamWeaver::App.new("Canvas")
+      # @return [RenderResult] the html and the theme, layout and inline CSS
+      #   it declared, or an error
+      def render_dsl(dsl, session_name:, theme: :default, layout: :fluid)
+        mini_app = StreamWeaver::App.new("Canvas", theme: theme, layout: layout)
         mini_app.instance_eval(dsl)
 
-        # Create adapter in websocket mode
         adapter = StreamWeaver::Adapter::AlpineJS.new(
           url_prefix: "/canvas/#{session_name}",
           mode: :websocket
         )
-
-        # Render to HTML
-        state = {}
-        html = StreamWeaver::Views::AppContentView.new(mini_app, state, adapter, false,
+        html = StreamWeaver::Views::AppContentView.new(mini_app, {}, adapter, false,
                                                        delivery: StreamWeaver::Delivery::Served.new).call
-        RenderResult.new(html: html, error: nil, stylesheets: mini_app.fragment_css)
-      rescue => e
-        RenderResult.new(
-          html: "<div class='error'>Error: #{e.message}</div>",
-          error: e.message,
-          stylesheets: []
-        )
+        RenderResult.new(html: html, theme: mini_app.theme, layout: mini_app.layout,
+                         stylesheets: mini_app.fragment_css)
+      rescue ScriptError, StandardError => e
+        RenderResult.new(error: e.message)
       end
     end
   end

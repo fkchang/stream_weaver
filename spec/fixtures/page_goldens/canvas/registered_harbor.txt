@@ -42,4 +42,4 @@ tags. Without this, only a chart present in the page's very first HTML render
 <style>[css 7fa80ed195d5]</style>
 <script>[script ba218c0b8a49, 826 bytes]</script>
 <script>[script d6fb14de67f3, 29347 bytes]</script>
-<script>[script 167a50926404, 7122 bytes]</script>
+<script>[script 487f13d6234c, 8324 bytes]</script>

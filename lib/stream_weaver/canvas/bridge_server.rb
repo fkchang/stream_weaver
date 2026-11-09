@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'sinatra/base'
+require 'digest'
 require 'json'
 require 'socket'
 require 'fileutils'
@@ -171,7 +172,8 @@ module StreamWeaver
           version: session.html_version,
           toasts: session.pop_toasts,
           regions: session.regions_newer_than(region_versions_param),
-          annotate: session.annotate?
+          annotate: session.annotate?,
+          page: live_page(session.page)
         }.to_json
       end
 
@@ -350,17 +352,31 @@ module StreamWeaver
         rv.to_h { |name, version| [name.to_s, version.to_s.to_i] }
       end
 
+      # What the open page needs to wear a push without a reload (disc-127):
+      # its body class, its head tags keyed by a digest of the tag (the page
+      # appends a key it has not seen, never one it has), and the push CSS,
+      # which the page replaces as a group so a token edit never stacks.
+      # @param page [StreamWeaver::PageShell::Page]
+      # @return [Hash]
+      def live_page(page)
+        tags = StreamWeaver::PageShell.head(page, StreamWeaver::Delivery::Served.new).asset_tags
+        {
+          body_class: page.body_class,
+          assets: tags.map { |tag| { key: Digest::SHA256.hexdigest(tag)[0, 16], html: tag } },
+          push_css: page.assets.user_css
+        }
+      end
+
       def render_canvas_page(session_name, session)
-        # The pushed DSL's App is gone by now (session.html was rendered at
-        # push time), so the page resolves from the session's theme and
-        # layout, plus the CSS its `use_stylesheet` calls carried
-        # (stream_weaver-9uk): canvas has no route to serve a referenced
-        # asset file across processes, so the bridge inlines the raw content
-        # it was handed. session.stylesheets is already deduped per push.
-        page = StreamWeaver::PageShell.resolve(nil, theme: session.theme, layout: session.layout) +
-               StreamWeaver::Assets.of(user_css: session.stylesheets,
-                                                  body_classes: session.annotate? ? %w[sw-annotate-on] : [])
-        page_head = StreamWeaver::PageShell.head(page, StreamWeaver::Delivery::Served.new)
+        # The last good push's page (Session#page): its theme and layout,
+        # plus the CSS its `use_stylesheet` and `theme_tokens` calls carried
+        # (stream_weaver-9uk). That push CSS is marked so the poll script
+        # can replace it on the next push (#live_page).
+        page = session.page + StreamWeaver::Assets.of(body_classes: session.annotate? ? %w[sw-annotate-on] : [])
+        live = live_page(session.page)
+        page_head = [StreamWeaver::PageShell.head(page.with(assets: page.assets.with(user_css: [])),
+                                                  StreamWeaver::Delivery::Served.new).to_s,
+                     *page.assets.user_css.map { |css| "<style data-sw-push-css>#{css}</style>" }].join("\n")
 
         # Create adapter in websocket mode
         adapter = StreamWeaver::Adapter::AlpineJS.new(
@@ -435,7 +451,8 @@ module StreamWeaver
             <!-- Comment overlay: outside #app-container so the poll swap cannot remove it or an open composer -->
             <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-canvas-notes.js'), encoding: 'UTF-8')}</script>
             <script>
-              #{polling_script(session_name, session.html_version, session.regions_newer_than.transform_values { |r| r[:version] })}
+              #{polling_script(session_name, session.html_version, session.regions_newer_than.transform_values { |r| r[:version] },
+                               live[:assets].map { |a| a[:key] })}
             </script>
           </body>
           </html>
@@ -498,12 +515,15 @@ module StreamWeaver
         }
       end
 
-      def polling_script(session_name, current_version, region_versions = {})
+      def polling_script(session_name, current_version, region_versions = {}, asset_keys = [])
         <<~JS
           (function() {
             let currentVersion = #{current_version};
             let sessionClosed = false;
             const regionVersions = #{region_versions.to_json};
+            // Head tags this page already has, by key (#live_page). Append-only:
+            // a push adds the tags it needs and never re-appends one.
+            const pageAssets = new Set(#{asset_keys.to_json});
             const pollBase = '/canvas/#{session_name}/poll';
             const container = document.getElementById('app-container');
             const closedHtml = '<div style="text-align:center;padding:60px;color:#374151;"><div style="font-size:3rem;margin-bottom:16px;">✓</div><h2 style="margin:0 0 12px">Session Complete</h2><p style="color:#666;margin:0">This StreamWeaver canvas session has closed.</p></div>';
@@ -549,6 +569,29 @@ module StreamWeaver
               if (toast.duration > 0) {
                 setTimeout(() => el.remove(), toast.duration);
               }
+            }
+
+            // Wear the pushed page: its body class (keeping annotate mode,
+            // which the page owns), the head tags it lacks, and its push CSS
+            // in place of the last push's, after the appended tags so theme
+            // tokens still follow the theme's own CSS.
+            function applyPage(page) {
+              if (!page) return;
+              const annotating = document.body.classList.contains('sw-annotate-on');
+              document.body.className = page.body_class;
+              document.body.classList.toggle('sw-annotate-on', annotating);
+              page.assets.forEach(asset => {
+                if (pageAssets.has(asset.key)) return;
+                pageAssets.add(asset.key);
+                document.head.insertAdjacentHTML('beforeend', asset.html);
+              });
+              document.querySelectorAll('style[data-sw-push-css]').forEach(el => el.remove());
+              page.push_css.forEach(css => {
+                const el = document.createElement('style');
+                el.setAttribute('data-sw-push-css', '');
+                el.textContent = css;
+                document.head.appendChild(el);
+              });
             }
 
             function escapeHtml(text) {
@@ -610,6 +653,7 @@ module StreamWeaver
                   const wasNearBottom = (window.innerHeight + window.scrollY) >=
                     (document.documentElement.scrollHeight - 150);
 
+                  applyPage(data.page);
                   container.innerHTML = data.html;
 
                   // Scroll-to-top hint (round-9 UAT): a push that reshapes

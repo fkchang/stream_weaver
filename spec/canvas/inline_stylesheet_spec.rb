@@ -104,7 +104,7 @@ RSpec.describe 'Canvas inline stylesheets (stream_weaver-9uk)' do
       )
       get '/canvas/styled'
       expect(last_response.status).to eq(200)
-      expect(last_response.body).to include('<style>.sw-bespoke-card { border: 4px solid hotpink; }</style>')
+      expect(last_response.body).to include('<style data-sw-push-css>.sw-bespoke-card { border: 4px solid hotpink; }</style>')
     end
 
     it 're-pushing the same DSL does not stack duplicate <style> tags' do

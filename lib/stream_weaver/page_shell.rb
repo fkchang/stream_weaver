@@ -674,19 +674,24 @@ module StreamWeaver
          stylesheets, user_css, scripts].reject(&:empty?).join("\n")
       end
 
+      # The page's own tags (fonts, theme and component CSS, stylesheets),
+      # one string each, for a live canvas that appends the ones it lacks
+      # after a push. Scripts are left out: one appended later would not run
+      # in page order. User CSS is left out: it changes with every push, so
+      # the canvas replaces it instead of appending.
+      # @return [Array<String>]
+      def asset_tags
+        [*font_tags, framework_css, *stylesheet_tags].reject(&:empty?)
+      end
+
       # One Google Fonts stylesheet for every declared Google font, then an
       # @font-face block for every self-hosted one ({ family:, src: }).
       def fonts
-        href = StreamWeaver::Fonts.google_fonts_href(@assets.fonts)
-        faces = StreamWeaver::Fonts.font_face_css(@assets.fonts, @delivery)
-        tags = []
-        tags << Delivery.tag(href, :stylesheet) if href
-        tags << "<style>#{faces}</style>" unless faces.empty?
-        tags.join("\n")
+        font_tags.join("\n")
       end
 
       def stylesheets
-        @assets.stylesheets.map { |path| @delivery.ref(path, :stylesheet) }.join("\n")
+        stylesheet_tags.join("\n")
       end
 
       # Component CSS, one layered block.
@@ -702,6 +707,21 @@ module StreamWeaver
 
       def scripts
         @assets.scripts.map { |path| @delivery.ref(path, :script) }.join("\n")
+      end
+
+      private
+
+      def font_tags
+        href = StreamWeaver::Fonts.google_fonts_href(@assets.fonts)
+        faces = StreamWeaver::Fonts.font_face_css(@assets.fonts, @delivery)
+        tags = []
+        tags << Delivery.tag(href, :stylesheet) if href
+        tags << "<style>#{faces}</style>" unless faces.empty?
+        tags
+      end
+
+      def stylesheet_tags
+        @assets.stylesheets.map { |path| @delivery.ref(path, :stylesheet) }
       end
     end
   end
