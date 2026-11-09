@@ -531,8 +531,8 @@ its components' assets: both are collected during the render.
 
 | To add | Touch exactly |
 |---|---|
-| A built-in theme | One `register_theme` file |
-| A user or gem theme | The same call, with `dark:`, `fonts:`, `css:` |
+| A user or gem theme | One `register_theme` call, with `dark:`, `fonts:`, `css:` |
+| A built-in theme | Two places: a `register_built_in_theme` line in `theme/built_ins.rb` (label, fonts) and its hand-tuned `body.sw-theme-<name>` block in `Views::AppView.master_theme_css`; the golden gate picks it up from `StreamWeaver.built_in_themes` |
 | A DSL token override | `theme_tokens` (or `theme_overrides:`) |
 | Component CSS, scripts or fonts | The `css`, `css_path`, `js_path`, `font` macros on the class; they reach every host |
 | An output host | One `Delivery` class plus a call to `PageShell.resolve` and `PageShell.head` |

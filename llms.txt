@@ -906,7 +906,8 @@ theme_tokens color_primary: "#a21caf", dark: { color_bg: "#120712" }
 
 | To add | Touch |
 |---|---|
-| A built-in or user theme | One `register_theme` call |
+| A user or gem theme | One `register_theme` call |
+| A built-in theme | A line in `theme/built_ins.rb` plus its CSS block in `Views::AppView.master_theme_css` |
 | A DSL token override | `theme_tokens` / `theme_overrides:` |
 | Component CSS, scripts, fonts | `css`, `css_path`, `js_path`, `font` macros |
 | An output host | One `Delivery` plus `PageShell.resolve` and `PageShell.head` |

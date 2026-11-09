@@ -15,7 +15,9 @@ require 'stream_weaver/opal/builder'
 # document order. spec/page_goldens_spec.rb compares the result with the
 # files under spec/fixtures/page_goldens; UPDATE_GOLDENS=1 rewrites them.
 module PageGoldens
-  THEMES = %i[default dashboard document dark doc ide].freeze
+  # Every built-in theme, in registration order (theme/built_ins.rb), so a new
+  # built-in is gated without editing this file.
+  THEMES = StreamWeaver.built_in_themes.freeze
   HOSTS  = %i[standalone canvas reader export opal live].freeze
   # Hosts whose body is filled in the browser, so the probe's text is not in the HTML.
   BROWSER_FILLED = %i[opal live].freeze
