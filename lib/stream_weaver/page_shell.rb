@@ -635,30 +635,33 @@ module StreamWeaver
         @assets = assets
         @delivery = delivery
       end
-    
+
       # One Google Fonts stylesheet for every declared Google font, then an
       # @font-face block for every self-hosted one ({ family:, src: }).
       def fonts
         href = StreamWeaver::Fonts.google_fonts_href(@assets.fonts)
         faces = StreamWeaver::Fonts.font_face_css(@assets.fonts, @delivery)
-        [href && Delivery.tag(href, :stylesheet), !faces.empty? && "<style>#{faces}</style>"].select { |t| t }.join("\n")
+        tags = []
+        tags << Delivery.tag(href, :stylesheet) if href
+        tags << "<style>#{faces}</style>" unless faces.empty?
+        tags.join("\n")
       end
-    
+
       def stylesheets
         @assets.stylesheets.map { |path| @delivery.ref(path, :stylesheet) }.join("\n")
       end
-    
+
       # Component CSS, one layered block.
       def framework_css
         return "" if @assets.framework_css.empty?
-    
+
         "<style>#{StreamWeaver::CSS.layer_wrap(@assets.framework_css.join("\n"))}</style>"
       end
-    
+
       def user_css
         PageShell.user_css_html(inline_stylesheets: @assets.user_css)
       end
-    
+
       def scripts
         @assets.scripts.map { |path| @delivery.ref(path, :script) }.join("\n")
       end
