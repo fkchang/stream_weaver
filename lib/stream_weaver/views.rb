@@ -32,7 +32,14 @@ module StreamWeaver
         # (stream_weaver-1lo). Captured rather than appended directly so it
         # can be replayed into <body> after <head> is emitted.
         body_html = capture { render_page_body }
-        page = StreamWeaver::PageShell.resolve(@app, theme: effective_theme, components: component_css_registry)
+        # Divergence (follow-up): canvas, reader and export emit one head in
+        # one order (PageShell::Head#to_s). This view still places each bucket
+        # itself below, its theme stylesheets come after the layer pin and its
+        # custom-theme CSS stays in <body> (render_custom_theme_css, hence
+        # theme_css: false); moving it onto Head#to_s is a stated golden diff
+        # for a later story.
+        page = StreamWeaver::PageShell.resolve(@app, theme: effective_theme, components: component_css_registry,
+                                               theme_css: false)
         page_head = StreamWeaver::PageShell.head(page, Delivery::Served.new)
 
         doctype

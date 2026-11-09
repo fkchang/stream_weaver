@@ -129,6 +129,24 @@ RSpec.describe StreamWeaver::PageShell do
       expect(head.scripts).to eq('<script src="https://example.test/a.js"></script>')
     end
 
+    it "emits the whole head in one order: pin, fonts, framework CSS, stylesheets, user CSS, scripts" do
+      html = head.to_s(extra_layers: %w[chrome])
+      marks = ["@layer stream-weaver, chrome;", "family=Inter", "shadcn Token Layer", ".c{}", "a.css", ".u{}", "a.js"]
+      positions = marks.map { |mark| html.index(mark) }
+      expect(positions).to all(be_a(Integer))
+      expect(positions).to eq(positions.sort)
+    end
+
+    it "carries a registered custom theme's CSS in the framework layer" do
+      StreamWeaver.register_theme(:page_shell_spec_theme, { color_primary: "#123456" })
+      page = described_class.resolve(nil, theme: :page_shell_spec_theme, layout: nil)
+      expect(page.assets.framework_css).to eq([StreamWeaver.get_theme(:page_shell_spec_theme).to_css])
+      expect(described_class.resolve(nil, theme: :page_shell_spec_theme, layout: nil, theme_css: false)
+               .assets.framework_css).to eq([])
+    ensure
+      StreamWeaver.themes.delete(:page_shell_spec_theme)
+    end
+
     it "emits nothing for empty buckets" do
       empty = described_class.head(StreamWeaver::PageShell::Page.new(theme: nil, layout: nil,
                                                                      assets: StreamWeaver::PageShell::Assets.of),

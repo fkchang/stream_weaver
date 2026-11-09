@@ -44,21 +44,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>canvas-read</title>
-  <%# The theme-declared fonts and stylesheets. Only the head of the first
-      doc opened carries them: a doc swapped in later keeps this head. %>
-  <%= page_head.stylesheets %>
-  <%= page_head.fonts %>
-
-  <%# Framework CSS, identical ordering to the canvas (PageShell is the single
-      source of truth): layer pin, then CANVAS_CSS / master_theme_css /
-      visual_skills_css all inside @layer stream-weaver. The reader's own
+  <%# The page's head, in the order the canvas and export use (PageShell::Head#to_s):
+      layer pin, fonts, framework CSS, theme stylesheets, the doc's own
+      use_stylesheet CSS (unlayered, so it wins everything). The reader's own
       chrome gets a later layer so it can't be outranked by, nor bleed into,
-      framework rules. %>
-  <%= StreamWeaver::PageShell.framework_css_html(extra_layers: %w[sw-reader-chrome]) %>
-
-  <%# The doc's own use_stylesheet CSS -- unlayered, so it wins everything.
-      Nothing to inline with no doc open yet (a bare Browse listing). %>
-  <%= page_head.user_css %>
+      framework rules. Only the head of the first doc opened carries its
+      theme's fonts: a doc swapped in later keeps this head. %>
+  <%= page_head.to_s(extra_layers: %w[sw-reader-chrome]) %>
 
   <%# Reader chrome. BOTH layered and #sw-reader-*-scoped, on purpose:
       scoping alone would let CANVAS_CSS/master_theme_css's bare h1..h6/p/a

@@ -298,27 +298,11 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
       # reader use (PageShell is the single source of truth): framework layer,
       # then the app's registered theme, then unlayered user CSS last so it
       # outranks everything.
+      # The page's head (PageShell::Head#to_s): layer pin, fonts, framework
+      # CSS and a registered custom theme's, stylesheets, the app's unlayered
+      # CSS last, its scripts.
       def css_html
-        parts = [StreamWeaver::PageShell.framework_css_html]
-
-        # Registered custom themes are NOT part of master_theme_css -- AppView
-        # emits them separately via render_custom_theme_css, and so must we.
-        if (theme = custom_theme)
-          parts << "<style>#{StreamWeaver::CSS.layer_wrap(theme.to_css)}</style>"
-        end
-
-        parts << page_head.user_css
-        parts.join("\n")
-      end
-
-      # The app's and its theme's head tags (stylesheets, fonts, user CSS).
-      def page_head
-        StreamWeaver::PageShell.head(@page, StreamWeaver::Delivery::Inline.new)
-      end
-
-      def custom_theme
-        theme = @app.theme && StreamWeaver.get_theme(@app.theme)
-        theme unless theme&.built_in?
+        StreamWeaver::PageShell.head(@page, StreamWeaver::Delivery::Inline.new).to_s
       end
 
       # Collect CDN script URLs based on what's actually in the rendered
@@ -370,11 +354,6 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
         if components_include?(Components::CodeBlock)
           scripts << { src: CDN_PRISMJS_JS }
           scripts << { src: CDN_PRISMJS_AUTOLOADER }
-        end
-
-        # Custom scripts from the app
-        @page.assets.scripts.each do |src|
-          scripts << { src: src }
         end
 
         scripts
@@ -455,8 +434,6 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             #{style_tags}
-            #{page_head.stylesheets}
-            #{page_head.fonts}
             #{script_tags}
           #{css_html}
           </head>

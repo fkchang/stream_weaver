@@ -507,13 +507,18 @@ module StreamWeaver
       #   to call this).
       # @return [String] HTML <style> tags
       def framework_css_html(extra_layers: [])
-        layers = [StreamWeaver::CSS::LAYER_NAME, *extra_layers].join(", ")
-        <<~HTML
-          <style>@layer #{layers};</style>
-          <style>#{StreamWeaver::CSS.layer_wrap(CANVAS_CSS)}</style>
-          <style>#{StreamWeaver::CSS.layer_wrap(StreamWeaver::Views::AppView.master_theme_css)}</style>
-          <style>#{StreamWeaver::CSS.layer_wrap(StreamWeaver::Theme.visual_skills_css)}</style>
-        HTML
+        "#{layer_pin_html(extra_layers)}\n#{framework_blocks_html}"
+      end
+
+      # The <style> that fixes the cascade layer order, before any framework CSS.
+      def layer_pin_html(extra_layers = [])
+        "<style>@layer #{[StreamWeaver::CSS::LAYER_NAME, *extra_layers].join(', ')};</style>"
+      end
+
+      # CANVAS_CSS, master_theme_css and visual_skills_css, each in the framework layer.
+      def framework_blocks_html
+        [CANVAS_CSS, StreamWeaver::Views::AppView.master_theme_css, StreamWeaver::Theme.visual_skills_css]
+          .map { |css| "<style>#{StreamWeaver::CSS.layer_wrap(css)}</style>" }.join("\n") + "\n"
       end
 
       # User-authored inline CSS, always UNLAYERED so it outranks every
@@ -542,9 +547,14 @@ module StreamWeaver
       #   that block (the exporter) passes nil and keeps sw-layout-*.
       # @param components [Hash{Symbol=>String}] component CSS registered
       #   during the body render, keyed so each block appears once
+      # @param theme_css [Boolean] false leaves a registered custom theme's
+      #   CSS out of framework_css, for the standalone view, which still
+      #   emits it in <body> (AppView#render_custom_theme_css) until it moves
+      #   onto Head#to_s
       # @return [Page]
-      def resolve(app, theme:, layout: app&.layout, layout_entry: app&.layout_entry, components: {})
-        page_assets = theme_assets(theme) + layout_assets(layout_entry, layout) +
+      def resolve(app, theme:, layout: app&.layout, layout_entry: app&.layout_entry, components: {},
+                  theme_css: true)
+        page_assets = theme_assets(theme, css: theme_css) + layout_assets(layout_entry, layout) +
                       Assets.of(body_classes: theme ? ["sw-theme-#{theme}"] : [])
         page_assets = app_assets(app) + page_assets if app
         Page.new(theme: theme, layout: layout,
@@ -580,8 +590,12 @@ module StreamWeaver
 
       private
 
-      def theme_assets(theme)
-        Assets.of(fonts: StreamWeaver.theme_fonts(theme), stylesheets: StreamWeaver.theme_stylesheets(theme))
+      # A registered custom theme's CSS (a built-in's is in master_theme_css).
+      def theme_assets(theme, css: true)
+        custom = theme && StreamWeaver.get_theme(theme)
+        custom_css = css && custom && !custom.built_in? ? [custom.to_css] : []
+        Assets.of(fonts: StreamWeaver.theme_fonts(theme), stylesheets: StreamWeaver.theme_stylesheets(theme),
+                  framework_css: custom_css)
       end
 
       # An exclusive layout names its own body classes instead of sw-layout-*.
@@ -625,10 +639,9 @@ module StreamWeaver
       end
     end
 
-    # A page's head tags, one method per Assets bucket. Each host places
-    # them in its own head: the hosts' tag orders differ, and the cascade
-    # depends on order, so the shared part is what each tag is, not where
-    # a host puts it.
+    # A page's head tags. #to_s is the whole asset part of a head in one
+    # fixed order (canvas, reader, export); the per-bucket methods remain
+    # for the standalone view, which still places them itself.
     class Head
       # @param assets [Assets]
       # @param delivery [Delivery::Served, Delivery::Inline, Delivery::Copied]
@@ -636,6 +649,17 @@ module StreamWeaver
       def initialize(assets, delivery)
         @assets = assets
         @delivery = delivery
+      end
+
+      # Layer pin, fonts, framework CSS (the shared blocks, then the theme's
+      # and the components'), theme and app stylesheets, user CSS, scripts.
+      #
+      # @param extra_layers [Array<String>] layers pinned after the
+      #   framework's (the reader's chrome)
+      # @return [String] HTML
+      def to_s(extra_layers: [])
+        [PageShell.layer_pin_html(extra_layers), fonts, PageShell.framework_blocks_html, framework_css,
+         stylesheets, user_css, scripts].reject(&:empty?).join("\n")
       end
 
       # One Google Fonts stylesheet for every declared Google font, then an

@@ -4,12 +4,12 @@ sw-layout-fluid sw-theme-ide
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>StreamWeaver Canvas: probe</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.8/index.css">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap">
 <style>[css 2434f41c5b7f]</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap">
 <style>[css d3037a149254]</style>
 <style>[css 6073a2c531a5]</style>
 <style>[css 9daf8e10ee84]</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.8/index.css">
 <script>[script 1fecbf6d34b7, 2232 bytes]</script>
 <script src="https://unpkg.com/htmx.org@2.0.4">
 </script>

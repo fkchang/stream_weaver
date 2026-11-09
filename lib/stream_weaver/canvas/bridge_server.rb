@@ -401,10 +401,7 @@ module StreamWeaver
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>StreamWeaver Canvas: #{session_name}</title>
-            #{page_head.stylesheets}
-            #{page_head.fonts}
-            #{StreamWeaver::PageShell.framework_css_html}
-            #{page_head.user_css}
+            #{page_head}
             <script>#{StreamWeaver::Theme::AutoMode.inline_script}</script>
             #{adapter.cdn_scripts.join("\n")}
             <!-- Chart.js for charts -->
