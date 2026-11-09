@@ -62,6 +62,20 @@ module StreamWeaver
         [css_strings, css_paths, js_paths]
       end
 
+      # CSS declared with the css class macro by every registered component
+      # class: the framework's own (StreamWeaver::Components, by name) and
+      # those registered with StreamWeaver.register_component. For a host
+      # with no component tree to walk: an Opal build compiles a file, so it
+      # ships them all.
+      #
+      # @return [Array<String>]
+      def every_class_css
+        framework = Components.constants.sort.map { |name| Components.const_get(name) }
+                              .select { |c| c.is_a?(Class) && c < Components::Base }
+        registered = ComponentRegistry.all.values.map { |entry| entry[:class] }
+        (framework + registered).uniq.flat_map(&:component_css_strings).uniq
+      end
+
       def reset!
         @file_registry.clear
       end

@@ -105,6 +105,9 @@ module StreamWeaver
         css = StreamWeaver::CSS.full_stylesheet
         css += "\n" + StreamWeaver::Theme.visual_skills_css
         css += "\n" + StreamWeaver::CSS.animation_css
+        # Unlayered, as the standalone page emits css-macro CSS (spec/css_layer_spec.rb).
+        component_css = StreamWeaver::ComponentAssets.every_class_css
+        css += "\n" + component_css.join("\n") if component_css.any?
         if @theme
           unless StreamWeaver::Theme::Presets.get(@theme.to_sym)
             warn "[OpalBuilder] Unknown theme preset: #{@theme}"
@@ -131,6 +134,7 @@ module StreamWeaver
             replay_js: local_asset("sw-replay.js"),
             theme_css: File.exist?(output_path("sw-theme.css")) ? "sw-theme.css" : nil,
             google_fonts_url: google_fonts_url_for_build,
+            theme_links_html: theme_links_html,
             body_theme: page.body_class,
             dark_mode_script: StreamWeaver::Theme::AutoMode.inline_script
           ))
@@ -144,6 +148,11 @@ module StreamWeaver
         @page ||= StreamWeaver::PageShell::Page.new(
           theme: @theme, layout: nil, assets: StreamWeaver::PageShell::Assets.of(body_classes: %w[sw-theme-default])
         ) + StreamWeaver::PageShell.resolve(nil, theme: @theme, layout: nil).assets
+      end
+
+      def theme_links_html
+        head = StreamWeaver::PageShell.head(page)
+        [head.stylesheets, head.fonts].reject(&:empty?).join("\n")
       end
 
       def google_fonts_url_for_build
