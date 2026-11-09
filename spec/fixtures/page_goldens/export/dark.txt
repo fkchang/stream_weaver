@@ -7,9 +7,12 @@ sw-theme-dark sw-layout-default
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer>
+</script>
 <style>[css 2434f41c5b7f]</style>
 <style>[css d3037a149254]</style>
 <style>[css 6073a2c531a5]</style>
 <style>[css 9daf8e10ee84]</style>
-# body <style> blocks, in document order
+# body <link>, <script> and <style> tags, in document order
 <style>[css c0406a386c36]</style>
+<style>[css 30f5c5254d95]</style>

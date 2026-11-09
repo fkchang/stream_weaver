@@ -14,7 +14,7 @@ sw-layout-default sw-theme-default
 <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer>
 </script>
 <script>[script 020c0d797c46, 6132 bytes]</script>
-<style>[css c0406a386c36]</style>
+<style>[css 9b3017e79cb5]</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap">
@@ -22,5 +22,5 @@ sw-layout-default sw-theme-default
 <style>[css 9daf8e10ee84]</style>
 <style>[css cfabc6abeb74]</style>
 <script>[script 1fecbf6d34b7, 2232 bytes]</script>
-# body <style> blocks, in document order
+# body <link>, <script> and <style> tags, in document order
 

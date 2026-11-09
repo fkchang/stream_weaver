@@ -24,5 +24,9 @@ sw-theme-default sw-theme-dark
 </script>
 <script src="diff.min.js">
 </script>
-# body <style> blocks, in document order
-
+# body <link>, <script> and <style> tags, in document order
+<script src="app.js">
+<script>[script f0d51e3e51e0, 330 bytes]</script>
+<script>[script 0c6ce73f94d8, 99 bytes]</script>
+# build warnings
+[OpalBuilder] Unknown theme preset: dark

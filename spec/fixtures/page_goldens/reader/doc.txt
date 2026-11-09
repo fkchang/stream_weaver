@@ -21,5 +21,8 @@ sw-theme-doc sw-layout-fluid sw-reader
 <script>[script 7f14c1745be3, 29571 bytes]</script>
 <script>[script 626d1f8fabb5, 6629 bytes]</script>
 <script>[script 9c072ae7f4a0, 55 bytes]</script>
-# body <style> blocks, in document order
+# body <link>, <script> and <style> tags, in document order
+<script type="application/json" id="sw-state-data">[script 4f82429f09a6, 17 bytes]</script>
 <style>[css c0406a386c36]</style>
+<style>[css 30f5c5254d95]</style>
+<script>[script aa9b6f159f3f, 7360 bytes]</script>

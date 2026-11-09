@@ -16,7 +16,9 @@ require 'stream_weaver/opal/builder'
 # files under spec/fixtures/page_goldens; UPDATE_GOLDENS=1 rewrites them.
 module PageGoldens
   THEMES = %i[default dashboard document dark doc ide].freeze
-  HOSTS  = %i[standalone canvas reader export opal].freeze
+  HOSTS  = %i[standalone canvas reader export opal live].freeze
+  # Hosts whose body is filled in the browser, so the probe's text is not in the HTML.
+  BROWSER_FILLED = %i[opal live].freeze
 
   # Hosts, or parts of a host, that cannot be rendered without a browser or
   # a full compile. Listed here (and printed by the spec) so nothing is
@@ -25,9 +27,12 @@ module PageGoldens
     'opal app.js' => 'compiling app.js needs the opal compiler and takes seconds per theme; ' \
                      'the head, body class and sw-theme.css are produced by the builder steps ' \
                      'that run without it (write_theme_css, write_index_html), so those are recorded',
-    'opal runtime theme' => 'a theme the Opal app applies at runtime happens in the browser; the ' \
-                            'build-time body class comes from --theme, which the builder treats as ' \
-                            'a Theme::Presets name (none of the six built-ins is one)',
+    'opal runtime theme' => 'Opal ignores the six built-in themes: --theme takes a Theme::Presets name and ' \
+                            'none of the six is one, so the Opal CSS is the same for every theme and only ' \
+                            'the body class varies (the builder warning is recorded in each golden); a ' \
+                            'theme the app applies at runtime happens in the browser',
+    'live body content' => 'the /live page fills #app-container in the browser by polling; its head, ' \
+                           'body class and body asset tags are recorded',
     'extension head' => 'the extension page is assembled in the browser by sandbox.js; only its ' \
                         'framework CSS input, CSS.base_stylesheet (bin/build_extension), is recorded'
   }.freeze
@@ -37,6 +42,11 @@ module PageGoldens
     button "Go"
     table [{ "name" => "alpha", "value" => 1 }]
     callout "Heads up", variant: :info
+    ide_shell do
+      ide_titlebar { text "probe" }
+      ide_editor { text "editor" }
+      ide_statusbar { text "status" }
+    end
   RUBY
 
   ROOT = File.expand_path('../fixtures/page_goldens', __dir__)
@@ -50,8 +60,9 @@ module PageGoldens
     HOSTS.each do |host|
       THEMES.each do |theme|
         html = send("render_#{host}", theme)
-        # Opal renders its body in the browser; every other host must show the probe.
-        raise "#{host}/#{theme} did not render the probe" unless host == :opal || html.include?('Heads up')
+        unless BROWSER_FILLED.include?(host) || (html.include?('Heads up') && html.include?('sw-ide-shell'))
+          raise "#{host}/#{theme} did not render the probe"
+        end
 
         pages["#{host}/#{theme}.txt"] = record(html)
       end
@@ -87,7 +98,8 @@ module PageGoldens
       previous_list = reader.file_list
       reader.configure_files!(reader::FileList.build([dir]))
       reader.configure_defaults!(theme: theme)
-      rack_get(reader, '/?file=0')
+      # The doc's own path reaches the body (Save-as-doc widget); pin it.
+      rack_get(reader, '/?file=0').gsub(File.realpath(dir), '<tmpdir>').gsub(dir, '<tmpdir>')
     ensure
       reader.configure_files!(previous_list)
       reader.configure_defaults!
@@ -98,9 +110,21 @@ module PageGoldens
     StreamWeaver::Export::HtmlExporter.from_dsl(PROBE_DSL, theme: theme).to_html
   end
 
+  # The /live session page (Service), which takes its theme from ?theme=.
+  def render_live(theme)
+    rack_get(StreamWeaver::Service, "/live/page-probe?theme=#{theme}")
+  ensure
+    StreamWeaver::Service.live_sessions.delete('page-probe')
+  end
+
   # Runs every OpalBuilder step except the compile (see EXCLUSIONS), with
   # mermaid pinned to a local stub so the head does not depend on whether
   # vendor/js/mermaid.min.js happens to be present on this machine.
+  #
+  # OpalBuilder has no public build without the compile, so this depends on
+  # its internals: the @mermaid_source_path ivar and the private steps
+  # copy_morphdom, copy_marked, copy_browser_assets, write_theme_css and
+  # write_index_html (opal/builder.rb). Its warnings are recorded, not hidden.
   def render_opal(theme)
     Dir.mktmpdir do |dir|
       app_file = File.join(dir, 'page_probe.rb')
@@ -111,34 +135,40 @@ module PageGoldens
       builder = StreamWeaver::Opal::OpalBuilder.new(app_file, output_dir: out, theme: theme)
       builder.instance_variable_set(:@mermaid_source_path, mermaid_stub)
       FileUtils.mkdir_p(out)
-      silence_warnings do
+      warnings = capture_warnings do
         %i[copy_morphdom copy_marked copy_browser_assets write_theme_css write_index_html]
           .each { |step| builder.send(step) }
       end
       html = File.read(File.join(out, 'index.html'))
       # The linked sw-theme.css is the page's CSS; record it as a head block.
-      html.sub('<link rel="stylesheet" href="sw-theme.css">',
-               "<style>#{File.read(File.join(out, 'sw-theme.css'))}</style>")
+      html.sub!('<link rel="stylesheet" href="sw-theme.css">',
+                "<style>#{File.read(File.join(out, 'sw-theme.css'))}</style>") or
+        raise 'opal index.html no longer links sw-theme.css; update PageGoldens.render_opal'
+      [html, warnings]
     end
   end
 
   # --- recording -----------------------------------------------------------
 
-  def record(html)
+  ASSET_TAG = /\A<(link|script|style)\b/
+
+  # @param rendered [String, Array(String, String)] the page, or [page, build warnings]
+  def record(rendered)
+    html, warnings = rendered
     head = html[%r{<head>(.*?)</head>}m, 1] or raise "no <head> in render"
     body = html.split('</head>', 2).last
     body_class = body[/<body[^>]*\bclass="([^"]*)"/, 1].to_s
-    head_text, = placeholders(head)
-    _, body_css = placeholders(body)
+    body_assets = placeholders(body).lines.map(&:chomp).grep(ASSET_TAG)
 
-    <<~TEXT
+    text = <<~TEXT
       # body class
       #{body_class}
       # head (one tag per line; <style> and inline <script> bodies are replaced by digests)
-      #{head_text}
-      # body <style> blocks, in document order
-      #{body_css.join("\n")}
+      #{placeholders(head)}
+      # body <link>, <script> and <style> tags, in document order
+      #{body_assets.join("\n")}
     TEXT
+    warnings ? "#{text}# build warnings\n#{warnings}" : text
   end
 
   def record_css_only(css)
@@ -151,21 +181,19 @@ module PageGoldens
 
   # Replaces each <style> body with "[css <digest>]" (content kept in the
   # store) and each inline <script> body with "[script <digest>, N bytes]".
-  # Returns [one-tag-per-line text, list of css placeholders in order].
+  # Returns the fragment one tag per line.
   def placeholders(fragment)
-    css = []
     text = fragment.gsub(TOKEN) do
       style_tag, style_body, script_tag, script_body = Regexp.last_match.captures
       if style_tag
-        "#{style_tag}#{store(style_body)}</style>".tap { |tag| css << tag }
+        "#{style_tag}#{store(style_body)}</style>"
       elsif script_tag
         "#{script_tag}[script #{digest(script_body)}, #{script_body.bytesize} bytes]</script>"
       else
         Regexp.last_match(0)
       end
     end
-    lines = text.gsub(/>\s*</, ">\n<").lines.map(&:strip).reject(&:empty?)
-    [lines.join("\n"), css]
+    text.gsub(/>\s*</, ">\n<").lines.map(&:strip).reject(&:empty?).join("\n")
   end
 
   # CSS blocks are stored once, in first-seen order, so a change to a shared
@@ -200,11 +228,15 @@ module PageGoldens
     response.body
   end
 
-  def silence_warnings
+  # Returns what the block warned, and still passes it through to $stderr.
+  def capture_warnings
     previous = $stderr
     $stderr = StringIO.new
     yield
+    $stderr.string
   ensure
+    captured = $stderr.string
     $stderr = previous
+    $stderr.write(captured)
   end
 end

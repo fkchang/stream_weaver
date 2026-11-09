@@ -7,10 +7,13 @@ require_relative 'support/page_goldens'
 # against these files, and only a diff a story states is allowed.
 #
 # What is recorded, per built-in theme and host (standalone AppView, canvas,
-# reader, export, Opal), in spec/fixtures/page_goldens/<host>/<theme>.txt:
-# the <body> class, the ordered <head> one tag per line, and the <style>
-# blocks the body carries. Every CSS block lives once in css_blocks.css and
-# is referenced by a 12-character digest of its content.
+# reader, export, Opal, the /live session page), in
+# spec/fixtures/page_goldens/<host>/<theme>.txt: the <body> class, the
+# ordered <head> one tag per line, the body's <link>, <script> and <style>
+# tags in document order (other body markup is dropped), and for Opal the
+# builder's warnings. Every CSS block lives once in css_blocks.css and is
+# referenced by a 12-character digest of its content. The probe includes an
+# ide_shell, so injected component CSS is covered on every host.
 #
 # Normalisations, each because the raw value is noise rather than signal:
 # - <style> bodies become "[css <digest>]"; the CSS itself is in css_blocks.css.
@@ -19,8 +22,10 @@ require_relative 'support/page_goldens'
 # - whitespace between tags is collapsed to one tag per line, because Phlex
 #   renders a single line and the heredoc hosts render indented ones.
 # - the Opal build pins mermaid to a local stub (see PageGoldens.render_opal).
+# - the reader's temporary doc directory becomes "<tmpdir>": the doc path
+#   reaches a body script (the Save-as-doc widget).
 # Nothing else is rewritten: the probe uses fixed names, so no port,
-# timestamp or generated id reaches the head or the CSS.
+# timestamp or generated id reaches what is recorded.
 #
 # An intended diff: run `UPDATE_GOLDENS=1 bundle exec rspec spec/page_goldens_spec.rb`,
 # review `git diff spec/fixtures/page_goldens`, and name the diff in the commit.
@@ -45,9 +50,12 @@ RSpec.describe 'page goldens (page-assets gate)' do
     raise "missing golden #{path}: run UPDATE_GOLDENS=1 bundle exec rspec #{__FILE__}"
   end
 
-  it 'lists every host it cannot render without a browser, with the reason' do
-    expect(PageGoldens::EXCLUSIONS.keys).to contain_exactly('opal app.js', 'opal runtime theme', 'extension head')
-    PageGoldens::EXCLUSIONS.each { |part, why| expect(why).not_to be_empty, "#{part} has no reason" }
+  it 'names an exclusion, with its reason, for every host whose body is filled in the browser' do
+    PageGoldens::BROWSER_FILLED.each do |host|
+      reasons = PageGoldens::EXCLUSIONS.select { |part, _| part.start_with?(host.to_s) }.values
+      expect(reasons).not_to be_empty, "#{host} skips the probe check with no exclusion listed"
+      expect(reasons).to all(match(/\S{3,}.*\S{3,}/))
+    end
   end
 
   it 'records every theme on every host, and nothing else' do

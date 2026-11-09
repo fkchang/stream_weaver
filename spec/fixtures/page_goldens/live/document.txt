@@ -1,0 +1,14 @@
+# body class
+sw-theme-document sw-layout-default
+# head (one tag per line; <style> and inline <script> bodies are replaced by digests)
+<title>StreamWeaver Live: page-probe</title>
+<script src="https://unpkg.com/htmx.org@2.0.4">
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js">
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap">
+<style>[css 4dcaa1eaf6b9]</style>
+# body <link>, <script> and <style> tags, in document order
+<script>[script 9dcdf09bf583, 1721 bytes]</script>
