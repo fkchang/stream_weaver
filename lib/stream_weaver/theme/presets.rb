@@ -349,8 +349,7 @@ module StreamWeaver
       # @param preset [Hash] Preset definition
       # @return [String] Google Fonts CSS URL
       def self.google_fonts_url(preset)
-        families = preset[:google_fonts].map { |f| "family=#{f}" }.join("&")
-        "https://fonts.googleapis.com/css2?#{families}&display=swap"
+        Fonts.google_fonts_href(preset[:google_fonts])
       end
 
       # Generate CSS custom properties for a preset in the given mode

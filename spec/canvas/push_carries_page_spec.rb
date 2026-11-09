@@ -259,7 +259,7 @@ RSpec.describe 'A canvas push carries its page', type: :request do
     ].each do |body|
       it "resolves the same theme, layout and assets for #{body.lines.first.strip.inspect}" do
         push(body)
-        canvas = bridge.get_session('s1').page
+        canvas = bridge.get_session('s1').snapshot[:page]
         reader = StreamWeaver::Canvas::Reader.page_for(StreamWeaver::Canvas::Reader.render_doc(body))
         reader_assets = reader.assets.with(body_classes: reader.assets.body_classes - %w[sw-reader])
         expect([canvas.theme, canvas.layout]).to eq([reader.theme, reader.layout])

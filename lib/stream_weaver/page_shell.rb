@@ -8,10 +8,12 @@ require_relative "delivery"
 require_relative "assets"
 
 module StreamWeaver
-  # Framework-CSS <head> block, shared by all three renderers that need the
-  # same cascade order: the canvas (Canvas::BridgeServer), the reader
-  # (Canvas::Reader / reader_layout.erb), and static exports
-  # (Export::HtmlExporter). Extracted from BridgeServer#render_canvas_page,
+  # Framework-CSS <head> block in one cascade order. Head#to_s emits it for
+  # the reader (Canvas::Reader / reader_layout.erb) and static exports
+  # (Export::HtmlExporter); the canvas (Canvas::BridgeServer) emits
+  # framework_css_html plus Head#asset_tags; the standalone view and the
+  # Opal builder place Head's buckets themselves.
+  # Extracted from BridgeServer#render_canvas_page,
   # which was the correct reference implementation (stream_weaver-oeo fixed
   # its cascade-layer bug: CANVAS_CSS must be layer-wrapped alongside
   # master_theme_css/visual_skills_css, or it silently outranks them) --
@@ -702,7 +704,8 @@ module StreamWeaver
         stylesheet_tags.join("\n")
       end
 
-      # Component CSS, one layered block.
+      # The page's framework-layer CSS in one layered block: a registered
+      # custom theme's token CSS, the app's theme_tokens and component CSS.
       def framework_css
         return "" if @assets.framework_css.empty?
 

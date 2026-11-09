@@ -294,10 +294,6 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
         end
       end
 
-      # The <head> style block, in the same cascade order the canvas and the
-      # reader use (PageShell is the single source of truth): framework layer,
-      # then the app's registered theme, then unlayered user CSS last so it
-      # outranks everything.
       # The page's head (PageShell::Head#to_s): layer pin, fonts, framework
       # CSS and a registered custom theme's, stylesheets, the app's unlayered
       # CSS last, its scripts.

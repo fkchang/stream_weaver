@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative 'fonts' unless RUBY_ENGINE == 'opal' # register_theme resolves self-hosted fonts
 require_relative 'theme/presets'
 require_relative 'theme/auto_mode'
 
@@ -543,17 +544,6 @@ module StreamWeaver
 
         #{Presets.animations_css}
       CSS
-    end
-
-    # Generate a Google Fonts <link> tag URL for the given font families.
-    #
-    # @param families [Array<String>] Google Fonts family strings
-    #   e.g. ["Instrument+Serif:ital@0;1", "JetBrains+Mono:wght@400;500"]
-    # @return [String] Full Google Fonts CSS URL
-    def self.google_fonts_url(*families)
-      families = families.flatten
-      query = families.map { |f| "family=#{f}" }.join("&")
-      "https://fonts.googleapis.com/css2?#{query}&display=swap"
     end
 
     private

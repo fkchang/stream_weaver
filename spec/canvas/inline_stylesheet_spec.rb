@@ -33,26 +33,32 @@ RSpec.describe 'Canvas inline stylesheets (stream_weaver-9uk)' do
   end
 
   describe StreamWeaver::Canvas::Session do
-    it 'starts with no stylesheets and replaces (not accumulates) on set_stylesheets' do
-      session = described_class.new('x')
+    let(:bridge) { StreamWeaver::Canvas::Bridge.new(port: 0) }
+    let(:session) { bridge.create_session('x') }
+
+    def push(dsl)
+      bridge.handle_claude_message(type: 'push', name: 'x', dsl: dsl)
+    end
+
+    it 'starts with no stylesheets and replaces (not accumulates) on each push' do
       expect(session.stylesheets).to eq([])
 
-      session.set_stylesheets(['.a {}'])
+      push("use_stylesheet('.a {}')")
       expect(session.stylesheets).to eq(['.a {}'])
 
-      session.set_stylesheets(['.b {}'])
+      push("use_stylesheet('.b {}')")
       expect(session.stylesheets).to eq(['.b {}'])
     end
 
-    it 'dedupes on set_stylesheets' do
-      session = described_class.new('x')
-      session.set_stylesheets(['.a {}', '.a {}'])
+    it 'dedupes a push that names the same CSS twice' do
+      session
+      push("use_stylesheet('.a {}')\nuse_stylesheet('.a {}')")
       expect(session.stylesheets).to eq(['.a {}'])
     end
 
     it 'clears stylesheets on reset!' do
-      session = described_class.new('x')
-      session.set_stylesheets(['.a {}'])
+      session
+      push("use_stylesheet('.a {}')")
       session.reset!
       expect(session.stylesheets).to eq([])
     end

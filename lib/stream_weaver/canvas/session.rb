@@ -105,15 +105,10 @@ module StreamWeaver
         @page_layout || @layout
       end
 
-      # What the page needs for the current push: the same recipe as
-      # canvas-read's Reader.page_for (PageShell.fragment_page), so the live
-      # canvas and canvas-read agree for the same body (disc-127).
-      # @return [StreamWeaver::PageShell::Page]
-      def page
-        snapshot[:page]
-      end
-
-      # The content, its version and its page, read in one locked step.
+      # The content, its version and its page, read in one locked step. The
+      # page uses the same recipe as canvas-read's Reader.page_for
+      # (PageShell.fragment_page), so the live canvas and canvas-read agree
+      # for the same body (disc-127).
       # @param since [Integer, nil] the version a poller already has: the
       #   page is resolved and included only when this one is newer
       # @return [Hash] { html:, version:, page: } (page omitted when not newer)
@@ -124,14 +119,6 @@ module StreamWeaver
 
         { html: html, version: version,
           page: StreamWeaver::PageShell.fragment_page(theme: theme, layout: layout, user_css: user_css) }
-      end
-
-      # Replace the inline stylesheets carried by the current DSL (stream_weaver-9uk).
-      # Replacing rather than accumulating means a re-push with the same (or no)
-      # `use_stylesheet` calls never stacks duplicate <style> tags across pushes.
-      # @param list [Array<String>] CSS text, deduped
-      def set_stylesheets(list)
-        @stylesheets = list.uniq
       end
 
       # Update session state

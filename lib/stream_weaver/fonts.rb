@@ -64,10 +64,5 @@ module StreamWeaver
         entry.merge(src: File.expand_path(entry[:src], dir))
       end
     end
-
-    # Returns true if any entry is a Google font.
-    def self.google_fonts?(fonts)
-      fonts.any? { |e| e.is_a?(String) || (e.is_a?(Hash) && e.key?(:google)) }
-    end
   end
 end

@@ -316,35 +316,6 @@ RSpec.describe "Theme Enhancement + CSS Foundation (T2)" do
   end
 
   # =========================================
-  # Google Fonts CDN Helper
-  # =========================================
-
-  describe "StreamWeaver::Theme.google_fonts_url" do
-    it "generates a URL for single family" do
-      url = StreamWeaver::Theme.google_fonts_url("DM+Sans:wght@400;500;600")
-      expect(url).to start_with("https://fonts.googleapis.com/css2?")
-      expect(url).to include("family=DM+Sans")
-      expect(url).to include("display=swap")
-    end
-
-    it "generates a URL for multiple families" do
-      url = StreamWeaver::Theme.google_fonts_url(
-        "Instrument+Serif:ital@0;1",
-        "JetBrains+Mono:wght@400;500"
-      )
-      expect(url).to include("family=Instrument+Serif")
-      expect(url).to include("family=JetBrains+Mono")
-    end
-
-    it "accepts an array of families" do
-      families = ["DM+Sans:wght@400", "Fira+Code:wght@400"]
-      url = StreamWeaver::Theme.google_fonts_url(families)
-      expect(url).to include("DM+Sans")
-      expect(url).to include("Fira+Code")
-    end
-  end
-
-  # =========================================
   # Backward Compatibility
   # =========================================
 
