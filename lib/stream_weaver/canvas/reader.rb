@@ -7,6 +7,7 @@ require 'socket'
 require 'sinatra/base'
 require 'stream_weaver/app'
 require 'stream_weaver/views'
+require 'stream_weaver/asset_route'
 require 'stream_weaver/adapter/alpinejs'
 require 'stream_weaver/canvas/doc_store'
 require 'stream_weaver/canvas/doc_roots'
@@ -15,6 +16,7 @@ require 'stream_weaver/canvas/gist_publisher'
 require 'stream_weaver/canvas/gist_save_handler'
 require 'stream_weaver/canvas/save_doc_widget'
 require 'stream_weaver/page_shell'
+require 'stream_weaver/canvas/fragment'
 require 'stream_weaver/export/html_exporter'
 require 'stream_weaver/org/writer'
 require 'stream_weaver/org/reader'
@@ -23,6 +25,8 @@ module StreamWeaver
   module Canvas
     class Reader < Sinatra::Base
       include GistSaveHandler
+      # A doc's css_path/js_path files and self-hosted fonts (Delivery::Served).
+      register StreamWeaver::AssetRoute
 
       class NoFilesError < StandardError; end
 
@@ -220,9 +224,8 @@ module StreamWeaver
       end
 
       # What Reader.render_doc hands the layout template: the rendered HTML
-      # plus the theme/layout/CSS the DSL declared for itself, which the shell
-      # needs for the <body> class and the user-CSS <style> tags.
-      Doc = Struct.new(:html, :theme, :layout, :inline_stylesheets, keyword_init: true)
+      # plus the theme/layout/CSS the DSL declared for itself (Fragment).
+      Doc = Canvas::Fragment
 
       class << self
         attr_reader :default_theme, :default_layout
@@ -752,19 +755,12 @@ module StreamWeaver
         end
 
         dsl = StreamWeaver::Org::Reader.to_dsl(dsl) if StreamWeaver::Org::Reader.streamweaver_org?(dsl)
-        mini_app = StreamWeaver::App.new('reader', theme: theme, layout: layout)
-        mini_app.instance_eval(dsl, path.to_s, 1)
         adapter = StreamWeaver::Adapter::AlpineJS.new(
           url_prefix: '/canvas/reader',
           mode: :websocket,
           inert: true
         )
-        Doc.new(
-          html: StreamWeaver::Views::AppContentView.new(mini_app, {}, adapter, false).call,
-          theme: mini_app.theme,
-          layout: mini_app.layout,
-          inline_stylesheets: mini_app.inline_stylesheets
-        )
+        Doc.render(dsl, adapter: adapter, theme: theme, layout: layout, path: path&.to_s)
       rescue ScriptError, StandardError => e
         Doc.new(
           html: "<div style='color:red;padding:1rem;font-family:monospace'>" \
@@ -777,6 +773,17 @@ module StreamWeaver
 
       def self.render_dsl(dsl)
         render_doc(dsl).html
+      end
+
+      # The reader shell's page for `doc`: its theme, layout and inline CSS,
+      # plus sw-reader. Browse with no file open yet has no doc, so the
+      # reader's own defaults stand in.
+      #
+      # @param doc [Doc, nil]
+      # @return [StreamWeaver::PageShell::Page]
+      def self.page_for(doc)
+        page = doc ? doc.page : StreamWeaver::PageShell.fragment_page(theme: fallback_theme, layout: fallback_layout)
+        page + StreamWeaver::Assets.of(body_classes: %w[sw-reader])
       end
 
       # Neutral, not red -- this isn't a bug in the doc or in canvas-read,

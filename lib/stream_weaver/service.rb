@@ -8,6 +8,7 @@ require 'socket'
 require 'fileutils'
 require 'uri'
 require_relative 'css'
+require_relative 'asset_route'
 
 module StreamWeaver
   # Multi-app service that renders StreamWeaver apps without per-app process management.
@@ -501,6 +502,10 @@ module StreamWeaver
 
     end
 
+    # Local files a page names through Delivery::Served (css_path/js_path and
+    # font macros, a theme's self-hosted fonts:): /sw-asset/<key>/<file>.
+    register StreamWeaver::AssetRoute
+
     # =========================================
     # Service Management Routes
     # =========================================
@@ -616,7 +621,10 @@ module StreamWeaver
       layout = (params[:layout] || 'default').to_s
       self.class.get_or_create_live_session(session_name)
 
-      # Validate theme
+      # Validate theme. This page builds its own head and body class rather
+      # than PageShell.resolve: it loads only CSS.full_stylesheet, which
+      # carries the default, dashboard and document themes, so those three
+      # are all it accepts.
       valid_themes = %w[default dashboard document]
       theme = 'default' unless valid_themes.include?(theme)
 
@@ -1207,9 +1215,11 @@ module StreamWeaver
         session[:theme_overrides] ||= {}
         session[:theme_overrides][app_id] = theme
         status 200
-        "sw-theme-#{theme} sw-layout-#{app_entry[:app].layout}"
+        content_type 'text/plain'
+        StreamWeaver::PageShell.resolve(app_entry[:app], theme: theme).body_class
       else
         status 400
+        content_type 'text/plain'
         "Invalid theme"
       end
     end

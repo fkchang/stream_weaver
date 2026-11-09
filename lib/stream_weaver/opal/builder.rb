@@ -3,6 +3,7 @@ require "fileutils"
 require_relative "shell"
 require_relative "../css"
 require_relative "../theme"
+require_relative "../page_shell"
 
 module StreamWeaver
   module Opal
@@ -104,9 +105,21 @@ module StreamWeaver
         css = StreamWeaver::CSS.full_stylesheet
         css += "\n" + StreamWeaver::Theme.visual_skills_css
         css += "\n" + StreamWeaver::CSS.animation_css
+        # The css macro CSS of every registered component class: layered
+        # where the class asked for it, user CSS unlayered (spec/css_layer_spec.rb).
+        unless components.framework_css.empty?
+          css += "\n" + StreamWeaver::CSS.layer_wrap(components.framework_css.join("\n"))
+        end
+        css += "\n" + components.user_css.join("\n") unless components.user_css.empty?
+        # A registered (non built-in) theme's generated token CSS
+        theme_css = page.assets.framework_css
+        css += "\n" + StreamWeaver::CSS.layer_wrap(theme_css.join("\n")) unless theme_css.empty?
         if @theme
-          unless StreamWeaver::Theme::Presets.get(@theme.to_sym)
-            warn "[OpalBuilder] Unknown theme preset: #{@theme}"
+          # --theme names a registered theme (its fonts and stylesheets reach
+          # the page through #page) or a Theme::Presets entry (its CSS lands
+          # here); warn only when it is neither.
+          unless StreamWeaver::Theme::Presets.get(@theme.to_sym) || StreamWeaver.theme_exists?(@theme)
+            warn "[OpalBuilder] Unknown theme: #{@theme} (neither a registered theme nor a preset)"
           end
           css += "\n" + StreamWeaver::Theme::Presets.generate_preset_css(@theme.to_sym)
         end
@@ -130,16 +143,42 @@ module StreamWeaver
             replay_js: local_asset("sw-replay.js"),
             theme_css: File.exist?(output_path("sw-theme.css")) ? "sw-theme.css" : nil,
             google_fonts_url: google_fonts_url_for_build,
-            body_theme: @theme ? "sw-theme-default sw-theme-#{@theme}" : "sw-theme-default",
+            page_links_html: page_links_html,
+            body_theme: page.body_class,
             dark_mode_script: StreamWeaver::Theme::AutoMode.inline_script
           ))
+      end
+
+      # The build-time page. An Opal build has no App (it receives a file name)
+      # and no layout class, and reads --theme as a registered theme's name
+      # (or a preset's). Its stylesheet scopes the base variables to
+      # body.sw-theme-default, so that class always comes first: it is
+      # prepended here rather than in PageShell.resolve, because no other
+      # host needs it. With no component tree either, it carries the files
+      # and fonts of every registered component class.
+      def page
+        @page ||= StreamWeaver::PageShell::Page.new(
+          theme: @theme, layout: nil, assets: StreamWeaver::Assets.of(body_classes: %w[sw-theme-default])
+        ) + StreamWeaver::PageShell.resolve(nil, theme: @theme, layout: nil).assets +
+          StreamWeaver::Assets.of(stylesheets: components.stylesheets, scripts: components.scripts,
+                                             fonts: components.fonts)
+      end
+
+      def components
+        @components ||= StreamWeaver::ComponentAssets.every_class_assets
+      end
+
+      # Local files are copied into the build (Delivery::Copied).
+      def page_links_html
+        head = StreamWeaver::PageShell.head(page, StreamWeaver::Delivery::Copied.new(@output_dir))
+        [head.stylesheets, head.fonts, head.scripts].reject(&:empty?).join("\n")
       end
 
       def google_fonts_url_for_build
         if @theme && (preset = StreamWeaver::Theme::Presets.get(@theme.to_sym))
           StreamWeaver::Theme::Presets.google_fonts_url(preset)
         else
-          "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap"
+          StreamWeaver::Fonts::BASE_HREF
         end
       end
 

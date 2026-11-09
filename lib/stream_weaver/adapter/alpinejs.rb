@@ -1765,15 +1765,14 @@ module StreamWeaver
       # Render the ide_shell grid. One Alpine flag, railOpen, drives the
       # off-canvas right rail below the mobile breakpoint: the nav toggle
       # opens it and focus moves into the rail; the backdrop and Escape
-      # close it and focus returns to the toggle. Adds the shared ide
-      # stylesheet for every ide_* region inside it.
+      # close it and focus returns to the toggle. The shared ide stylesheet
+      # is IdeShell's css macro (components/ide/styles.rb).
       #
       # @param view [Phlex::HTML] The Phlex view instance
       # @param component [Components::IdeShell]
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_ide_shell(view, component, state)
-        inject_component_css(view, :ide, Components::Ide::CSS)
         has_right_rail = component.children.any? { |c| c.is_a?(Components::IdeRailRight) }
 
         attrs = framework_attrs("sw-ide-shell", component.options).merge(
@@ -3442,7 +3441,7 @@ module StreamWeaver
                 view.button(
                   type: "button",
                   class: "sw-theme-switcher-option",
-                  "@click" => "switchTheme('#{theme[:id]}')"
+                  "@click" => "switchTheme(#{theme[:id].to_s.to_json}, #{theme[:built_in] ? 'false' : 'true'})"
                 ) do
                   view.span(class: "sw-theme-switcher-option-label") { theme[:label] }
                   view.span(class: "sw-theme-switcher-option-desc") { theme[:description] }
@@ -3453,6 +3452,16 @@ module StreamWeaver
         end
       end
 
+      # switchTheme takes the theme classes from the POST /theme response
+      # (PageShell.resolve's body class): a registered theme wears its base
+      # theme's class too, so no client-side rewrite can know the full set.
+      # Every sw-theme-* class is dropped; classes the page added (layout,
+      # sw-annotate-on) are kept. A response that is not a list of class
+      # names (an error page with a 200) is ignored.
+      #
+      # A registered theme's CSS, fonts and stylesheets are emitted only for
+      # the theme the page was rendered with, so switching TO one reloads the
+      # page (the POST already stored the choice); built-ins swap in place.
       def theme_switcher_alpine_data(themes)
         <<~JS.gsub(/\s+/, " ").strip
           {
@@ -3464,10 +3473,18 @@ module StreamWeaver
               document.documentElement.classList.toggle('dark', v);
               document.documentElement.setAttribute('data-sw-theme', v ? 'dark' : 'light');
             },
-            switchTheme(id) {
+            switchTheme(id, registered) {
               this.open = false;
-              document.body.className = document.body.className.replace(/sw-theme-\\w+/, 'sw-theme-' + id);
-              htmx.ajax('POST', '#{url("/theme/")}' + id, {swap:'none'});
+              fetch('#{url("/theme/")}' + encodeURIComponent(id), {method: 'POST', credentials: 'same-origin'})
+                .then(r => r.ok ? r.text() : Promise.reject(r.status))
+                .then(text => {
+                  const classes = text.trim().split(' ').filter(Boolean);
+                  if (!classes.length || !classes.every(c => /^[A-Za-z0-9_-]+$/.test(c))) return;
+                  if (registered) { window.location.reload(); return; }
+                  const kept = [...document.body.classList].filter(c => !c.startsWith('sw-theme-'));
+                  document.body.className = [...new Set([...classes, ...kept])].join(' ');
+                })
+                .catch(() => {});
             }
           }
         JS

@@ -115,7 +115,7 @@ RSpec.describe StreamWeaver::Opal::OpalBuilder do
         File.write(app_file, app_content)
         out = File.join(@tmpdir, "dist")
         expect { described_class.build(app_file, output_dir: out, theme: :nonexistent_theme) }
-          .to output(/Unknown theme preset/).to_stderr
+          .to output(/Unknown theme: nonexistent_theme/).to_stderr
         expect(File.exist?(File.join(out, "sw-theme.css"))).to be true
       end
     end
@@ -153,6 +153,38 @@ RSpec.describe StreamWeaver::Opal::OpalBuilder do
       expect(File.exist?(File.join(out, "sw-mermaid-zoom.js"))).to be true
       html = File.read(File.join(out, "index.html"))
       expect(html).to include('src="sw-mermaid-zoom.js"')
+    end
+  end
+
+  # The build steps that need no compile, run the way PageGoldens.render_opal runs them.
+  describe "build-time page (no App)" do
+    around do |example|
+      Dir.mktmpdir do |dir|
+        @app_file = File.join(dir, "app.rb")
+        File.write(@app_file, "app \"T\" do\nend\n")
+        @out = File.join(dir, "dist")
+        FileUtils.mkdir_p(@out)
+        example.run
+      end
+    end
+
+    def build_page(theme)
+      builder = described_class.new(@app_file, output_dir: @out, theme: theme)
+      %i[write_theme_css write_index_html].each { |step| builder.send(step) }
+      [File.read(File.join(@out, "index.html")), File.read(File.join(@out, "sw-theme.css"))]
+    end
+
+    it "loads the theme-declared fonts and stylesheets of a registered theme" do
+      html, = build_page(:ide)
+      StreamWeaver.theme_stylesheets(:ide).each { |href| expect(html).to include(%(<link rel="stylesheet" href="#{href}">)) }
+      expect(html).to include(StreamWeaver::Fonts.google_fonts_href(StreamWeaver.theme_fonts(:ide)))
+      expect(html).to include(%(<body class="sw-theme-default sw-theme-ide">))
+    end
+
+    it "bundles the css macro CSS of every registered component class" do
+      allow(StreamWeaver::Components::Button).to receive(:component_css_strings).and_return([".builder-spec-btn{}"])
+      _, css = build_page(nil)
+      expect(css).to include("\n.builder-spec-btn{}")
     end
   end
 end

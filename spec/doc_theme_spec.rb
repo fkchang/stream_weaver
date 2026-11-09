@@ -115,7 +115,7 @@ RSpec.describe "Doc theme (sw-theme-doc)" do
 
   describe "theme registration" do
     it "is a recognized built-in theme" do
-      expect(StreamWeaver::App::BUILT_IN_THEMES).to include(:doc)
+      expect(StreamWeaver.built_in_themes).to include(:doc)
       expect(StreamWeaver.theme_exists?(:doc)).to be true
     end
 

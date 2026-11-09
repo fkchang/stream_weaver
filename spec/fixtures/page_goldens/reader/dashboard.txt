@@ -1,0 +1,28 @@
+# body class
+sw-layout-fluid sw-theme-dashboard sw-reader
+# head (one tag per line; <style> and inline <script> bodies are replaced by digests)
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>canvas-read</title>
+<style>[css f734af5e1fd3]</style>
+<style>[css d3037a149254]</style>
+<style>[css 6732a632695e]</style>
+<style>[css 9daf8e10ee84]</style>
+<style id="sw-reader-chrome-css">[css e27e03faf1be]</style>
+<script src="https://unpkg.com/htmx.org@2.0.4">
+</script>
+<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer>
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js">
+</script>
+<script>[script 7f14c1745be3, 29571 bytes]</script>
+<script>[script 626d1f8fabb5, 6629 bytes]</script>
+<script>[script 9c072ae7f4a0, 55 bytes]</script>
+# body <link>, <script> and <style> tags, in document order
+<script type="application/json" id="sw-state-data">[script 4f82429f09a6, 17 bytes]</script>
+<style>[css 084aca0b782a]</style>
+<style>[css c0406a386c36]</style>
+<script>[script aa9b6f159f3f, 7360 bytes]</script>

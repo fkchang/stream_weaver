@@ -1,0 +1,18 @@
+# body class
+sw-layout-default sw-theme-dark
+# head (one tag per line; <style> and inline <script> bodies are replaced by digests)
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StreamWeaver Export</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer>
+</script>
+<style>[css 2434f41c5b7f]</style>
+<style>[css d3037a149254]</style>
+<style>[css 6732a632695e]</style>
+<style>[css 9daf8e10ee84]</style>
+<style>[css 084aca0b782a]</style>
+# body <link>, <script> and <style> tags, in document order
+<style>[css c0406a386c36]</style>

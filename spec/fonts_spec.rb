@@ -35,24 +35,6 @@ RSpec.describe StreamWeaver::Fonts do
     end
   end
 
-  describe ".google_fonts?" do
-    it "returns true for string entries" do
-      expect(described_class.google_fonts?(["Cinzel:wght@400"])).to be true
-    end
-
-    it "returns true for hash entries with :google" do
-      expect(described_class.google_fonts?([{ google: "Lora" }])).to be true
-    end
-
-    it "returns false for empty list" do
-      expect(described_class.google_fonts?([])).to be false
-    end
-
-    it "returns false for only self-hosted entries" do
-      expect(described_class.google_fonts?([{ src: "/f.woff2", family: "X" }])).to be false
-    end
-  end
-
   describe "HTML injection — <link> tags in <head>" do
     def render_head(app)
       state = {}

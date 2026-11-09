@@ -1,0 +1,318 @@
+/* ==== css 9daf8e10ee84 (9349 bytes) ==== */
+@layer stream-weaver {
+/* ===========================================
+   Visual Skills CSS Foundation (T2)
+   Semantic tokens for visual skills components.
+   All classes use sw- prefix with BEM modifiers:
+     sw-component--variant  (e.g. sw-card--hero)
+     sw-is-active           (state classes)
+   =========================================== */
+
+/* Light mode defaults -- bridge to existing --sw-color-* tokens */
+:root {
+  --sw-bg: var(--sw-color-bg, #f8f8f8);
+  --sw-surface: var(--sw-color-bg-card, #ffffff);
+  --sw-surface-elevated: var(--sw-color-bg-elevated, #f3f3f3);
+  --sw-border: var(--sw-color-border, #e0e0e0);
+  --sw-text: var(--sw-color-text, #111111);
+  --sw-text-dim: var(--sw-color-text-muted, #444444);
+  --sw-accent: var(--sw-color-accent, #0d9488);
+  --sw-font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* Diagram node palette */
+  --sw-node-a: var(--sw-color-primary, #c2410c);
+  --sw-node-b: var(--sw-color-accent, #0d9488);
+  --sw-node-c: #7c3aed;
+
+  /* Status colors */
+  --sw-success: #16a34a;
+  --sw-warning: #d97706;
+  --sw-error: #dc2626;
+  --sw-info: #2563eb;
+}
+
+/* Re-bridge on body: --sw-color-* (what these fall back to) is itself
+   declared on body (per-theme, or an app's theme_overrides:), a
+   descendant of :root -- so the :root block above can never see it and
+   is stuck on its own light-mode fallback. Redeclaring here lets these
+   short tokens track whatever theme body actually ends up with
+   (stream_weaver-9u2). */
+body {
+  --sw-bg: var(--sw-color-bg, #f8f8f8);
+  --sw-surface: var(--sw-color-bg-card, #ffffff);
+  --sw-surface-elevated: var(--sw-color-bg-elevated, #f3f3f3);
+  --sw-border: var(--sw-color-border, #e0e0e0);
+  --sw-text: var(--sw-color-text, #111111);
+  --sw-text-dim: var(--sw-color-text-muted, #444444);
+  --sw-accent: var(--sw-color-accent, #0d9488);
+  --sw-node-a: var(--sw-color-primary, #c2410c);
+  --sw-node-b: var(--sw-color-accent, #0d9488);
+}
+
+/* Theme toggle button (sw- prefixed, BEM) */
+.sw-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.sw-theme-toggle__btn {
+  background: transparent;
+  border: 1px solid var(--sw-border);
+  border-radius: var(--sw-radius-md, 6px);
+  padding: 0.375rem 0.5rem;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--sw-text);
+  transition: background 200ms ease-out, border-color 200ms ease-out;
+}
+
+.sw-theme-toggle__btn:hover {
+  background: var(--sw-surface-elevated);
+  border-color: var(--sw-accent);
+}
+
+.sw-theme-toggle__label {
+  font-size: 0.75rem;
+  color: var(--sw-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Dark mode overrides */
+html.dark {
+  --sw-bg: var(--sw-color-bg, oklch(0.145 0 0));
+  --sw-surface: var(--sw-color-bg-card, oklch(0.205 0 0));
+  --sw-surface-elevated: var(--sw-color-bg-elevated, oklch(0.269 0 0));
+  --sw-border: var(--sw-color-border, oklch(1 0 0 / 10%));
+  --sw-text: var(--sw-color-text, oklch(0.985 0 0));
+  --sw-text-dim: var(--sw-color-text-muted, oklch(0.708 0 0));
+  --sw-accent: var(--sw-color-accent, #2dd4bf);
+
+  /* Brighter node colors for dark backgrounds */
+  --sw-node-a: #f97316;
+  --sw-node-b: #2dd4bf;
+  --sw-node-c: #a78bfa;
+
+  /* Brighter status colors for dark backgrounds */
+  --sw-success: #22c55e;
+  --sw-warning: #fbbf24;
+  --sw-error: #f87171;
+  --sw-info: #60a5fa;
+}
+
+/* ===========================================
+   Card Depth Tiers (T6)
+   sw-card--{depth} classes for visual hierarchy.
+   =========================================== */
+
+.sw-card--hero {
+  background: color-mix(in oklch, var(--sw-accent) 8%, var(--sw-surface));
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
+  border-left: 4px solid var(--sw-accent);
+}
+
+.sw-card--elevated {
+  background: var(--sw-surface);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.sw-card--default {
+  background: var(--sw-surface);
+  border: 1px solid var(--sw-border);
+  box-shadow: none;
+}
+
+.sw-card--recessed {
+  background: var(--sw-surface-elevated);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--sw-border);
+}
+
+.sw-card--glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+}
+
+html.dark .sw-card--glass {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Card accent borders (left border colored by node palette) */
+.sw-card--accent-a { border-left: 4px solid var(--sw-node-a); }
+.sw-card--accent-b { border-left: 4px solid var(--sw-node-b); }
+.sw-card--accent-c { border-left: 4px solid var(--sw-node-c); }
+.sw-card--accent   { border-left: 4px solid; }
+
+/* Card corner label */
+.sw-card__label {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--sw-radius-sm, 4px);
+  background: var(--sw-accent);
+  color: white;
+  line-height: 1.4;
+}
+
+/* Card with label: position: relative is applied inline by the component */
+
+/* ===========================================
+   Table Enhancements (T6)
+   sw-table--{feature} classes for enhanced tables.
+   =========================================== */
+
+/* Alternating row backgrounds */
+.sw-table--alternating .sw-table__row--alt {
+  background: var(--sw-surface-elevated, rgba(0, 0, 0, 0.02));
+}
+
+html.dark .sw-table--alternating .sw-table__row--alt {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Row hover highlight */
+.sw-table--hover .sw-table__row--hover:hover {
+  background: color-mix(in oklch, var(--sw-accent) 6%, transparent);
+  transition: background 150ms ease-out;
+}
+
+/* Scrollable wrapper */
+.sw-table--scrollable {
+  border: 1px solid var(--sw-border, #e0e0e0);
+  border-radius: var(--sw-radius-md, 6px);
+}
+
+/* Sticky header styling */
+.sw-table--sticky-header thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/* ===========================================
+   StreamWeaver Animations (T15)
+   sw- prefixed animation utilities.
+   =========================================== */
+
+/* Keyframes */
+@keyframes sw-fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sw-slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sw-fadeScale {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes sw-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes sw-slideDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Animation utility classes */
+.sw-animate-fadeIn {
+  animation: sw-fadeIn 0.4s ease-out both;
+}
+
+.sw-animate-slideUp {
+  animation: sw-slideUp 0.5s ease-out both;
+}
+
+.sw-animate-fadeScale {
+  animation: sw-fadeScale 0.4s ease-out both;
+}
+
+.sw-animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--sw-surface-elevated) 25%,
+    var(--sw-border) 50%,
+    var(--sw-surface-elevated) 75%
+  );
+  background-size: 200% 100%;
+  animation: sw-shimmer 1.5s ease-in-out infinite;
+}
+
+.sw-animate-slideDown {
+  animation: sw-slideDown 0.5s ease-out both;
+}
+
+/* Stagger delay helpers: apply to children for sequential reveal.
+   Usage: parent.sw-stagger > child elements get increasing delays.
+   Uses CSS custom property --sw-stagger-delay (default 80ms). */
+.sw-stagger > :nth-child(1) { animation-delay: calc(var(--sw-stagger-delay, 80ms) * 0); }
+.sw-stagger > :nth-child(2) { animation-delay: calc(var(--sw-stagger-delay, 80ms) * 1); }
+.sw-stagger > :nth-child(3) { animation-delay: calc(var(--sw-stagger-delay, 80ms) * 2); }
+.sw-stagger > :nth-child(4) { animation-delay: calc(var(--sw-stagger-delay, 80ms) * 3); }
+.sw-stagger > :nth-child(5) { animation-delay: calc(var(--sw-stagger-delay, 80ms) * 4); }
+.sw-stagger > :nth-child(6) { animation-delay: calc(var(--sw-stagger-delay, 80ms) * 5); }
+.sw-stagger > :nth-child(7) { animation-delay: calc(var(--sw-stagger-delay, 80ms) * 6); }
+.sw-stagger > :nth-child(8) { animation-delay: calc(var(--sw-stagger-delay, 80ms) * 7); }
+.sw-stagger > :nth-child(9) { animation-delay: calc(var(--sw-stagger-delay, 80ms) * 8); }
+.sw-stagger > :nth-child(10) { animation-delay: calc(var(--sw-stagger-delay, 80ms) * 9); }
+.sw-stagger > :nth-child(11) { animation-delay: calc(var(--sw-stagger-delay, 80ms) * 10); }
+.sw-stagger > :nth-child(12) { animation-delay: calc(var(--sw-stagger-delay, 80ms) * 11); }
+
+/* Slide swap transitions */
+.sw-slide-transition {
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+}
+
+.sw-slide-enter {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.sw-slide-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.sw-slide-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.sw-slide-exit-active {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+/* Reduce motion preference: disable all animations */
+@media (prefers-reduced-motion: reduce) {
+  .sw-animate-fadeIn,
+  .sw-animate-slideUp,
+  .sw-animate-fadeScale,
+  .sw-animate-shimmer,
+  .sw-animate-slideDown {
+    animation: none !important;
+  }
+  .sw-slide-transition {
+    transition: none !important;
+  }
+}
+
+
+}

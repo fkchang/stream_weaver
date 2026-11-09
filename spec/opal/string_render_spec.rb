@@ -159,8 +159,8 @@ RSpec.describe "DOM-free rendering" do
         expect(described_class.base_stylesheet).not_to be_empty
       end
 
-      it "falls back to the minimal token set when the source file is out of reach" do
-        allow(described_class).to receive(:full_stylesheet).and_raise(Errno::ENOENT)
+      it "falls back to the minimal token set when the view layer is not loaded (as in Opal)" do
+        allow(described_class).to receive(:full_stylesheet).and_raise(NameError, "uninitialized constant StreamWeaver::Views")
         expect(described_class.base_stylesheet).to eq(described_class.minimal_css)
       end
     end

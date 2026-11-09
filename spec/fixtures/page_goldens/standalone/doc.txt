@@ -1,0 +1,26 @@
+# body class
+sw-layout-default sw-theme-doc
+# head (one tag per line; <style> and inline <script> bodies are replaced by digests)
+<style>[css 2434f41c5b7f]</style>
+<title>Page probe</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://unpkg.com/htmx.org@2.0.4">
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@alpinejs/morph@3.x.x/dist/cdn.min.js">
+</script>
+<script src="https://cdn.jsdelivr.net/npm/htmx-ext-alpine-morph@2.0.0/alpine-morph.js">
+</script>
+<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer>
+</script>
+<script>[script 020c0d797c46, 6132 bytes]</script>
+<style>[css 2a052d740352]</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap">
+<style>[css 6732a632695e]</style>
+<style>[css 9daf8e10ee84]</style>
+<style>[css cfabc6abeb74]</style>
+<script>[script 1fecbf6d34b7, 2232 bytes]</script>
+# body <link>, <script> and <style> tags, in document order
+

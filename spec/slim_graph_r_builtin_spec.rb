@@ -55,14 +55,14 @@ RSpec.describe 'built-in SlimGraphR diagrams' do
         app.components
       )
 
-      canvas = StreamWeaver::Canvas::Bridge.new.send(:render_dsl, dsl, session_name: 'builtin')
+      canvas = StreamWeaver::Canvas::Fragment.render(dsl, adapter: StreamWeaver::Adapter::AlpineJS.new(url_prefix: "/canvas/builtin", mode: :websocket))
       reader_html = StreamWeaver::Canvas::Reader.render_doc(dsl).html
       export_html = StreamWeaver::Export::HtmlExporter.from_dsl(dsl).to_html
 
       StreamWeaver.register_extension(:third_party_probe)
 
       puts [app_html, canvas.html, reader_html, export_html].all? { |html| html.include?('<svg') }
-      puts canvas.error.nil?
+      puts canvas.theme == :default
       puts StreamWeaver::Extensions.registered?(:third_party_probe)
       puts $LOADED_FEATURES.any? { |path| path.end_with?('/slim_graph_r/stream_weaver.rb') }
     RUBY

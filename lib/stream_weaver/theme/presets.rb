@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../fonts' unless RUBY_ENGINE == 'opal' # google_fonts_url delegates to Fonts
+
 module StreamWeaver
   class Theme
     # Curated theme presets for visual skills components.
@@ -349,8 +351,7 @@ module StreamWeaver
       # @param preset [Hash] Preset definition
       # @return [String] Google Fonts CSS URL
       def self.google_fonts_url(preset)
-        families = preset[:google_fonts].map { |f| "family=#{f}" }.join("&")
-        "https://fonts.googleapis.com/css2?#{families}&display=swap"
+        Fonts.google_fonts_href(preset[:google_fonts])
       end
 
       # Generate CSS custom properties for a preset in the given mode
@@ -392,7 +393,8 @@ module StreamWeaver
       end
 
       # Generate a complete CSS block for a preset that applies to :root (light)
-      # and html.dark (dark mode). Also sets font-family on body elements.
+      # and either dark signal on <html> (Theme.token_css). Also sets
+      # font-family on body elements.
       #
       # @param preset_name [Symbol] Preset name
       # @return [String] CSS string with custom properties for both modes
@@ -400,22 +402,13 @@ module StreamWeaver
         preset = get(preset_name)
         return "" unless preset
 
-        light_vars = css_variables(preset, mode: :light)
-        dark_vars = css_variables(preset, mode: :dark)
-
-        light_block = light_vars.map { |k, v| "  #{k}: #{v};" }.join("\n")
-        dark_block = dark_vars.map { |k, v| "  #{k}: #{v};" }.join("\n")
-
+        tokens = Theme.token_css(Theme::ROOT_SCOPE, css_variables(preset, mode: :light),
+                                dark: css_variables(preset, mode: :dark))
         fonts = preset[:fonts]
 
         <<~CSS
           /* Theme preset: #{preset[:label]} -- #{preset[:description]} */
-          :root {
-          #{light_block}
-          }
-          html.dark {
-          #{dark_block}
-          }
+          #{tokens.chomp}
           /* Apply preset fonts to body */
           body {
             font-family: #{fonts[:body]};

@@ -46,6 +46,131 @@ RSpec.describe StreamWeaver::PageShell do
     end
   end
 
+  describe StreamWeaver::Assets do
+    it "merges bucket by bucket, keeping order and dropping repeats" do
+      a = described_class.of(fonts: ["Inter"], body_classes: %w[sw-layout-default])
+      b = described_class.of(fonts: %w[Inter Geist], body_classes: %w[sw-theme-ide])
+
+      merged = a + b
+      expect(merged.fonts).to eq(%w[Inter Geist])
+      expect(merged.body_classes).to eq(%w[sw-layout-default sw-theme-ide])
+      expect(merged.stylesheets).to eq([])
+    end
+
+    it "treats a nil bucket as empty and drops repeats within one value" do
+      assets = described_class.of(fonts: nil, scripts: %w[a.js a.js])
+      expect(assets.fonts).to eq([])
+      expect(assets.scripts).to eq(%w[a.js])
+    end
+  end
+
+  describe ".resolve with a registered layout" do
+    after { StreamWeaver::LayoutRegistry.instance_variable_get(:@registry).delete(:resolve_spec_css_layout) }
+
+    it "carries the layout's css_path on every host that names the layout" do
+      StreamWeaver.register_layout(:resolve_spec_css_layout, css_path: "/tmp/layout.css")
+      expect(described_class.resolve(nil, theme: :default, layout: :resolve_spec_css_layout).assets.stylesheets)
+        .to eq(["/tmp/layout.css"])
+    end
+  end
+
+  describe ".resolve" do
+    after { StreamWeaver::LayoutRegistry.instance_variable_get(:@registry).delete(:resolve_spec_exclusive) }
+
+    it "puts the layout class before the theme class" do
+      app = StreamWeaver::App.new("p", theme: :doc, layout: :wide) {}
+      expect(described_class.resolve(app, theme: app.theme).body_class).to eq("sw-layout-wide sw-theme-doc")
+    end
+
+    it "uses the theme it is given, so a session override wins over app.theme" do
+      app = StreamWeaver::App.new("p", theme: :doc) {}
+      expect(described_class.resolve(app, theme: :ide).body_class).to eq("sw-layout-default sw-theme-ide")
+    end
+
+    it "gives an exclusive layout its own body classes instead of sw-layout-*" do
+      StreamWeaver.register_layout(:resolve_spec_exclusive, exclusive: true, body_classes: %w[a b]) {}
+      app = StreamWeaver::App.new("p", layout: :resolve_spec_exclusive) {}
+      expect(described_class.resolve(app, theme: :default).body_class).to eq("a b sw-theme-default")
+    end
+
+    it "resolves a host with no App from the theme and layout alone" do
+      page = described_class.resolve(nil, theme: :ide, layout: :fluid)
+      expect(page.body_class).to eq("sw-layout-fluid sw-theme-ide")
+      expect(page.assets.fonts).to eq(StreamWeaver.theme_fonts(:ide))
+      expect(page.assets.stylesheets).to eq(StreamWeaver.theme_stylesheets(:ide))
+    end
+
+    it "omits the layout class when there is no layout" do
+      expect(described_class.resolve(nil, theme: :ide, layout: nil).body_class).to eq("sw-theme-ide")
+    end
+
+    it "puts the app's fonts and stylesheets before the theme's, and keeps its CSS and scripts" do
+      app = StreamWeaver::App.new("p", theme: :ide, fonts: ["Inter:wght@400"],
+                                       stylesheets: ["https://example.test/app.css"],
+                                       scripts: ["https://example.test/app.js"]) {}
+      app.use_stylesheet(".x { color: red; }")
+      assets = described_class.resolve(app, theme: :ide, injected_css: { ide: ".ide{}" }).assets
+
+      expect(assets.fonts).to eq(["Inter:wght@400", *StreamWeaver.theme_fonts(:ide)])
+      expect(assets.stylesheets.first).to eq("https://example.test/app.css")
+      expect(assets.user_css).to eq([".x { color: red; }"])
+      expect(assets.scripts).to eq(["https://example.test/app.js"])
+      expect(assets.framework_css).to eq([".ide{}"])
+    end
+  end
+
+  describe ".head" do
+    let(:assets) do
+      StreamWeaver::Assets.of(
+        fonts: ["Inter:wght@400"], stylesheets: ['https://example.test/a.css?x="y"'],
+        framework_css: [".c{}", ".d{}"], user_css: [".u{}"], scripts: ["https://example.test/a.js"]
+      )
+    end
+    let(:head) do
+      described_class.head(StreamWeaver::PageShell::Page.new(theme: nil, layout: nil, assets: assets),
+                           StreamWeaver::Delivery::Served.new)
+    end
+
+    it "emits one Google Fonts stylesheet for the declared fonts" do
+      expect(head.fonts).to eq('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400&display=swap">')
+    end
+
+    it "escapes attribute quotes the way Phlex does" do
+      expect(head.stylesheets).to eq('<link rel="stylesheet" href="https://example.test/a.css?x=&quot;y&quot;">')
+    end
+
+    it "layers component CSS in one block and leaves user CSS unlayered" do
+      expect(head.framework_css).to eq("<style>#{StreamWeaver::CSS.layer_wrap(".c{}\n.d{}")}</style>")
+      expect(head.user_css).to eq("<style>.u{}</style>")
+      expect(head.scripts).to eq('<script src="https://example.test/a.js"></script>')
+    end
+
+    it "emits the whole head in one order: pin, fonts, framework CSS, stylesheets, user CSS, scripts" do
+      html = head.to_s(extra_layers: %w[chrome])
+      marks = ["@layer stream-weaver, chrome;", "family=Inter", "shadcn Token Layer", ".c{}", "a.css", ".u{}", "a.js"]
+      positions = marks.map { |mark| html.index(mark) }
+      expect(positions).to all(be_a(Integer))
+      expect(positions).to eq(positions.sort)
+    end
+
+    it "carries a registered custom theme's CSS in the framework layer" do
+      StreamWeaver.register_theme(:page_shell_spec_theme, { color_primary: "#123456" })
+      page = described_class.resolve(nil, theme: :page_shell_spec_theme, layout: nil)
+      expect(page.assets.framework_css).to eq([StreamWeaver.get_theme(:page_shell_spec_theme).to_css])
+      expect(described_class.resolve(nil, theme: :page_shell_spec_theme, layout: nil, theme_css: false)
+               .assets.framework_css).to eq([])
+    ensure
+      StreamWeaver.themes.delete(:page_shell_spec_theme)
+    end
+
+    it "emits nothing for empty buckets" do
+      empty = described_class.head(StreamWeaver::PageShell::Page.new(theme: nil, layout: nil,
+                                                                     assets: StreamWeaver::Assets.of),
+                                   StreamWeaver::Delivery::Served.new)
+      expect(%i[fonts stylesheets framework_css user_css scripts].map { |b| empty.public_send(b) }).to all(eq(""))
+    end
+  end
+
   it "loads standalone without requiring the full stream_weaver.rb entrypoint" do
     lib_path = File.expand_path("../lib", __dir__)
     cmd = "ruby -I#{lib_path} -r stream_weaver/page_shell -e 'print StreamWeaver::PageShell.framework_css_html.bytesize'"

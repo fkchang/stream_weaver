@@ -1,0 +1,102 @@
+/* ==== css c0406a386c36 (2857 bytes) ==== */
+@layer stream-weaver {
+/* ===========================================
+   Callout Styles (sw- prefix, T11)
+   =========================================== */
+.sw-callout {
+  display: flex;
+  gap: 0.75rem;
+  padding: var(--sw-callout-padding, 1rem 1.25rem);
+  border-radius: var(--sw-radius-md, 6px);
+  border-left: 4px solid var(--sw-info, #2563eb);
+  background: color-mix(in oklch, var(--sw-info) 6%, var(--sw-surface, #ffffff));
+  margin: 0.75rem 0;
+}
+
+.sw-callout__icon {
+  flex-shrink: 0;
+  font-size: 1.25rem;
+  line-height: 1.4;
+}
+
+.sw-callout__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.sw-callout__title {
+  font-weight: 700;
+  font-size: 0.9375rem;
+  margin-bottom: 0.25rem;
+  color: var(--sw-text, #111111);
+}
+
+.sw-callout__content {
+  font-size: 0.875rem;
+  color: var(--sw-text, #111111);
+  line-height: 1.6;
+}
+
+/* Variant colors */
+.sw-callout--info {
+  border-left-color: var(--sw-info, #2563eb);
+  background: color-mix(in oklch, var(--sw-info) 6%, var(--sw-surface, #ffffff));
+}
+
+.sw-callout--warning {
+  border-left-color: var(--sw-warning, #d97706);
+  background: color-mix(in oklch, var(--sw-warning) 6%, var(--sw-surface, #ffffff));
+}
+
+.sw-callout--success {
+  border-left-color: var(--sw-success, #16a34a);
+  background: color-mix(in oklch, var(--sw-success) 6%, var(--sw-surface, #ffffff));
+}
+
+.sw-callout--error {
+  border-left-color: var(--sw-error, #dc2626);
+  background: color-mix(in oklch, var(--sw-error) 6%, var(--sw-surface, #ffffff));
+}
+
+.sw-callout--tip {
+  border-left-color: #7c3aed;
+  background: color-mix(in oklch, #7c3aed 6%, var(--sw-surface, #ffffff));
+}
+
+.sw-callout--decision {
+  border-left-color: #b45309;
+  background: color-mix(in oklch, #b45309 6%, var(--sw-surface, #ffffff));
+}
+
+.sw-callout--risk {
+  border-left-color: #dc2626;
+  background: color-mix(in oklch, #dc2626 10%, var(--sw-surface, #ffffff));
+}
+
+/* Dark mode adjustments */
+html.dark .sw-callout {
+  background: color-mix(in oklch, var(--sw-info) 8%, var(--sw-surface, oklch(0.205 0 0)));
+}
+html.dark .sw-callout--info {
+  background: color-mix(in oklch, var(--sw-info) 8%, var(--sw-surface, oklch(0.205 0 0)));
+}
+html.dark .sw-callout--warning {
+  background: color-mix(in oklch, var(--sw-warning) 8%, var(--sw-surface, oklch(0.205 0 0)));
+}
+html.dark .sw-callout--success {
+  background: color-mix(in oklch, var(--sw-success) 8%, var(--sw-surface, oklch(0.205 0 0)));
+}
+html.dark .sw-callout--error {
+  background: color-mix(in oklch, var(--sw-error) 8%, var(--sw-surface, oklch(0.205 0 0)));
+}
+html.dark .sw-callout--tip {
+  background: color-mix(in oklch, #a78bfa 8%, var(--sw-surface, oklch(0.205 0 0)));
+}
+html.dark .sw-callout--decision {
+  background: color-mix(in oklch, #fbbf24 8%, var(--sw-surface, oklch(0.205 0 0)));
+}
+html.dark .sw-callout--risk {
+  background: color-mix(in oklch, #f87171 10%, var(--sw-surface, oklch(0.205 0 0)));
+}
+
+}

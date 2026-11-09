@@ -1,0 +1,45 @@
+# body class
+sw-layout-fluid sw-theme-doc
+# head (one tag per line; <style> and inline <script> bodies are replaced by digests)
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StreamWeaver Canvas: probe</title>
+<style>[css 2434f41c5b7f]</style>
+<style>[css d3037a149254]</style>
+<style>[css 6732a632695e]</style>
+<style>[css 9daf8e10ee84]</style>
+<script>[script 1fecbf6d34b7, 2232 bytes]</script>
+<script src="https://unpkg.com/htmx.org@2.0.4">
+</script>
+<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer>
+</script>
+<script>[script 4edc18f82f3a, 7376 bytes]</script>
+<!-- Chart.js for charts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+</script>
+<!-- Chart lazy-init engine — always present (like the mermaid engine below) so a
+`chart type:` push is initialized even though the poll swap that lands it
+replaces #app-container via innerHTML, which never executes embedded <script>
+tags. Without this, only a chart present in the page's very first HTML render
+-- never a later canvas-push -- would ever call `new Chart(...)`. -->
+<style>[css 6d7d90a627b3]</style>
+<script>[script a6b95098179a, 4010 bytes]</script>
+<!-- Highlight.js for syntax highlighting -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js">
+</script>
+<!-- Mermaid zoom/pan engine — always present so canvas-push with mermaid works on first push -->
+<script>[script 7f14c1745be3, 29571 bytes]</script>
+<!-- Replay engine: always present. Inline scripts in morphed canvas-push content are inert, so a replay arriving in a later push needs the engine already on the page -->
+<script>[script 626d1f8fabb5, 6629 bytes]</script>
+<!-- Kick off CDN fetch immediately so mermaid is ready before first push arrives -->
+<script>[script 9c072ae7f4a0, 55 bytes]</script>
+<meta name="sw-page-end">
+# body <link>, <script> and <style> tags, in document order
+<script type="application/json" id="sw-state-data">[script 4f82429f09a6, 17 bytes]</script>
+<style>[css 084aca0b782a]</style>
+<style>[css c0406a386c36]</style>
+<style>[css 7fa80ed195d5]</style>
+<script>[script ba218c0b8a49, 826 bytes]</script>
+<script>[script d6fb14de67f3, 29347 bytes]</script>
+<script>[script 149065bbac1f, 8976 bytes]</script>

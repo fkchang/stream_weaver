@@ -2,6 +2,7 @@
 
 require 'digest'
 require 'set'
+require_relative 'theme'
 require_relative 'resource'
 
 module StreamWeaver
@@ -39,12 +40,7 @@ module StreamWeaver
       end
     end
 
-    # Built-in themes (custom themes checked via StreamWeaver.theme_exists?)
-    BUILT_IN_THEMES = [:default, :dashboard, :document, :dark, :doc, :ide].freeze
-    # For backwards compatibility
-    VALID_THEMES = BUILT_IN_THEMES
-
-    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :inline_stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions, :action_updates, :action_primary
+    attr_reader :title, :block, :layout, :chrome, :theme, :theme_token_css, :scripts, :stylesheets, :inline_stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions, :action_updates, :action_primary
 
     # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
     ENDPOINT_VERBS = %i[get post put patch delete].freeze
@@ -84,15 +80,6 @@ module StreamWeaver
     RESERVED_ENDPOINT_EXACT = %w[/update /submit].freeze
     RESERVED_ENDPOINT_PREFIXES = %w[/action/ /event/ /form/ /theme/ /sw/].freeze
 
-    # Content-type by extension for local files served via the /sw-asset/
-    # route (App#local_asset, stylesheets: auto-detection). Shared with
-    # server.rb's /sw-asset/ route handler.
-    LOCAL_ASSET_MIME_TYPES = {
-      'css' => 'text/css', 'js' => 'application/javascript', 'mjs' => 'application/javascript',
-      'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
-      'gif' => 'image/gif', 'svg' => 'image/svg+xml', 'webp' => 'image/webp', 'ico' => 'image/x-icon'
-    }.freeze
-
     # @param assets_dirs [Array<String>] Extra directories (besides the
     #   calling script's own directory) that local_asset/stylesheets: are
     #   allowed to serve local files from (stream_weaver-1lo).
@@ -128,6 +115,7 @@ module StreamWeaver
       @allowed_asset_dirs = ([@script_dir] + assets_dirs.map { |d| File.expand_path(d) }).uniq
       @stylesheets = stylesheets.map { |href| resolve_stylesheet_href(href) }
       @inline_stylesheets = []
+      reset_theme_tokens
       @fonts = fonts
       @transient_keys = Set.new
       @timers = []
@@ -151,8 +139,8 @@ module StreamWeaver
 
     def validate_theme(theme)
       theme = theme.to_sym
-      # Accept built-in themes or custom registered themes
-      return theme if BUILT_IN_THEMES.include?(theme) || StreamWeaver.theme_exists?(theme)
+      # Accept any registered theme, built-in (theme/built_ins.rb) or custom
+      return theme if StreamWeaver.theme_exists?(theme)
       warn "StreamWeaver: Unknown theme '#{theme}', falling back to :default"
       :default
     end
@@ -334,6 +322,7 @@ module StreamWeaver
       @render_state.deferred_target = deferred_target&.to_s
       apply_scope_lifecycle
       flash_messages if chrome
+      reset_theme_tokens
       evaluate_dsl_block(@block)
       @render_state.checkbox_keys = collect_checkbox_keys(components)
       @timers_frozen = true
@@ -1473,7 +1462,7 @@ module StreamWeaver
       raise ArgumentError, "local_asset: file not found: #{path}" unless abs_path
 
       ensure_asset_path_allowed!(abs_path, path)
-      "/sw-asset/#{ComponentAssets.register_file(abs_path)}/#{File.basename(abs_path)}"
+      ComponentAssets.url(abs_path)
     end
 
     # Adds CSS as an inline <style> block, usable inside the DSL body itself
@@ -1490,6 +1479,39 @@ module StreamWeaver
     def use_stylesheet(source)
       css = resolve_stylesheet_content(source)
       @inline_stylesheets << css unless @inline_stylesheets.include?(css)
+    end
+
+    # The app's own token values over whatever theme the page wears, from
+    # the DSL body, so a canvas push carries them too. theme_overrides: is
+    # the same call. Owner decision 2: a surface token (Theme::SURFACE_TOKENS)
+    # applies in light mode only unless dark: gives it a dark value; every
+    # other token applies in both modes. Each render starts from
+    # theme_overrides: alone, so state-dependent tokens do not pile up.
+    #
+    # Limits: a canvas push applies them live, with no reload (the push
+    # carries its resolved page); an Opal build does not render them and
+    # warns once, for theme_tokens in OpalRuntime and for theme_overrides:
+    # in opal_entry.rb.
+    #
+    # @example
+    #   theme_tokens color_primary: '#a21caf', dark: { color_bg: '#120712' }
+    def theme_tokens(dark: {}, **tokens)
+      return if tokens.empty? && dark.empty?
+
+      css = Theme.token_css(Theme::TOKEN_SCOPE, tokens, dark: dark, carry: true)
+      return if @theme_token_css.include?(css)
+
+      warn_unknown_theme_tokens(tokens.keys + dark.keys)
+      @theme_token_css << css
+    end
+
+    # The CSS a DSL fragment carries to a host that renders it without its
+    # App (canvas, reader): its theme tokens (layered: they must keep losing
+    # to the framework's dark blocks), then its use_stylesheet blocks.
+    #
+    # @return [Array<String>]
+    def fragment_css
+      @theme_token_css.map { |css| StreamWeaver::CSS.layer_wrap(css) } + @inline_stylesheets
     end
 
     # In-DSL equivalents of App.new's `theme:`/`layout:` kwargs, for the same
@@ -1600,7 +1622,27 @@ module StreamWeaver
       return href unless abs_path
 
       ensure_asset_path_allowed!(abs_path, href)
-      "/sw-asset/#{ComponentAssets.register_file(abs_path)}/#{File.basename(abs_path)}"
+      ComponentAssets.url(abs_path)
+    end
+
+    def reset_theme_tokens
+      @theme_token_css = []
+      theme_tokens(**@theme_overrides.transform_keys(&:to_sym))
+    end
+
+    # A raw custom property ("--x-y") is named on purpose; only a bare key
+    # that matches no schema entry is suspect. Once per key per App, since
+    # every render re-declares the tokens.
+    def warn_unknown_theme_tokens(keys)
+      @_warned_theme_tokens ||= Set.new
+      unknown = keys.reject { |key| key.to_s.start_with?("--") || Theme::VARIABLE_SCHEMA.key?(key.to_sym) }
+      unknown = unknown.reject { |key| @_warned_theme_tokens.include?(key.to_sym) }
+      return if unknown.empty?
+
+      @_warned_theme_tokens.merge(unknown.map(&:to_sym))
+      warn "StreamWeaver: Unknown theme token(s) #{unknown.map(&:inspect).join(', ')} -- " \
+           "no matching entry in Theme::VARIABLE_SCHEMA, so each is emitted as a raw --sw- custom property " \
+           "that no built-in styling reads."
     end
 
     # Resolves a `use_stylesheet` argument to raw CSS text: a local file

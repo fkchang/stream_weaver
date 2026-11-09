@@ -3,23 +3,27 @@
 require_relative "css"
 require_relative "views"
 require_relative "theme"
+require_relative "fonts"
+require_relative "delivery"
+require_relative "assets"
 
 module StreamWeaver
-  # Framework-CSS <head> block, shared by all three renderers that need the
-  # same cascade order: the canvas (Canvas::BridgeServer), the reader
-  # (Canvas::Reader / reader_layout.erb), and static exports
-  # (Export::HtmlExporter). Extracted from BridgeServer#render_canvas_page,
+  # Framework-CSS <head> block in one cascade order. Head#to_s emits it for
+  # the reader (Canvas::Reader / reader_layout.erb) and static exports
+  # (Export::HtmlExporter); the canvas (Canvas::BridgeServer) emits
+  # framework_css_html plus Head#asset_tags; the standalone view and the
+  # Opal builder place Head's buckets themselves.
+  # Extracted from BridgeServer#render_canvas_page,
   # which was the correct reference implementation (stream_weaver-oeo fixed
   # its cascade-layer bug: CANVAS_CSS must be layer-wrapped alongside
   # master_theme_css/visual_skills_css, or it silently outranks them) --
   # extracting it here is what lets the other two call the same ordering
   # instead of re-deriving it (stream_weaver-mdc).
   #
-  # Deliberately narrow scope: only the framework <style> blocks plus
-  # optional user CSS. Body-class computation (session theme overrides,
-  # chrome: false, exclusive-layout registry entries), <title>/favicon, CDN
-  # scripts, and chrome/widgets all stay with each caller -- this is NOT a
-  # canonical replacement for AppView's full standalone shell.
+  # PageShell.resolve is the one description of what a page needs (its
+  # Assets and body class) for every host: standalone AppView, the canvas,
+  # the reader, the exporter and the Opal builder. <title>/favicon, adapter
+  # CDN scripts and chrome/widgets stay with each caller.
   module PageShell
     # Canvas-specific CSS -- moved verbatim from Canvas::BridgeServer's old
     # SW_STYLES constant when this module was extracted (stream_weaver-39j).
@@ -506,13 +510,18 @@ module StreamWeaver
       #   to call this).
       # @return [String] HTML <style> tags
       def framework_css_html(extra_layers: [])
-        layers = [StreamWeaver::CSS::LAYER_NAME, *extra_layers].join(", ")
-        <<~HTML
-          <style>@layer #{layers};</style>
-          <style>#{StreamWeaver::CSS.layer_wrap(CANVAS_CSS)}</style>
-          <style>#{StreamWeaver::CSS.layer_wrap(StreamWeaver::Views::AppView.master_theme_css)}</style>
-          <style>#{StreamWeaver::CSS.layer_wrap(StreamWeaver::Theme.visual_skills_css)}</style>
-        HTML
+        "#{layer_pin_html(extra_layers)}\n#{framework_blocks_html}"
+      end
+
+      # The <style> that fixes the cascade layer order, before any framework CSS.
+      def layer_pin_html(extra_layers = [])
+        "<style>@layer #{[StreamWeaver::CSS::LAYER_NAME, *extra_layers].join(', ')};</style>"
+      end
+
+      # CANVAS_CSS, master_theme_css and visual_skills_css, each in the framework layer.
+      def framework_blocks_html
+        [CANVAS_CSS, StreamWeaver::Views::AppView.master_theme_css, StreamWeaver::Theme.visual_skills_css]
+          .map { |css| "<style>#{StreamWeaver::CSS.layer_wrap(css)}</style>" }.join("\n") + "\n"
       end
 
       # User-authored inline CSS, always UNLAYERED so it outranks every
@@ -524,6 +533,206 @@ module StreamWeaver
       # @return [String] HTML <style> tags
       def user_css_html(inline_stylesheets: [])
         inline_stylesheets.map { |css| "<style>#{css}</style>" }.join("\n")
+      end
+
+      # What one page needs, resolved once per render AFTER its body has
+      # rendered (components register CSS while they render, so earlier
+      # would miss it). Every host reads its body class and its theme-,
+      # app- and component-owned head tags from the result.
+      #
+      # @param app [StreamWeaver::App, nil] nil for a host with no App (the
+      #   canvas page, an Opal build): only the theme and layout contribute
+      # @param theme [Symbol, nil] the theme in effect (a session override
+      #   wins over app.theme, so the caller decides)
+      # @param layout [Symbol, nil] nil omits the sw-layout-* class
+      # @param layout_entry [Hash, nil] the registered layout whose render
+      #   block draws the page (app.layout_entry). A host that never runs
+      #   that block (the exporter) passes nil and keeps sw-layout-*.
+      # @param injected_css [Hash{Symbol=>String}] component CSS registered
+      #   during the body render (adapter#inject_component_css), keyed so
+      #   each block appears once
+      # @param theme_css [Boolean] false leaves a registered custom theme's
+      #   CSS and the app's theme_tokens out of framework_css, for the
+      #   standalone view, which still emits them in <body>
+      #   (AppView#render_custom_theme_css, #render_theme_tokens) until they move
+      #   onto Head#to_s
+      # @return [Page]
+      def resolve(app, theme:, layout: app&.layout, layout_entry: app&.layout_entry, injected_css: {},
+                  theme_css: true)
+        page_assets = theme_assets(theme, css: theme_css) + layout_assets(layout_entry, layout) +
+                      Assets.of(body_classes: theme_body_classes(theme))
+        # The app's theme_tokens are theme CSS: right after the theme's own,
+        # which they must follow to win the specificity tie.
+        page_assets += Assets.of(framework_css: app.theme_token_css) if app && theme_css
+        page_assets += Assets.of(framework_css: injected_css.values)
+        page_assets = app_assets(app) + page_assets + component_assets(app) if app
+        Page.new(theme: theme, layout: layout, assets: page_assets)
+      end
+
+      # The page around a DSL fragment (a canvas push, a canvas-read doc),
+      # whose App is gone by the time the page is drawn: its theme, layout
+      # and the inline CSS the body declared (use_stylesheet, theme_tokens).
+      # @return [Page]
+      def fragment_page(theme:, layout:, user_css: [])
+        resolve(nil, theme: theme, layout: layout) + Assets.of(user_css: user_css)
+      end
+
+      # @param page [Page]
+      # @param delivery [Delivery::Served, Delivery::Inline, Delivery::Copied]
+      # @return [Head] the page's head tags, one method per bucket
+      def head(page, delivery)
+        Head.new(page.assets, delivery)
+      end
+
+      # Everything the classes in a component tree declare with the class
+      # macros (css, css_path, js_path, font), as tags, each class once.
+      # The standalone head emits it; a fragment (canvas content, a reader
+      # doc, an export body) leads with it, since its page head never saw
+      # those components.
+      #
+      # @param components [Array<Components::Base>]
+      # @param delivery [Delivery::Served, Delivery::Inline, Delivery::Copied, nil]
+      #   nil for a fragment that only updates a page whose head already
+      #   loaded the files (a standalone htmx response): its CSS still comes
+      #   along, as injected component CSS always has, but no file tags, so
+      #   a script is never run twice
+      # @return [String] HTML
+      def components_html(components, delivery)
+        head = Head.new(ComponentAssets.assets(components), delivery)
+        tags = [head.framework_css, head.user_css]
+        tags += [head.stylesheets, head.scripts, head.fonts] if delivery
+        tags.reject(&:empty?).join("\n")
+      end
+
+      private
+
+      # A registered custom theme's CSS (a built-in's is in master_theme_css).
+      def theme_assets(theme, css: true)
+        custom = theme && StreamWeaver.get_theme(theme)
+        custom_css = css && custom && !custom.built_in? ? [custom.to_css] : []
+        Assets.of(fonts: StreamWeaver.theme_fonts(theme), stylesheets: StreamWeaver.theme_stylesheets(theme),
+                  framework_css: custom_css)
+      end
+
+      # A registered theme wears its base theme's class first: the base's
+      # type, spacing and radius come from that class's CSS, and the theme's
+      # own block (same specificity, later) overrides what it sets.
+      def theme_body_classes(theme)
+        return [] unless theme
+
+        custom = StreamWeaver.get_theme(theme)
+        base = custom && !custom.built_in? ? ["sw-theme-#{custom.base_theme}"] : []
+        base + ["sw-theme-#{theme}"]
+      end
+
+      # An exclusive layout names its own body classes instead of sw-layout-*.
+      # A registered layout's css_path reaches every host that names the
+      # layout, whether or not it runs the layout's render block.
+      def layout_assets(entry, layout)
+        css_path = (entry || (layout && LayoutRegistry[layout]))&.dig(:css_path)
+        assets = Assets.of(stylesheets: [css_path].compact)
+        return assets + Assets.of(body_classes: entry[:body_classes]) if entry&.dig(:exclusive)
+
+        assets + Assets.of(body_classes: layout ? ["sw-layout-#{layout}"] : [])
+      end
+
+      # What the app's component classes declare with the class macros,
+      # layout slots included.
+      def component_assets(app)
+        ComponentAssets.assets(app.components + (app.layout_slots || {}).values.flatten)
+      end
+
+      def app_assets(app)
+        Assets.of(fonts: app.fonts, stylesheets: app.stylesheets, user_css: app.inline_stylesheets,
+                  scripts: app.scripts)
+      end
+    end
+
+    # A resolved page: the theme and layout in effect and everything they,
+    # the app and its components need.
+    Page = Data.define(:theme, :layout, :assets) do
+      # A host's own additions (its user CSS, its extra body classes) after the page's.
+      def +(more)
+        with(assets: assets + more)
+      end
+
+      def body_class
+        assets.body_classes.join(" ")
+      end
+    end
+
+    # A page's head tags. #to_s is the whole asset part of a head in one
+    # fixed order (canvas, reader, export); the per-bucket methods remain
+    # for the standalone view, which still places them itself.
+    class Head
+      # @param assets [Assets]
+      # @param delivery [Delivery::Served, Delivery::Inline, Delivery::Copied]
+      #   how this host loads a local file
+      def initialize(assets, delivery)
+        @assets = assets
+        @delivery = delivery
+      end
+
+      # Layer pin, fonts, framework CSS (the shared blocks, then the theme's
+      # and the components'), theme and app stylesheets, user CSS, scripts.
+      #
+      # @param extra_layers [Array<String>] layers pinned after the
+      #   framework's (the reader's chrome)
+      # @return [String] HTML
+      def to_s(extra_layers: [])
+        [PageShell.layer_pin_html(extra_layers), fonts, PageShell.framework_blocks_html, framework_css,
+         stylesheets, user_css, scripts].reject(&:empty?).join("\n")
+      end
+
+      # The page's own tags (fonts, theme and component CSS, stylesheets),
+      # one string each, for a live canvas that appends the ones it lacks
+      # after a push. Scripts are left out: one appended later would not run
+      # in page order. User CSS is left out: it changes with every push, so
+      # the canvas replaces it instead of appending.
+      # @return [Array<String>]
+      def asset_tags
+        [*font_tags, framework_css, *stylesheet_tags].reject(&:empty?)
+      end
+
+      # One Google Fonts stylesheet for every declared Google font, then an
+      # @font-face block for every self-hosted one ({ family:, src: }).
+      def fonts
+        font_tags.join("\n")
+      end
+
+      def stylesheets
+        stylesheet_tags.join("\n")
+      end
+
+      # The page's framework-layer CSS in one layered block: a registered
+      # custom theme's token CSS, the app's theme_tokens and component CSS.
+      def framework_css
+        return "" if @assets.framework_css.empty?
+
+        "<style>#{StreamWeaver::CSS.layer_wrap(@assets.framework_css.join("\n"))}</style>"
+      end
+
+      def user_css
+        PageShell.user_css_html(inline_stylesheets: @assets.user_css)
+      end
+
+      def scripts
+        @assets.scripts.map { |path| @delivery.ref(path, :script) }.join("\n")
+      end
+
+      private
+
+      def font_tags
+        href = StreamWeaver::Fonts.google_fonts_href(@assets.fonts)
+        faces = StreamWeaver::Fonts.font_face_css(@assets.fonts, @delivery)
+        tags = []
+        tags << Delivery.tag(href, :stylesheet) if href
+        tags << "<style>#{faces}</style>" unless faces.empty?
+        tags
+      end
+
+      def stylesheet_tags
+        @assets.stylesheets.map { |path| @delivery.ref(path, :stylesheet) }
       end
     end
   end

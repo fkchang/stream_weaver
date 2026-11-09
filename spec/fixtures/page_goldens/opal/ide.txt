@@ -1,0 +1,33 @@
+# body class
+sw-theme-default sw-theme-ide
+# head (one tag per line; <style> and inline <script> bodies are replaced by digests)
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Page Probe</title>
+<script>[script 1fecbf6d34b7, 2232 bytes]</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.8/index.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<style>[css 86607930bd08]</style>
+<link rel="stylesheet" href="prism-tomorrow.min.css">
+<script src="marked.umd.js">
+</script>
+<script src="morphdom.min.js">
+</script>
+<script src="prism.min.js">
+</script>
+<script src="mermaid.min.js">
+</script>
+<script src="sw-mermaid-zoom.js">
+</script>
+<script src="sw-replay.js">
+</script>
+<script src="diff.min.js">
+</script>
+# body <link>, <script> and <style> tags, in document order
+<script src="app.js">
+<script>[script f0d51e3e51e0, 330 bytes]</script>
+<script>[script 0c6ce73f94d8, 99 bytes]</script>
+# build warnings

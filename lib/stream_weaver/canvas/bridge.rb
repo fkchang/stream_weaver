@@ -2,6 +2,7 @@
 
 require_relative 'protocol'
 require_relative 'session'
+require_relative 'fragment'
 require_relative 'event_log'
 
 module StreamWeaver
@@ -10,9 +11,6 @@ module StreamWeaver
     # Manages sessions and routes messages between the two.
     class Bridge
       DEFAULT_PORT = 4568
-
-      # Result of rendering DSL to HTML
-      RenderResult = Struct.new(:html, :error, :stylesheets, keyword_init: true)
 
       attr_reader :sessions, :port
 
@@ -130,30 +128,25 @@ module StreamWeaver
         session = get_session(name)
         return { type: 'error', message: "Session not found: #{name}" } unless session
 
-        # Render DSL to HTML
-        result = render_dsl(dsl, session_name: name)
-
-        # Store in session for polling clients
-        session.set_html(result.html)
-
-        # Broadcast to all websockets (if any connected)
-        session.broadcast({ type: 'update', html: result.html })
-
-        # Return error info if rendering failed
-        if result.error
-          { type: 'push_error', message: result.error }
-        else
-          # Persist raw DSL, its inline stylesheets, and the directory it was
-          # pushed from only on successful render so a later failed push
-          # doesn't clobber the user's last-good content, re-skin
-          # (stream_weaver-9uk), or desync source_dir from the DSL it's
-          # paired with (canvas-doc-location-and-discovery.md).
-          session.set_dsl(dsl)
-          session.set_stylesheets(result.stylesheets)
-          session.set_source_dir(source_dir)
-          session.doc_pushed!
-          { type: 'push_ok' }
+        # A push that fails to evaluate changes nothing: the open page keeps
+        # its content, body class and assets, and the agent gets the error.
+        # SystemStackError is not a StandardError: a body that recurses
+        # without end would otherwise kill the socket thread unanswered.
+        fragment = begin
+          render(dsl, session)
+        rescue ScriptError, StandardError, SystemStackError => e
+          return { type: 'push_error', message: e.message }
         end
+
+        # The page (theme, layout, inline CSS) goes with the HTML, so a
+        # pushed use_theme reaches the open page (disc-127). The DSL and
+        # source_dir are the last good push's too: saving re-skins nothing
+        # (stream_weaver-9uk) and source_dir never desyncs from its DSL
+        # (canvas-doc-location-and-discovery.md).
+        session.publish(fragment, dsl: dsl, source_dir: source_dir)
+        session.broadcast({ type: 'update', html: fragment.html })
+        session.doc_pushed!
+        { type: 'push_ok' }
       end
 
       def handle_toast(name, message, variant, duration)
@@ -180,14 +173,14 @@ module StreamWeaver
       end
 
       # canvas-snapshot's DSL/body source (stream_weaver-ps84): returns the
-      # session's current in-memory dsl plus the theme/layout it was created
-      # with, since the bridge only sets those at Session.new and neither
-      # can drift afterward (Session has no theme=/layout= setter).
+      # session's current in-memory dsl plus the theme/layout on the page
+      # now (the last good push's use_theme/use_layout, else the ones the
+      # session was created with).
       def handle_get_dsl(name)
         session = get_session(name)
         return { type: 'error', message: "Session not found: #{name}" } unless session
 
-        { type: 'dsl', name: name, dsl: session.dsl, theme: session.theme, layout: session.layout }
+        { type: 'dsl', name: name, dsl: session.dsl, theme: session.current_theme, layout: session.current_layout }
       end
 
       # Drain viewer comments (canvas-notes). A name drains that session; no
@@ -275,31 +268,12 @@ module StreamWeaver
         { type: 'list', sessions: list_sessions }
       end
 
-      # Render StreamWeaver DSL to HTML
-      # @param dsl [String] DSL code
-      # @param session_name [String] Session name for routing
-      # @return [RenderResult] Result with html and optional error
-      def render_dsl(dsl, session_name:)
-        # Create a mini app to evaluate the DSL
-        mini_app = StreamWeaver::App.new("Canvas")
-        mini_app.instance_eval(dsl)
-
-        # Create adapter in websocket mode
-        adapter = StreamWeaver::Adapter::AlpineJS.new(
-          url_prefix: "/canvas/#{session_name}",
-          mode: :websocket
-        )
-
-        # Render to HTML
-        state = {}
-        html = StreamWeaver::Views::AppContentView.new(mini_app, state, adapter, false).call
-        RenderResult.new(html: html, error: nil, stylesheets: mini_app.inline_stylesheets)
-      rescue => e
-        RenderResult.new(
-          html: "<div class='error'>Error: #{e.message}</div>",
-          error: e.message,
-          stylesheets: []
-        )
+      # The pushed body as canvas content: the session's theme and layout
+      # stand in for the ones the body does not declare.
+      # @return [Fragment]
+      def render(dsl, session)
+        adapter = StreamWeaver::Adapter::AlpineJS.new(url_prefix: "/canvas/#{session.name}", mode: :websocket)
+        Fragment.render(dsl, adapter: adapter, theme: session.theme, layout: session.layout)
       end
     end
   end

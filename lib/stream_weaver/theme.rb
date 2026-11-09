@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require_relative 'fonts' unless RUBY_ENGINE == 'opal' # register_theme resolves self-hosted fonts
 require_relative 'theme/presets'
 require_relative 'theme/auto_mode'
 
@@ -149,114 +150,105 @@ module StreamWeaver
       font_mono: { css: "--sw-font-mono", type: :string }
     }.freeze
 
-    # Built-in theme definitions (matches CSS in views.rb)
-    BUILT_IN_THEMES = {
-      default: {
-        name: "Default",
-        description: "Warm Industrial",
-        variables: {
-          font_display: "'Source Sans 3', system-ui, sans-serif",
-          font_body: "'Source Sans 3', system-ui, sans-serif",
-          font_size_base: "17px",
-          line_height: "1.7",
-          color_primary: "#a16207",
-          color_bg: "#f2ede4",
-          color_text: "#111111",
-          spacing_md: "1.25rem",
-          card_border_left: "3px solid var(--sw-color-primary)"
-        }
-      },
-      dashboard: {
-        name: "Dashboard",
-        description: "Data Dense",
-        variables: {
-          font_display: "'Source Sans 3', system-ui, sans-serif",
-          font_body: "'Source Sans 3', system-ui, sans-serif",
-          font_size_base: "15px",
-          line_height: "1.5",
-          color_primary: "#a16207",
-          color_bg: "#fafafa",
-          color_text: "#111111",
-          spacing_md: "0.75rem",
-          card_border_left: "1px solid var(--sw-color-border)"
-        }
-      },
-      document: {
-        name: "Document",
-        description: "Reading Mode",
-        variables: {
-          font_display: "'Source Sans 3', system-ui, sans-serif",
-          font_body: "'Crimson Pro', Georgia, 'Times New Roman', serif",
-          font_size_base: "19px",
-          line_height: "1.85",
-          color_primary: "#6b7280",
-          color_bg: "#faf8f5",
-          color_text: "#1a1a1a",
-          spacing_md: "1.5rem",
-          card_border_left: "none"
-        }
-      },
-      doc: {
-        name: "Doc",
-        description: "Compact Editorial",
-        variables: {
-          font_display: "Charter, 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif",
-          font_body: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif",
-          font_size_base: "15px",
-          line_height: "1.65",
-          color_primary: "#1E4ED8",
-          color_bg: "#F5F4EF",
-          color_text: "#181714",
-          spacing_md: "1rem",
-          card_border_left: "none"
-        }
-      },
-      ide: {
-        name: "IDE",
-        description: "Editor Workspace",
-        # Loaded by the page head whenever this theme is active.
-        fonts: ["JetBrains+Mono:wght@400;500;600;700"],
-        stylesheets: ["https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.8/index.css"],
-        variables: {
-          font_display: "'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-          font_body: "'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-          font_size_base: "15px",
-          line_height: "1.6",
-          color_primary: "#2e7d16",
-          color_bg: "#ffffff",
-          color_text: "#1a1a1e",
-          spacing_md: "1rem",
-          card_border_left: "none"
-        }
-      }
-    }.freeze
+    # Surface tokens (the colors_neutral and shadows groups): the ones the
+    # framework's dark block (html.dark body in master_theme_css) gives its
+    # own value. Owner decision 2: a light value for a surface token applies
+    # in light mode only unless the caller passes dark:, while every other
+    # token (primary, accent, type, spacing) applies in both modes.
+    SURFACE_TOKENS = %i[
+      color_text color_text_muted color_text_light color_bg color_bg_card color_bg_elevated
+      color_border color_border_strong color_border_focus
+      shadow_sm shadow_md shadow_lg shadow_xl shadow_inner
+    ].freeze
 
-    attr_reader :name, :variables, :base_theme, :label, :description
+    # Where an app's own tokens (theme_tokens, theme_overrides:) apply: the
+    # body of any themed page. Same specificity as a theme's body.sw-theme-X
+    # block, and emitted after it, so it wins in light mode; the framework's
+    # dark blocks still outrank its light block, so a surface token keeps
+    # losing in dark mode. Theme-agnostic because a canvas push does not know
+    # the page theme.
+    TOKEN_SCOPE = 'body[class*="sw-theme-"]'
+
+    # The selectors that mean "dark mode": AutoMode and the theme toggle set
+    # both on <html>, and the built-in themes key on one or the other.
+    # Generated CSS matches either, so a host that sets only
+    # data-sw-theme="dark" on :default (which keys on html.dark alone) gets a
+    # dark: background with :default's light-mode text unless dark: also
+    # gives a text token.
+    DARK_SIGNALS = ['html.dark', 'html[data-sw-theme="dark"]'].freeze
+
+    # The scope that means <html> itself, where the dark signals live.
+    ROOT_SCOPE = ":root"
+
+    # The one token CSS generator: scope {} for the light tokens, then the
+    # scope under either dark signal for the dark tokens (left out if none).
+    #
+    # @param scope [String] a selector, or ROOT_SCOPE for <html> itself
+    # @param light [Hash] VARIABLE_SCHEMA keys or raw custom property names => values
+    # @param dark [Hash] the same, for dark mode
+    # @param carry [Boolean] true carries the light tokens into dark mode
+    #   under owner decision 2 (dark_tokens); false uses dark: as given
+    # @return [String] CSS
+    def self.token_css(scope, light, dark: {}, carry: false)
+      dark = dark_tokens(light, dark) if carry
+      dark_scope = DARK_SIGNALS.map { |signal| scope == ROOT_SCOPE ? signal : "#{signal} #{scope}" }.join(", ")
+      [[scope, light], [dark_scope, dark]].reject { |_, tokens| tokens.empty? }.map do |selector, tokens|
+        "#{selector} {\n#{tokens.map { |key, value| "  #{css_property(key)}: #{value};" }.join("\n")}\n}\n"
+      end.join
+    end
+
+    # Owner decision 2: dark mode carries every light token except the
+    # surface ones, then the caller's dark: tokens.
+    #
+    # @return [Hash] the dark tokens for token_css
+    def self.dark_tokens(light, dark)
+      light.reject { |key, _| SURFACE_TOKENS.include?(key.to_sym) }.merge(dark)
+    end
+
+    # @return [String] the custom property a token key names
+    def self.css_property(key)
+      name = key.to_s
+      return name if name.start_with?("--")
+
+      VARIABLE_SCHEMA.dig(key.to_sym, :css) || "--sw-#{name.tr('_', '-').delete_prefix('sw-')}"
+    end
+
+    attr_reader :name, :variables, :dark, :css, :base_theme, :label, :description, :fonts, :stylesheets
 
     # @param name [Symbol] Theme identifier
     # @param variables [Hash] Theme variable overrides
     # @param base [Symbol] Base theme to inherit from (:default, :dashboard, :document)
     # @param label [String] Human-readable name
     # @param description [String] Short description
-    def initialize(name, variables = {}, base: :default, label: nil, description: nil)
+    # @param fonts [Array<String>] Google Fonts entries (Fonts.google_fonts_href format) the page head loads
+    # @param stylesheets [Array<String>] Stylesheet URLs the page head loads
+    # @param dark [Hash] dark-mode token values (see SURFACE_TOKENS for what carries over without one)
+    # @param css [String, nil] extra CSS appended after the generated token CSS
+    # @param built_in [Boolean] true for the framework's own themes, whose CSS lives in master_theme_css
+    def initialize(name, variables = {}, base: :default, label: nil, description: nil,
+                   fonts: [], stylesheets: [], dark: {}, css: nil, built_in: false)
       @name = name.to_sym
       @base_theme = base.to_sym
       @variables = normalize_variables(variables)
+      @dark = normalize_variables(dark)
+      @css = css
       @label = label || name.to_s.split('_').map(&:capitalize).join(' ')
       @description = description || "Custom theme"
+      @fonts = fonts
+      @stylesheets = stylesheets
+      @built_in = built_in
     end
 
-    # Generate CSS variable declarations for this theme
-    #
-    # @return [String] CSS variable block
-    def to_css
-      css_lines = @variables.map do |key, value|
-        schema = VARIABLE_SCHEMA[key]
-        css_var = schema ? schema[:css] : "--sw-#{key.to_s.tr('_', '-')}"
-        "  #{css_var}: #{value};"
-      end
+    def built_in?
+      @built_in
+    end
 
-      "body.sw-theme-#{@name} {\n#{css_lines.join("\n")}\n}"
+    # This theme's CSS: its light and dark tokens from the generator, then its css:.
+    #
+    # @return [String] CSS
+    def to_css
+      tokens = Theme.token_css("body.sw-theme-#{@name}", @variables, dark: @dark, carry: true)
+      @css ? "#{tokens}#{@css}\n" : tokens
     end
 
     # Export as Ruby registration code
@@ -554,17 +546,6 @@ module StreamWeaver
       CSS
     end
 
-    # Generate a Google Fonts <link> tag URL for the given font families.
-    #
-    # @param families [Array<String>] Google Fonts family strings
-    #   e.g. ["Instrument+Serif:ital@0;1", "JetBrains+Mono:wght@400;500"]
-    # @return [String] Full Google Fonts CSS URL
-    def self.google_fonts_url(*families)
-      families = families.flatten
-      query = families.map { |f| "family=#{f}" }.join("&")
-      "https://fonts.googleapis.com/css2?#{query}&display=swap"
-    end
-
     private
 
     # Normalize variable keys to symbols
@@ -573,25 +554,39 @@ module StreamWeaver
     end
   end
 
-  # Theme registry - stores custom themes
+  # Theme registry: the built-in themes (theme/built_ins.rb) and any custom ones
   @themes = {}
 
   class << self
     # Access the theme registry
     #
-    # @return [Hash<Symbol, Theme>] Registered themes
+    # @return [Hash<Symbol, Theme>] Registered themes, built-ins first
     def themes
       @themes
     end
 
-    # Register a custom theme
+    # Register a theme
     #
     # @param name [Symbol] Theme identifier (used in theme: :name)
     # @param variables [Hash] CSS variable overrides
     # @param base [Symbol] Base theme to inherit from
     # @param label [String] Human-readable name
     # @param description [String] Short description
+    # @param fonts [Array<String, Hash>] fonts the page head loads: Google Fonts
+    #   entries, or { family:, src: } for a self-hosted file (a relative src
+    #   resolves against the file that registers the theme)
+    # @param stylesheets [Array<String>] Stylesheet URLs the page head loads
+    # @param dark [Hash] dark-mode token values; without one a surface token
+    #   (Theme::SURFACE_TOKENS) is light-only and every other token applies in both modes
+    # @param css [String, nil] extra CSS emitted after the generated token CSS
     # @return [Theme] The registered theme
+    #
+    # @example A theme from a hash, light and dark, no hand-written token CSS
+    #   StreamWeaver.register_theme :harbor,
+    #     { color_primary: "#0e7490", color_bg: "#f7fafa" },
+    #     dark: { color_primary: "#22d3ee", color_bg: "#0b1416" },
+    #     fonts: ["Inter:wght@400;600"], label: "Harbor",
+    #     css: "body.sw-theme-harbor h2 { letter-spacing: -0.01em; }"
     #
     # @example Basic registration
     #   StreamWeaver.register_theme :corporate, {
@@ -603,10 +598,39 @@ module StreamWeaver
     #   StreamWeaver.register_theme :compact_corporate, {
     #     color_primary: "#0066cc"
     #   }, base: :dashboard
-    def register_theme(name, variables = {}, base: :default, label: nil, description: nil)
-      theme = Theme.new(name, variables, base: base, label: label, description: description)
-      @themes[name.to_sym] = theme
-      theme
+    def register_theme(name, variables = {}, base: :default, label: nil, description: nil,
+                       fonts: [], stylesheets: [], dark: {}, css: nil)
+      warn_replacing_built_in_theme(name.to_sym)
+      if fonts.any?(Hash)
+        fonts = Fonts.resolve(fonts, File.dirname(File.expand_path(caller_locations(1, 1).first.path)))
+      end
+      @themes[name.to_sym] = Theme.new(name, variables, base: base, label: label, description: description,
+                                                        fonts: fonts, stylesheets: stylesheets, dark: dark, css: css)
+    end
+
+    # Names of the framework's own themes, in registry order
+    #
+    # @return [Array<Symbol>]
+    def built_in_themes
+      @themes.values.select(&:built_in?).map(&:name)
+    end
+
+    # The framework's own themes register here (theme/built_ins.rb): listed
+    # like any theme, but their CSS lives in master_theme_css.
+    private def register_built_in_theme(name, label:, description:, fonts: [], stylesheets: [])
+      @themes[name.to_sym] = Theme.new(name, label: label, description: description,
+                                             fonts: fonts, stylesheets: stylesheets, built_in: true)
+    end
+
+    # Registering a built-in's name replaces it with a custom theme: its page
+    # keeps the sw-theme-<name> class but gets the custom token CSS on top of
+    # the hand-tuned block, and the name drops out of built_in_themes. Once
+    # replaced the name is no longer built-in, so this warns once per name.
+    private def warn_replacing_built_in_theme(name)
+      return unless get_theme(name)&.built_in?
+
+      warn "StreamWeaver: register_theme #{name.inspect} replaces the built-in #{name.inspect} theme " \
+           "with a custom one; pick another name and base: #{name.inspect} to build on it."
     end
 
     # Get a theme by name (custom or built-in)
@@ -614,29 +638,23 @@ module StreamWeaver
     # @param name [Symbol] Theme name
     # @return [Theme, nil] The theme or nil if not found
     def get_theme(name)
-      name = name.to_sym
-      @themes[name] || (Theme::BUILT_IN_THEMES[name] && Theme.new(
-        name,
-        Theme::BUILT_IN_THEMES[name][:variables],
-        label: Theme::BUILT_IN_THEMES[name][:name],
-        description: Theme::BUILT_IN_THEMES[name][:description]
-      ))
+      @themes[name.to_sym]
     end
 
-    # Google Fonts entries (Fonts.google_fonts_href format) a built-in theme loads.
+    # Google Fonts entries (Fonts.google_fonts_href format) a theme loads.
     #
     # @param name [Symbol, nil] Theme name
     # @return [Array<String>]
     def theme_fonts(name)
-      Theme::BUILT_IN_THEMES.dig(name&.to_sym, :fonts) || []
+      (name && get_theme(name)&.fonts) || []
     end
 
-    # Stylesheet URLs a built-in theme loads (version-pinned CDN fonts).
+    # Stylesheet URLs a theme loads (version-pinned CDN fonts).
     #
     # @param name [Symbol, nil] Theme name
     # @return [Array<String>]
     def theme_stylesheets(name)
-      Theme::BUILT_IN_THEMES.dig(name&.to_sym, :stylesheets) || []
+      (name && get_theme(name)&.stylesheets) || []
     end
 
     # Check if a theme exists (custom or built-in)
@@ -644,30 +662,25 @@ module StreamWeaver
     # @param name [Symbol] Theme name
     # @return [Boolean]
     def theme_exists?(name)
-      name = name.to_sym
-      @themes.key?(name) || Theme::BUILT_IN_THEMES.key?(name)
+      @themes.key?(name.to_sym)
     end
 
     # Get all available theme names
     #
     # @return [Array<Symbol>] Theme names
     def available_themes
-      (Theme::BUILT_IN_THEMES.keys + @themes.keys).uniq
+      @themes.keys
     end
 
     # Get all themes as an array suitable for theme_switcher
     #
     # @return [Array<Hash>] Array of theme info hashes
     def all_themes_for_switcher
-      built_in = Theme::BUILT_IN_THEMES.map do |id, info|
-        { id: id, label: info[:name], description: info[:description] }
+      @themes.map do |id, theme|
+        { id: id, label: theme.label, description: theme.description, built_in: theme.built_in? }
       end
-
-      custom = @themes.map do |id, theme|
-        { id: id, label: theme.label, description: theme.description }
-      end
-
-      built_in + custom
     end
   end
 end
+
+require_relative 'theme/built_ins'

@@ -23,37 +23,32 @@ module StreamWeaver
 
         "@layer #{LAYER_NAME} {\n#{css}\n}"
       end
-      # Returns the full StreamWeaver CSS (themes + components)
+
+      # Returns the full StreamWeaver CSS (themes + components): the same
+      # master theme CSS the standalone page renders (disc-194). Loads the
+      # view layer on demand, because the MRI builders (bin/build_extension,
+      # OpalBuilder) require only this file; the guard keeps the Opal
+      # compiler from bundling views.rb and Phlex.
       # @return [String] CSS content
       def full_stylesheet
-        @full_stylesheet ||= begin
-          # Read from views.rb and extract the CSS heredoc
-          views_path = File.expand_path('views.rb', __dir__)
-          content = File.read(views_path)
-          
-          # Extract CSS between the heredoc markers
-          # Pattern: raw(safe(<<~CSS)) ... CSS
-          if content =~ /raw\(safe\(<<~CSS\)\)(.*?)^\s*CSS$/m
-            # Remove the 16-space indentation from the original
-            $1.gsub(/^                /, '')
-          else
-            # Fallback: return minimal CSS
-            minimal_css
-          end
-        end
+        require_relative "views" unless RUBY_ENGINE == "opal"
+        StreamWeaver::Views::AppView.master_theme_css
       end
 
       # The framework stylesheet, or the best available substitute.
       #
-      # full_stylesheet reads views.rb off disk. A compiled Opal bundle has no
-      # disk to read it from, so callers that run in both hosts -- notably the
-      # DOM-free render-to-string path -- ask for this instead and get the
-      # minimal token set rather than an exception when the file is out of
-      # reach.
+      # full_stylesheet needs the view layer (views.rb, which needs Phlex).
+      # A compiled Opal bundle does not load it, so callers that run in both
+      # hosts -- notably the DOM-free render-to-string path -- ask for this
+      # instead and get the minimal token set rather than an exception. Only
+      # the missing view layer (an undefined AppView) falls back; any other
+      # failure raises, so the stub can never stand in silently (disc-194).
       # @return [String] CSS content
       def base_stylesheet
         full_stylesheet
-      rescue StandardError, NotImplementedError
+      rescue NameError => e
+        raise if e.is_a?(NoMethodError)
+
         minimal_css
       end
 
@@ -86,7 +81,7 @@ module StreamWeaver
         <<~HTML
           <link rel="preconnect" href="https://fonts.googleapis.com">
           <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap">
+          <link rel="stylesheet" href="#{StreamWeaver::Fonts::BASE_HREF}">
         HTML
       end
 

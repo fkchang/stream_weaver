@@ -2,6 +2,7 @@
 
 require_relative 'protocol'
 require_relative 'notes_panel'
+require_relative '../page_shell'
 
 module StreamWeaver
   module Canvas
@@ -22,6 +23,8 @@ module StreamWeaver
         @name = name
         @layout = VALID_LAYOUTS.include?(layout) ? layout : :fluid
         @theme = theme
+        @page_theme = nil
+        @page_layout = nil
         @state = {}
         @websockets = []
         @created_at = Time.now
@@ -73,12 +76,49 @@ module StreamWeaver
         @source_dir = dir
       end
 
-      # Replace the inline stylesheets carried by the current DSL (stream_weaver-9uk).
-      # Replacing rather than accumulating means a re-push with the same (or no)
-      # `use_stylesheet` calls never stacks duplicate <style> tags across pushes.
-      # @param list [Array<String>] CSS text, deduped
-      def set_stylesheets(list)
-        @stylesheets = list.uniq
+      # A successful push: its content, the theme, layout and inline CSS it
+      # resolved to, its DSL and the directory it came from, written in one
+      # locked step so a poll (#snapshot) never pairs one push's HTML with
+      # another's version or page. Bridge#handle_push calls it only after
+      # the body rendered, so a failed push keeps everything the page had.
+      # @param fragment [Fragment]
+      def publish(fragment, dsl:, source_dir:)
+        @mutex.synchronize do
+          @page_theme = fragment.theme
+          @page_layout = fragment.layout
+          @stylesheets = fragment.inline_stylesheets.uniq
+          @dsl = dsl
+          @source_dir = source_dir
+          @html = fragment.html
+          @html_version += 1
+        end
+      end
+
+      # The theme and layout on the page now: the last good push's
+      # use_theme / use_layout, else the ones the session was created with
+      # (#theme, #layout, which a push's render falls back to).
+      def current_theme
+        @page_theme || @theme
+      end
+
+      def current_layout
+        @page_layout || @layout
+      end
+
+      # The content, its version and its page, read in one locked step. The
+      # page uses the same recipe as canvas-read's Reader.page_for
+      # (PageShell.fragment_page), so the live canvas and canvas-read agree
+      # for the same body (disc-127).
+      # @param since [Integer, nil] the version a poller already has: the
+      #   page is resolved and included only when this one is newer
+      # @return [Hash] { html:, version:, page: } (page omitted when not newer)
+      def snapshot(since: nil)
+        html, version, theme, layout, user_css =
+          @mutex.synchronize { [@html, @html_version, current_theme, current_layout, @stylesheets] }
+        return { html: html, version: version } if since && version <= since
+
+        { html: html, version: version,
+          page: StreamWeaver::PageShell.fragment_page(theme: theme, layout: layout, user_css: user_css) }
       end
 
       # Update session state
@@ -108,10 +148,14 @@ module StreamWeaver
 
       def reset!
         @state.clear
-        @html = nil
-        @stylesheets = []
-        @html_version += 1
-        @mutex.synchronize { @pending_toasts.clear }
+        @mutex.synchronize do
+          @html = nil
+          @stylesheets = []
+          @page_theme = nil
+          @page_layout = nil
+          @html_version += 1
+          @pending_toasts.clear
+        end
         broadcast(type: 'reset')
       end
 
@@ -301,8 +345,8 @@ module StreamWeaver
           websocket_count: @websockets.size,
           created_at: @created_at,
           pane_id: @pane_id,
-          theme: @theme,
-          layout: @layout
+          theme: current_theme,
+          layout: current_layout
         }
       end
       private

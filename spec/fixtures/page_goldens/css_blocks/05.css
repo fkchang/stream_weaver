@@ -1,0 +1,11 @@
+/* ==== css 05259ef5cad4 (234 bytes) ==== */
+@layer stream-weaver {
+body[class*="sw-theme-"] {
+  --sw-color-primary: #a21caf;
+  --sw-color-bg: #fdf4ff;
+}
+html.dark body[class*="sw-theme-"], html[data-sw-theme="dark"] body[class*="sw-theme-"] {
+  --sw-color-primary: #a21caf;
+}
+
+}

@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../support/body_class_helper'
 require 'tmpdir'
 require 'fileutils'
 
@@ -48,7 +49,19 @@ RSpec.describe StreamWeaver::Export::HtmlExporter do
       expect(html).to include("<html")
       expect(html).to include("</html>")
       expect(html).to include("<head>")
-      expect(html).to include('<body class="sw-theme-default sw-layout-default">')
+      expect(body_classes(html)).to match_array(%w[sw-layout-default sw-theme-default])
+    end
+
+    # An export never runs a layout's render block, so it keeps the
+    # sw-layout-* class its #app-container rules match on, whatever the
+    # app's chrome. Expected classes are the export of this same app at
+    # 43c3825, before PageShell.resolve.
+    it "keeps sw-layout-* for a chrome: false app, as before PageShell.resolve" do
+      app = StreamWeaver::App.new("Docs", chrome: false, theme: :ide) do
+        ide_shell { ide_editor { text "editor" } }
+      end
+      html = described_class.new(app).to_html
+      expect(body_classes(html)).to match_array(%w[sw-theme-ide sw-layout-default])
     end
 
     it "wraps the body content in #app-container, as the canvas and reader do" do
@@ -63,7 +76,7 @@ RSpec.describe StreamWeaver::Export::HtmlExporter do
         text "hi"
       end
       html = described_class.new(app).to_html
-      expect(html).to include('<body class="sw-theme-doc sw-layout-wide">')
+      expect(body_classes(html)).to match_array(%w[sw-layout-wide sw-theme-doc])
     end
 
     it "emits the doc's use_stylesheet CSS unlayered, after the framework CSS" do

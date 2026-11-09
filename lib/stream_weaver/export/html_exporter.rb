@@ -48,7 +48,6 @@ module StreamWeaver
       CDN_PRISMJS_JS = "https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"
       CDN_PRISMJS_AUTOLOADER = "https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"
       CDN_ALPINE = "https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-      CDN_GOOGLE_FONTS = "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap"
 
 # `bare: true` drops the page shell (padding, card, background) so the
 # content runs edge to edge -- for embedding the export in an <iframe>.
@@ -164,6 +163,11 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
         @app.rebuild_with_state(@state, deferred_target: App::ALL_DEFERRED) if @app.block
 
         body_html = render_body
+        # layout_entry: nil -- an export never runs a layout's render block
+        # (chrome: false, an exclusive layout), and its #app-container rules
+        # need body[class*="sw-layout-"] (see build_document), so it keeps
+        # sw-layout-<app.layout> as it always has.
+        @page = StreamWeaver::PageShell.resolve(@app, theme: @app.theme, layout_entry: nil)
         body_html = inline_images_in_html(body_html) if inline_images
         inline_mermaid = offline && components_include?(Components::Mermaid)
 
@@ -192,7 +196,8 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
 
       # Render body components to HTML string via Phlex
       def render_body
-        StreamWeaver::ComponentRenderer.render_html(@adapter, @app.components, @state)
+        # The components' class-macro assets come with the resolved page's head.
+        StreamWeaver::ComponentRenderer.render_html(@adapter, @app.components, @state, assets: false)
       end
 
       # Fetches mermaid's classic global build (sets globalThis.mermaid --
@@ -289,31 +294,11 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
         end
       end
 
-      # The <head> style block, in the same cascade order the canvas and the
-      # reader use (PageShell is the single source of truth): framework layer,
-      # then the app's registered theme, then unlayered user CSS last so it
-      # outranks everything.
+      # The page's head (PageShell::Head#to_s): layer pin, fonts, framework
+      # CSS and a registered custom theme's, stylesheets, the app's unlayered
+      # CSS last, its scripts.
       def css_html
-        parts = [StreamWeaver::PageShell.framework_css_html]
-
-        # Registered custom themes are NOT part of master_theme_css -- AppView
-        # emits them separately via render_custom_theme_css, and so must we.
-        if (theme = custom_theme)
-          parts << "<style>#{StreamWeaver::CSS.layer_wrap(theme.to_css)}</style>"
-        end
-
-        parts << StreamWeaver::PageShell.user_css_html(inline_stylesheets: @app.inline_stylesheets)
-        parts.join("\n")
-      end
-
-      def custom_theme
-        return nil if @app.theme.nil? || StreamWeaver::App::BUILT_IN_THEMES.include?(@app.theme)
-
-        StreamWeaver.get_theme(@app.theme)
-      end
-
-      def body_class
-        "sw-theme-#{@app.theme} sw-layout-#{@app.layout}"
+        StreamWeaver::PageShell.head(@page, StreamWeaver::Delivery::Inline.new).to_s
       end
 
       # Collect CDN script URLs based on what's actually in the rendered
@@ -367,11 +352,6 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
           scripts << { src: CDN_PRISMJS_AUTOLOADER }
         end
 
-        # Custom scripts from the app
-        @app.scripts.each do |src|
-          scripts << { src: src }
-        end
-
         scripts
       end
 
@@ -380,16 +360,11 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
         styles = []
 
         # Google Fonts
-        styles << CDN_GOOGLE_FONTS
+        styles << StreamWeaver::Fonts::BASE_HREF
 
         # Prism.js theme CSS
         if components_include?(Components::CodeBlock)
           styles << CDN_PRISMJS_CSS
-        end
-
-        # Custom stylesheets from the app
-        @app.stylesheets.each do |href|
-          styles << href
         end
 
         styles
@@ -458,7 +433,7 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
             #{script_tags}
           #{css_html}
           </head>
-          <body class="#{body_class}">
+          <body class="#{@page.body_class}">
           <!-- #app-container is a DIRECT body child, as the canvas and reader
                render it: theme/sidebar_toc selectors use the ">" combinator
                against body[class*="sw-layout-"] > #app-container. -->

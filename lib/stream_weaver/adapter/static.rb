@@ -849,10 +849,10 @@ module StreamWeaver
                Scoping note: this rule ships with sidebar_toc_css, so a
                doc with no sidebar_toc keeps box-forming wrappers. Nothing
                in lib/ breaks on that today (no `#app-container > *`
-               structural or sibling selectors at that level), and the
-               obvious alternative home -- views.rb's master_theme_css --
-               cannot reach the extension sandbox at all (disc-194:
-               CSS.base_stylesheet silently degrades to minimal_css).
+               structural or sibling selectors at that level). The
+               obvious alternative home, views.rb's master_theme_css,
+               could not reach the extension sandbox when this was written
+               (disc-194); it can now, through CSS.base_stylesheet.
 
              - Selector matching: `display: contents` changes boxes, not
                the DOM, so every `>` combinator below still needs a

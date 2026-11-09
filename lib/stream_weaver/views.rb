@@ -21,9 +21,6 @@ module StreamWeaver
         @adapter = adapter
         @is_agentic = is_agentic
         @session_theme = session_theme
-        @scripts = app.scripts
-        @stylesheets = app.stylesheets
-        @inline_stylesheets = app.inline_stylesheets
       end
 
       def view_template
@@ -35,6 +32,15 @@ module StreamWeaver
         # (stream_weaver-1lo). Captured rather than appended directly so it
         # can be replayed into <body> after <head> is emitted.
         body_html = capture { render_page_body }
+        # Divergence (follow-up): canvas, reader and export emit one head in
+        # one order (PageShell::Head#to_s). This view still places each bucket
+        # itself below, its theme stylesheets come after the layer pin and its
+        # custom-theme CSS stays in <body> (render_custom_theme_css, hence
+        # theme_css: false); moving it onto Head#to_s is a stated golden diff
+        # for a later story.
+        page = StreamWeaver::PageShell.resolve(@app, theme: effective_theme, injected_css: component_css_registry,
+                                               theme_css: false)
+        page_head = StreamWeaver::PageShell.head(page, Delivery::Served.new)
 
         doctype
         html do
@@ -57,37 +63,26 @@ module StreamWeaver
             # Inject adapter-specific CDN scripts using Phlex methods
             @adapter.render_cdn_scripts(self)
 
-            # Framework-injected component CSS (collected during the body
-            # render above), before user stylesheets: below -- so that at
+            # Framework component CSS (layered css macros, then the CSS
+            # injected during the body render above), before user stylesheets: below -- so that at
             # equal specificity, user stylesheets win on document order
             # instead of always losing to the framework's own rule
             # (stream_weaver-1lo). Also wrapped in the shared layer
             # (stream_weaver-oeo) so this ordering is now a nicety, not a
             # requirement -- an unlayered user rule wins even if it lands
             # earlier in the document.
-            unless component_css_registry.empty?
-              style { raw(safe(StreamWeaver::CSS.layer_wrap(component_css_registry.values.join("\n")))) }
-            end
+            raw(safe(page_head.framework_css))
 
-            # Add custom stylesheets, then any the active theme declares
-            (@stylesheets + StreamWeaver.theme_stylesheets(effective_theme)).each do |href|
-              link(rel: "stylesheet", href: href)
-            end
-
-            # Inline stylesheets declared via `use_stylesheet` in the DSL
-            # body (stream_weaver-9uk) -- same document-order/cascade
-            # position as the linked stylesheets above.
-            @inline_stylesheets.each do |css|
-              style { raw(safe(css)) }
-            end
-
-            # Add custom scripts
-            @scripts.each do |src|
-              script(src: src)
-            end
-
-            # Component-scoped CSS/JS (declared via css/css_path/js_path class macros)
-            render_component_assets
+            # Stylesheets (the app's, the theme's, the layout's css_path,
+            # then component css_path files), then unlayered CSS: the app's
+            # use_stylesheet blocks (stream_weaver-9uk) and then component
+            # css-macro CSS. That order is intended and predates
+            # PageShell: a component's own unlayered CSS follows the app's,
+            # so an app overrides it by specificity. Then the app's scripts
+            # and component js_path files.
+            raw(safe(page_head.stylesheets))
+            raw(safe(page_head.user_css))
+            raw(safe(page_head.scripts))
 
             # Chart.js CDN - only load when charts are present
             if @app.has_charts?
@@ -104,15 +99,11 @@ module StreamWeaver
               @adapter.render_routing_scripts(self)
             end
 
-            # Google Fonts: Source Sans 3 + Crimson Pro (for document theme) + any app- or theme-declared fonts
+            # Google Fonts: Source Sans 3 + Crimson Pro (for document theme), then the app's and theme's fonts
             link(rel: "preconnect", href: "https://fonts.googleapis.com")
             link(rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "anonymous")
-            link(rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap")
-            fonts = @app.fonts + StreamWeaver.theme_fonts(effective_theme)
-            if fonts.any?
-              custom_href = Fonts.google_fonts_href(fonts)
-              link(rel: "stylesheet", href: custom_href) if custom_href
-            end
+            link(rel: "stylesheet", href: Fonts::BASE_HREF)
+            raw(safe(page_head.fonts))
             style do
               raw(safe(StreamWeaver::CSS.layer_wrap(self.class.master_theme_css)))
             end
@@ -136,7 +127,7 @@ module StreamWeaver
               raw(safe(StreamWeaver::Theme::AutoMode.inline_script(default_mode: theme_toggle&.mode || :auto)))
             end
           end
-          body(class: body_classes) do
+          body(class: page.body_class) do
             raw(safe(body_html))
           end
         end
@@ -149,8 +140,8 @@ module StreamWeaver
         # Custom theme CSS (for registered themes)
         render_custom_theme_css
 
-        # Theme overrides as inline CSS
-        render_theme_overrides if @app.theme_overrides.any?
+        # The app's theme_tokens / theme_overrides: as inline CSS
+        render_theme_tokens
 
         layout_entry = @app.layout_entry
         if layout_entry&.dig(:exclusive) && layout_entry[:render_block]
@@ -681,8 +672,10 @@ module StreamWeaver
                   --sw-term-bg-hover: var(--sw-color-accent-light);
                 }
 
-                /* Doc theme — dark mode overrides (data-sw-theme="dark" lives on <html>).
+                /* Doc theme — dark mode overrides, on either dark signal on <html>
+                   (html.dark alone used to get the generic dark colours with doc's light primary).
                    Colors only — type/spacing/radius/shadow cascade from the light block above. */
+                html.dark body.sw-theme-doc,
                 html[data-sw-theme="dark"] body.sw-theme-doc {
                   --sw-color-primary: #6699FF;
                   --sw-color-primary-hover: #8AB0FF;
@@ -3573,8 +3566,8 @@ module StreamWeaver
                    Dark Theme (Cabinet Control style)
                    =========================================== */
                 body.sw-theme-dark {
-                  --sw-font-display: 'Outfit', 'Source Sans 3', system-ui, sans-serif;
-                  --sw-font-body: 'Outfit', 'Source Sans 3', system-ui, sans-serif;
+                  --sw-font-display: 'Source Sans 3', system-ui, sans-serif;
+                  --sw-font-body: 'Source Sans 3', system-ui, sans-serif;
                   --sw-font-family: var(--sw-font-body);
                   --sw-font-mono: 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
                   --sw-font-size-base: 15px;
@@ -3765,97 +3758,35 @@ module StreamWeaver
         end
       end
 
-      # Generate body classes for layout and theme.
-      # Exclusive layouts supply their own body_classes; the sw-layout-* class is omitted.
-      def body_classes
-        effective_theme = @session_theme || @app.theme
-        theme_class = "sw-theme-#{effective_theme}"
-
-        layout_entry = @app.layout_entry
-        if layout_entry&.dig(:exclusive)
-          extra = layout_entry[:body_classes].join(" ")
-          [extra, theme_class].reject(&:empty?).join(" ")
-        else
-          "sw-layout-#{@app.layout} #{theme_class}"
-        end
-      end
-
       # Get the effective theme (session override or app default)
       def effective_theme
         @session_theme || @app.theme
       end
 
-      # Render inline CSS for theme overrides.
+      # The app's theme_tokens and theme_overrides: (Theme.token_css), in the
+      # framework layer.
       #
-      # Scoped to body.sw-theme-<active theme> rather than a bare `body`
-      # selector: every built-in theme's own CSS uses that same
-      # body.sw-theme-<name> selector (specificity 0-1-1), which always
-      # beats a plain `body {}` (0-0-1) regardless of source order. Matching
-      # the selector's specificity means the tie is broken by cascade order
-      # instead -- this block is emitted in <body>, after the built-in
-      # theme's own block in <head>, so it wins (stream_weaver-ckz; same
-      # technique as the `html.dark body` dark-mode override above).
-      def render_theme_overrides
-        warn_unknown_theme_override_tokens
-        css_vars = @app.theme_overrides.map do |key, value|
-          css_var = key.to_s.tr('_', '-')
-          # Add sw- prefix if not present
-          css_var = "sw-#{css_var}" unless css_var.start_with?('sw-')
-          "--#{css_var}: #{value};"
-        end.join("\n  ")
-
-        style do
-          raw(safe(StreamWeaver::CSS.layer_wrap("body.sw-theme-#{effective_theme} { #{css_vars} }")))
+      # Scoped to Theme::TOKEN_SCOPE, the same specificity (0-1-1) as every
+      # built-in theme's body.sw-theme-<name> block, so the tie is broken by
+      # cascade order: this block is emitted in <body>, after the built-in
+      # theme's own block in <head>, so it wins (stream_weaver-ckz). The
+      # framework's dark blocks outrank its light block, which is what keeps a
+      # surface token light-only (Theme::SURFACE_TOKENS).
+      def render_theme_tokens
+        @app.theme_token_css.each do |css|
+          style { raw(safe(StreamWeaver::CSS.layer_wrap(css))) }
         end
-      end
-
-      def warn_unknown_theme_override_tokens
-        unknown = @app.theme_overrides.keys.reject { |key| Theme::VARIABLE_SCHEMA.key?(key.to_sym) }
-        return if unknown.empty?
-
-        warn "StreamWeaver: Unknown theme override token(s) #{unknown.map(&:inspect).join(', ')} -- " \
-             "no matching entry in Theme::VARIABLE_SCHEMA, so this override is emitted as a raw --sw- custom property " \
-             "that no built-in styling reads."
       end
 
       # Render CSS for custom registered themes
       def render_custom_theme_css
         theme_name = effective_theme
-        # Only render if it's a custom theme (not built-in)
-        return if StreamWeaver::App::BUILT_IN_THEMES.include?(theme_name)
-
+        # Only a custom theme; a built-in's CSS is already in master_theme_css
         custom_theme = StreamWeaver.get_theme(theme_name)
-        return unless custom_theme
+        return if custom_theme.nil? || custom_theme.built_in?
 
         style do
           raw(safe(StreamWeaver::CSS.layer_wrap(custom_theme.to_css)))
-        end
-      end
-
-      # Emit CSS/JS declared via the css/css_path/js_path class macros on component classes.
-      # Deduped by component class so multiple instances only emit their assets once.
-      # Also collects from layout slots and emits the layout's own css_path if registered.
-      def render_component_assets
-        all_components = @app.components + (@app.layout_slots || {}).values.flatten
-
-        # Layout-level CSS file
-        layout_entry = @app.layout_entry
-        if layout_entry&.dig(:css_path)
-          path = layout_entry[:css_path]
-          key  = ComponentAssets.file_key(path)
-          link(rel: "stylesheet", href: "/sw-asset/#{key}/#{File.basename(path)}")
-        end
-
-        css_strings, css_paths, js_paths = ComponentAssets.collect(all_components)
-
-        css_strings.each { |css| style { raw(safe(css)) } }
-        css_paths.each do |path|
-          key = ComponentAssets.file_key(path)
-          link(rel: "stylesheet", href: "/sw-asset/#{key}/#{File.basename(path)}")
-        end
-        js_paths.each do |path|
-          key = ComponentAssets.file_key(path)
-          script(src: "/sw-asset/#{key}/#{File.basename(path)}")
         end
       end
 
@@ -3885,11 +3816,16 @@ module StreamWeaver
       # @param state [Hash] The current state
       # @param adapter [StreamWeaver::Adapter::Base] The adapter for rendering
       # @param is_agentic [Boolean] Whether running in agentic mode
-      def initialize(app, state, adapter, is_agentic = false)
+      # @param delivery [Delivery::Served, Delivery::Inline, nil] how the
+      #   components' own files reach the page, for content whose page head
+      #   never saw them (a canvas push, a reader doc); nil for an update to a
+      #   page that already loaded them (see PageShell.components_html)
+      def initialize(app, state, adapter, is_agentic = false, delivery: nil)
         @app = app
         @state = state
         @adapter = adapter
         @is_agentic = is_agentic
+        @delivery = delivery
       end
 
       def view_template
@@ -3903,6 +3839,7 @@ module StreamWeaver
         end
         state_json = JSON.generate(state_json_data)
         script(type: "application/json", id: "sw-state-data") { raw safe(state_json) }
+        raw(safe(StreamWeaver::PageShell.components_html(@app.components, @delivery)))
 
         @app.components.each do |component|
           component.render(self, @state)

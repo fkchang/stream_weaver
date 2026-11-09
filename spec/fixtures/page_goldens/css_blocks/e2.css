@@ -1,0 +1,219 @@
+/* ==== css e27e03faf1be (11819 bytes) ==== */
+@layer sw-reader-chrome {
+    /* Offset for the fixed rail lives on `html`, NOT body: this shrinks html's
+       content box so body's own `margin: 0 auto` centering and the max-width
+       the sidebar_toc CSS sets on body both keep working untouched, with zero
+       cascade contact with views.rb's
+       `body[class*="sw-layout-"] { margin: 0 auto; padding: ... }` shorthand. */
+    html { padding-left: 220px; }
+    html.sw-rail-collapsed { padding-left: 0; }
+
+    /* Collapse is driven by `left`, never `transform`: a transformed ancestor
+       becomes the containing block for its position:fixed descendants, which
+       would trap the Save-as-doc modal (docked in #sw-reader-nav) inside the
+       220px rail instead of covering the viewport. */
+    #sw-reader-chrome {
+      position: fixed; top: 0; bottom: 0; left: 0; width: 220px; z-index: 40;
+      display: flex; flex-direction: column;
+      background: #f9fafb; border-right: 1px solid #d1d5db;
+      font-family: system-ui, sans-serif; font-size: 16px; line-height: 1.5;
+      color: #4b5563;
+      transition: left 160ms ease;
+    }
+    html.sw-rail-collapsed #sw-reader-chrome { left: -220px; }
+
+    #sw-reader-toggle {
+      position: absolute; top: 0.5rem; right: -2.25rem;
+      width: 2rem; height: 2rem; padding: 0; line-height: 1;
+      border: 1px solid #d1d5db; border-radius: 4px;
+      background: #f9fafb; color: #4b5563;
+      font-size: 0.95rem; cursor: pointer;
+    }
+    #sw-reader-toggle:hover { background: #e5e7eb; color: #111827; }
+
+    /* Only the file list scrolls; #sw-reader-nav stays docked at the bottom. */
+    #sw-reader-files { flex: 1; overflow-y: auto; min-height: 0; }
+    #sw-reader-files h2 {
+      margin: 0; padding: 0.75rem 1rem; font-size: 0.7rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .08em; color: #6b7280;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    #sw-reader-files .dir-header {
+      padding: 0.4rem 1rem; font-size: 0.75rem; color: #4b5563; cursor: pointer;
+      user-select: none; display: flex; align-items: center; gap: 0.4rem;
+    }
+    #sw-reader-files .dir-header:hover { background: #e5e7eb; }
+    /* Base glyph (▶) is the collapsed state; .expanded rotates it to point
+       down. Same convention as .history-section-header.expanded below, so
+       toggleSection() can drive both with one function. */
+    #sw-reader-files .dir-arrow { font-size: 0.6rem; transition: transform 0.15s; display: inline-block; }
+    #sw-reader-files .dir-header.expanded .dir-arrow { transform: rotate(90deg); }
+    #sw-reader-files .dir-files { list-style: none; margin: 0; padding: 0; }
+    #sw-reader-files .dir-files.collapsed { display: none; }
+    #sw-reader-files .dir-files li a {
+      display: block; padding: 0.35rem 1rem 0.35rem 1.75rem; font-size: 0.8rem;
+      color: #4b5563; text-decoration: none; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    #sw-reader-files .dir-files li a:hover { background: #e5e7eb; color: #111827; }
+    #sw-reader-files .dir-files li a.active { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+    /* Delete control (stream_weaver-uvaj). The row becomes a flex line so
+       the trash sits at its right edge; the link keeps flex:1 + min-width:0
+       so a long name still ellipsizes instead of shoving the button out of
+       the 220px rail. Visible at rest, not hover-only: a control you have to
+       discover by hovering is friction, and it's the confirm dialog -- not
+       concealment -- that protects against a mis-click. */
+    #sw-reader-files .dir-files li { display: flex; align-items: center; }
+    #sw-reader-files .dir-files li a { flex: 1 1 auto; min-width: 0; }
+    #sw-reader-files .sw-doc-delete {
+      flex: 0 0 auto; border: none; background: none; cursor: pointer;
+      padding: 0.35rem 0.65rem 0.35rem 0.15rem; font-size: 0.72rem;
+      line-height: 1; opacity: 0.4;
+    }
+    #sw-reader-files .sw-doc-delete:hover { opacity: 1; }
+
+    /* Confirm dialog. Same modal treatment as the Save-as-doc widget's
+       (.sw-save-doc-*, further down), but rooted at #sw-reader-chrome so it
+       stays inside this block's scoping guard (reader_chrome_css_spec)
+       instead of needing a second unscoped <style> the way that widget did. */
+    #sw-reader-chrome [x-cloak] { display: none !important; }
+    #sw-reader-chrome .sw-doc-delete-modal {
+      position: fixed; inset: 0; z-index: 60;
+      background: rgba(15, 17, 23, 0.45);
+      display: flex; align-items: center; justify-content: center;
+    }
+    #sw-reader-chrome .sw-doc-delete-dialog {
+      background: #fff; border-radius: 8px; padding: 1.5rem;
+      width: min(420px, 90vw); box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+      font-family: system-ui, sans-serif; color: #111827; text-align: left;
+    }
+    #sw-reader-chrome .sw-doc-delete-dialog h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; }
+    #sw-reader-chrome .sw-doc-delete-dialog p.hint {
+      margin: 0; color: #6b7280; font-size: 0.85rem; word-break: break-word;
+    }
+    #sw-reader-chrome .sw-doc-delete-error {
+      margin-top: 0.75rem; padding: 0.5rem 0.75rem;
+      background: #fee2e2; color: #991b1b; border-radius: 4px; font-size: 0.85rem;
+    }
+    #sw-reader-chrome .sw-doc-delete-actions {
+      display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;
+    }
+    #sw-reader-chrome .sw-doc-delete-actions button {
+      padding: 0.45rem 1rem; border-radius: 5px; font-size: 0.9rem;
+      cursor: pointer; border: 1px solid transparent;
+    }
+    #sw-reader-chrome .sw-doc-delete-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #sw-reader-chrome .sw-doc-delete-cancel { background: #f3f4f6; color: #374151; border-color: #d1d5db; }
+    #sw-reader-chrome .sw-doc-delete-cancel:hover:not(:disabled) { background: #e5e7eb; }
+    #sw-reader-chrome .sw-doc-delete-confirm { background: #b91c1c; color: #fff; }
+    #sw-reader-chrome .sw-doc-delete-confirm:hover:not(:disabled) { filter: brightness(1.08); }
+
+    /* .org format badge (stream_weaver-gnj8) -- unconditional on every org
+       entry, not just on a name collision with its .rb sibling; see the
+       ERB comment above this class's only use site for why. */
+    #sw-reader-files .sw-reader-file-badge {
+      display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.35rem;
+      font-size: 0.65rem; font-weight: 600; letter-spacing: 0.02em;
+      color: #6b7280; background: #e5e7eb; border-radius: 3px;
+    }
+
+    /* Repo filter (stream_weaver-iugu) -- same chip treatment as
+       .browse-shortcuts below, since it is the same kind of control (a row
+       of small jump targets above the listing) and two different-looking
+       chip rows in one 220px rail would read as two unrelated mechanisms.
+       Only the .active state is new: unlike Browse's shortcuts, exactly one
+       of these is always the current view. */
+    #sw-reader-files .repo-filter {
+      padding: 0.5rem 1rem; display: flex; gap: 0.4rem; flex-wrap: wrap;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    #sw-reader-files .repo-filter a {
+      font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 3px;
+      background: #e5e7eb; color: #374151; text-decoration: none;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #sw-reader-files .repo-filter a:hover { background: #d1d5db; }
+    #sw-reader-files .repo-filter a.active {
+      background: #dbeafe; color: #1d4ed8; font-weight: 600;
+    }
+
+    /* Browse (stream_weaver-rdh). .browse-listing reuses .dir-files li a's
+       styling above (same selector chain) for consistent link appearance;
+       only the browse-specific chrome (shortcuts, breadcrumbs, up/back
+       links) needs its own rules. */
+    #sw-reader-files .browse-shortcuts {
+      padding: 0.5rem 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    #sw-reader-files .browse-shortcuts a {
+      font-size: 0.7rem; padding: 0.15rem 0.5rem; border-radius: 3px;
+      background: #e5e7eb; color: #374151; text-decoration: none;
+    }
+    #sw-reader-files .browse-shortcuts a:hover { background: #d1d5db; }
+    #sw-reader-files .browse-crumbs {
+      padding: 0.4rem 1rem; font-size: 0.72rem; color: #6b7280;
+      word-break: break-all; border-bottom: 1px solid #e5e7eb;
+    }
+    #sw-reader-files .browse-crumbs a { color: #4b5563; text-decoration: none; }
+    #sw-reader-files .browse-crumbs a:hover { text-decoration: underline; }
+    #sw-reader-files .browse-crumbs .crumb-sep { color: #9ca3af; }
+    #sw-reader-files .browse-listing .browse-up,
+    #sw-reader-files .browse-listing .browse-dir { font-weight: 500; }
+    #sw-reader-files .browse-empty {
+      padding: 0.5rem 1rem 0.5rem 1.75rem; font-size: 0.75rem; color: #9ca3af;
+      font-style: italic;
+    }
+    #sw-reader-files .browse-back, #sw-reader-files .browse-link {
+      display: block; padding: 0.5rem 1rem; font-size: 0.75rem;
+      color: #4b5563; text-decoration: none; border-top: 1px solid #e5e7eb;
+    }
+    #sw-reader-files .browse-back:hover, #sw-reader-files .browse-link:hover {
+      background: #e5e7eb; color: #111827;
+    }
+
+    /* History section (collapsed by default) */
+    #sw-reader-files .history-section-header {
+      border-top: 1px solid #e5e7eb; border-bottom: none;
+      cursor: pointer; user-select: none; display: flex; align-items: center; gap: 0.4rem;
+    }
+    #sw-reader-files .history-section-header:hover { background: #e5e7eb; color: #374151; }
+    #sw-reader-files .history-arrow { font-size: 0.6rem; transition: transform 0.15s; display: inline-block; }
+    #sw-reader-files .history-section-header.expanded .history-arrow { transform: rotate(90deg); }
+    #sw-reader-files .history-content.collapsed { display: none; }
+    #sw-reader-files .history-session .dir-header { font-size: 0.7rem; color: #6b7280; padding-left: 1.25rem; }
+    #sw-reader-files .history-session .dir-files li a {
+      padding-left: 2.25rem; font-family: ui-monospace, monospace; font-size: 0.72rem;
+    }
+
+    /* Prev/Next docked in the rail -- not a fixed bottom bar, which would
+       collide with the Save-as-doc button at bottom right. flex-wrap
+       because Export (and, on a doc with mermaid, a second Export
+       (offline) row -- stream_weaver-dnq) sits below Prev/counter/Next,
+       which already fill the 220px width -- a fourth same-row item would
+       squeeze the counter. */
+    #sw-reader-nav {
+      flex-shrink: 0; border-top: 1px solid #e5e7eb; background: #f9fafb;
+      padding: 0.5rem 0.75rem; display: flex; flex-wrap: wrap; align-items: center;
+      justify-content: space-between; gap: 0.4rem;
+    }
+    #sw-reader-nav .nav-link {
+      background: #e5e7eb; color: #374151; border: none; padding: 0.3rem 0.6rem;
+      border-radius: 4px; cursor: pointer; font-size: 0.75rem;
+      text-decoration: none; display: inline-block;
+    }
+    #sw-reader-nav .nav-link:hover { background: #d1d5db; color: #111827; }
+    #sw-reader-nav .nav-link--disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+    #sw-reader-nav .counter { font-size: 0.72rem; color: #6b7280; white-space: nowrap; }
+    #sw-reader-nav .nav-export { flex-basis: 100%; text-align: center; }
+
+    /* Mandatory below ~1100px: the sidebar_toc's own desktop breakpoint
+       (min-width: 1000px) measures the VIEWPORT, not the doc's content
+       region, so a permanently-present 220px rail leaves the doc cramped at
+       common laptop widths. Default to collapsed and let the toggle slide it
+       back in over the content. */
+    @media (max-width: 1100px) {
+      html { padding-left: 0; }
+      #sw-reader-chrome { left: -220px; }
+      html.sw-rail-open #sw-reader-chrome { left: 0; box-shadow: 0 0 30px rgba(0,0,0,0.18); }
+    }
+  }

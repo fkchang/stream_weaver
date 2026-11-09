@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes (page assets)
+- **Removed with no shim**: `App::BUILT_IN_THEMES`, `App::VALID_THEMES` and `Theme::BUILT_IN_THEMES` (ask `StreamWeaver.built_in_themes` or `StreamWeaver.get_theme(name)&.built_in?`), `Theme.google_fonts_url` and `Fonts.google_fonts?` (use `Fonts.google_fonts_href`). `Components::Ide::CSS` is now `IdeShell`'s layered `css` macro and no longer carries the landing-page rules, which moved to `examples/ide/streamweaver_landing_body.rb`.
+- **Dark mode for registered themes**: an already-registered custom theme's non-surface tokens (`color_primary` and the other accent, type and spacing tokens) now carry into dark mode; its surface tokens (`Theme::SURFACE_TOKENS`) do not unless `dark:` is given.
+- **Presets**: `Theme::Presets` dark blocks now match both dark signals, `html.dark` and `html[data-sw-theme="dark"]`.
+- **`register_theme` with a built-in's name warns** (once per name): it replaces the hand-tuned built-in with a custom theme; use another name with `base:` instead.
+- See docs/theming-hooks.md ("Upgrade notes" and "Known follow-ups").
+
 ### Changed
 - **A click on a `url: true` tab page no longer snaps back to the first tab** - the POST response's `HX-Push-Url` was the route builder's bare path (`/`), which replaced the address bar and dropped `?view=2`. When the push lands on the path the browser is already on, the page's own query string now rides along (`StreamWeaver::PushUrl.keep_query`, standalone and multi-app). A push to a different path is unchanged.
 - **The canvas bridge's auto-heal no longer restarts a bridge that holds live sessions, and two installs no longer restart each other's bridge** - a dev checkout and the installed gem stamp different paths, and each treated the other's bridge as stale and restarted it onto itself every few minutes (past the 60 s cooldown), dropping sessions whose DSL the bridge did not hold. Now an idle bridge heals as before; one with sessions warns and logs `heal_skipped`; a stamp from a different install is stale only when this copy has a strictly higher version. Snapshots keep a session's newest history push when the bridge holds no DSL (an empty live session with an old history entry of the same name now comes back with that content), restore recreates empty sessions (so open tabs do not show "Session Complete"), every canvas gets a toast naming the caller and the sessions that came back empty, and `canvas-events` records `bridge_heal`, `session_dropped` and `session_restore_failed`.

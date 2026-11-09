@@ -11,13 +11,21 @@ module StreamWeaver
   class ComponentRenderer < Phlex::HTML
     attr_reader :adapter
 
-    def initialize(adapter, components, state = {})
+    # @param delivery [Delivery::Served, Delivery::Inline, nil] see
+    #   PageShell.components_html: given, the components' own files lead the
+    #   output; nil, only their CSS does
+    # @param assets [Boolean] false when the page's head already carries
+    #   the components' class-macro assets (the exporter resolves them)
+    def initialize(adapter, components, state = {}, delivery: nil, assets: true)
       @adapter = adapter
       @components = Array(components)
       @state = state
+      @delivery = delivery
+      @assets = assets
     end
 
     def view_template
+      raw(safe(PageShell.components_html(@components, @delivery))) if @assets
       @components.each { |c| c.render(self, @state) }
     end
 
@@ -40,9 +48,9 @@ module StreamWeaver
     # @param components [Array<Components::Base>] Components to render
     # @param state [Hash] State hash (default: empty)
     # @return [String] Rendered HTML
-    def self.render_html(adapter = nil, components = [], state = {})
+    def self.render_html(adapter = nil, components = [], state = {}, delivery: nil, assets: true)
       adapter ||= Adapter::AlpineJS.new
-      new(adapter, components, state).call
+      new(adapter, components, state, delivery: delivery, assets: assets).call
     end
   end
 end

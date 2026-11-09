@@ -552,6 +552,21 @@ end
 
 **Built-in themes:** `:default`, `:dashboard`, `:document`, `:dark`, `:doc`, `:ide`
 
+**Your own theme** is one call, with a dark palette, fonts and extra CSS; **token tweaks** work from any DSL body, including a canvas push (applied live, no reload):
+
+```ruby
+StreamWeaver.register_theme :harbor,
+  { color_primary: "#0e7490", color_bg: "#f7fafa" },
+  dark: { color_primary: "#22d3ee", color_bg: "#0b1416" },
+  fonts: ["Inter:wght@400;600"], label: "Harbor", base: :document
+
+app "Harbor", theme: :harbor do
+  theme_tokens color_primary: "#a21caf"   # accent tokens apply in both modes; pass dark: for surface tokens
+end
+```
+
+Details, token names, component asset macros and the extension points: `docs/theming-hooks.md`.
+
 `:ide` is a VS Code-style workspace (light and dark) with matching `ide_*` components: a title bar, file tree, tabbed editor sections with a scroll spy, a right rail with a terminal, and a status bar. Run `examples/ide/streamweaver_landing.rb` for a full landing page, or `examples/ide/shell_demo.rb` for the smallest shell; see `docs/theming-hooks.md` for the hooks.
 
 ---

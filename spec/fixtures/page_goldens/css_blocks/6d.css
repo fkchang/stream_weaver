@@ -1,0 +1,16 @@
+/* ==== css 6d7d90a627b3 (395 bytes) ==== */
+/* ===========================================
+   Chart Component Styles (sw- prefix, T12)
+   =========================================== */
+.sw-chart {
+  position: relative;
+  margin: 0.75rem 0;
+  padding: 0.5rem;
+  background: var(--sw-surface, #fff);
+  border: 1px solid var(--sw-border, #e0e0e0);
+  border-radius: var(--sw-radius-md, 6px);
+}
+
+.sw-chart__canvas {
+  width: 100% !important;
+}

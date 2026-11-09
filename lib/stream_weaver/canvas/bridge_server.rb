@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'sinatra/base'
+require 'digest'
 require 'json'
 require 'socket'
 require 'fileutils'
@@ -10,6 +11,7 @@ require_relative 'code_stamp'
 require_relative 'scroll_top_hint'
 require_relative 'session'
 require_relative 'bridge'
+require_relative '../asset_route'
 require_relative 'doc_store'
 require_relative 'gist_store'
 require_relative 'gist_publisher'
@@ -38,6 +40,10 @@ module StreamWeaver
     #
     class BridgeServer < Sinatra::Base
       include GistSaveHandler
+      # A pushed doc's css_path/js_path files and self-hosted fonts
+      # (Delivery::Served): the bridge evaluates the DSL in-process, so the
+      # asset registry is local.
+      register StreamWeaver::AssetRoute
 
       SOCKET_PATH = File.expand_path('~/.streamweaver/canvas.sock')
       PID_FILE_PATH = File.expand_path('~/.streamweaver/canvas.pid')
@@ -160,14 +166,19 @@ module StreamWeaver
         end
 
         content_type :json
-        {
+        # ?v= is the version the page already shows: its page (body class,
+        # head tags, push CSS) is sent only when this one is newer.
+        snapshot = session.snapshot(since: params[:v] && params[:v].to_i)
+        response = {
           state: session.state,
-          html: session.html,
-          version: session.html_version,
+          html: snapshot[:html],
+          version: snapshot[:version],
           toasts: session.pop_toasts,
           regions: session.regions_newer_than(region_versions_param),
           annotate: session.annotate?
-        }.to_json
+        }
+        response[:page] = live_page(snapshot[:page]) if snapshot[:page]
+        response.to_json
       end
 
       # Save the session's last-good DSL as a persistent canvas doc (Tier 2).
@@ -191,7 +202,7 @@ module StreamWeaver
         # ternary treats anything other than 'global' as :repo, which would
         # silently misroute a gist save into a file write).
         if body[:scope] == 'gist'
-          return handle_gist_save(session.dsl, doc_name, theme: session.theme, layout: session.layout)
+          return handle_gist_save(session.dsl, doc_name, theme: session.current_theme, layout: session.current_layout)
         end
 
         # The Save-as-doc toggle (stream_weaver-j3b3): 'global' always means
@@ -223,7 +234,7 @@ module StreamWeaver
         # Carry the live session's theme/layout into the saved text -- canvas-read
         # re-renders the file with no session to inherit from (stream_weaver-csf).
         dsl = StreamWeaver::Canvas::DocStore.dsl_with_metadata(
-          session.dsl, theme: session.theme, layout: session.layout
+          session.dsl, theme: session.current_theme, layout: session.current_layout
         )
 
         rescue_save_errors do
@@ -345,7 +356,38 @@ module StreamWeaver
         rv.to_h { |name, version| [name.to_s, version.to_s.to_i] }
       end
 
+      # What the open page needs to wear a push without a reload (disc-127):
+      # its body class, its head tags keyed by a digest of the tag (the page
+      # appends a key it has not seen, never one it has), and the push CSS,
+      # which the page replaces as a group so a token edit never stacks.
+      # @param page [StreamWeaver::PageShell::Page]
+      # @return [Hash]
+      def live_page(page)
+        tags = StreamWeaver::PageShell.head(page, StreamWeaver::Delivery::Served.new).asset_tags
+        {
+          body_class: page.body_class,
+          assets: tags.map { |tag| { key: Digest::SHA256.hexdigest(tag)[0, 16], html: tag } },
+          push_css: page.assets.user_css
+        }
+      end
+
       def render_canvas_page(session_name, session)
+        # The last good push's content and page, read together: its theme
+        # and layout, plus the CSS its `use_stylesheet` and `theme_tokens`
+        # calls carried (stream_weaver-9uk).
+        snapshot = session.snapshot
+        page = snapshot[:page] + StreamWeaver::Assets.of(body_classes: session.annotate? ? %w[sw-annotate-on] : [])
+        live = live_page(snapshot[:page])
+        # The page's own tags and its push CSS go after every fixed tag and
+        # before the sw-page-end marker, which is where the poll script's
+        # swApplyPage puts them after a push: an unlayered rule then wins or
+        # loses the same way live and after a reload, and styles scripts add
+        # to <head> while the page loads still land after the marker. The
+        # push CSS is marked so the next push replaces it.
+        page_tags = (live[:assets].map { |a| a[:html] } +
+                     live[:push_css].map { |css| "<style data-sw-push-css>#{css}</style>" } +
+                     ['<meta name="sw-page-end">']).join("\n")
+
         # Create adapter in websocket mode
         adapter = StreamWeaver::Adapter::AlpineJS.new(
           url_prefix: "/canvas/#{session_name}",
@@ -353,8 +395,8 @@ module StreamWeaver
         )
 
         # If session already has HTML, show it; otherwise show waiting message
-        initial_content = if session.html
-          session.html
+        initial_content = if snapshot[:html]
+          snapshot[:html]
         else
           <<~WAITING
             <div class="sw-canvas-waiting">
@@ -386,7 +428,6 @@ module StreamWeaver
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>StreamWeaver Canvas: #{session_name}</title>
             #{StreamWeaver::PageShell.framework_css_html}
-            #{inline_stylesheets_html(session)}
             <script>#{StreamWeaver::Theme::AutoMode.inline_script}</script>
             #{adapter.cdn_scripts.join("\n")}
             <!-- Chart.js for charts -->
@@ -407,8 +448,9 @@ module StreamWeaver
             <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-replay.js'), encoding: 'UTF-8')}</script>
             <!-- Kick off CDN fetch immediately so mermaid is ready before first push arrives -->
             <script>if (window.swMermaidPreload) window.swMermaidPreload();</script>
+            #{page_tags}
           </head>
-          <body class="sw-theme-#{session.theme} sw-layout-#{session.layout}#{' sw-annotate-on' if session.annotate?}">
+          <body class="#{page.body_class}">
             <div id="app-container" #{container_attrs(session.state, adapter)}>
               #{initial_content}
             </div>
@@ -420,21 +462,12 @@ module StreamWeaver
             <!-- Comment overlay: outside #app-container so the poll swap cannot remove it or an open composer -->
             <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-canvas-notes.js'), encoding: 'UTF-8')}</script>
             <script>
-              #{polling_script(session_name, session.html_version, session.regions_newer_than.transform_values { |r| r[:version] })}
+              #{polling_script(session_name, snapshot[:version], session.regions_newer_than.transform_values { |r| r[:version] },
+                               live[:assets].map { |a| a[:key] })}
             </script>
           </body>
           </html>
         HTML
-      end
-
-      # CSS carried by the pushed DSL's `use_stylesheet` calls (stream_weaver-9uk)
-      # -- canvas has no route to serve a referenced asset file across
-      # processes, so the bridge inlines the raw content it was handed
-      # instead. `session.stylesheets` is already deduped/replaced per push
-      # (Session#set_stylesheets), so no further digest bookkeeping is
-      # needed here to avoid stacking duplicate tags across re-pushes.
-      def inline_stylesheets_html(session)
-        StreamWeaver::PageShell.user_css_html(inline_stylesheets: session.stylesheets)
       end
 
       # Floating "Save as doc" button + Alpine.js modal that POSTs the
@@ -493,12 +526,15 @@ module StreamWeaver
         }
       end
 
-      def polling_script(session_name, current_version, region_versions = {})
+      def polling_script(session_name, current_version, region_versions = {}, asset_keys = [])
         <<~JS
           (function() {
             let currentVersion = #{current_version};
             let sessionClosed = false;
             const regionVersions = #{region_versions.to_json};
+            // Head tags this page already has, by key (#live_page). Append-only:
+            // a push adds the tags it needs and never re-appends one.
+            const pageAssets = new Set(#{asset_keys.to_json});
             const pollBase = '/canvas/#{session_name}/poll';
             const container = document.getElementById('app-container');
             const closedHtml = '<div style="text-align:center;padding:60px;color:#374151;"><div style="font-size:3rem;margin-bottom:16px;">✓</div><h2 style="margin:0 0 12px">Session Complete</h2><p style="color:#666;margin:0">This StreamWeaver canvas session has closed.</p></div>';
@@ -546,6 +582,7 @@ module StreamWeaver
               }
             }
 
+            #{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-canvas-page.js'), encoding: 'UTF-8')}
             function escapeHtml(text) {
               const div = document.createElement('div');
               div.textContent = text;
@@ -554,8 +591,8 @@ module StreamWeaver
 
             async function poll() {
               try {
-                const rv = Object.keys(regionVersions).map(n => 'rv[' + encodeURIComponent(n) + ']=' + regionVersions[n]).join('&');
-                const resp = await fetch(rv ? pollBase + '?' + rv : pollBase);
+                const rv = Object.keys(regionVersions).map(n => '&rv[' + encodeURIComponent(n) + ']=' + regionVersions[n]).join('');
+                const resp = await fetch(pollBase + '?v=' + currentVersion + rv);
                 if (!resp.ok) {
                   if (resp.status === 404 && !sessionClosed) {
                     sessionClosed = true;
@@ -605,6 +642,7 @@ module StreamWeaver
                   const wasNearBottom = (window.innerHeight + window.scrollY) >=
                     (document.documentElement.scrollHeight - 150);
 
+                  window.swApplyPage(data.page, pageAssets);
                   container.innerHTML = data.html;
 
                   // Scroll-to-top hint (round-9 UAT): a push that reshapes

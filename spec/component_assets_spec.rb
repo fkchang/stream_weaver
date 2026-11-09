@@ -65,7 +65,7 @@ RSpec.describe "Component-scoped CSS/JS macros" do
           klass.css_path(css_file)
 
           expect(klass.component_css_path).to eq(css_file)
-          key = StreamWeaver::ComponentAssets.file_key(css_file)
+          key = StreamWeaver::ComponentAssets.url(css_file)[%r{/sw-asset/(\h+)/}, 1]
           expect(StreamWeaver::ComponentAssets.resolve_file(key)).to eq(css_file)
         end
       end
@@ -90,15 +90,16 @@ RSpec.describe "Component-scoped CSS/JS macros" do
   end
 
   describe StreamWeaver::ComponentAssets do
-    describe ".collect" do
-      it "collects inline CSS from a flat list of components" do
+    describe ".assets" do
+      it "collects inline CSS from a flat list of components, as unlayered user CSS" do
         components = [
           AssetTestBannerWithInlineCss.new,
           AssetTestChild.new
         ]
-        css_strings, _css_paths, _js_paths = StreamWeaver::ComponentAssets.collect(components)
-        expect(css_strings).to include(".asset-test-banner { color: red; }")
-        expect(css_strings).to include(".asset-test-child { margin: 0; }")
+        assets = StreamWeaver::ComponentAssets.assets(components)
+        expect(assets.user_css).to include(".asset-test-banner { color: red; }")
+        expect(assets.user_css).to include(".asset-test-child { margin: 0; }")
+        expect(assets.framework_css).to be_empty
       end
 
       it "deduplicates — same class appearing twice only yields its CSS once" do
@@ -106,28 +107,54 @@ RSpec.describe "Component-scoped CSS/JS macros" do
           AssetTestBannerWithInlineCss.new,
           AssetTestBannerWithInlineCss.new
         ]
-        css_strings, _, _ = StreamWeaver::ComponentAssets.collect(components)
-        count = css_strings.count(".asset-test-banner { color: red; }")
+        count = StreamWeaver::ComponentAssets.assets(components).user_css.count(".asset-test-banner { color: red; }")
         expect(count).to eq(1)
       end
 
       it "recurses into children" do
         parent = AssetTestParent.new
         parent.children = [AssetTestChild.new]
-        css_strings, _, _ = StreamWeaver::ComponentAssets.collect([parent])
-        expect(css_strings).to include(".asset-test-child { margin: 0; }")
+        expect(StreamWeaver::ComponentAssets.assets([parent]).user_css).to include(".asset-test-child { margin: 0; }")
       end
 
-      it "returns empty arrays when no assets declared" do
+      it "returns empty buckets when no assets declared" do
         parent = AssetTestParent.new
-        css_strings, css_paths, js_paths = StreamWeaver::ComponentAssets.collect([parent])
-        expect(css_strings).to be_empty
-        expect(css_paths).to be_empty
-        expect(js_paths).to be_empty
+        assets = StreamWeaver::ComponentAssets.assets([parent])
+        expect([assets.user_css, assets.framework_css, assets.stylesheets, assets.scripts, assets.fonts]).to all(be_empty)
+      end
+
+      it "keeps layered (framework) CSS apart, and carries files and fonts" do
+        Dir.mktmpdir do |dir|
+          css_file = File.join(dir, "w.css")
+          js_file = File.join(dir, "w.js")
+          File.write(css_file, ".w{}")
+          File.write(js_file, "")
+          klass = Class.new(StreamWeaver::Components::Base) do
+            css ".framework-w {}", layered: true
+            def render(view, _state); end
+            def children; []; end
+          end
+          klass.css_path(css_file)
+          klass.js_path(js_file)
+          klass.font(family: "Probe", src: File.join(dir, "probe.woff2"))
+
+          assets = StreamWeaver::ComponentAssets.assets([klass.new])
+          expect(assets.framework_css).to eq([".framework-w {}"])
+          expect(assets.stylesheets).to eq([css_file])
+          expect(assets.scripts).to eq([js_file])
+          expect(assets.fonts).to eq([{ family: "Probe", src: File.join(dir, "probe.woff2") }])
+        end
       end
     end
 
-    describe ".file_key / .resolve_file" do
+    describe ".font" do
+      it "resolves a relative src against the file that declares the component" do
+        klass = Class.new(StreamWeaver::Components::Base) { font family: "Rel", src: "fonts/rel.woff2" }
+        expect(klass.component_fonts).to eq([{ family: "Rel", src: File.expand_path("fonts/rel.woff2", __dir__) }])
+      end
+    end
+
+    describe ".register_file / .resolve_file" do
       it "round-trips a registered path" do
         Dir.mktmpdir do |dir|
           path = File.join(dir, "my.css")
