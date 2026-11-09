@@ -3452,6 +3452,11 @@ module StreamWeaver
         end
       end
 
+      # switchTheme takes the theme classes from the POST /theme response
+      # (PageShell.resolve's body class): a registered theme wears its base
+      # theme's class too, so no client-side rewrite can know the full set.
+      # Every sw-theme-* class is dropped; classes the page added (layout,
+      # sw-annotate-on) are kept.
       def theme_switcher_alpine_data(themes)
         <<~JS.gsub(/\s+/, " ").strip
           {
@@ -3465,8 +3470,12 @@ module StreamWeaver
             },
             switchTheme(id) {
               this.open = false;
-              document.body.className = document.body.className.replace(/sw-theme-\\w+/, 'sw-theme-' + id);
-              htmx.ajax('POST', '#{url("/theme/")}' + id, {swap:'none'});
+              fetch('#{url("/theme/")}' + id, {method: 'POST', credentials: 'same-origin'})
+                .then(r => r.ok ? r.text() : Promise.reject(r.status))
+                .then(classes => {
+                  const kept = [...document.body.classList].filter(c => !c.startsWith('sw-theme-'));
+                  document.body.className = [...new Set([...classes.split(' '), ...kept])].filter(Boolean).join(' ');
+                });
             }
           }
         JS
