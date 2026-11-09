@@ -14644,6 +14644,12 @@ body.sw-theme-dark .sw-expandable-card--highlight {
 /* ==== css 6f95914459c9 (39 bytes) ==== */
 .probe-inline { color: rebeccapurple; }
 
+/* ==== css 8ae9f3c7dc68 (105 bytes) ==== */
+@layer stream-weaver {
+body.sw-theme-default { --sw-color-primary: #a21caf;
+  --sw-color-bg: #fdf4ff; }
+}
+
 /* ==== css 424b68ee886c (91648 bytes) ==== */
 /* ===========================================
    shadcn Token Layer

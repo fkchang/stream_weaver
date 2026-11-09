@@ -68,6 +68,12 @@ module PageGoldens
     #{PROBE_DSL}
   RUBY
 
+  # A third probe, for theme_overrides: (an App.new kwarg, so only the hosts
+  # that render a real App): one accent token and one surface token on
+  # :default, so the generated override block is recorded per host.
+  OVERRIDES_HOSTS = %i[standalone export].freeze
+  OVERRIDES = { color_primary: '#a21caf', color_bg: '#fdf4ff' }.freeze
+
   ROOT = File.expand_path('../fixtures/page_goldens', __dir__)
   CSS_STORE = File.join(ROOT, 'css_blocks.css')
 
@@ -88,6 +94,9 @@ module PageGoldens
     end
     VARIANT_HOSTS.each do |host|
       pages["#{host}/variant_#{VARIANT_THEME}.txt"] = send("render_variant_#{host}")
+    end
+    OVERRIDES_HOSTS.each do |host|
+      pages["#{host}/overrides_#{VARIANT_THEME}.txt"] = send("render_overrides_#{host}")
     end
     pages['extension/base_stylesheet.txt'] = record_css_only(StreamWeaver::CSS.base_stylesheet)
     pages.merge('css_blocks.css' => css_store_text)
@@ -205,6 +214,22 @@ module PageGoldens
 
   def render_variant_opal
     record(with_probe_dsl(VARIANT_DSL) { render_opal(VARIANT_THEME) })
+  end
+
+  # --- the theme_overrides probe -------------------------------------------
+
+  def overrides_app
+    app = StreamWeaver::App.new('Page probe', theme: VARIANT_THEME, theme_overrides: OVERRIDES)
+    app.instance_eval(PROBE_DSL)
+    app
+  end
+
+  def render_overrides_standalone
+    record(StreamWeaver::Views::AppView.new(overrides_app, {}, StreamWeaver::Adapter::AlpineJS.new).call)
+  end
+
+  def render_overrides_export
+    record(StreamWeaver::Export::HtmlExporter.new(overrides_app).to_html)
   end
 
   # The fragment hosts read PROBE_DSL; swap in the variant for one render.
