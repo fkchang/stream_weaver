@@ -380,7 +380,7 @@ StreamWeaver::App.new("Harbor", theme: :harbor) { header2 "Hello" }
 | `stylesheets:` | Stylesheet URLs the head loads |
 | `css:` | Extra CSS emitted after the generated token CSS |
 | `label:` | Name shown in the theme switcher |
-| `description:` | Optional short text for the theme (default "Custom theme") |
+| `description:` | Optional short text (default "Custom theme"). Stored metadata: `all_themes_for_switcher` returns it with `id` and `label`, and `to_ruby` / `to_json` save it; no page shows it |
 | `base:` | Built-in theme whose look it inherits (default `:default`) |
 
 The generated light and dark CSS lives under `body.sw-theme-harbor`, and
@@ -470,7 +470,8 @@ StreamWeaver::App.new("Harbor") { harbor_panel }   # or `harbor_panel` in a canv
 `register_component` defines the DSL method (`harbor_panel`), which a body
 then calls like any component. A relative `css_path`, `js_path` or `font`
 `src` resolves against the file that declares the class (here, the
-directory of the file holding `Panel`); an absolute path works too. Each
+directory of the file holding `Panel`); an absolute path works too. `css` and `font` accumulate when repeated, but `css_path` and `js_path`
+hold one file each: a second `css_path` line replaces the first. Each
 class contributes once per page, however many instances render. `layered:`
 is optional: the default `false` is unlayered, so an app's component CSS
 wins over the framework; `layered: true` is for framework components.
@@ -509,8 +510,8 @@ wins over the framework; `layered: true` is for framework components.
   returns the markup that loads a local file as `:stylesheet`, `:script` or
   `:font`. `Delivery::Served` gives a `/sw-asset` URL (standalone, canvas,
   reader), `Delivery::Inline` embeds the content (export), and
-  `Delivery::Copied.new(root)` copies the file beside the page and returns a
-  relative href (Opal). A remote URL passes through unchanged.
+  `Delivery::Copied.new(root)` copies the file into `root/sw-assets/` and returns a
+  relative href (Opal; `root` is the build's output directory, `dist` by default). A remote URL passes through unchanged.
 
 ```ruby
 app = StreamWeaver::App.new("Harbor", theme: :harbor) do
@@ -541,7 +542,7 @@ its components' assets: both are collected during the render.
 ### The golden gate
 
 `spec/page_goldens_spec.rb` (helpers in `spec/support/page_goldens.rb`)
-renders one fixed probe page for every built-in theme on every host
+renders one fixed probe page for every built-in theme on every host (a probe you add may cover a subset of hosts, as the recipe below does)
 (standalone, canvas, reader, export, Opal, the `/live` page) and compares
 the ordered `<head>`, the body class and every CSS block with the files
 under `spec/fixtures/page_goldens/`. Further probes cover a variant page
@@ -597,11 +598,21 @@ missing fixture into a green spec:
    `TOKENS_DSL = "theme_tokens color_primary: '#a21caf'\nheader1 'Tokens probe'\n"`.
 2. Add one render method per host, returning `record(html)`:
    `def render_tokens_export; record(StreamWeaver::Export::HtmlExporter.from_dsl(TOKENS_DSL, theme: :default).to_html); end`.
-3. In `render_all`, add
+3. In `render_all`, add, before the final `pages.merge('css_blocks.css' => ...)` line (anywhere after `pages = {}` works; `css_blocks.css` is built last),
    `TOKENS_HOSTS.each { |host| pages["#{host}/tokens.txt"] = send("render_tokens_#{host}") }`.
-4. In `spec/page_goldens_spec.rb`, add an `it` per host comparing
-   `@fresh.fetch(path)` with `golden(path)`.
-5. Run `UPDATE_GOLDENS=1 bundle exec rspec spec/page_goldens_spec.rb`, read
+4. In `spec/page_goldens_spec.rb`, add an `it` per host inside the
+   `RSpec.describe` block, where `@fresh` and `golden` are already in scope,
+   comparing `@fresh.fetch(path)` with `golden(path)`. The probe's name needs
+   no registration anywhere else: the spec's "records every theme on every
+   host, and nothing else" check compares the fixture directory with
+   `@fresh.keys`.
+5. Check the store size first: `wc -c spec/fixtures/page_goldens/css_blocks.css`
+   against the 500,000-byte hygiene limit (it was 499,201 bytes when this was
+   written). If your probe adds CSS that will not fit, split the store into
+   several files in its own commit with no content change, before adding the
+   probe. Then run `UPDATE_GOLDENS=1 bundle exec rspec spec/page_goldens_spec.rb`
+   (it deletes the whole fixture directory and rewrites it from `render_all`, so
+   a removed probe's fixtures vanish and the rest come back byte for byte), read
    `git diff spec/fixtures/page_goldens` (a new file, plus any growth in
    `css_blocks.css`; mind the size limit), run the spec again without the
    variable, and commit the constants, the method, the `it` and the fixtures together.
