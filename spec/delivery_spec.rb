@@ -46,6 +46,14 @@ RSpec.describe StreamWeaver::Delivery do
       expect(request.get(url).status).to eq(404)
     end
 
+    # `streamweaver service` renders pages whose fonts and css_path files are
+    # /sw-asset URLs, so the route must be mounted there as well.
+    it "is mounted on Service" do
+      response = Rack::MockRequest.new(StreamWeaver::Service).get(StreamWeaver::ComponentAssets.url(js))
+      expect(response.status).to eq(200)
+      expect(response.body).to eq("window.widgetLoaded = true;")
+    end
+
     it "sends nosniff" do
       response = request.get(StreamWeaver::ComponentAssets.url(js))
       expect(response.headers["X-Content-Type-Options"]).to eq("nosniff")

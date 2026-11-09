@@ -8,6 +8,7 @@ require 'socket'
 require 'fileutils'
 require 'uri'
 require_relative 'css'
+require_relative 'asset_route'
 
 module StreamWeaver
   # Multi-app service that renders StreamWeaver apps without per-app process management.
@@ -500,6 +501,10 @@ module StreamWeaver
       end
 
     end
+
+    # Local files a page names through Delivery::Served (css_path/js_path and
+    # font macros, a theme's self-hosted fonts:): /sw-asset/<key>/<file>.
+    register StreamWeaver::AssetRoute
 
     # =========================================
     # Service Management Routes
