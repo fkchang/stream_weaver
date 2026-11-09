@@ -19,9 +19,16 @@ module StreamWeaver
   # - Copied: a copy beside the page with a relative href (an Opal build).
   #
   # A remote URL or a data: URI is not a local file: every Delivery passes
-  # it through unchanged. A /sw-asset URL (App#local_asset and stylesheets:
-  # produce them) names a registered local file, so Inline and Copied
-  # deliver that file.
+  # it through unchanged, as it does a root-relative URL ("/app.css") that
+  # is not a file. A /sw-asset URL (App#local_asset and stylesheets: produce
+  # them) names a registered local file, so Inline and Copied deliver that
+  # file. An absolute path into an existing directory whose file is missing
+  # raises, so a typo fails loudly instead of leaking the path into markup.
+  #
+  # Paths come from the author (the DSL, a theme, a component class): Inline
+  # embeds and Copied copies any existing file the author named. Within a
+  # stylesheet only url() references are followed; @import "x.css" (the
+  # string form) is left as written.
   module Delivery
     URL = %r{\A(?:[a-z][a-z0-9+.-]*:|//)}i
     SERVED = %r{\A/sw-asset/(\h+)/}
@@ -45,8 +52,11 @@ module StreamWeaver
     def local_file(path)
       path = path.to_s
       return ComponentAssets.resolve_file(Regexp.last_match(1)) if path.match(SERVED)
+      return nil if path.match?(URL)
+      return path if File.file?(path)
 
-      path if !path.match?(URL) && File.file?(path)
+      dir = File.dirname(path)
+      raise ArgumentError, "asset file not found: #{path}" if path.start_with?("/") && dir != "/" && File.directory?(dir)
     end
 
     def mime_type(path)
@@ -93,7 +103,7 @@ module StreamWeaver
       def href(path)
         return path if path.to_s.match?(SERVED) || !Delivery.local_file(path)
 
-        "/sw-asset/#{ComponentAssets.register_file(path)}/#{File.basename(path)}"
+        ComponentAssets.url(path)
       end
     end
 
@@ -103,8 +113,8 @@ module StreamWeaver
         return Delivery.tag(path, kind) unless file
 
         case kind
-        when :stylesheet then "<style>#{stylesheet(file)}</style>"
-        when :script     then "<script>#{File.read(file)}</script>"
+        when :stylesheet then "<style>#{stylesheet(file).gsub(%r{</style}i, '<\/style')}</style>"
+        when :script     then "<script>#{File.read(file).gsub(%r{</script}i, '<\/script')}</script>"
         else Delivery.tag(data_uri(file), kind)
         end
       end
@@ -126,6 +136,7 @@ module StreamWeaver
       # @param root [String] the build's output directory; files land in root/sw-assets
       def initialize(root)
         @root = root
+        @copies = {}
       end
 
       def ref(path, kind)
@@ -136,9 +147,13 @@ module StreamWeaver
       private
 
       # Copies `path` (and, for a stylesheet, every file its relative url()s
-      # name, as siblings) and returns its href relative to the root.
+      # name, as siblings) and returns its href relative to the root. Each
+      # file is copied once, so stylesheets that name each other terminate.
       def copy(path)
         name = "#{Digest::SHA256.hexdigest(path)[0, 8]}-#{File.basename(path)}"
+        return @copies[path] if @copies.key?(path)
+
+        @copies[path] = "#{DIR}/#{name}"
         dest = File.join(@root, DIR, name)
         FileUtils.mkdir_p(File.dirname(dest))
         if File.extname(path) == ".css"

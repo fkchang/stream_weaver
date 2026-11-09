@@ -31,6 +31,27 @@ RSpec.describe StreamWeaver::Delivery do
     end
   end
 
+  it "raises for an absolute path into an existing directory whose file is missing" do
+    missing = File.join(@dir, "missing.css")
+    [described_class::Served.new, described_class::Inline.new, described_class::Copied.new(@dir)].each do |delivery|
+      expect { delivery.ref(missing, :stylesheet) }.to raise_error(ArgumentError, /asset file not found/)
+    end
+  end
+
+  describe StreamWeaver::AssetRoute do
+    let(:request) { Rack::MockRequest.new(Class.new(Sinatra::Base) { register StreamWeaver::AssetRoute }) }
+
+    it "answers 404, not 500, for a registered directory" do
+      url = StreamWeaver::ComponentAssets.url(File.join(@dir, "fonts"))
+      expect(request.get(url).status).to eq(404)
+    end
+
+    it "sends nosniff" do
+      response = request.get(StreamWeaver::ComponentAssets.url(js))
+      expect(response.headers["X-Content-Type-Options"]).to eq("nosniff")
+    end
+  end
+
   describe described_class::Served do
     it "returns a /sw-asset URL that resolves back to the registered file" do
       tag = subject.ref(css, :stylesheet)
@@ -58,6 +79,13 @@ RSpec.describe StreamWeaver::Delivery do
       expect(tag).to include("url(https://x.test/a.png)")
     end
 
+    it "cannot be closed early by the inlined file's own closing tag" do
+      File.write(js, "var s = '</script><b>';")
+      File.write(css, "/* </style> */ .x {}")
+      expect(subject.ref(js, :script)).to eq(%q(<script>var s = '<\/script><b>';</script>))
+      expect(subject.ref(css, :stylesheet)).to eq(%q(<style>/* <\/style> */ .x {}</style>))
+    end
+
     it "inlines scripts and fonts" do
       expect(subject.ref(js, :script)).to eq("<script>window.widgetLoaded = true;</script>")
       expect(subject.ref(font, :font)).to eq(%(url("data:font/woff2;base64,#{Base64.strict_encode64('wOF2-probe')}")))
@@ -79,6 +107,17 @@ RSpec.describe StreamWeaver::Delivery do
       font_name = copied[/url\("([^"]+)"\)/, 1]
       expect(File.binread(File.join(out, "sw-assets", font_name))).to eq("wOF2-probe")
       expect(delivery.ref(font, :font)).to match(%r{\Aurl\("sw-assets/\h+-probe\.woff2"\)\z})
+    end
+  end
+
+  describe "Copied with stylesheets that name each other" do
+    it "copies each once and terminates" do
+      File.write(File.join(@dir, "a.css"), %(.a { background: url("b.css"); }))
+      File.write(File.join(@dir, "b.css"), %(.b { background: url("a.css"); }))
+      out = File.join(@dir, "dist")
+      href = described_class::Copied.new(out).ref(File.join(@dir, "a.css"), :stylesheet)[/href="([^"]+)"/, 1]
+      expect(Dir.children(File.join(out, "sw-assets")).size).to eq(2)
+      expect(File.read(File.join(out, href))).to match(/url\("\h+-b\.css"\)/)
     end
   end
 

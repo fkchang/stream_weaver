@@ -1460,7 +1460,7 @@ module StreamWeaver
       raise ArgumentError, "local_asset: file not found: #{path}" unless abs_path
 
       ensure_asset_path_allowed!(abs_path, path)
-      "/sw-asset/#{ComponentAssets.register_file(abs_path)}/#{File.basename(abs_path)}"
+      ComponentAssets.url(abs_path)
     end
 
     # Adds CSS as an inline <style> block, usable inside the DSL body itself
@@ -1587,7 +1587,7 @@ module StreamWeaver
       return href unless abs_path
 
       ensure_asset_path_allowed!(abs_path, href)
-      "/sw-asset/#{ComponentAssets.register_file(abs_path)}/#{File.basename(abs_path)}"
+      ComponentAssets.url(abs_path)
     end
 
     # Resolves a `use_stylesheet` argument to raw CSS text: a local file
