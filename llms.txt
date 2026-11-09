@@ -912,7 +912,7 @@ theme_tokens color_primary: "#a21caf", dark: { color_bg: "#120712" }
 | An output host | One `Delivery` plus `PageShell.resolve` and `PageShell.head` |
 | A gem layout | `register_layout` (its `css_path` reaches every host) |
 
-**Golden gate**: `spec/page_goldens_spec.rb` records head, body class and CSS for every theme on every host in `spec/fixtures/page_goldens/`; `UPDATE_GOLDENS=1 bundle exec rspec spec/page_goldens_spec.rb` rewrites them (review the git diff). Add a host via `PageGoldens::HOSTS` and a `render_<host>` method, a probe via a constant plus `render_all`. `PageGoldens::EXCLUSIONS` names what cannot render without a browser. `css_blocks.css` is near the 500,000-byte limit that `bin/check_git_hygiene` enforces on staged files.
+**Golden gate**: `spec/page_goldens_spec.rb` records head, body class and CSS for every theme on every host in `spec/fixtures/page_goldens/`; `UPDATE_GOLDENS=1 bundle exec rspec spec/page_goldens_spec.rb` rewrites them (review the git diff). Add a host via `PageGoldens::HOSTS` and a `render_<host>` method, a probe via a constant plus `render_all`. `PageGoldens::EXCLUSIONS` names what cannot render without a browser. CSS blocks are stored once by digest in shards named by the digest's first two hex digits (`css_blocks/<xx>.css`), so no fixture nears the 500,000-byte limit that `bin/check_git_hygiene` enforces on staged files.
 
 Known follow-ups: three Google Fonts URL builders (`Fonts`, `Theme`, `Presets`), export rejects a code sample containing `run!` (disc-262), the reader takes theme fonts only from the first doc, highlight.js is not reapplied after a canvas reload (disc-263), exclusive layouts are skipped on the canvas (disc-259).
 

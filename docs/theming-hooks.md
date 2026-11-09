@@ -564,24 +564,28 @@ git diff spec/fixtures/page_goldens                                # name each d
   `app.js`, runtime theme switching, the `/live` body, the extension head).
   A browser-filled host must name one, and the spec checks that the reason
   is a sentence.
-- **Size limit**: CSS is stored once in `css_blocks.css`, referenced by digest.
-  The git hygiene hook (`bin/check_git_hygiene`) blocks a staged file over
-  500,000 bytes, and `css_blocks.css` is already close to it. A new probe
-  or host adds a CSS block per theme and can push it over; keep new probes
-  lean, as `REGISTERED_DSL` does, by leaving out the `ide_shell`.
+- **The CSS store**: each CSS block is stored once, referenced by a
+  12-character digest, in the shard named by the digest's first two hex
+  digits (`css_blocks/<xx>.css`). A changed block is one in-place hunk in its
+  shard. The git hygiene hook (`bin/check_git_hygiene`) blocks a staged file
+  over 500,000 bytes; sharding keeps every file to about one block (the
+  largest, a joined framework CSS block, is about 120 KB), so a new probe or
+  host needs no store work. Keep new probes lean anyway, as `REGISTERED_DSL`
+  does by leaving out the `ide_shell`: every distinct block is another copy
+  of the framework CSS.
 
 #### How the helper is built
 
 - `PageGoldens.render_all` takes no arguments and returns a
   `Hash{String => String}`: a fixture path relative to
   `spec/fixtures/page_goldens/` (`"export/default.txt"`) to the text recorded
-  for it. It always includes `"css_blocks.css"`. The spec renders it once in
+  for it. It always includes the store shards (`"css_blocks/<xx>.css"`). The spec renders it once in
   `before(:all)`, as `@fresh`.
 - A probe constant holds a String (a DSL body, as `PROBE_DSL`, `VARIANT_DSL`,
   `REGISTERED_DSL`) or a Hash (App options or tokens, as `VARIANT_APP_OPTIONS`,
   `OVERRIDES`); hosts are Arrays of Symbols.
 - `record(html)` reduces a page to its body class, head tags and body asset
-  tags, and stores each CSS block once in `css_blocks.css` by digest.
+  tags, and stores each CSS block once, by digest, in its `css_blocks/` shard.
 - An example compares a render with its fixture like this (from the spec):
   `expect(@fresh.fetch("export/tokens.txt")).to eq(golden("export/tokens.txt"))`,
   where `golden(path)` reads the file and raises `missing golden ...` if there is none.
@@ -598,7 +602,7 @@ missing fixture into a green spec:
    `TOKENS_DSL = "theme_tokens color_primary: '#a21caf'\nheader1 'Tokens probe'\n"`.
 2. Add one render method per host, returning `record(html)`:
    `def render_tokens_export; record(StreamWeaver::Export::HtmlExporter.from_dsl(TOKENS_DSL, theme: :default).to_html); end`.
-3. In `render_all`, add, before the final `pages.merge('css_blocks.css' => ...)` line (anywhere after `pages = {}` works; `css_blocks.css` is built last),
+3. In `render_all`, add, before the final `pages.merge(css_store_files)` line (anywhere after `pages = {}` works; the store shards are built last),
    `TOKENS_HOSTS.each { |host| pages["#{host}/tokens.txt"] = send("render_tokens_#{host}") }`.
 4. In `spec/page_goldens_spec.rb`, add an `it` per host inside the
    `RSpec.describe` block, where `@fresh` and `golden` are already in scope,
@@ -606,15 +610,11 @@ missing fixture into a green spec:
    no registration anywhere else: the spec's "records every theme on every
    host, and nothing else" check compares the fixture directory with
    `@fresh.keys`.
-5. Check the store size first: `wc -c spec/fixtures/page_goldens/css_blocks.css`
-   against the 500,000-byte hygiene limit (it was 499,201 bytes when this was
-   written). If your probe adds CSS that will not fit, split the store into
-   several files in its own commit with no content change, before adding the
-   probe. Then run `UPDATE_GOLDENS=1 bundle exec rspec spec/page_goldens_spec.rb`
+5. Run `UPDATE_GOLDENS=1 bundle exec rspec spec/page_goldens_spec.rb`
    (it deletes the whole fixture directory and rewrites it from `render_all`, so
    a removed probe's fixtures vanish and the rest come back byte for byte), read
-   `git diff spec/fixtures/page_goldens` (a new file, plus any growth in
-   `css_blocks.css`; mind the size limit), run the spec again without the
+   `git diff spec/fixtures/page_goldens` (a new file, plus a new or grown
+   `css_blocks/<xx>.css` shard for any new CSS block), run the spec again without the
    variable, and commit the constants, the method, the `it` and the fixtures together.
 
 ### Known follow-ups

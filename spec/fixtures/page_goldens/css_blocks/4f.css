@@ -1,0 +1,13 @@
+/* ==== css 4f1fd0711e6c (301 bytes) ==== */
+@layer stream-weaver {
+body.sw-theme-harbor {
+  --sw-color-primary: #0e7490;
+  --sw-color-bg: #f7fafa;
+}
+html.dark body.sw-theme-harbor, html[data-sw-theme="dark"] body.sw-theme-harbor {
+  --sw-color-primary: #22d3ee;
+  --sw-color-bg: #0b1416;
+}
+body.sw-theme-harbor h2 { letter-spacing: -0.01em; }
+
+}

@@ -11,12 +11,14 @@ require_relative 'support/page_goldens'
 # spec/fixtures/page_goldens/<host>/<theme>.txt: the <body> class, the
 # ordered <head> one tag per line, the body's <link>, <script> and <style>
 # tags in document order (other body markup is dropped), and for Opal the
-# builder's warnings. Every CSS block lives once in css_blocks.css and is
-# referenced by a 12-character digest of its content. The probe includes an
+# builder's warnings. Every CSS block lives once in the CSS store and is
+# referenced by a 12-character digest of its content. The store is sharded
+# by the digest's first two hex digits (css_blocks/<xx>.css) so no fixture
+# nears the git hygiene hook's size limit. The probe includes an
 # ide_shell, so injected component CSS is covered on every host.
 #
 # Normalisations, each because the raw value is noise rather than signal:
-# - <style> bodies become "[css <digest>]"; the CSS itself is in css_blocks.css.
+# - <style> bodies become "[css <digest>]"; the CSS itself is in css_blocks/<xx>.css.
 # - inline <script> bodies become "[script <digest>, N bytes]": scripts are
 #   not CSS, and a changed script still shows up as a changed digest.
 # - whitespace between tags is collapsed to one tag per line, because Phlex
@@ -99,8 +101,12 @@ RSpec.describe 'page goldens (page-assets gate)' do
     expect(@fresh.fetch('extension/base_stylesheet.txt')).to eq(golden('extension/base_stylesheet.txt'))
   end
 
-  it 'every CSS block matches css_blocks.css' do
-    expect(@fresh.fetch('css_blocks.css')).to eq(golden('css_blocks.css'))
+  it 'every CSS block matches its css_blocks shard' do
+    shards = @fresh.keys.select { |path| path.start_with?("#{PageGoldens::CSS_STORE_DIR}/") }
+    expect(shards).not_to be_empty
+    aggregate_failures do
+      shards.each { |path| expect(@fresh.fetch(path)).to eq(golden(path)), "#{path} differs" }
+    end
   end
 
   it 'renders the same output twice (nothing nondeterministic leaks in)' do

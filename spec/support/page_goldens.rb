@@ -83,14 +83,19 @@ module PageGoldens
   REGISTERED_THEME = :harbor
   REGISTERED_HOSTS = %i[standalone canvas export].freeze
   # The main probe without its ide_shell: the IDE CSS is gated by every
-  # built-in theme already, and another copy would only grow css_blocks.css.
+  # built-in theme already, and another copy would only grow the CSS store.
   REGISTERED_DSL = PROBE_DSL.split("ide_shell").first
 
   # Theme::Presets CSS, which no built-in theme reaches (see EXCLUSIONS).
   PRESET = :editorial
 
   ROOT = File.expand_path('../fixtures/page_goldens', __dir__)
-  CSS_STORE = File.join(ROOT, 'css_blocks.css')
+  # The CSS store is sharded by the first two hex digits of each block's
+  # digest (css_blocks/<xx>.css), so no fixture file approaches the git
+  # hygiene hook's size limit (bin/check_git_hygiene MAX_FILE_BYTES): a
+  # shard holds only the blocks whose digest starts with its name.
+  CSS_STORE_DIR = 'css_blocks'
+  SHARD_DIGITS = 2
 
   module_function
 
@@ -121,7 +126,7 @@ module PageGoldens
     end
     pages["presets/#{PRESET}.txt"] = record_css_only(StreamWeaver::Theme::Presets.generate_preset_css(PRESET))
     pages['extension/base_stylesheet.txt'] = record_css_only(StreamWeaver::CSS.base_stylesheet)
-    pages.merge('css_blocks.css' => css_store_text)
+    pages.merge(css_store_files)
   end
 
   # --- hosts ---------------------------------------------------------------
@@ -330,7 +335,7 @@ module PageGoldens
   end
 
   # CSS blocks are stored once, in first-seen order, so a change to a shared
-  # block (master_theme_css, say) is one in-place hunk in css_blocks.css
+  # block (master_theme_css, say) is one in-place hunk in its css_blocks shard
   # instead of thirty copies.
   def store(css)
     key = digest(css)
@@ -342,8 +347,12 @@ module PageGoldens
     @css_blocks ||= {}
   end
 
-  def css_store_text
-    css_blocks.map { |key, css| "/* ==== css #{key} (#{css.bytesize} bytes) ==== */\n#{css.strip}\n" }.join("\n")
+  # @return [Hash{String=>String}] shard path => its blocks, in first-seen order
+  def css_store_files
+    css_blocks.group_by { |key, _| key[0, SHARD_DIGITS] }.sort.to_h do |shard, blocks|
+      text = blocks.map { |key, css| "/* ==== css #{key} (#{css.bytesize} bytes) ==== */\n#{css.strip}\n" }.join("\n")
+      ["#{CSS_STORE_DIR}/#{shard}.css", text]
+    end
   end
 
   def digest(text)

@@ -1,0 +1,50 @@
+/* ==== css 45fac1de5b88 (1437 bytes) ==== */
+/* Theme preset: Editorial -- Magazine-style with serif display font */
+:root {
+  --sw-font-display: 'Instrument Serif', Georgia, serif;
+  --sw-font-body: 'Source Sans 3', system-ui, sans-serif;
+  --sw-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --sw-bg: #faf8f5;
+  --sw-surface: #ffffff;
+  --sw-surface-elevated: #f5f3f0;
+  --sw-border: #e8e4df;
+  --sw-text: #1a1a1a;
+  --sw-text-dim: #6b6560;
+  --sw-accent: #c2410c;
+  --sw-node-a: #c2410c;
+  --sw-node-b: #0d9488;
+  --sw-node-c: #7c3aed;
+  --sw-success: #16a34a;
+  --sw-warning: #d97706;
+  --sw-error: #dc2626;
+  --sw-info: #2563eb;
+}
+html.dark, html[data-sw-theme="dark"] {
+  --sw-font-display: 'Instrument Serif', Georgia, serif;
+  --sw-font-body: 'Source Sans 3', system-ui, sans-serif;
+  --sw-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --sw-bg: #1a1816;
+  --sw-surface: #262220;
+  --sw-surface-elevated: #332e2b;
+  --sw-border: rgba(255, 255, 255, 0.1);
+  --sw-text: #f5f0eb;
+  --sw-text-dim: #a89f97;
+  --sw-accent: #f97316;
+  --sw-node-a: #f97316;
+  --sw-node-b: #2dd4bf;
+  --sw-node-c: #a78bfa;
+  --sw-success: #22c55e;
+  --sw-warning: #fbbf24;
+  --sw-error: #f87171;
+  --sw-info: #60a5fa;
+}
+/* Apply preset fonts to body */
+body {
+  font-family: 'Source Sans 3', system-ui, sans-serif;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Instrument Serif', Georgia, serif;
+}
+code, pre, .sw-code-block {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
