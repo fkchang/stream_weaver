@@ -567,6 +567,14 @@ module StreamWeaver
         Page.new(theme: theme, layout: layout, assets: page_assets)
       end
 
+      # The page around a DSL fragment (a canvas push, a canvas-read doc),
+      # whose App is gone by the time the page is drawn: its theme, layout
+      # and the inline CSS the body declared (use_stylesheet, theme_tokens).
+      # @return [Page]
+      def fragment_page(theme:, layout:, user_css: [])
+        resolve(nil, theme: theme, layout: layout) + Assets.of(user_css: user_css)
+      end
+
       # @param page [Page]
       # @param delivery [Delivery::Served, Delivery::Inline, Delivery::Copied]
       # @return [Head] the page's head tags, one method per bucket

@@ -2,6 +2,7 @@
 
 require_relative 'protocol'
 require_relative 'session'
+require_relative 'fragment'
 require_relative 'event_log'
 
 module StreamWeaver
@@ -10,9 +11,6 @@ module StreamWeaver
     # Manages sessions and routes messages between the two.
     class Bridge
       DEFAULT_PORT = 4568
-
-      # Result of rendering DSL to HTML
-      RenderResult = Struct.new(:html, :error, :theme, :layout, :stylesheets, keyword_init: true)
 
       attr_reader :sessions, :port
 
@@ -130,10 +128,13 @@ module StreamWeaver
         session = get_session(name)
         return { type: 'error', message: "Session not found: #{name}" } unless session
 
-        result = render_dsl(dsl, session_name: name, theme: session.theme, layout: session.layout)
         # A push that fails to evaluate changes nothing: the open page keeps
         # its content, body class and assets, and the agent gets the error.
-        return { type: 'push_error', message: result.error } if result.error
+        result = begin
+          render(dsl, session)
+        rescue ScriptError, StandardError => e
+          return { type: 'push_error', message: e.message }
+        end
 
         # The page (theme, layout, inline CSS) goes with the HTML, so a
         # pushed use_theme reaches the open page (disc-127). The DSL and
@@ -141,7 +142,7 @@ module StreamWeaver
         # (stream_weaver-9uk) and source_dir never desyncs from its DSL
         # (canvas-doc-location-and-discovery.md).
         session.set_look(result.theme, result.layout)
-        session.set_stylesheets(result.stylesheets)
+        session.set_stylesheets(result.inline_stylesheets)
         session.set_html(result.html)
         session.set_dsl(dsl)
         session.set_source_dir(source_dir)
@@ -269,27 +270,12 @@ module StreamWeaver
         { type: 'list', sessions: list_sessions }
       end
 
-      # Render StreamWeaver DSL to HTML. The body is evaluated in an App
-      # seeded with the session's theme and layout, so its own use_theme /
-      # use_layout win and the session's stand in otherwise, the same
-      # precedence canvas-read uses (Reader.render_doc).
-      # @param dsl [String] DSL code
-      # @return [RenderResult] the html and the theme, layout and inline CSS
-      #   it declared, or an error
-      def render_dsl(dsl, session_name:, theme: :default, layout: :fluid)
-        mini_app = StreamWeaver::App.new("Canvas", theme: theme, layout: layout)
-        mini_app.instance_eval(dsl)
-
-        adapter = StreamWeaver::Adapter::AlpineJS.new(
-          url_prefix: "/canvas/#{session_name}",
-          mode: :websocket
-        )
-        html = StreamWeaver::Views::AppContentView.new(mini_app, {}, adapter, false,
-                                                       delivery: StreamWeaver::Delivery::Served.new).call
-        RenderResult.new(html: html, theme: mini_app.theme, layout: mini_app.layout,
-                         stylesheets: mini_app.fragment_css)
-      rescue ScriptError, StandardError => e
-        RenderResult.new(error: e.message)
+      # The pushed body as canvas content: the session's theme and layout
+      # stand in for the ones the body does not declare.
+      # @return [Fragment]
+      def render(dsl, session)
+        adapter = StreamWeaver::Adapter::AlpineJS.new(url_prefix: "/canvas/#{session.name}", mode: :websocket)
+        Fragment.render(dsl, adapter: adapter, theme: session.theme, layout: session.layout)
       end
     end
   end

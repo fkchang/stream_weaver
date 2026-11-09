@@ -16,6 +16,7 @@ require 'stream_weaver/canvas/gist_publisher'
 require 'stream_weaver/canvas/gist_save_handler'
 require 'stream_weaver/canvas/save_doc_widget'
 require 'stream_weaver/page_shell'
+require 'stream_weaver/canvas/fragment'
 require 'stream_weaver/export/html_exporter'
 require 'stream_weaver/org/writer'
 require 'stream_weaver/org/reader'
@@ -223,9 +224,8 @@ module StreamWeaver
       end
 
       # What Reader.render_doc hands the layout template: the rendered HTML
-      # plus the theme/layout/CSS the DSL declared for itself, which the shell
-      # needs for the <body> class and the user-CSS <style> tags.
-      Doc = Struct.new(:html, :theme, :layout, :inline_stylesheets, keyword_init: true)
+      # plus the theme/layout/CSS the DSL declared for itself (Fragment).
+      Doc = Canvas::Fragment
 
       class << self
         attr_reader :default_theme, :default_layout
@@ -755,20 +755,12 @@ module StreamWeaver
         end
 
         dsl = StreamWeaver::Org::Reader.to_dsl(dsl) if StreamWeaver::Org::Reader.streamweaver_org?(dsl)
-        mini_app = StreamWeaver::App.new('reader', theme: theme, layout: layout)
-        mini_app.instance_eval(dsl, path.to_s, 1)
         adapter = StreamWeaver::Adapter::AlpineJS.new(
           url_prefix: '/canvas/reader',
           mode: :websocket,
           inert: true
         )
-        Doc.new(
-          html: StreamWeaver::Views::AppContentView.new(mini_app, {}, adapter, false,
-                                                        delivery: StreamWeaver::Delivery::Served.new).call,
-          theme: mini_app.theme,
-          layout: mini_app.layout,
-          inline_stylesheets: mini_app.fragment_css
-        )
+        Doc.render(dsl, adapter: adapter, theme: theme, layout: layout, path: path&.to_s)
       rescue ScriptError, StandardError => e
         Doc.new(
           html: "<div style='color:red;padding:1rem;font-family:monospace'>" \
@@ -790,10 +782,8 @@ module StreamWeaver
       # @param doc [Doc, nil]
       # @return [StreamWeaver::PageShell::Page]
       def self.page_for(doc)
-        theme  = doc ? doc.theme : fallback_theme
-        layout = doc ? doc.layout : fallback_layout
-        StreamWeaver::PageShell.resolve(nil, theme: theme, layout: layout) +
-          StreamWeaver::Assets.of(user_css: doc ? doc.inline_stylesheets : [], body_classes: %w[sw-reader])
+        page = doc ? doc.page : StreamWeaver::PageShell.fragment_page(theme: fallback_theme, layout: fallback_layout)
+        page + StreamWeaver::Assets.of(body_classes: %w[sw-reader])
       end
 
       # Neutral, not red -- this isn't a bug in the doc or in canvas-read,

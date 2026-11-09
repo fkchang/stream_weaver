@@ -32,11 +32,10 @@ RSpec.describe 'Visual Companion SlimGraphR diagram guidance' do
     expect(scaffold).to include('diagram :architecture')
     expect(scaffold).not_to include('document do')
 
-    canvas = StreamWeaver::Canvas::Bridge.new.send(:render_dsl, scaffold, session_name: 'guide-scaffold')
+    canvas = StreamWeaver::Canvas::Fragment.render(scaffold, adapter: StreamWeaver::Adapter::AlpineJS.new(url_prefix: "/canvas/guide-scaffold", mode: :websocket))
     reader = StreamWeaver::Canvas::Reader.render_doc(scaffold)
     exported = StreamWeaver::Export::HtmlExporter.from_dsl(scaffold).to_html
 
-    expect(canvas.error).to be_nil
     expect([canvas.html, reader.html, exported]).to all(include('<svg'))
   end
 

@@ -85,12 +85,12 @@ module StreamWeaver
       end
 
       # What the page needs for the current push: the same recipe as
-      # canvas-read's Reader.page_for, so the live canvas and canvas-read
+      # canvas-read's Reader.page_for (PageShell.fragment_page), so the live canvas and canvas-read
       # agree for the same body (disc-127).
       # @return [StreamWeaver::PageShell::Page]
       def page
-        StreamWeaver::PageShell.resolve(nil, theme: @page_theme || @theme, layout: @page_layout || @layout) +
-          StreamWeaver::Assets.of(user_css: @stylesheets)
+        StreamWeaver::PageShell.fragment_page(theme: @page_theme || @theme, layout: @page_layout || @layout,
+                                              user_css: @stylesheets)
       end
 
       # Replace the inline stylesheets carried by the current DSL (stream_weaver-9uk).

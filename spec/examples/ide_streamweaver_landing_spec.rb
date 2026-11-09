@@ -58,12 +58,11 @@ RSpec.describe "examples/ide/streamweaver_landing.rb" do
   describe "canvas push of the same body" do
     let(:result) do
       body = File.read(StreamWeaverLanding::BODY_PATH)
-      StreamWeaver::Canvas::Bridge.new.send(:render_dsl, body, session_name: "landing")
+      StreamWeaver::Canvas::Fragment.render(body, adapter: StreamWeaver::Adapter::AlpineJS.new(url_prefix: "/canvas/landing", mode: :websocket))
     end
     let(:page_html) { result.html }
 
     it "evaluates without error and renders the shell" do
-      expect(result.error).to be_nil
       expect(page_html).to include(%(class="sw-ide-shell"), %(class="sw-ide-tabstrip"))
     end
 

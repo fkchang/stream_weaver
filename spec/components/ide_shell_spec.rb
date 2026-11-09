@@ -131,8 +131,7 @@ RSpec.describe "ide_shell" do
           ide_statusbar { text "status" }
         end
       RUBY
-      result = StreamWeaver::Canvas::Bridge.new.send(:render_dsl, dsl, session_name: "ide")
-      expect(result.error).to be_nil
+      result = StreamWeaver::Canvas::Fragment.render(dsl, adapter: StreamWeaver::Adapter::AlpineJS.new(url_prefix: "/canvas/ide", mode: :websocket))
       expect(result.html).to include(%(class="sw-ide-shell"))
       expect(result.html).to include(%(<main class="sw-ide-editor"))
       expect(result.html).to include(".sw-ide-shell {")
