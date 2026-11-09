@@ -111,6 +111,9 @@ module StreamWeaver
           css += "\n" + StreamWeaver::CSS.layer_wrap(components.framework_css.join("\n"))
         end
         css += "\n" + components.user_css.join("\n") unless components.user_css.empty?
+        # A registered (non built-in) theme's generated token CSS
+        theme_css = page.assets.framework_css
+        css += "\n" + StreamWeaver::CSS.layer_wrap(theme_css.join("\n")) unless theme_css.empty?
         if @theme
           # --theme names a registered theme (its fonts and stylesheets reach
           # the page through #page) or a Theme::Presets entry (its CSS lands

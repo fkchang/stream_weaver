@@ -294,7 +294,7 @@ module StreamWeaver
         state = {}
         html = StreamWeaver::Views::AppContentView.new(mini_app, state, adapter, false,
                                                        delivery: StreamWeaver::Delivery::Served.new).call
-        RenderResult.new(html: html, error: nil, stylesheets: mini_app.inline_stylesheets)
+        RenderResult.new(html: html, error: nil, stylesheets: mini_app.fragment_css)
       rescue => e
         RenderResult.new(
           html: "<div class='error'>Error: #{e.message}</div>",

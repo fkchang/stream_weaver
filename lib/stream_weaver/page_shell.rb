@@ -550,14 +550,18 @@ module StreamWeaver
       #   during the body render (adapter#inject_component_css), keyed so
       #   each block appears once
       # @param theme_css [Boolean] false leaves a registered custom theme's
-      #   CSS out of framework_css, for the standalone view, which still
-      #   emits it in <body> (AppView#render_custom_theme_css) until it moves
+      #   CSS and the app's theme_tokens out of framework_css, for the
+      #   standalone view, which still emits them in <body>
+      #   (AppView#render_custom_theme_css, #render_theme_tokens) until they move
       #   onto Head#to_s
       # @return [Page]
       def resolve(app, theme:, layout: app&.layout, layout_entry: app&.layout_entry, injected_css: {},
                   theme_css: true)
         page_assets = theme_assets(theme, css: theme_css) + layout_assets(layout_entry, layout) +
                       Assets.of(body_classes: theme ? ["sw-theme-#{theme}"] : [])
+        # The app's theme_tokens are theme CSS: right after the theme's own,
+        # which they must follow to win the specificity tie.
+        page_assets += Assets.of(framework_css: app.theme_token_css) if app && theme_css
         page_assets += Assets.of(framework_css: injected_css.values)
         page_assets = app_assets(app) + page_assets + component_assets(app) if app
         Page.new(theme: theme, layout: layout, assets: page_assets)

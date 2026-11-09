@@ -767,7 +767,7 @@ module StreamWeaver
                                                         delivery: StreamWeaver::Delivery::Served.new).call,
           theme: mini_app.theme,
           layout: mini_app.layout,
-          inline_stylesheets: mini_app.inline_stylesheets
+          inline_stylesheets: mini_app.fragment_css
         )
       rescue ScriptError, StandardError => e
         Doc.new(

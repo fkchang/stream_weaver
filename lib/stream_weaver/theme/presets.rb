@@ -392,7 +392,8 @@ module StreamWeaver
       end
 
       # Generate a complete CSS block for a preset that applies to :root (light)
-      # and html.dark (dark mode). Also sets font-family on body elements.
+      # and either dark signal on <html> (Theme.token_css). Also sets
+      # font-family on body elements.
       #
       # @param preset_name [Symbol] Preset name
       # @return [String] CSS string with custom properties for both modes
@@ -400,22 +401,12 @@ module StreamWeaver
         preset = get(preset_name)
         return "" unless preset
 
-        light_vars = css_variables(preset, mode: :light)
-        dark_vars = css_variables(preset, mode: :dark)
-
-        light_block = light_vars.map { |k, v| "  #{k}: #{v};" }.join("\n")
-        dark_block = dark_vars.map { |k, v| "  #{k}: #{v};" }.join("\n")
-
+        tokens = Theme.token_css(":root", css_variables(preset, mode: :light), css_variables(preset, mode: :dark))
         fonts = preset[:fonts]
 
         <<~CSS
           /* Theme preset: #{preset[:label]} -- #{preset[:description]} */
-          :root {
-          #{light_block}
-          }
-          html.dark {
-          #{dark_block}
-          }
+          #{tokens.chomp}
           /* Apply preset fonts to body */
           body {
             font-family: #{fonts[:body]};

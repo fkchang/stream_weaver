@@ -9,28 +9,30 @@ RSpec.describe "theme_overrides (stream_weaver-ckz)" do
   end
 
   describe "specificity vs. a non-default built-in theme" do
-    it "scopes the override selector to body.sw-theme-<active theme> so it wins over the built-in theme's own rule" do
+    it "scopes the override to a themed body (the same specificity as the built-in theme's own rule) and emits it after that rule" do
       app = StreamWeaver::App.new("Title", theme: :dashboard,
                                             theme_overrides: { color_primary: "#D97706" }) {}
       html = render_app(app)
 
-      expect(html).to include("body.sw-theme-dashboard { --sw-color-primary: #D97706; }")
+      override = "body[class*=\"sw-theme-\"] {\n  --sw-color-primary: #D97706;\n}"
+      expect(html).to include(override)
 
       # Source order: the built-in theme block (emitted in <head>) must come
       # before the override block (emitted in <body>) so that with equal
       # specificity, cascade order lets the override win.
       builtin_index = html.index("body.sw-theme-dashboard {\n")
-      override_index = html.index("body.sw-theme-dashboard { --sw-color-primary: #D97706; }")
+      override_index = html.index(override)
       expect(builtin_index).not_to be_nil
       expect(override_index).to be > builtin_index
     end
 
-    it "scopes to whichever built-in theme is active, not always :dashboard" do
+    it "applies to whichever built-in theme is active, not always :dashboard" do
       app = StreamWeaver::App.new("Title", theme: :document,
                                             theme_overrides: { color_primary: "#D97706" }) {}
       html = render_app(app)
 
-      expect(html).to include("body.sw-theme-document { --sw-color-primary: #D97706; }")
+      expect(html).to include("<body class=\"sw-layout-default sw-theme-document\"")
+      expect(html).to include("body[class*=\"sw-theme-\"] {\n  --sw-color-primary: #D97706;\n}")
     end
   end
 
@@ -77,10 +79,9 @@ RSpec.describe "theme_overrides (stream_weaver-ckz)" do
 
   describe "unknown override token" do
     it "warns loudly when an override key matches no known VARIABLE_SCHEMA token" do
-      app = StreamWeaver::App.new("Title", theme: :dashboard,
-                                            theme_overrides: { not_a_real_token: "nope" }) {}
-
-      expect { render_app(app) }.to output(/Unknown theme override token.*not_a_real_token/).to_stderr
+      expect do
+        StreamWeaver::App.new("Title", theme: :dashboard, theme_overrides: { not_a_real_token: "nope" }) {}
+      end.to output(/Unknown theme token.*not_a_real_token/).to_stderr
     end
 
     it "does not warn for a known token" do

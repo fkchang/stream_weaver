@@ -140,8 +140,8 @@ module StreamWeaver
         # Custom theme CSS (for registered themes)
         render_custom_theme_css
 
-        # Theme overrides as inline CSS
-        render_theme_overrides if @app.theme_overrides.any?
+        # The app's theme_tokens / theme_overrides: as inline CSS
+        render_theme_tokens
 
         layout_entry = @app.layout_entry
         if layout_entry&.dig(:exclusive) && layout_entry[:render_block]
@@ -672,8 +672,10 @@ module StreamWeaver
                   --sw-term-bg-hover: var(--sw-color-accent-light);
                 }
 
-                /* Doc theme — dark mode overrides (data-sw-theme="dark" lives on <html>).
+                /* Doc theme — dark mode overrides, on either dark signal on <html>
+                   (html.dark alone used to get the generic dark colours with doc's light primary).
                    Colors only — type/spacing/radius/shadow cascade from the light block above. */
+                html.dark body.sw-theme-doc,
                 html[data-sw-theme="dark"] body.sw-theme-doc {
                   --sw-color-primary: #6699FF;
                   --sw-color-primary-hover: #8AB0FF;
@@ -3761,37 +3763,19 @@ module StreamWeaver
         @session_theme || @app.theme
       end
 
-      # Render inline CSS for theme overrides.
+      # The app's theme_tokens and theme_overrides: (Theme.token_css), in the
+      # framework layer.
       #
-      # Scoped to body.sw-theme-<active theme> rather than a bare `body`
-      # selector: every built-in theme's own CSS uses that same
-      # body.sw-theme-<name> selector (specificity 0-1-1), which always
-      # beats a plain `body {}` (0-0-1) regardless of source order. Matching
-      # the selector's specificity means the tie is broken by cascade order
-      # instead -- this block is emitted in <body>, after the built-in
-      # theme's own block in <head>, so it wins (stream_weaver-ckz; same
-      # technique as the `html.dark body` dark-mode override above).
-      def render_theme_overrides
-        warn_unknown_theme_override_tokens
-        css_vars = @app.theme_overrides.map do |key, value|
-          css_var = key.to_s.tr('_', '-')
-          # Add sw- prefix if not present
-          css_var = "sw-#{css_var}" unless css_var.start_with?('sw-')
-          "--#{css_var}: #{value};"
-        end.join("\n  ")
-
-        style do
-          raw(safe(StreamWeaver::CSS.layer_wrap("body.sw-theme-#{effective_theme} { #{css_vars} }")))
+      # Scoped to Theme::TOKEN_SCOPE, the same specificity (0-1-1) as every
+      # built-in theme's body.sw-theme-<name> block, so the tie is broken by
+      # cascade order: this block is emitted in <body>, after the built-in
+      # theme's own block in <head>, so it wins (stream_weaver-ckz). The
+      # framework's dark blocks outrank its light block, which is what keeps a
+      # surface token light-only (Theme::SURFACE_TOKENS).
+      def render_theme_tokens
+        @app.theme_token_css.each do |css|
+          style { raw(safe(StreamWeaver::CSS.layer_wrap(css))) }
         end
-      end
-
-      def warn_unknown_theme_override_tokens
-        unknown = @app.theme_overrides.keys.reject { |key| Theme::VARIABLE_SCHEMA.key?(key.to_sym) }
-        return if unknown.empty?
-
-        warn "StreamWeaver: Unknown theme override token(s) #{unknown.map(&:inspect).join(', ')} -- " \
-             "no matching entry in Theme::VARIABLE_SCHEMA, so this override is emitted as a raw --sw- custom property " \
-             "that no built-in styling reads."
       end
 
       # Render CSS for custom registered themes

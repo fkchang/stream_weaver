@@ -40,7 +40,7 @@ module StreamWeaver
       end
     end
 
-    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :inline_stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions, :action_updates, :action_primary
+    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :theme_token_css, :scripts, :stylesheets, :inline_stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions, :action_updates, :action_primary
 
     # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
     ENDPOINT_VERBS = %i[get post put patch delete].freeze
@@ -115,6 +115,8 @@ module StreamWeaver
       @allowed_asset_dirs = ([@script_dir] + assets_dirs.map { |d| File.expand_path(d) }).uniq
       @stylesheets = stylesheets.map { |href| resolve_stylesheet_href(href) }
       @inline_stylesheets = []
+      @theme_token_css = []
+      theme_tokens(**theme_overrides.transform_keys(&:to_sym))
       @fonts = fonts
       @transient_keys = Set.new
       @timers = []
@@ -1479,6 +1481,33 @@ module StreamWeaver
       @inline_stylesheets << css unless @inline_stylesheets.include?(css)
     end
 
+    # The app's own token values over whatever theme the page wears, from
+    # the DSL body, so a canvas push carries them too. theme_overrides: is
+    # the same call. Owner decision 2: a surface token (Theme::SURFACE_TOKENS)
+    # applies in light mode only unless dark: gives it a dark value; every
+    # other token applies in both modes.
+    #
+    # @example
+    #   theme_tokens color_primary: '#a21caf', dark: { color_bg: '#120712' }
+    def theme_tokens(dark: {}, **tokens)
+      return if tokens.empty? && dark.empty?
+
+      css = Theme.token_css(Theme::TOKEN_SCOPE, tokens, Theme.dark_tokens(tokens, dark))
+      return if @theme_token_css.include?(css)
+
+      warn_unknown_theme_tokens(tokens.keys + dark.keys)
+      @theme_token_css << css
+    end
+
+    # The CSS a DSL fragment carries to a host that renders it without its
+    # App (canvas, reader): its theme tokens (layered: they must keep losing
+    # to the framework's dark blocks), then its use_stylesheet blocks.
+    #
+    # @return [Array<String>]
+    def fragment_css
+      @theme_token_css.map { |css| StreamWeaver::CSS.layer_wrap(css) } + @inline_stylesheets
+    end
+
     # In-DSL equivalents of App.new's `theme:`/`layout:` kwargs, for the same
     # reason use_stylesheet exists: a DSL file that gets instance_eval'd by
     # canvas-push/canvas-read never runs its own App.new, so a `theme:` kwarg
@@ -1588,6 +1617,15 @@ module StreamWeaver
 
       ensure_asset_path_allowed!(abs_path, href)
       ComponentAssets.url(abs_path)
+    end
+
+    def warn_unknown_theme_tokens(keys)
+      unknown = keys.reject { |key| Theme::VARIABLE_SCHEMA.key?(key.to_sym) }
+      return if unknown.empty?
+
+      warn "StreamWeaver: Unknown theme token(s) #{unknown.map(&:inspect).join(', ')} -- " \
+           "no matching entry in Theme::VARIABLE_SCHEMA, so each is emitted as a raw --sw- custom property " \
+           "that no built-in styling reads."
     end
 
     # Resolves a `use_stylesheet` argument to raw CSS text: a local file

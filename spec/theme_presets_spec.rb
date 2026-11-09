@@ -248,7 +248,7 @@ RSpec.describe "Theme Presets + Typography + Animations (T15)" do
         css = described_class.generate_preset_css(:editorial)
         expect(css).to include("Theme preset: Editorial")
         expect(css).to include(":root {")
-        expect(css).to include("html.dark {")
+        expect(css).to include('html.dark, html[data-sw-theme="dark"] {')
         expect(css).to include("--sw-bg:")
         expect(css).to include("--sw-text:")
         expect(css).to include("--sw-accent:")

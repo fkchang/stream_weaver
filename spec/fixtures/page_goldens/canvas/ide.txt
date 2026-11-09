@@ -7,7 +7,7 @@ sw-layout-fluid sw-theme-ide
 <style>[css 2434f41c5b7f]</style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap">
 <style>[css d3037a149254]</style>
-<style>[css 6073a2c531a5]</style>
+<style>[css 6732a632695e]</style>
 <style>[css 9daf8e10ee84]</style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.8/index.css">
 <script>[script 1fecbf6d34b7, 2232 bytes]</script>
