@@ -49,6 +49,26 @@ module PageGoldens
     end
   RUBY
 
+  # A second probe, rendered for :default only, for the paths the main probe
+  # never reaches: app fonts:, an app stylesheets: URL, a use_stylesheet
+  # block, a layout slot and chrome: false. A DSL fragment host (canvas,
+  # reader) can carry only the DSL parts; the exporter and standalone get a
+  # real App. Plus one standalone htmx partial (AppContentView).
+  VARIANT_THEME = :default
+  VARIANT_HOSTS = %i[standalone standalone_partial canvas reader export opal].freeze
+  VARIANT_APP_OPTIONS = {
+    chrome: false,
+    fonts: ['Inter:wght@400;600'],
+    stylesheets: ['https://example.test/probe.css']
+  }.freeze
+  VARIANT_DSL = <<~RUBY
+    use_stylesheet ".probe-inline { color: rebeccapurple; }"
+    layout_slot :aside do
+      text "slot probe"
+    end
+    #{PROBE_DSL}
+  RUBY
+
   ROOT = File.expand_path('../fixtures/page_goldens', __dir__)
   CSS_STORE = File.join(ROOT, 'css_blocks.css')
 
@@ -66,6 +86,9 @@ module PageGoldens
 
         pages["#{host}/#{theme}.txt"] = record(html)
       end
+    end
+    VARIANT_HOSTS.each do |host|
+      pages["#{host}/variant_#{VARIANT_THEME}.txt"] = send("render_variant_#{host}")
     end
     pages['extension/base_stylesheet.txt'] = record_css_only(StreamWeaver::CSS.base_stylesheet)
     pages.merge('css_blocks.css' => css_store_text)
@@ -85,7 +108,7 @@ module PageGoldens
     previous = server.bridge
     server.bridge = StreamWeaver::Canvas::Bridge.new(port: 0)
     server.bridge.create_session('probe', theme: theme)
-    server.bridge.handle_claude_message(type: 'push', name: 'probe', dsl: PROBE_DSL)
+    server.bridge.handle_claude_message(type: 'push', name: 'probe', dsl: probe_dsl)
     rack_get(server, '/canvas/probe')
   ensure
     server.bridge = previous
@@ -94,7 +117,7 @@ module PageGoldens
   def render_reader(theme)
     reader = StreamWeaver::Canvas::Reader
     Dir.mktmpdir do |dir|
-      File.write(File.join(dir, 'probe.rb'), PROBE_DSL)
+      File.write(File.join(dir, 'probe.rb'), probe_dsl)
       previous_list = reader.file_list
       reader.configure_files!(reader::FileList.build([dir]))
       reader.configure_defaults!(theme: theme)
@@ -128,7 +151,7 @@ module PageGoldens
   def render_opal(theme)
     Dir.mktmpdir do |dir|
       app_file = File.join(dir, 'page_probe.rb')
-      File.write(app_file, "app 'Page probe' do\n#{PROBE_DSL}end\n")
+      File.write(app_file, "app 'Page probe' do\n#{probe_dsl}end\n")
       mermaid_stub = File.join(dir, 'mermaid.min.js')
       File.write(mermaid_stub, '')
       out = File.join(dir, 'dist')
@@ -146,6 +169,55 @@ module PageGoldens
         raise 'opal index.html no longer links sw-theme.css; update PageGoldens.render_opal'
       [html, warnings]
     end
+  end
+
+  # --- the variant probe ---------------------------------------------------
+
+  def variant_app
+    app = StreamWeaver::App.new('Page probe', theme: VARIANT_THEME, **VARIANT_APP_OPTIONS)
+    app.instance_eval(VARIANT_DSL)
+    app
+  end
+
+  def render_variant_standalone
+    app = variant_app
+    record(StreamWeaver::Views::AppView.new(app, {}, StreamWeaver::Adapter::AlpineJS.new).call)
+  end
+
+  # An htmx response: no <head>, so only its <link>, <script> and <style> tags.
+  def render_variant_standalone_partial
+    app = variant_app
+    html = StreamWeaver::Views::AppContentView.new(app, {}, StreamWeaver::Adapter::AlpineJS.new).call
+    "# fragment <link>, <script> and <style> tags, in document order\n" \
+      "#{placeholders(html).lines.map(&:chomp).grep(ASSET_TAG).join("\n")}\n"
+  end
+
+  def render_variant_canvas
+    record(with_probe_dsl(VARIANT_DSL) { render_canvas(VARIANT_THEME) })
+  end
+
+  def render_variant_reader
+    record(with_probe_dsl(VARIANT_DSL) { render_reader(VARIANT_THEME) })
+  end
+
+  def render_variant_export
+    record(StreamWeaver::Export::HtmlExporter.new(variant_app).to_html)
+  end
+
+  def render_variant_opal
+    record(with_probe_dsl(VARIANT_DSL) { render_opal(VARIANT_THEME) })
+  end
+
+  # The fragment hosts read PROBE_DSL; swap in the variant for one render.
+  def with_probe_dsl(dsl)
+    @probe_dsl = dsl
+    yield
+  ensure
+    @probe_dsl = nil
+  end
+
+  def probe_dsl
+    @probe_dsl || PROBE_DSL
   end
 
   # --- recording -----------------------------------------------------------

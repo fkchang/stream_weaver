@@ -69,6 +69,13 @@ RSpec.describe 'page goldens (page-assets gate)' do
     end
   end
 
+  PageGoldens::VARIANT_HOSTS.each do |host|
+    path = "#{host}/variant_#{PageGoldens::VARIANT_THEME}.txt"
+    it "#{host} / variant probe matches its golden" do
+      expect(@fresh.fetch(path)).to eq(golden(path))
+    end
+  end
+
   it 'extension base_stylesheet matches its golden' do
     expect(@fresh.fetch('extension/base_stylesheet.txt')).to eq(golden('extension/base_stylesheet.txt'))
   end
