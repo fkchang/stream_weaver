@@ -23,6 +23,7 @@ module StreamWeaver
 
         "@layer #{LAYER_NAME} {\n#{css}\n}"
       end
+
       # Returns the full StreamWeaver CSS (themes + components): the same
       # master theme CSS the standalone page renders (disc-194). Loads the
       # view layer on demand, because the MRI builders (bin/build_extension,
@@ -39,11 +40,15 @@ module StreamWeaver
       # full_stylesheet needs the view layer (views.rb, which needs Phlex).
       # A compiled Opal bundle does not load it, so callers that run in both
       # hosts -- notably the DOM-free render-to-string path -- ask for this
-      # instead and get the minimal token set rather than an exception.
+      # instead and get the minimal token set rather than an exception. Only
+      # the missing view layer (an undefined AppView) falls back; any other
+      # failure raises, so the stub can never stand in silently (disc-194).
       # @return [String] CSS content
       def base_stylesheet
         full_stylesheet
-      rescue StandardError, NotImplementedError
+      rescue NameError => e
+        raise if e.is_a?(NoMethodError)
+
         minimal_css
       end
 
