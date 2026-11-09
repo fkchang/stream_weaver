@@ -874,7 +874,47 @@ app "Page", chrome: false, theme: :ide do
 end.run!
 ```
 
-Canvas: a pushed body's `use_theme` is ignored on a live canvas (disc-127), so create the canvas session with theme `:ide` first, then `canvas-push` a bare DSL body. The stylesheet is injected by `ide_shell`, so a push needs no extra CSS. Examples: `examples/ide/shell_demo.rb` (smallest shell), `examples/ide/streamweaver_landing.rb` (full landing page; its body, `streamweaver_landing_body.rb`, is also the canvas push). Hooks: `docs/theming-hooks.md`; flexibility notes: `docs/ide-shell-css-flexibility.md`.
+Canvas: a pushed body's `use_theme :ide` themes the open canvas live, so `canvas-push` a DSL body that starts with `use_theme :ide` (or create the session with `--theme=ide`). The stylesheet is declared by `ide_shell`, so a push needs no extra CSS. Examples: `examples/ide/shell_demo.rb` (smallest shell), `examples/ide/streamweaver_landing.rb` (full landing page; its body, `streamweaver_landing_body.rb`, is also the canvas push). Hooks: `docs/theming-hooks.md`; flexibility notes: `docs/ide-shell-css-flexibility.md`.
+
+## Themes, Tokens and Page Assets
+
+A page is described once (`PageShell.resolve`); every host (standalone, canvas, reader, export, Opal) builds its head and body class from that. Full guide: `docs/theming-hooks.md`.
+
+**Add a theme** with `register_theme(name, tokens = {}, dark: {}, fonts: [], stylesheets: [], css: nil, label: nil, base: :default)`. `fonts:` takes Google entries or `{ family:, src: }` (self-hosted; a relative `src` resolves against the calling file). The page wears `sw-theme-<base>` and `sw-theme-<name>`.
+
+```ruby
+StreamWeaver.register_theme :harbor,
+  { color_primary: "#0e7490", color_bg: "#f7fafa", font_body: "'Inter', system-ui, sans-serif" },
+  dark:  { color_primary: "#22d3ee", color_bg: "#0b1416", color_text: "#e6f4f7" },
+  fonts: ["Inter:wght@400;600", { family: "Harbor Mono", src: "fonts/harbor.woff2" }],
+  css:   "body.sw-theme-harbor h2 { letter-spacing: -0.01em; }", label: "Harbor", base: :document
+
+StreamWeaver::App.new("Harbor", theme: :harbor) { header2 "Hello" }
+```
+
+**Override tokens** from any DSL body with `theme_tokens(dark: {}, **tokens)`; `App.new(theme_overrides: {...})` is the same call. Token names are the keys of `Theme::VARIABLE_SCHEMA` (`color_primary`, `color_bg`, `color_text`, `font_body`, `spacing_md`, `radius_md`, `shadow_md`, ...); an unknown name warns. Accent tokens (primary, accent, type, spacing) apply in both modes; surface tokens (`Theme::SURFACE_TOKENS`: `color_text*`, `color_bg*`, `color_border*`, `shadow_*`) apply in light mode only unless `dark:` gives them a value. Not rendered in an Opal build (it warns once).
+
+```ruby
+theme_tokens color_primary: "#a21caf", dark: { color_bg: "#120712" }
+```
+
+**Canvas pushes apply live, no reload**: a pushed `use_theme`, `theme_tokens`, theme fonts, theme and component CSS and stylesheets show on the open canvas (the session theme is only the fallback). Push CSS (`use_stylesheet`, `theme_tokens`) is replaced as a group on every push; head asset tags (fonts, stylesheets, component CSS) are append-only, so a font link from an earlier theme stays until reload. A push that fails to evaluate changes nothing and the CLI says `Push rejected: <name> still shows its previous page`.
+
+**Component assets**: class macros on a `Components::Base` subclass reach every host: `css "...", layered: false` (`layered: true` puts it in `@layer stream-weaver`, for framework components), `css_path`, `js_path`, `font family:, src:`. Relative paths resolve against the declaring file.
+
+**Extension points**: `Assets` (`Data` of `fonts, stylesheets, framework_css, user_css, scripts, body_classes`; `+` merges and dedups), `PageShell.resolve(app, theme:)` returns a `Page` (`assets`, `body_class`), `PageShell.head(page, delivery)` returns a `Head` (`Head#to_s` is the whole asset part of a head), and `Delivery::Served` (a `/sw-asset` URL), `Delivery::Inline` (embedded, export), `Delivery::Copied.new(root)` (copied beside the page, Opal) answer `ref(path, kind)` for `:stylesheet`, `:script`, `:font`.
+
+| To add | Touch |
+|---|---|
+| A built-in or user theme | One `register_theme` call |
+| A DSL token override | `theme_tokens` / `theme_overrides:` |
+| Component CSS, scripts, fonts | `css`, `css_path`, `js_path`, `font` macros |
+| An output host | One `Delivery` plus `PageShell.resolve` and `PageShell.head` |
+| A gem layout | `register_layout` (its `css_path` reaches every host) |
+
+**Golden gate**: `spec/page_goldens_spec.rb` records head, body class and CSS for every theme on every host in `spec/fixtures/page_goldens/`; `UPDATE_GOLDENS=1 bundle exec rspec spec/page_goldens_spec.rb` rewrites them (review the git diff). Add a host via `PageGoldens::HOSTS` and a `render_<host>` method, a probe via a constant plus `render_all`. `PageGoldens::EXCLUSIONS` names what cannot render without a browser. `css_blocks.css` is near the 500,000-byte limit that `bin/check_git_hygiene` enforces on staged files.
+
+Known follow-ups: three Google Fonts URL builders (`Fonts`, `Theme`, `Presets`), export rejects a code sample containing `run!` (disc-262), the reader takes theme fonts only from the first doc, highlight.js is not reapplied after a canvas reload (disc-263), exclusive layouts are skipped on the canvas (disc-259).
 
 ## Session Persistence
 

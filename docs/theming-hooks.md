@@ -348,3 +348,210 @@ end
 
 `examples/ide/streamweaver_landing.rb` is the full page; `examples/ide/shell_demo.rb`
 is the smallest working one.
+
+## Themes, tokens and page assets
+
+A page is described once, by `PageShell.resolve`, and every host (the
+standalone view, the canvas, the reader, the exporter, the Opal builder)
+builds its `<head>` and body class from that one description. This section
+is the map of where to extend what.
+
+### Add a theme: `register_theme`
+
+`register_theme` is the one way to add a theme, in your app or in a gem:
+
+```ruby
+StreamWeaver.register_theme :harbor,
+  { color_primary: "#0e7490", color_bg: "#f7fafa", font_body: "'Inter', system-ui, sans-serif" },
+  dark:  { color_primary: "#22d3ee", color_bg: "#0b1416", color_text: "#e6f4f7" },
+  fonts: ["Inter:wght@400;600", { family: "Harbor Mono", src: "fonts/harbor.woff2" }],
+  stylesheets: ["https://example.test/harbor-extra.css"],
+  css:   "body.sw-theme-harbor h2 { letter-spacing: -0.01em; }",
+  label: "Harbor", base: :document
+
+StreamWeaver::App.new("Harbor", theme: :harbor) { header2 "Hello" }
+```
+
+| Argument | Meaning |
+|---|---|
+| `tokens` (2nd, a Hash) | Light-mode values; keys are `Theme::VARIABLE_SCHEMA` names (below) or raw `--custom-property` names |
+| `dark:` | Dark-mode values (see the accent-versus-surface rule below) |
+| `fonts:` | Google Fonts entries (`"Inter:wght@400;600"`) or self-hosted `{ family:, src: }`; a relative `src` resolves against the file that calls `register_theme` |
+| `stylesheets:` | Stylesheet URLs the head loads |
+| `css:` | Extra CSS emitted after the generated token CSS |
+| `label:` | Name shown in the theme switcher |
+| `base:` | Built-in theme whose look it inherits (default `:default`) |
+
+The generated light and dark CSS lives under `body.sw-theme-harbor`, and
+dark mode matches either signal, `html.dark` or `html[data-sw-theme="dark"]`.
+A registered theme's page wears its base theme's class too
+(`sw-layout-default sw-theme-document sw-theme-harbor`), because the base supplies type,
+spacing and radius; the theme's own block, later at the same specificity,
+overrides what it sets. The six built-ins (`:default`, `:dashboard`,
+`:document`, `:dark`, `:doc`, `:ide`) register the same way, for their label
+and fonts only: their hand-tuned CSS stays in `master_theme_css`.
+
+### Override tokens from the DSL: `theme_tokens`
+
+```ruby
+theme_tokens color_primary: "#a21caf", dark: { color_bg: "#120712" }
+```
+
+`theme_tokens` works inside any DSL body (a standalone app, a canvas push,
+a `canvas-read` doc, an export). `App.new(..., theme_overrides: { ... })` is
+the same call. It emits a layered `body[class*="sw-theme-"]` block, so it
+applies over whatever theme the page wears.
+
+Token names (`Theme::VARIABLE_SCHEMA`; an unknown name warns):
+
+| Group | Tokens |
+|---|---|
+| Typography | `font_display`, `font_body`, `font_family`, `font_mono`, `font_size_base`, `font_size_sm`, `font_size_lg`, `font_size_xl`, `line_height` |
+| Primary | `color_primary`, `color_primary_hover`, `color_primary_light`, `color_primary_glow` |
+| Neutrals | `color_text`, `color_text_muted`, `color_text_light`, `color_bg`, `color_bg_card`, `color_bg_elevated`, `color_border`, `color_border_strong`, `color_border_focus` |
+| Secondary and accent | `color_secondary`, `color_secondary_hover`, `color_secondary_foreground`, `color_accent`, `color_accent_light` |
+| Spacing and radius | `spacing_xs` to `spacing_2xl`, `radius_sm` to `radius_xl` |
+| Shadows | `shadow_sm`, `shadow_md`, `shadow_lg`, `shadow_xl`, `shadow_inner`, `card_border_left` |
+| Term highlighting | `term_color`, `term_bg_hover` |
+| Visual skills | `vs_bg`, `vs_surface`, `vs_surface_elevated`, `vs_border`, `vs_text`, `vs_text_dim`, `vs_accent`, `vs_node_a` to `vs_node_c`, `vs_success`, `vs_warning`, `vs_error`, `vs_info` |
+
+**Accent versus surface.** An accent or brand token (primary, accent,
+type, spacing) applies in both modes. A surface token
+(`Theme::SURFACE_TOKENS`: the neutral colors `color_text*`, `color_bg*`,
+`color_border*`, and the `shadow_*` tokens) applies in light mode only,
+because the framework's dark block owns those values; pass `dark:` to
+give one a dark value.
+
+Limits:
+
+- **Opal builds do not render tokens.** The page keeps its theme's tokens
+  and the build warns once.
+- **Partial `dark:` with only `data-sw-theme="dark"`.** The built-in
+  `:default` keys its dark text on `html.dark`, so a host that sets only the
+  attribute gets your dark background with light-mode text unless `dark:`
+  also gives `color_text`. Normal auto mode sets both signals.
+- **A canvas push applies live, with no reload.** A pushed `use_theme`,
+  `theme_tokens`, theme-declared fonts, theme and component CSS and
+  stylesheets all take effect on the open canvas. The session's theme is
+  only the fallback for a body with no `use_theme`.
+  - Push CSS (`use_stylesheet`, `theme_tokens`) is *replaced* as a group on
+    every push. Head asset tags (fonts, stylesheets, component CSS) are
+    append-only, keyed by a hash of the tag: a font link from an earlier
+    theme stays until a reload.
+  - A push that fails to evaluate (including `SyntaxError` and
+    `SystemStackError`) changes nothing; the CLI prints
+    `Push rejected: <name> still shows its previous page`.
+  - The live canvas and `canvas-read` agree for the same body.
+
+### Component assets: the class macros
+
+A component declares what it needs on its class, and every host delivers it:
+
+```ruby
+class Panel < StreamWeaver::Components::Base
+  css ".harbor-panel { padding: 1rem }"                                   # unlayered: outranks the framework
+  css ".harbor-panel b { color: var(--sw-color-primary) }", layered: true  # in @layer stream-weaver
+  css_path "harbor.css"                                                    # a file, delivered per host
+  js_path  "harbor.js"
+  font family: "Harbor Mono", src: "fonts/harbor.woff2", weight: "400 700"
+
+  def render(view, state)
+    view.div(class: "harbor-panel") { view.plain "hi" }
+  end
+end
+```
+
+Relative `css_path`, `js_path` and `font` sources resolve against the file
+that declares the class. Each class contributes once per page, however many
+instances render. `layered: true` is for framework components; an app's
+own component CSS stays unlayered so it wins.
+
+### The extension points: `Assets`, `PageShell`, `Delivery`
+
+- **`StreamWeaver::Assets`**: one value,
+  `Data.define(:fonts, :stylesheets, :framework_css, :user_css, :scripts, :body_classes)`.
+  Two CSS buckets because layering depends on who owns the CSS: framework
+  CSS is layered, user CSS is not. `+` concatenates bucket by bucket and
+  drops repeats, so the framework, theme, layout, components and app each
+  contribute one and are merged. `Assets.of(framework_css: [...])` builds one.
+- **`PageShell.resolve(app, theme:, ...)`** returns a `PageShell::Page`
+  (`theme`, `layout`, merged `assets`, and `body_class`). Call it once per
+  render, after the body has rendered, because components register CSS
+  while they render. `app` is `nil` for a host with no App (the canvas, an
+  Opal build). `PageShell.fragment_page` is the same for a DSL fragment
+  whose App is gone.
+- **`PageShell.head(page, delivery)`** returns a `Head`. `Head#to_s` is the
+  whole asset part of a head in one fixed order (layer pin, fonts, framework
+  CSS, theme and component CSS, stylesheets, user CSS, scripts), and is
+  what the canvas, the reader and export emit. The standalone view still
+  places the per-bucket methods (`fonts`, `stylesheets`, `framework_css`,
+  `user_css`, `scripts`) itself.
+- **`Delivery`** answers one question per host, `ref(path, kind)`, which
+  returns the markup that loads a local file as `:stylesheet`, `:script` or
+  `:font`. `Delivery::Served` gives a `/sw-asset` URL (standalone, canvas,
+  reader), `Delivery::Inline` embeds the content (export), and
+  `Delivery::Copied.new(root)` copies the file beside the page and returns a
+  relative href (Opal). A remote URL passes through unchanged.
+
+```ruby
+page = StreamWeaver::PageShell.resolve(app, theme: :harbor)
+puts page.body_class                                           # sw-layout-default sw-theme-document sw-theme-harbor
+puts StreamWeaver::PageShell.head(page, StreamWeaver::Delivery::Served.new)
+```
+
+### One place per axis
+
+| To add | Touch exactly |
+|---|---|
+| A built-in theme | One `register_theme` file |
+| A user or gem theme | The same call, with `dark:`, `fonts:`, `css:` |
+| A DSL token override | `theme_tokens` (or `theme_overrides:`) |
+| Component CSS, scripts or fonts | The `css`, `css_path`, `js_path`, `font` macros on the class; they reach every host |
+| An output host | One `Delivery` class plus a call to `PageShell.resolve` and `PageShell.head` |
+| A font source | `Fonts` (`google_fonts_href` for Google, `font_face_css` for self-hosted files); the Google URL builders are still duplicated, see the follow-ups |
+| A gem layout | `register_layout` (unchanged); its `css_path` reaches every host |
+
+### The golden gate
+
+`spec/page_goldens_spec.rb` (helpers in `spec/support/page_goldens.rb`)
+renders one fixed probe page for every built-in theme on every host
+(standalone, canvas, reader, export, Opal, the `/live` page) and compares
+the ordered `<head>`, the body class and every CSS block with the files
+under `spec/fixtures/page_goldens/`. Further probes cover a variant page
+(app fonts, a stylesheet, a layout slot, `chrome: false`), `theme_overrides:`,
+a registered theme (`:harbor`) and one `Theme::Presets` preset. Any change
+to how a page is assembled must show up here, and only as a diff you meant.
+
+```bash
+bundle exec rspec spec/page_goldens_spec.rb                        # check
+UPDATE_GOLDENS=1 bundle exec rspec spec/page_goldens_spec.rb       # rewrite, then review
+git diff spec/fixtures/page_goldens                                # name each diff in the commit
+```
+
+- **A new host**: add its name to `PageGoldens::HOSTS` and a
+  `render_<host>(theme)` method; if its body is filled in the browser, add it
+  to `BROWSER_FILLED`.
+- **A new probe**: add a constant for it (as `VARIANT_DSL`, `OVERRIDES` and
+  `REGISTERED_THEME` do), render it in `render_all`, and add an `it` for it
+  in the spec.
+- **Exclusions**: `PageGoldens::EXCLUSIONS` lists, with a reason, each part
+  that cannot be rendered without a browser or a full compile (the Opal
+  `app.js`, runtime theme switching, the `/live` body, the extension head).
+  A browser-filled host must name one.
+- **Size limit**: CSS is stored once in `css_blocks.css`, referenced by digest.
+  The git hygiene hook (`bin/check_git_hygiene`) blocks a staged file over
+  500,000 bytes, and `css_blocks.css` is already close to it. A new probe
+  or host adds a CSS block per theme and can push it over; keep new probes
+  lean, as `REGISTERED_DSL` does, by leaving out the `ide_shell`.
+
+### Known follow-ups
+
+- The Google Fonts URL builders still exist in three places (`Fonts`,
+  `Theme`, `Presets`).
+- `streamweaver export` rejects a DSL whose code sample mentions `run!`
+  (disc-262).
+- The reader takes theme fonts only from the first doc it opens.
+- A live canvas keeps font links from an earlier theme until a reload
+  (head asset tags are append-only).
+- Code blocks are highlighted live but not after a reload (disc-263).
+- Exclusive layouts are skipped on the canvas path (disc-259).
