@@ -1215,9 +1215,11 @@ module StreamWeaver
         session[:theme_overrides] ||= {}
         session[:theme_overrides][app_id] = theme
         status 200
+        content_type 'text/plain'
         StreamWeaver::PageShell.resolve(app_entry[:app], theme: theme).body_class
       else
         status 400
+        content_type 'text/plain'
         "Invalid theme"
       end
     end

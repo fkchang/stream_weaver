@@ -680,7 +680,7 @@ module StreamWeaver
     # @return [Array<Hash>] Array of theme info hashes
     def all_themes_for_switcher
       @themes.map do |id, theme|
-        { id: id, label: theme.label, description: theme.description }
+        { id: id, label: theme.label, description: theme.description, built_in: theme.built_in? }
       end
     end
   end

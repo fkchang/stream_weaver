@@ -3441,7 +3441,7 @@ module StreamWeaver
                 view.button(
                   type: "button",
                   class: "sw-theme-switcher-option",
-                  "@click" => "switchTheme('#{theme[:id]}')"
+                  "@click" => "switchTheme(#{theme[:id].to_s.to_json}, #{theme[:built_in] ? 'false' : 'true'})"
                 ) do
                   view.span(class: "sw-theme-switcher-option-label") { theme[:label] }
                   view.span(class: "sw-theme-switcher-option-desc") { theme[:description] }
@@ -3456,7 +3456,12 @@ module StreamWeaver
       # (PageShell.resolve's body class): a registered theme wears its base
       # theme's class too, so no client-side rewrite can know the full set.
       # Every sw-theme-* class is dropped; classes the page added (layout,
-      # sw-annotate-on) are kept.
+      # sw-annotate-on) are kept. A response that is not a list of class
+      # names (an error page with a 200) is ignored.
+      #
+      # A registered theme's CSS, fonts and stylesheets are emitted only for
+      # the theme the page was rendered with, so switching TO one reloads the
+      # page (the POST already stored the choice); built-ins swap in place.
       def theme_switcher_alpine_data(themes)
         <<~JS.gsub(/\s+/, " ").strip
           {
@@ -3468,14 +3473,18 @@ module StreamWeaver
               document.documentElement.classList.toggle('dark', v);
               document.documentElement.setAttribute('data-sw-theme', v ? 'dark' : 'light');
             },
-            switchTheme(id) {
+            switchTheme(id, registered) {
               this.open = false;
-              fetch('#{url("/theme/")}' + id, {method: 'POST', credentials: 'same-origin'})
+              fetch('#{url("/theme/")}' + encodeURIComponent(id), {method: 'POST', credentials: 'same-origin'})
                 .then(r => r.ok ? r.text() : Promise.reject(r.status))
-                .then(classes => {
+                .then(text => {
+                  const classes = text.trim().split(' ').filter(Boolean);
+                  if (!classes.length || !classes.every(c => /^[A-Za-z0-9_-]+$/.test(c))) return;
+                  if (registered) { window.location.reload(); return; }
                   const kept = [...document.body.classList].filter(c => !c.startsWith('sw-theme-'));
-                  document.body.className = [...new Set([...classes.split(' '), ...kept])].filter(Boolean).join(' ');
-                });
+                  document.body.className = [...new Set([...classes, ...kept])].join(' ');
+                })
+                .catch(() => {});
             }
           }
         JS

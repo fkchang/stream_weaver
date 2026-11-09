@@ -380,7 +380,7 @@ StreamWeaver::App.new("Harbor", theme: :harbor) { header2 "Hello" }
 | `stylesheets:` | Stylesheet URLs the head loads |
 | `css:` | Extra CSS emitted after the generated token CSS |
 | `label:` | Name shown in the theme switcher |
-| `description:` | Optional short text (default "Custom theme"). Stored metadata: `all_themes_for_switcher` returns it with `id` and `label`, and `to_ruby` / `to_json` save it; no page shows it |
+| `description:` | Optional short text (default "Custom theme"). Stored metadata: `all_themes_for_switcher` returns it with `id`, `label` and `built_in`, and `to_ruby` / `to_json` save it; no page shows it |
 | `base:` | Built-in theme whose look it inherits (default `:default`) |
 
 The generated light and dark CSS lives under `body.sw-theme-harbor`, and
@@ -391,6 +391,10 @@ spacing and radius; the theme's own block, later at the same specificity,
 overrides what it sets. The six built-ins (`:default`, `:dashboard`,
 `:document`, `:dark`, `:doc`, `:ide`) register the same way, for their label
 and fonts only: their hand-tuned CSS stays in `master_theme_css`.
+
+A runtime switch to a registered theme reloads the page: its CSS, fonts and
+stylesheets are emitted only for the theme a page is rendered with. The
+`theme_switcher` swaps a built-in theme's classes in place, without a reload.
 
 ### Override tokens from the DSL: `theme_tokens`
 
