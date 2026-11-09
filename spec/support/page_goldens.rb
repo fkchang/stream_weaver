@@ -29,7 +29,8 @@ module PageGoldens
                      'that run without it (write_theme_css, write_index_html), so those are recorded',
     'opal runtime theme' => 'none of the six built-in themes is a Theme::Presets entry, so the Opal CSS is ' \
                             'the same for every theme; only the body class and the theme font and ' \
-                            'stylesheet links vary; a theme the app applies at runtime happens in the browser',
+                            'stylesheet links vary; a theme the app applies at runtime happens in the browser. ' \
+                            'One preset\'s CSS is recorded on its own (presets/editorial.txt)',
     'live body content' => 'the /live page fills #app-container in the browser by polling; its head, ' \
                            'body class and body asset tags are recorded',
     'extension head' => 'the extension page is assembled in the browser by sandbox.js; only its ' \
@@ -69,10 +70,24 @@ module PageGoldens
   RUBY
 
   # A third probe, for theme_overrides: (an App.new kwarg, so only the hosts
-  # that render a real App): one accent token and one surface token on
-  # :default, so the generated override block is recorded per host.
+  # that render a real App): one accent token and one surface token, on
+  # :default and on :doc (whose own dark block an accent override must beat),
+  # so the generated override block is recorded per host.
   OVERRIDES_HOSTS = %i[standalone export].freeze
+  OVERRIDES_THEMES = %i[default doc].freeze
   OVERRIDES = { color_primary: '#a21caf', color_bg: '#fdf4ff' }.freeze
+
+  # A fourth: a theme registered from a hash (light, dark:, css:, a font),
+  # rendered as the main probe on the hosts that can name a registered theme,
+  # so a new theme's whole page (body classes, head, CSS) is gated.
+  REGISTERED_THEME = :harbor
+  REGISTERED_HOSTS = %i[standalone canvas export].freeze
+  # The main probe without its ide_shell: the IDE CSS is gated by every
+  # built-in theme already, and another copy would only grow css_blocks.css.
+  REGISTERED_DSL = PROBE_DSL.split("ide_shell").first
+
+  # Theme::Presets CSS, which no built-in theme reaches (see EXCLUSIONS).
+  PRESET = :editorial
 
   ROOT = File.expand_path('../fixtures/page_goldens', __dir__)
   CSS_STORE = File.join(ROOT, 'css_blocks.css')
@@ -95,9 +110,16 @@ module PageGoldens
     VARIANT_HOSTS.each do |host|
       pages["#{host}/variant_#{VARIANT_THEME}.txt"] = send("render_variant_#{host}")
     end
-    OVERRIDES_HOSTS.each do |host|
-      pages["#{host}/overrides_#{VARIANT_THEME}.txt"] = send("render_overrides_#{host}")
+    OVERRIDES_HOSTS.product(OVERRIDES_THEMES).each do |host, theme|
+      pages["#{host}/overrides_#{theme}.txt"] = send("render_overrides_#{host}", theme)
     end
+    with_registered_theme do
+      REGISTERED_HOSTS.each do |host|
+        html = with_probe_dsl(REGISTERED_DSL) { send("render_#{host}", REGISTERED_THEME) }
+        pages["#{host}/registered_#{REGISTERED_THEME}.txt"] = record(html)
+      end
+    end
+    pages["presets/#{PRESET}.txt"] = record_css_only(StreamWeaver::Theme::Presets.generate_preset_css(PRESET))
     pages['extension/base_stylesheet.txt'] = record_css_only(StreamWeaver::CSS.base_stylesheet)
     pages.merge('css_blocks.css' => css_store_text)
   end
@@ -105,7 +127,8 @@ module PageGoldens
   # --- hosts ---------------------------------------------------------------
 
   def render_standalone(theme)
-    app = StreamWeaver::App.new('Page probe', theme: theme) { instance_eval(PROBE_DSL) }
+    dsl = probe_dsl
+    app = StreamWeaver::App.new('Page probe', theme: theme) { instance_eval(dsl) }
     state = {}
     app.rebuild_with_state(state)
     StreamWeaver::Views::AppView.new(app, state, StreamWeaver::Adapter::AlpineJS.new).call
@@ -138,7 +161,7 @@ module PageGoldens
   end
 
   def render_export(theme)
-    StreamWeaver::Export::HtmlExporter.from_dsl(PROBE_DSL, theme: theme).to_html
+    StreamWeaver::Export::HtmlExporter.from_dsl(probe_dsl, theme: theme).to_html
   end
 
   # The /live session page (Service), which takes its theme from ?theme=.
@@ -218,18 +241,32 @@ module PageGoldens
 
   # --- the theme_overrides probe -------------------------------------------
 
-  def overrides_app
-    app = StreamWeaver::App.new('Page probe', theme: VARIANT_THEME, theme_overrides: OVERRIDES)
+  def overrides_app(theme)
+    app = StreamWeaver::App.new('Page probe', theme: theme, theme_overrides: OVERRIDES)
     app.instance_eval(PROBE_DSL)
     app
   end
 
-  def render_overrides_standalone
-    record(StreamWeaver::Views::AppView.new(overrides_app, {}, StreamWeaver::Adapter::AlpineJS.new).call)
+  def render_overrides_standalone(theme)
+    record(StreamWeaver::Views::AppView.new(overrides_app(theme), {}, StreamWeaver::Adapter::AlpineJS.new).call)
   end
 
-  def render_overrides_export
-    record(StreamWeaver::Export::HtmlExporter.new(overrides_app).to_html)
+  def render_overrides_export(theme)
+    record(StreamWeaver::Export::HtmlExporter.new(overrides_app(theme)).to_html)
+  end
+
+  # --- the registered-theme probe ------------------------------------------
+
+  # Registered for the block only, so no other spec sees it.
+  def with_registered_theme
+    StreamWeaver.register_theme REGISTERED_THEME,
+                                { color_primary: '#0e7490', color_bg: '#f7fafa' },
+                                dark: { color_primary: '#22d3ee', color_bg: '#0b1416' },
+                                fonts: ['Inter:wght@400;600'], label: 'Harbor',
+                                css: "body.sw-theme-#{REGISTERED_THEME} h2 { letter-spacing: -0.01em; }"
+    yield
+  ensure
+    StreamWeaver.themes.delete(REGISTERED_THEME)
   end
 
   # The fragment hosts read PROBE_DSL; swap in the variant for one render.

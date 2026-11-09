@@ -76,11 +76,23 @@ RSpec.describe 'page goldens (page-assets gate)' do
     end
   end
 
-  PageGoldens::OVERRIDES_HOSTS.each do |host|
-    path = "#{host}/overrides_#{PageGoldens::VARIANT_THEME}.txt"
-    it "#{host} / theme_overrides probe matches its golden" do
+  PageGoldens::OVERRIDES_HOSTS.product(PageGoldens::OVERRIDES_THEMES).each do |host, theme|
+    path = "#{host}/overrides_#{theme}.txt"
+    it "#{host} / :#{theme} theme_overrides probe matches its golden" do
       expect(@fresh.fetch(path)).to eq(golden(path))
     end
+  end
+
+  PageGoldens::REGISTERED_HOSTS.each do |host|
+    path = "#{host}/registered_#{PageGoldens::REGISTERED_THEME}.txt"
+    it "#{host} / registered :#{PageGoldens::REGISTERED_THEME} theme matches its golden" do
+      expect(@fresh.fetch(path)).to eq(golden(path))
+    end
+  end
+
+  it "the :#{PageGoldens::PRESET} preset CSS matches its golden" do
+    path = "presets/#{PageGoldens::PRESET}.txt"
+    expect(@fresh.fetch(path)).to eq(golden(path))
   end
 
   it 'extension base_stylesheet matches its golden' do
