@@ -44,6 +44,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>canvas-read</title>
+  <%# The theme-declared fonts and stylesheets. Only the head of the first
+      doc opened carries them: a doc swapped in later keeps this head. %>
+  <%= page_head.stylesheets %>
+  <%= page_head.fonts %>
 
   <%# Framework CSS, identical ordering to the canvas (PageShell is the single
       source of truth): layer pin, then CANVAS_CSS / master_theme_css /

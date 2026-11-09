@@ -48,7 +48,6 @@ module StreamWeaver
       CDN_PRISMJS_JS = "https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"
       CDN_PRISMJS_AUTOLOADER = "https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"
       CDN_ALPINE = "https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-      CDN_GOOGLE_FONTS = "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap"
 
 # `bare: true` drops the page shell (padding, card, background) so the
 # content runs edge to edge -- for embedding the export in an <iframe>.
@@ -303,8 +302,13 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
           parts << "<style>#{StreamWeaver::CSS.layer_wrap(theme.to_css)}</style>"
         end
 
-        parts << StreamWeaver::PageShell.head(@page).user_css
+        parts << page_head.user_css
         parts.join("\n")
+      end
+
+      # The app's and its theme's head tags (stylesheets, fonts, user CSS).
+      def page_head
+        StreamWeaver::PageShell.head(@page)
       end
 
       def custom_theme
@@ -364,7 +368,7 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
         end
 
         # Custom scripts from the app
-        @app.scripts.each do |src|
+        @page.assets.scripts.each do |src|
           scripts << { src: src }
         end
 
@@ -376,16 +380,11 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
         styles = []
 
         # Google Fonts
-        styles << CDN_GOOGLE_FONTS
+        styles << StreamWeaver::Fonts::BASE_HREF
 
         # Prism.js theme CSS
         if components_include?(Components::CodeBlock)
           styles << CDN_PRISMJS_CSS
-        end
-
-        # Custom stylesheets from the app
-        @app.stylesheets.each do |href|
-          styles << href
         end
 
         styles
@@ -451,6 +450,8 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             #{style_tags}
+            #{page_head.stylesheets}
+            #{page_head.fonts}
             #{script_tags}
           #{css_html}
           </head>

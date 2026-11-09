@@ -396,6 +396,8 @@ module StreamWeaver
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>StreamWeaver Canvas: #{session_name}</title>
+            #{page_head.stylesheets}
+            #{page_head.fonts}
             #{StreamWeaver::PageShell.framework_css_html}
             #{page_head.user_css}
             <script>#{StreamWeaver::Theme::AutoMode.inline_script}</script>

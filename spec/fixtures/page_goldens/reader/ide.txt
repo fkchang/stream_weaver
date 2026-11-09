@@ -4,6 +4,8 @@ sw-layout-fluid sw-theme-ide sw-reader
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>canvas-read</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.8/index.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap">
 <style>[css f734af5e1fd3]</style>
 <style>[css d3037a149254]</style>
 <style>[css 6073a2c531a5]</style>
