@@ -112,8 +112,11 @@ module StreamWeaver
         end
         css += "\n" + components.user_css.join("\n") unless components.user_css.empty?
         if @theme
-          unless StreamWeaver::Theme::Presets.get(@theme.to_sym)
-            warn "[OpalBuilder] Unknown theme preset: #{@theme}"
+          # --theme names a registered theme (its fonts and stylesheets reach
+          # the page through #page) or a Theme::Presets entry (its CSS lands
+          # here); warn only when it is neither.
+          unless StreamWeaver::Theme::Presets.get(@theme.to_sym) || StreamWeaver.theme_exists?(@theme)
+            warn "[OpalBuilder] Unknown theme: #{@theme} (neither a registered theme nor a preset)"
           end
           css += "\n" + StreamWeaver::Theme::Presets.generate_preset_css(@theme.to_sym)
         end
@@ -144,15 +147,17 @@ module StreamWeaver
       end
 
       # The build-time page. An Opal build has no App (it receives a file name)
-      # and no layout class, and reads --theme as a theme name; its stylesheet
-      # scopes the base variables to body.sw-theme-default, so that class
-      # always comes first. With no component tree either, it carries the
-      # files and fonts of every registered component class.
+      # and no layout class, and reads --theme as a registered theme's name
+      # (or a preset's). Its stylesheet scopes the base variables to
+      # body.sw-theme-default, so that class always comes first: it is
+      # prepended here rather than in PageShell.resolve, because no other
+      # host needs it. With no component tree either, it carries the files
+      # and fonts of every registered component class.
       def page
         @page ||= StreamWeaver::PageShell::Page.new(
-          theme: @theme, layout: nil, assets: StreamWeaver::PageShell::Assets.of(body_classes: %w[sw-theme-default])
+          theme: @theme, layout: nil, assets: StreamWeaver::Assets.of(body_classes: %w[sw-theme-default])
         ) + StreamWeaver::PageShell.resolve(nil, theme: @theme, layout: nil).assets +
-          StreamWeaver::PageShell::Assets.of(stylesheets: components.stylesheets, scripts: components.scripts,
+          StreamWeaver::Assets.of(stylesheets: components.stylesheets, scripts: components.scripts,
                                              fonts: components.fonts)
       end
 

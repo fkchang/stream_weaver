@@ -793,7 +793,7 @@ module StreamWeaver
         theme  = doc ? doc.theme : fallback_theme
         layout = doc ? doc.layout : fallback_layout
         StreamWeaver::PageShell.resolve(nil, theme: theme, layout: layout) +
-          StreamWeaver::PageShell::Assets.of(user_css: doc ? doc.inline_stylesheets : [], body_classes: %w[sw-reader])
+          StreamWeaver::Assets.of(user_css: doc ? doc.inline_stylesheets : [], body_classes: %w[sw-reader])
       end
 
       # Neutral, not red -- this isn't a bug in the doc or in canvas-read,

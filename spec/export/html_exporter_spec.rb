@@ -1,13 +1,10 @@
 # frozen_string_literal: true
 
+require_relative '../support/body_class_helper'
 require 'tmpdir'
 require 'fileutils'
 
 RSpec.describe StreamWeaver::Export::HtmlExporter do
-  def body_classes(html)
-    html[/<body class="([^"]*)"/, 1].to_s.split
-  end
-
   let(:simple_app) do
     StreamWeaver::App.new("Test Export") do
       text "Hello World"

@@ -10,9 +10,12 @@
 #   streamweaver canvas-push NAME < examples/ide/streamweaver_landing_body.rb
 
 # This page's own styles: the hero, pills, buttons, cards and transcript
-# are plain divs with these classes, no component behind them. Inside the
-# framework's cascade layer, where they sat when they shipped in the ide
-# stylesheet, so theme overrides and user CSS still outrank them.
+# are plain divs with these classes, no component behind them. They are
+# wrapped in the framework's cascade layer on purpose: they shipped inside
+# the ide stylesheet until the page-assets epic, and unlayered they would
+# outrank every :ide theme rule (dark mode included) instead of sitting
+# below theme overrides and user CSS, so the page would no longer render
+# exactly as it did.
 use_stylesheet <<~CSS
   @layer #{StreamWeaver::CSS::LAYER_NAME} {
     .sw-ide-h2 {

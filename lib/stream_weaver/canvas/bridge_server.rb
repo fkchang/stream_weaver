@@ -358,7 +358,7 @@ module StreamWeaver
         # asset file across processes, so the bridge inlines the raw content
         # it was handed. session.stylesheets is already deduped per push.
         page = StreamWeaver::PageShell.resolve(nil, theme: session.theme, layout: session.layout) +
-               StreamWeaver::PageShell::Assets.of(user_css: session.stylesheets,
+               StreamWeaver::Assets.of(user_css: session.stylesheets,
                                                   body_classes: session.annotate? ? %w[sw-annotate-on] : [])
         page_head = StreamWeaver::PageShell.head(page, StreamWeaver::Delivery::Served.new)
 

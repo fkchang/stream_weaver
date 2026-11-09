@@ -196,8 +196,8 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
 
       # Render body components to HTML string via Phlex
       def render_body
-        StreamWeaver::ComponentRenderer.render_html(@adapter, @app.components, @state,
-                                                    delivery: StreamWeaver::Delivery::Inline.new)
+        # The components' class-macro assets come with the resolved page's head.
+        StreamWeaver::ComponentRenderer.render_html(@adapter, @app.components, @state, assets: false)
       end
 
       # Fetches mermaid's classic global build (sets globalThis.mermaid --

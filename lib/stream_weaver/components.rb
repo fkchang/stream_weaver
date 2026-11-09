@@ -56,21 +56,21 @@ module StreamWeaver
         (@component_fonts ||= []).concat(Fonts.resolve([{ family: family, src: src, **descriptors }], dir))
       end
 
-      # Class-level macro: declare a CSS file to serve alongside this component.
-      # The file is served via the /sw-asset/ route (registered once at declaration time).
+      # Class-level macro: declare a CSS file to load alongside this component.
+      # Each host's Delivery serves, inlines or copies it. A relative path
+      # resolves against the file that declares the component, as `font` does.
       #
-      # @param path [String] Absolute path to the CSS file
+      # @param path [String] Path to the CSS file
       def self.css_path(path)
-        @component_css_path = path
-        ComponentAssets.register_file(path)
+        @component_css_path = File.expand_path(path, File.dirname(File.expand_path(caller_locations(1, 1).first.path)))
       end
 
-      # Class-level macro: declare a JS file to serve alongside this component.
+      # Class-level macro: declare a JS file to load alongside this component.
+      # A relative path resolves against the declaring file.
       #
-      # @param path [String] Absolute path to the JS file
+      # @param path [String] Path to the JS file
       def self.js_path(path)
-        @component_js_path = path
-        ComponentAssets.register_file(path)
+        @component_js_path = File.expand_path(path, File.dirname(File.expand_path(caller_locations(1, 1).first.path)))
       end
 
       def self.component_css_strings

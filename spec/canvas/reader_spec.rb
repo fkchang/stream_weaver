@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative '../support/body_class_helper'
 require 'spec_helper'
 require 'tmpdir'
 require 'fileutils'
@@ -443,7 +444,7 @@ RSpec.describe StreamWeaver::Canvas::Reader, type: :request do
 
     it 'gives <body> the doc theme + layout classes' do
       get '/?file=0'
-      expect(last_response.body).to match(/<body class="sw-layout-\w+ sw-theme-\w+ sw-reader"/)
+      expect(body_classes(last_response.body)).to contain_exactly(start_with("sw-layout-"), start_with("sw-theme-"), "sw-reader")
     end
 
     it 'drops the old #main/#content two-pane wrapper entirely' do
@@ -457,7 +458,8 @@ RSpec.describe StreamWeaver::Canvas::Reader, type: :request do
     # afterSwap handler reads the incoming doc's classes off this attribute.
     it 'carries the body classes on #app-container for the afterSwap handler' do
       get '/?file=0'
-      expect(last_response.body).to match(/<div id="app-container" data-sw-body-class="sw-layout-\w+ sw-theme-\w+ sw-reader"/)
+      expect(last_response.body).to include('<div id="app-container" data-sw-body-class=')
+      expect(data_body_classes(last_response.body)).to contain_exactly(start_with("sw-layout-"), start_with("sw-theme-"), "sw-reader")
     end
   end
 

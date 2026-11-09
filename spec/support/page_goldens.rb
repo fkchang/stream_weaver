@@ -27,10 +27,9 @@ module PageGoldens
     'opal app.js' => 'compiling app.js needs the opal compiler and takes seconds per theme; ' \
                      'the head, body class and sw-theme.css are produced by the builder steps ' \
                      'that run without it (write_theme_css, write_index_html), so those are recorded',
-    'opal runtime theme' => 'Opal ignores the six built-in themes: --theme takes a Theme::Presets name and ' \
-                            'none of the six is one, so the Opal CSS is the same for every theme and only ' \
-                            'the body class varies (the builder warning is recorded in each golden); a ' \
-                            'theme the app applies at runtime happens in the browser',
+    'opal runtime theme' => 'none of the six built-in themes is a Theme::Presets entry, so the Opal CSS is ' \
+                            'the same for every theme; only the body class and the theme font and ' \
+                            'stylesheet links vary; a theme the app applies at runtime happens in the browser',
     'live body content' => 'the /live page fills #app-container in the browser by polling; its head, ' \
                            'body class and body asset tags are recorded',
     'extension head' => 'the extension page is assembled in the browser by sandbox.js; only its ' \

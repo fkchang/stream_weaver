@@ -38,7 +38,7 @@ module StreamWeaver
         # custom-theme CSS stays in <body> (render_custom_theme_css, hence
         # theme_css: false); moving it onto Head#to_s is a stated golden diff
         # for a later story.
-        page = StreamWeaver::PageShell.resolve(@app, theme: effective_theme, components: component_css_registry,
+        page = StreamWeaver::PageShell.resolve(@app, theme: effective_theme, injected_css: component_css_registry,
                                                theme_css: false)
         page_head = StreamWeaver::PageShell.head(page, Delivery::Served.new)
 
@@ -63,8 +63,8 @@ module StreamWeaver
             # Inject adapter-specific CDN scripts using Phlex methods
             @adapter.render_cdn_scripts(self)
 
-            # Framework-injected component CSS (collected during the body
-            # render above), before user stylesheets: below -- so that at
+            # Framework component CSS (layered css macros, then the CSS
+            # injected during the body render above), before user stylesheets: below -- so that at
             # equal specificity, user stylesheets win on document order
             # instead of always losing to the framework's own rule
             # (stream_weaver-1lo). Also wrapped in the shared layer
@@ -73,15 +73,16 @@ module StreamWeaver
             # earlier in the document.
             raw(safe(page_head.framework_css))
 
-            # The app's and the theme's stylesheets, then the inline CSS
-            # declared via `use_stylesheet` (stream_weaver-9uk), then the
-            # app's scripts.
+            # Stylesheets (the app's, the theme's, the layout's css_path,
+            # then component css_path files), then unlayered CSS: the app's
+            # use_stylesheet blocks (stream_weaver-9uk) and then component
+            # css-macro CSS. That order is intended and predates
+            # PageShell: a component's own unlayered CSS follows the app's,
+            # so an app overrides it by specificity. Then the app's scripts
+            # and component js_path files.
             raw(safe(page_head.stylesheets))
             raw(safe(page_head.user_css))
             raw(safe(page_head.scripts))
-
-            # Component-scoped CSS/JS (declared via css/css_path/js_path class macros)
-            render_component_assets
 
             # Chart.js CDN - only load when charts are present
             if @app.has_charts?
@@ -3803,20 +3804,6 @@ module StreamWeaver
         style do
           raw(safe(StreamWeaver::CSS.layer_wrap(custom_theme.to_css)))
         end
-      end
-
-      # Emit the CSS, CSS/JS files and fonts declared via the class macros
-      # (css, css_path, js_path, font) on component classes, each class once.
-      # Also collects from layout slots and emits the layout's own css_path if registered.
-      def render_component_assets
-        all_components = @app.components + (@app.layout_slots || {}).values.flatten
-        delivery = Delivery::Served.new
-
-        # Layout-level CSS file
-        layout_css = @app.layout_entry&.dig(:css_path)
-        raw(safe(delivery.ref(layout_css, :stylesheet))) if layout_css
-
-        raw(safe(StreamWeaver::PageShell.components_html(all_components, delivery)))
       end
 
       # Render all components in a named layout slot.

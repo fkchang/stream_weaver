@@ -616,7 +616,10 @@ module StreamWeaver
       layout = (params[:layout] || 'default').to_s
       self.class.get_or_create_live_session(session_name)
 
-      # Validate theme
+      # Validate theme. This page builds its own head and body class rather
+      # than PageShell.resolve: it loads only CSS.full_stylesheet, which
+      # carries the default, dashboard and document themes, so those three
+      # are all it accepts.
       valid_themes = %w[default dashboard document]
       theme = 'default' unless valid_themes.include?(theme)
 

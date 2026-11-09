@@ -166,10 +166,12 @@ RSpec.describe StreamWeaver::Delivery do
       out = File.join(@dir, "dist")
       FileUtils.mkdir_p(out)
       builder = StreamWeaver::Opal::OpalBuilder.new(app_file, output_dir: out, theme: :delivery_spec_theme)
-      capture = StringIO.new
-      $stderr, previous = capture, $stderr
-      %i[write_theme_css write_index_html].each { |step| builder.send(step) }
-      $stderr = previous
+      begin
+        $stderr, previous = StringIO.new, $stderr
+        %i[write_theme_css write_index_html].each { |step| builder.send(step) }
+      ensure
+        $stderr = previous
+      end
       url = File.read(File.join(out, "index.html"))[face, 1]
       expect(url).to start_with("sw-assets/")
       expect(File.binread(File.join(out, url))).to eq("wOF2-probe")

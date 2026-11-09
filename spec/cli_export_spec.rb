@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'support/body_class_helper'
 require 'spec_helper'
 require 'tmpdir'
 require 'base64'
@@ -43,7 +44,7 @@ RSpec.describe StreamWeaver::CLI, '.export_html' do
     expect { described_class.export_html([doc, '-o', out]) }
       .to output(/Exported/).to_stdout
 
-    expect(File.read(out)).to include('<body class="sw-layout-fluid sw-theme-default">')
+    expect(body_classes(File.read(out))).to match_array(%w[sw-layout-fluid sw-theme-default])
   end
 
   it 'accepts --output=PATH as well as -o PATH' do

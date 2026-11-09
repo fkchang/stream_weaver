@@ -5,6 +5,7 @@ require_relative "views"
 require_relative "theme"
 require_relative "fonts"
 require_relative "delivery"
+require_relative "assets"
 
 module StreamWeaver
   # Framework-CSS <head> block, shared by all three renderers that need the
@@ -545,20 +546,21 @@ module StreamWeaver
       # @param layout_entry [Hash, nil] the registered layout whose render
       #   block draws the page (app.layout_entry). A host that never runs
       #   that block (the exporter) passes nil and keeps sw-layout-*.
-      # @param components [Hash{Symbol=>String}] component CSS registered
-      #   during the body render, keyed so each block appears once
+      # @param injected_css [Hash{Symbol=>String}] component CSS registered
+      #   during the body render (adapter#inject_component_css), keyed so
+      #   each block appears once
       # @param theme_css [Boolean] false leaves a registered custom theme's
       #   CSS out of framework_css, for the standalone view, which still
       #   emits it in <body> (AppView#render_custom_theme_css) until it moves
       #   onto Head#to_s
       # @return [Page]
-      def resolve(app, theme:, layout: app&.layout, layout_entry: app&.layout_entry, components: {},
+      def resolve(app, theme:, layout: app&.layout, layout_entry: app&.layout_entry, injected_css: {},
                   theme_css: true)
         page_assets = theme_assets(theme, css: theme_css) + layout_assets(layout_entry, layout) +
                       Assets.of(body_classes: theme ? ["sw-theme-#{theme}"] : [])
-        page_assets = app_assets(app) + page_assets if app
-        Page.new(theme: theme, layout: layout,
-                 assets: page_assets + Assets.of(framework_css: components.values))
+        page_assets += Assets.of(framework_css: injected_css.values)
+        page_assets = app_assets(app) + page_assets + component_assets(app) if app
+        Page.new(theme: theme, layout: layout, assets: page_assets)
       end
 
       # @param page [Page]
@@ -599,30 +601,25 @@ module StreamWeaver
       end
 
       # An exclusive layout names its own body classes instead of sw-layout-*.
+      # A registered layout's css_path reaches every host that names the
+      # layout, whether or not it runs the layout's render block.
       def layout_assets(entry, layout)
-        return Assets.of(body_classes: entry[:body_classes]) if entry&.dig(:exclusive)
+        css_path = (entry || (layout && LayoutRegistry[layout]))&.dig(:css_path)
+        assets = Assets.of(stylesheets: [css_path].compact)
+        return assets + Assets.of(body_classes: entry[:body_classes]) if entry&.dig(:exclusive)
 
-        Assets.of(body_classes: layout ? ["sw-layout-#{layout}"] : [])
+        assets + Assets.of(body_classes: layout ? ["sw-layout-#{layout}"] : [])
+      end
+
+      # What the app's component classes declare with the class macros,
+      # layout slots included.
+      def component_assets(app)
+        ComponentAssets.assets(app.components + (app.layout_slots || {}).values.flatten)
       end
 
       def app_assets(app)
         Assets.of(fonts: app.fonts, stylesheets: app.stylesheets, user_css: app.inline_stylesheets,
                   scripts: app.scripts)
-      end
-    end
-
-    # One page's assets, by owner and kind. framework_css is layered
-    # (StreamWeaver::CSS::LAYER_NAME) and user_css is not, which is the
-    # whole reason they are two buckets. `+` concatenates bucket by bucket
-    # and drops repeats, so the framework, the theme, the layout, the
-    # components and the app can each contribute one and be merged.
-    Assets = Data.define(:fonts, :stylesheets, :framework_css, :user_css, :scripts, :body_classes) do
-      def self.of(**buckets)
-        new(**members.to_h { |bucket| [bucket, []] }, **buckets)
-      end
-
-      def +(other)
-        self.class.new(**to_h { |bucket, entries| [bucket, (entries + other.public_send(bucket)).uniq] })
       end
     end
 

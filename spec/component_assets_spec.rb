@@ -65,7 +65,7 @@ RSpec.describe "Component-scoped CSS/JS macros" do
           klass.css_path(css_file)
 
           expect(klass.component_css_path).to eq(css_file)
-          key = StreamWeaver::ComponentAssets.file_key(css_file)
+          key = StreamWeaver::ComponentAssets.url(css_file)[%r{/sw-asset/(\h+)/}, 1]
           expect(StreamWeaver::ComponentAssets.resolve_file(key)).to eq(css_file)
         end
       end
@@ -154,7 +154,7 @@ RSpec.describe "Component-scoped CSS/JS macros" do
       end
     end
 
-    describe ".file_key / .resolve_file" do
+    describe ".register_file / .resolve_file" do
       it "round-trips a registered path" do
         Dir.mktmpdir do |dir|
           path = File.join(dir, "my.css")

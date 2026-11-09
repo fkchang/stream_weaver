@@ -29,4 +29,3 @@ sw-theme-default sw-theme-dashboard
 <script>[script f0d51e3e51e0, 330 bytes]</script>
 <script>[script 0c6ce73f94d8, 99 bytes]</script>
 # build warnings
-[OpalBuilder] Unknown theme preset: dashboard

@@ -115,7 +115,7 @@ RSpec.describe StreamWeaver::Opal::OpalBuilder do
         File.write(app_file, app_content)
         out = File.join(@tmpdir, "dist")
         expect { described_class.build(app_file, output_dir: out, theme: :nonexistent_theme) }
-          .to output(/Unknown theme preset/).to_stderr
+          .to output(/Unknown theme: nonexistent_theme/).to_stderr
         expect(File.exist?(File.join(out, "sw-theme.css"))).to be true
       end
     end

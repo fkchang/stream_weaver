@@ -46,7 +46,7 @@ RSpec.describe StreamWeaver::PageShell do
     end
   end
 
-  describe StreamWeaver::PageShell::Assets do
+  describe StreamWeaver::Assets do
     it "merges bucket by bucket, keeping order and dropping repeats" do
       a = described_class.of(fonts: ["Inter"], body_classes: %w[sw-layout-default])
       b = described_class.of(fonts: %w[Inter Geist], body_classes: %w[sw-theme-ide])
@@ -55,6 +55,22 @@ RSpec.describe StreamWeaver::PageShell do
       expect(merged.fonts).to eq(%w[Inter Geist])
       expect(merged.body_classes).to eq(%w[sw-layout-default sw-theme-ide])
       expect(merged.stylesheets).to eq([])
+    end
+
+    it "treats a nil bucket as empty and drops repeats within one value" do
+      assets = described_class.of(fonts: nil, scripts: %w[a.js a.js])
+      expect(assets.fonts).to eq([])
+      expect(assets.scripts).to eq(%w[a.js])
+    end
+  end
+
+  describe ".resolve with a registered layout" do
+    after { StreamWeaver::LayoutRegistry.instance_variable_get(:@registry).delete(:resolve_spec_css_layout) }
+
+    it "carries the layout's css_path on every host that names the layout" do
+      StreamWeaver.register_layout(:resolve_spec_css_layout, css_path: "/tmp/layout.css")
+      expect(described_class.resolve(nil, theme: :default, layout: :resolve_spec_css_layout).assets.stylesheets)
+        .to eq(["/tmp/layout.css"])
     end
   end
 
@@ -93,7 +109,7 @@ RSpec.describe StreamWeaver::PageShell do
                                        stylesheets: ["https://example.test/app.css"],
                                        scripts: ["https://example.test/app.js"]) {}
       app.use_stylesheet(".x { color: red; }")
-      assets = described_class.resolve(app, theme: :ide, components: { ide: ".ide{}" }).assets
+      assets = described_class.resolve(app, theme: :ide, injected_css: { ide: ".ide{}" }).assets
 
       expect(assets.fonts).to eq(["Inter:wght@400", *StreamWeaver.theme_fonts(:ide)])
       expect(assets.stylesheets.first).to eq("https://example.test/app.css")
@@ -105,7 +121,7 @@ RSpec.describe StreamWeaver::PageShell do
 
   describe ".head" do
     let(:assets) do
-      StreamWeaver::PageShell::Assets.of(
+      StreamWeaver::Assets.of(
         fonts: ["Inter:wght@400"], stylesheets: ['https://example.test/a.css?x="y"'],
         framework_css: [".c{}", ".d{}"], user_css: [".u{}"], scripts: ["https://example.test/a.js"]
       )
@@ -149,7 +165,7 @@ RSpec.describe StreamWeaver::PageShell do
 
     it "emits nothing for empty buckets" do
       empty = described_class.head(StreamWeaver::PageShell::Page.new(theme: nil, layout: nil,
-                                                                     assets: StreamWeaver::PageShell::Assets.of),
+                                                                     assets: StreamWeaver::Assets.of),
                                    StreamWeaver::Delivery::Served.new)
       expect(%i[fonts stylesheets framework_css user_css scripts].map { |b| empty.public_send(b) }).to all(eq(""))
     end

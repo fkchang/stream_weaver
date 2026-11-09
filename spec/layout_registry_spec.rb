@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'support/body_class_helper'
 RSpec.describe StreamWeaver::LayoutRegistry do
   after do
     StreamWeaver::LayoutRegistry.reset!
@@ -123,7 +124,7 @@ RSpec.describe StreamWeaver::LayoutRegistry do
       html = render_app(a)
 
       expect(html).to include("<h1>Default Chrome</h1>")
-      expect(html).to include('<body class="sw-layout-default sw-theme-default">')
+      expect(body_classes(html)).to match_array(%w[sw-layout-default sw-theme-default])
       expect(html).to include('id="app-container"')
     end
   end
