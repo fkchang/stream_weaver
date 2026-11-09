@@ -128,6 +128,33 @@ RSpec.describe StreamWeaver::Delivery do
     end
   end
 
+  describe "a registered component's css_path and js_path in an Opal build" do
+    it "are copied into the build and linked from index.html" do
+      stylesheet = css
+      script = js
+      klass = Class.new(StreamWeaver::Components::Base) do
+        css_path stylesheet
+        js_path script
+      end
+      StreamWeaver.register_component(klass, dsl: :delivery_spec_opal_widget)
+      app_file = File.join(@dir, "app.rb")
+      File.write(app_file, "app 'T' do\nend\n")
+      out = File.join(@dir, "dist")
+      FileUtils.mkdir_p(out)
+      builder = StreamWeaver::Opal::OpalBuilder.new(app_file, output_dir: out)
+      %i[write_theme_css write_index_html].each { |step| builder.send(step) }
+      html = File.read(File.join(out, "index.html"))
+
+      href = html[%r{<link rel="stylesheet" href="(sw-assets/\h+-widget\.css)">}, 1]
+      src = html[%r{<script src="(sw-assets/\h+-widget\.js)"></script>}, 1]
+      expect(File.read(File.join(out, src))).to eq("window.widgetLoaded = true;")
+      expect(File.read(File.join(out, href))).to include(".w {")
+    ensure
+      StreamWeaver::ComponentRegistry.instance_variable_get(:@registry).delete(:delivery_spec_opal_widget)
+      StreamWeaver::DisplayDSL.send(:remove_method, :delivery_spec_opal_widget) if StreamWeaver::DisplayDSL.method_defined?(:delivery_spec_opal_widget)
+    end
+  end
+
   describe "a component's css_path and js_path on canvas" do
     it "lead the pushed content as /sw-asset tags the bridge serves" do
       stylesheet = css
