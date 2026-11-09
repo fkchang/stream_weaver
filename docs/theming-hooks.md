@@ -286,7 +286,8 @@ The `:ide` theme and the `ide_*` components build a VS Code-style page: a
 title bar, a left rail, an editor made of tabbed sections, a right rail with
 a file tree and a terminal, and a status bar. Every component emits `sw-ide-*`
 hooks, and all of them are styled by one stylesheet, `Components::Ide::CSS`,
-that `render_ide_shell` adds once per page. Colours and fonts come from the
+which `IdeShell` declares with the `css` class macro (`layered: true`), so it
+reaches every host once per page. Colours and fonts come from the
 theme's `--ide-*` tokens (with `--sw-*` fallbacks), so another palette is a
 token change, not a rewrite.
 
