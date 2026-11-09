@@ -537,11 +537,14 @@ module StreamWeaver
       # @param theme [Symbol, nil] the theme in effect (a session override
       #   wins over app.theme, so the caller decides)
       # @param layout [Symbol, nil] nil omits the sw-layout-* class
+      # @param layout_entry [Hash, nil] the registered layout whose render
+      #   block draws the page (app.layout_entry). A host that never runs
+      #   that block (the exporter) passes nil and keeps sw-layout-*.
       # @param components [Hash{Symbol=>String}] component CSS registered
       #   during the body render, keyed so each block appears once
       # @return [Page]
-      def resolve(app, theme:, layout: app&.layout, components: {})
-        page_assets = theme_assets(theme) + layout_assets(app, layout) +
+      def resolve(app, theme:, layout: app&.layout, layout_entry: app&.layout_entry, components: {})
+        page_assets = theme_assets(theme) + layout_assets(layout_entry, layout) +
                       Assets.of(body_classes: theme ? ["sw-theme-#{theme}"] : [])
         page_assets = app_assets(app) + page_assets if app
         Page.new(theme: theme, layout: layout,
@@ -582,8 +585,7 @@ module StreamWeaver
       end
 
       # An exclusive layout names its own body classes instead of sw-layout-*.
-      def layout_assets(app, layout)
-        entry = app&.layout_entry
+      def layout_assets(entry, layout)
         return Assets.of(body_classes: entry[:body_classes]) if entry&.dig(:exclusive)
 
         Assets.of(body_classes: layout ? ["sw-layout-#{layout}"] : [])

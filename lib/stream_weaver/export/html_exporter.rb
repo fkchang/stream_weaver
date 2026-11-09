@@ -163,7 +163,11 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
         @app.rebuild_with_state(@state, deferred_target: App::ALL_DEFERRED) if @app.block
 
         body_html = render_body
-        @page = StreamWeaver::PageShell.resolve(@app, theme: @app.theme)
+        # layout_entry: nil -- an export never runs a layout's render block
+        # (chrome: false, an exclusive layout), and its #app-container rules
+        # need body[class*="sw-layout-"] (see build_document), so it keeps
+        # sw-layout-<app.layout> as it always has.
+        @page = StreamWeaver::PageShell.resolve(@app, theme: @app.theme, layout_entry: nil)
         body_html = inline_images_in_html(body_html) if inline_images
         inline_mermaid = offline && components_include?(Components::Mermaid)
 

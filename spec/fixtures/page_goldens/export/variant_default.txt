@@ -1,5 +1,5 @@
 # body class
-sw-chromeless sw-theme-default
+sw-layout-default sw-theme-default
 # head (one tag per line; <style> and inline <script> bodies are replaced by digests)
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
