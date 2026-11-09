@@ -10,6 +10,7 @@ require 'digest'
 require 'uri'
 require_relative 'session_store'
 require_relative 'dev_fallback_overlay'
+require_relative 'asset_route'
 
 module StreamWeaver
   # Generated Sinatra application for serving the StreamWeaver app
@@ -276,20 +277,9 @@ module StreamWeaver
         ""
       end
 
-      # Serve local files registered via css_path/js_path class macros, or via
+      # Local files registered via css_path/js_path class macros, or via
       # App#local_asset / auto-detected stylesheets: entries (stream_weaver-1lo).
-      # Only files whose absolute path was explicitly registered are served
-      # (no traversal -- the key is a hash of that path, never derived from
-      # the request), and registration itself already validated the path was
-      # under the app's script dir / assets_dirs: (see App#local_asset).
-      get '/sw-asset/:key/:filename' do
-        abs_path = StreamWeaver::ComponentAssets.resolve_file(params[:key])
-        halt 404 unless abs_path && File.exist?(abs_path)
-        halt 404 unless File.basename(abs_path) == params[:filename]
-        etag Digest::MD5.hexdigest("#{File.mtime(abs_path).to_i}-#{File.size(abs_path)}")
-        content_type StreamWeaver::App::LOCAL_ASSET_MIME_TYPES[File.extname(abs_path).delete('.').downcase] || "application/octet-stream"
-        File.binread(abs_path)
-      end
+      register StreamWeaver::AssetRoute
 
       # Define routes
       get '/' do

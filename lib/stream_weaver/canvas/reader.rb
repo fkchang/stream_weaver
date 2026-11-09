@@ -7,6 +7,7 @@ require 'socket'
 require 'sinatra/base'
 require 'stream_weaver/app'
 require 'stream_weaver/views'
+require 'stream_weaver/asset_route'
 require 'stream_weaver/adapter/alpinejs'
 require 'stream_weaver/canvas/doc_store'
 require 'stream_weaver/canvas/doc_roots'
@@ -23,6 +24,8 @@ module StreamWeaver
   module Canvas
     class Reader < Sinatra::Base
       include GistSaveHandler
+      # A doc's css_path/js_path files and self-hosted fonts (Delivery::Served).
+      register StreamWeaver::AssetRoute
 
       class NoFilesError < StandardError; end
 
@@ -760,7 +763,8 @@ module StreamWeaver
           inert: true
         )
         Doc.new(
-          html: StreamWeaver::Views::AppContentView.new(mini_app, {}, adapter, false).call,
+          html: StreamWeaver::Views::AppContentView.new(mini_app, {}, adapter, false,
+                                                        delivery: StreamWeaver::Delivery::Served.new).call,
           theme: mini_app.theme,
           layout: mini_app.layout,
           inline_stylesheets: mini_app.inline_stylesheets

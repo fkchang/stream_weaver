@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'digest'
-require 'set'
 
 module StreamWeaver
   # Registry for files served via the /sw-asset/ route.
@@ -29,55 +28,52 @@ module StreamWeaver
         key
       end
 
-      # Walk a component tree and collect unique CSS/JS declarations.
-      # Returns [css_strings, css_paths, js_paths] — all deduped by component class.
-      def collect(components, seen_classes = Set.new)
-        css_strings = []
-        css_paths   = []
-        js_paths    = []
-
-        components.each do |c|
-          klass = c.class
-          unless seen_classes.include?(klass)
-            seen_classes << klass
-            if klass.respond_to?(:component_css_strings)
-              css_strings.concat(klass.component_css_strings)
-            end
-            if klass.respond_to?(:component_css_path) && klass.component_css_path
-              css_paths << klass.component_css_path
-            end
-            if klass.respond_to?(:component_js_path) && klass.component_js_path
-              js_paths << klass.component_js_path
-            end
-          end
-
-          if c.respond_to?(:children) && !c.children.empty?
-            child_css_s, child_css_p, child_js_p = collect(c.children, seen_classes)
-            css_strings.concat(child_css_s)
-            css_paths.concat(child_css_p)
-            js_paths.concat(child_js_p)
-          end
-        end
-
-        [css_strings, css_paths, js_paths]
+      # The assets the component classes in a tree declare with the css,
+      # css_path, js_path and font class macros, each class once, in tree
+      # order.
+      #
+      # @param components [Array<Components::Base>]
+      # @return [PageShell::Assets]
+      def assets(components)
+        assets_of(classes_in(components))
       end
 
-      # CSS declared with the css class macro by every registered component
-      # class: the framework's own (StreamWeaver::Components, by name) and
-      # those registered with StreamWeaver.register_component. For a host
-      # with no component tree to walk: an Opal build compiles a file, so it
-      # ships them all.
+      # The assets of every registered component class: the framework's own
+      # (StreamWeaver::Components, by name) and those registered with
+      # StreamWeaver.register_component. For a host with no component tree
+      # to walk: an Opal build compiles a file, so it ships them all.
       #
-      # @return [Array<String>]
-      def every_class_css
+      # @return [PageShell::Assets]
+      def every_class_assets
         framework = Components.constants.sort.map { |name| Components.const_get(name) }
                               .select { |c| c.is_a?(Class) && c < Components::Base }
         registered = ComponentRegistry.all.values.map { |entry| entry[:class] }
-        (framework + registered).uniq.flat_map(&:component_css_strings).uniq
+        assets_of((framework + registered).uniq)
       end
 
       def reset!
         @file_registry.clear
+      end
+
+      private
+
+      def classes_in(components, seen = [])
+        components.each do |c|
+          seen << c.class unless seen.include?(c.class)
+          classes_in(c.children, seen) if c.respond_to?(:children) && c.children && !c.children.empty?
+        end
+        seen
+      end
+
+      def assets_of(classes)
+        classes = classes.select { |k| k.respond_to?(:component_css_strings) }
+        PageShell::Assets.of(
+          framework_css: classes.flat_map(&:component_framework_css),
+          user_css: classes.flat_map(&:component_css_strings),
+          stylesheets: classes.filter_map(&:component_css_path),
+          scripts: classes.filter_map(&:component_js_path),
+          fonts: classes.flat_map(&:component_fonts)
+        )
       end
     end
   end

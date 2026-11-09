@@ -110,7 +110,10 @@ RSpec.describe StreamWeaver::PageShell do
         framework_css: [".c{}", ".d{}"], user_css: [".u{}"], scripts: ["https://example.test/a.js"]
       )
     end
-    let(:head) { described_class.head(StreamWeaver::PageShell::Page.new(theme: nil, layout: nil, assets: assets)) }
+    let(:head) do
+      described_class.head(StreamWeaver::PageShell::Page.new(theme: nil, layout: nil, assets: assets),
+                           StreamWeaver::Delivery::Served.new)
+    end
 
     it "emits one Google Fonts stylesheet for the declared fonts" do
       expect(head.fonts).to eq('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400&display=swap">')
@@ -128,7 +131,8 @@ RSpec.describe StreamWeaver::PageShell do
 
     it "emits nothing for empty buckets" do
       empty = described_class.head(StreamWeaver::PageShell::Page.new(theme: nil, layout: nil,
-                                                                     assets: StreamWeaver::PageShell::Assets.of))
+                                                                     assets: StreamWeaver::PageShell::Assets.of),
+                                   StreamWeaver::Delivery::Served.new)
       expect(%i[fonts stylesheets framework_css user_css scripts].map { |b| empty.public_send(b) }).to all(eq(""))
     end
   end

@@ -105,9 +105,12 @@ module StreamWeaver
         css = StreamWeaver::CSS.full_stylesheet
         css += "\n" + StreamWeaver::Theme.visual_skills_css
         css += "\n" + StreamWeaver::CSS.animation_css
-        # Unlayered, as the standalone page emits css-macro CSS (spec/css_layer_spec.rb).
-        component_css = StreamWeaver::ComponentAssets.every_class_css
-        css += "\n" + component_css.join("\n") if component_css.any?
+        # The css macro CSS of every registered component class: layered
+        # where the class asked for it, user CSS unlayered (spec/css_layer_spec.rb).
+        unless components.framework_css.empty?
+          css += "\n" + StreamWeaver::CSS.layer_wrap(components.framework_css.join("\n"))
+        end
+        css += "\n" + components.user_css.join("\n") unless components.user_css.empty?
         if @theme
           unless StreamWeaver::Theme::Presets.get(@theme.to_sym)
             warn "[OpalBuilder] Unknown theme preset: #{@theme}"
@@ -134,7 +137,7 @@ module StreamWeaver
             replay_js: local_asset("sw-replay.js"),
             theme_css: File.exist?(output_path("sw-theme.css")) ? "sw-theme.css" : nil,
             google_fonts_url: google_fonts_url_for_build,
-            theme_links_html: theme_links_html,
+            page_links_html: page_links_html,
             body_theme: page.body_class,
             dark_mode_script: StreamWeaver::Theme::AutoMode.inline_script
           ))
@@ -143,23 +146,31 @@ module StreamWeaver
       # The build-time page. An Opal build has no App (it receives a file name)
       # and no layout class, and reads --theme as a theme name; its stylesheet
       # scopes the base variables to body.sw-theme-default, so that class
-      # always comes first.
+      # always comes first. With no component tree either, it carries the
+      # files and fonts of every registered component class.
       def page
         @page ||= StreamWeaver::PageShell::Page.new(
           theme: @theme, layout: nil, assets: StreamWeaver::PageShell::Assets.of(body_classes: %w[sw-theme-default])
-        ) + StreamWeaver::PageShell.resolve(nil, theme: @theme, layout: nil).assets
+        ) + StreamWeaver::PageShell.resolve(nil, theme: @theme, layout: nil).assets +
+          StreamWeaver::PageShell::Assets.of(stylesheets: components.stylesheets, scripts: components.scripts,
+                                             fonts: components.fonts)
       end
 
-      def theme_links_html
-        head = StreamWeaver::PageShell.head(page)
-        [head.stylesheets, head.fonts].reject(&:empty?).join("\n")
+      def components
+        @components ||= StreamWeaver::ComponentAssets.every_class_assets
+      end
+
+      # Local files are copied into the build (Delivery::Copied).
+      def page_links_html
+        head = StreamWeaver::PageShell.head(page, StreamWeaver::Delivery::Copied.new(@output_dir))
+        [head.stylesheets, head.fonts, head.scripts].reject(&:empty?).join("\n")
       end
 
       def google_fonts_url_for_build
         if @theme && (preset = StreamWeaver::Theme::Presets.get(@theme.to_sym))
           StreamWeaver::Theme::Presets.google_fonts_url(preset)
         else
-          "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap"
+          StreamWeaver::Fonts::BASE_HREF
         end
       end
 

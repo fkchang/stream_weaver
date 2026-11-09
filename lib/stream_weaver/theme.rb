@@ -520,7 +520,9 @@ module StreamWeaver
     # @param base [Symbol] Base theme to inherit from
     # @param label [String] Human-readable name
     # @param description [String] Short description
-    # @param fonts [Array<String>] Google Fonts entries the page head loads
+    # @param fonts [Array<String, Hash>] fonts the page head loads: Google Fonts
+    #   entries, or { family:, src: } for a self-hosted file (a relative src
+    #   resolves against the file that registers the theme)
     # @param stylesheets [Array<String>] Stylesheet URLs the page head loads
     # @return [Theme] The registered theme
     #
@@ -536,6 +538,9 @@ module StreamWeaver
     #   }, base: :dashboard
     def register_theme(name, variables = {}, base: :default, label: nil, description: nil,
                        fonts: [], stylesheets: [])
+      if fonts.any?(Hash)
+        fonts = Fonts.resolve(fonts, File.dirname(File.expand_path(caller_locations(1, 1).first.path)))
+      end
       @themes[name.to_sym] = Theme.new(name, variables, base: base, label: label, description: description,
                                                         fonts: fonts, stylesheets: stylesheets)
     end

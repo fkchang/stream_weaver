@@ -292,7 +292,8 @@ module StreamWeaver
 
         # Render to HTML
         state = {}
-        html = StreamWeaver::Views::AppContentView.new(mini_app, state, adapter, false).call
+        html = StreamWeaver::Views::AppContentView.new(mini_app, state, adapter, false,
+                                                       delivery: StreamWeaver::Delivery::Served.new).call
         RenderResult.new(html: html, error: nil, stylesheets: mini_app.inline_stylesheets)
       rescue => e
         RenderResult.new(

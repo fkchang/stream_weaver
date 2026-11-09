@@ -10,6 +10,7 @@ require_relative 'code_stamp'
 require_relative 'scroll_top_hint'
 require_relative 'session'
 require_relative 'bridge'
+require_relative '../asset_route'
 require_relative 'doc_store'
 require_relative 'gist_store'
 require_relative 'gist_publisher'
@@ -38,6 +39,10 @@ module StreamWeaver
     #
     class BridgeServer < Sinatra::Base
       include GistSaveHandler
+      # A pushed doc's css_path/js_path files and self-hosted fonts
+      # (Delivery::Served): the bridge evaluates the DSL in-process, so the
+      # asset registry is local.
+      register StreamWeaver::AssetRoute
 
       SOCKET_PATH = File.expand_path('~/.streamweaver/canvas.sock')
       PID_FILE_PATH = File.expand_path('~/.streamweaver/canvas.pid')
@@ -355,7 +360,7 @@ module StreamWeaver
         page = StreamWeaver::PageShell.resolve(nil, theme: session.theme, layout: session.layout) +
                StreamWeaver::PageShell::Assets.of(user_css: session.stylesheets,
                                                   body_classes: session.annotate? ? %w[sw-annotate-on] : [])
-        page_head = StreamWeaver::PageShell.head(page)
+        page_head = StreamWeaver::PageShell.head(page, StreamWeaver::Delivery::Served.new)
 
         # Create adapter in websocket mode
         adapter = StreamWeaver::Adapter::AlpineJS.new(

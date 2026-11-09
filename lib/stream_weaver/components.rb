@@ -30,12 +30,30 @@ module StreamWeaver
     class Base
       # Class-level macro: declare inline CSS for this component.
       # Multiple calls accumulate; all strings are emitted once per class per page.
+      # User CSS is unlayered, so it outranks the framework's; a framework
+      # component passes layered: true to sit in the framework's cascade layer
+      # (StreamWeaver::CSS::LAYER_NAME), below user CSS and theme overrides.
       #
       # @example
       #   css ".my-banner { color: red }"
-      def self.css(string)
-        @component_css_strings ||= []
-        @component_css_strings << string
+      def self.css(string, layered: false)
+        if layered
+          (@component_framework_css ||= []) << string
+        else
+          (@component_css_strings ||= []) << string
+        end
+      end
+
+      # Class-level macro: declare a self-hosted font this component needs,
+      # emitted as @font-face on every host (the file reaches each one
+      # through its Delivery). A relative src resolves against the file
+      # that declares the component.
+      #
+      # @example
+      #   font family: "Harbor Mono", src: "fonts/harbor.woff2", weight: "400 700"
+      def self.font(family:, src:, **descriptors)
+        dir = File.dirname(File.expand_path(caller_locations(1, 1).first.path))
+        (@component_fonts ||= []).concat(Fonts.resolve([{ family: family, src: src, **descriptors }], dir))
       end
 
       # Class-level macro: declare a CSS file to serve alongside this component.
@@ -57,6 +75,14 @@ module StreamWeaver
 
       def self.component_css_strings
         @component_css_strings || []
+      end
+
+      def self.component_framework_css
+        @component_framework_css || []
+      end
+
+      def self.component_fonts
+        @component_fonts || []
       end
 
       def self.component_css_path

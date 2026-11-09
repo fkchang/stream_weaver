@@ -192,7 +192,8 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
 
       # Render body components to HTML string via Phlex
       def render_body
-        StreamWeaver::ComponentRenderer.render_html(@adapter, @app.components, @state)
+        StreamWeaver::ComponentRenderer.render_html(@adapter, @app.components, @state,
+                                                    delivery: StreamWeaver::Delivery::Inline.new)
       end
 
       # Fetches mermaid's classic global build (sets globalThis.mermaid --
@@ -308,7 +309,7 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
 
       # The app's and its theme's head tags (stylesheets, fonts, user CSS).
       def page_head
-        StreamWeaver::PageShell.head(@page)
+        StreamWeaver::PageShell.head(@page, StreamWeaver::Delivery::Inline.new)
       end
 
       def custom_theme

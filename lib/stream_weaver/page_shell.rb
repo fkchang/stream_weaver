@@ -3,6 +3,8 @@
 require_relative "css"
 require_relative "views"
 require_relative "theme"
+require_relative "fonts"
+require_relative "delivery"
 
 module StreamWeaver
   # Framework-CSS <head> block, shared by all three renderers that need the
@@ -547,9 +549,30 @@ module StreamWeaver
       end
 
       # @param page [Page]
+      # @param delivery [Delivery::Served, Delivery::Inline, Delivery::Copied]
       # @return [Head] the page's head tags, one method per bucket
-      def head(page)
-        Head.new(page.assets)
+      def head(page, delivery)
+        Head.new(page.assets, delivery)
+      end
+
+      # Everything the classes in a component tree declare with the class
+      # macros (css, css_path, js_path, font), as tags, each class once.
+      # The standalone head emits it; a fragment (canvas content, a reader
+      # doc, an export body) leads with it, since its page head never saw
+      # those components.
+      #
+      # @param components [Array<Components::Base>]
+      # @param delivery [Delivery::Served, Delivery::Inline, Delivery::Copied, nil]
+      #   nil for a fragment that only updates a page whose head already
+      #   loaded the files (a standalone htmx response): its CSS still comes
+      #   along, as injected component CSS always has, but no file tags, so
+      #   a script is never run twice
+      # @return [String] HTML
+      def components_html(components, delivery)
+        head = Head.new(ComponentAssets.assets(components), delivery)
+        tags = [head.framework_css, head.user_css]
+        tags += [head.stylesheets, head.scripts, head.fonts] if delivery
+        tags.reject(&:empty?).join("\n")
       end
 
       private
@@ -605,45 +628,39 @@ module StreamWeaver
     # depends on order, so the shared part is what each tag is, not where
     # a host puts it.
     class Head
-      def initialize(assets)
+      # @param assets [Assets]
+      # @param delivery [Delivery::Served, Delivery::Inline, Delivery::Copied]
+      #   how this host loads a local file
+      def initialize(assets, delivery)
         @assets = assets
+        @delivery = delivery
       end
-
-      # One Google Fonts stylesheet for every declared Google font.
+    
+      # One Google Fonts stylesheet for every declared Google font, then an
+      # @font-face block for every self-hosted one ({ family:, src: }).
       def fonts
         href = StreamWeaver::Fonts.google_fonts_href(@assets.fonts)
-        href ? stylesheet_link(href) : ""
+        faces = StreamWeaver::Fonts.font_face_css(@assets.fonts, @delivery)
+        [href && Delivery.tag(href, :stylesheet), !faces.empty? && "<style>#{faces}</style>"].select { |t| t }.join("\n")
       end
-
+    
       def stylesheets
-        @assets.stylesheets.map { |href| stylesheet_link(href) }.join("\n")
+        @assets.stylesheets.map { |path| @delivery.ref(path, :stylesheet) }.join("\n")
       end
-
+    
       # Component CSS, one layered block.
       def framework_css
         return "" if @assets.framework_css.empty?
-
+    
         "<style>#{StreamWeaver::CSS.layer_wrap(@assets.framework_css.join("\n"))}</style>"
       end
-
+    
       def user_css
         PageShell.user_css_html(inline_stylesheets: @assets.user_css)
       end
-
+    
       def scripts
-        @assets.scripts.map { |src| %(<script src="#{attribute(src)}"></script>) }.join("\n")
-      end
-
-      private
-
-      def stylesheet_link(href)
-        %(<link rel="stylesheet" href="#{attribute(href)}">)
-      end
-
-      # Escapes exactly what Phlex escapes in an attribute, so a Phlex host
-      # and a heredoc host render the same tag.
-      def attribute(value)
-        value.to_s.gsub('"', "&quot;")
+        @assets.scripts.map { |path| @delivery.ref(path, :script) }.join("\n")
       end
     end
   end

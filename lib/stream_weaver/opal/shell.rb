@@ -52,8 +52,8 @@ module StreamWeaver
       #                    (see ENHANCE_JS's comment).
       # theme_css:         path/URL to a CSS file injected as a stylesheet link.
       # google_fonts_url:  full Google Fonts CSS URL; emits preconnect + stylesheet tags.
-      # theme_links_html:  the theme's own stylesheet and font links (PageShell.head),
-      #                    placed after the Google Fonts tags.
+      # page_links_html:   the page's own stylesheet, font and script tags
+      #                    (PageShell.head), placed after the Google Fonts tags.
       # dark_mode_script:  inline JS string placed first in <head> to prevent FOUC.
       # body_html:         pre-rendered markup for #sw-app. Supplying it makes the
       #                    page a finished document rather than an empty shell the
@@ -79,7 +79,7 @@ module StreamWeaver
         replay_js: nil,
         theme_css: nil,
         google_fonts_url: nil,
-        theme_links_html: nil,
+        page_links_html: nil,
         dark_mode_script: nil,
         body_theme: "sw-theme-default"
       )
@@ -101,7 +101,7 @@ module StreamWeaver
         optional_head = [
           (dark_mode_script && "    <script>#{dark_mode_script}</script>"),
           *google_fonts_tags,
-          *theme_links_html.to_s.lines.map(&:strip).reject(&:empty?).map { |tag| "    #{tag}" },
+          *page_links_html.to_s.lines.map(&:strip).reject(&:empty?).map { |tag| "    #{tag}" },
           (theme_css && "    <link rel=\"stylesheet\" href=\"#{theme_css}\">"),
           "    <link rel=\"stylesheet\" href=\"#{prism_css_src}\">",
           (has_inline_css ? "    <style>\n#{inline_css}\n    </style>" : nil)

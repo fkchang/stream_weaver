@@ -3,7 +3,7 @@
   # Browse (stream_weaver-rdh) can land here with no file open yet; page_for
   # then falls back to the reader's own theme and layout.
   page           = StreamWeaver::Canvas::Reader.page_for(doc)
-  page_head      = StreamWeaver::PageShell.head(page)
+  page_head      = StreamWeaver::PageShell.head(page, StreamWeaver::Delivery::Served.new)
   body_class     = page.body_class
   browse_mode    = !!@browse_mode
   # docs_groups/history_groups are meaningless in Browse mode (its sidebar

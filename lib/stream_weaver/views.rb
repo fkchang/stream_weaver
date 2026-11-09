@@ -33,7 +33,7 @@ module StreamWeaver
         # can be replayed into <body> after <head> is emitted.
         body_html = capture { render_page_body }
         page = StreamWeaver::PageShell.resolve(@app, theme: effective_theme, components: component_css_registry)
-        page_head = StreamWeaver::PageShell.head(page)
+        page_head = StreamWeaver::PageShell.head(page, Delivery::Served.new)
 
         doctype
         html do
@@ -3798,31 +3798,18 @@ module StreamWeaver
         end
       end
 
-      # Emit CSS/JS declared via the css/css_path/js_path class macros on component classes.
-      # Deduped by component class so multiple instances only emit their assets once.
+      # Emit the CSS, CSS/JS files and fonts declared via the class macros
+      # (css, css_path, js_path, font) on component classes, each class once.
       # Also collects from layout slots and emits the layout's own css_path if registered.
       def render_component_assets
         all_components = @app.components + (@app.layout_slots || {}).values.flatten
+        delivery = Delivery::Served.new
 
         # Layout-level CSS file
-        layout_entry = @app.layout_entry
-        if layout_entry&.dig(:css_path)
-          path = layout_entry[:css_path]
-          key  = ComponentAssets.file_key(path)
-          link(rel: "stylesheet", href: "/sw-asset/#{key}/#{File.basename(path)}")
-        end
+        layout_css = @app.layout_entry&.dig(:css_path)
+        raw(safe(delivery.ref(layout_css, :stylesheet))) if layout_css
 
-        css_strings, css_paths, js_paths = ComponentAssets.collect(all_components)
-
-        css_strings.each { |css| style { raw(safe(css)) } }
-        css_paths.each do |path|
-          key = ComponentAssets.file_key(path)
-          link(rel: "stylesheet", href: "/sw-asset/#{key}/#{File.basename(path)}")
-        end
-        js_paths.each do |path|
-          key = ComponentAssets.file_key(path)
-          script(src: "/sw-asset/#{key}/#{File.basename(path)}")
-        end
+        raw(safe(StreamWeaver::PageShell.components_html(all_components, delivery)))
       end
 
       # Render all components in a named layout slot.
@@ -3851,11 +3838,16 @@ module StreamWeaver
       # @param state [Hash] The current state
       # @param adapter [StreamWeaver::Adapter::Base] The adapter for rendering
       # @param is_agentic [Boolean] Whether running in agentic mode
-      def initialize(app, state, adapter, is_agentic = false)
+      # @param delivery [Delivery::Served, Delivery::Inline, nil] how the
+      #   components' own files reach the page, for content whose page head
+      #   never saw them (a canvas push, a reader doc); nil for an update to a
+      #   page that already loaded them (see PageShell.components_html)
+      def initialize(app, state, adapter, is_agentic = false, delivery: nil)
         @app = app
         @state = state
         @adapter = adapter
         @is_agentic = is_agentic
+        @delivery = delivery
       end
 
       def view_template
@@ -3869,6 +3861,7 @@ module StreamWeaver
         end
         state_json = JSON.generate(state_json_data)
         script(type: "application/json", id: "sw-state-data") { raw safe(state_json) }
+        raw(safe(StreamWeaver::PageShell.components_html(@app.components, @delivery)))
 
         @app.components.each do |component|
           component.render(self, @state)

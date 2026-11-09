@@ -80,15 +80,6 @@ module StreamWeaver
     RESERVED_ENDPOINT_EXACT = %w[/update /submit].freeze
     RESERVED_ENDPOINT_PREFIXES = %w[/action/ /event/ /form/ /theme/ /sw/].freeze
 
-    # Content-type by extension for local files served via the /sw-asset/
-    # route (App#local_asset, stylesheets: auto-detection). Shared with
-    # server.rb's /sw-asset/ route handler.
-    LOCAL_ASSET_MIME_TYPES = {
-      'css' => 'text/css', 'js' => 'application/javascript', 'mjs' => 'application/javascript',
-      'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
-      'gif' => 'image/gif', 'svg' => 'image/svg+xml', 'webp' => 'image/webp', 'ico' => 'image/x-icon'
-    }.freeze
-
     # @param assets_dirs [Array<String>] Extra directories (besides the
     #   calling script's own directory) that local_asset/stylesheets: are
     #   allowed to serve local files from (stream_weaver-1lo).
