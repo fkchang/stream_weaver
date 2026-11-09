@@ -3573,8 +3573,8 @@ module StreamWeaver
                    Dark Theme (Cabinet Control style)
                    =========================================== */
                 body.sw-theme-dark {
-                  --sw-font-display: 'Outfit', 'Source Sans 3', system-ui, sans-serif;
-                  --sw-font-body: 'Outfit', 'Source Sans 3', system-ui, sans-serif;
+                  --sw-font-display: 'Source Sans 3', system-ui, sans-serif;
+                  --sw-font-body: 'Source Sans 3', system-ui, sans-serif;
                   --sw-font-family: var(--sw-font-body);
                   --sw-font-mono: 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
                   --sw-font-size-base: 15px;

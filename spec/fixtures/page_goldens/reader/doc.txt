@@ -6,7 +6,7 @@ sw-theme-doc sw-layout-fluid sw-reader
 <title>canvas-read</title>
 <style>[css f734af5e1fd3]</style>
 <style>[css d3037a149254]</style>
-<style>[css 752de517273c]</style>
+<style>[css 6073a2c531a5]</style>
 <style>[css 9daf8e10ee84]</style>
 <style id="sw-reader-chrome-css">[css e27e03faf1be]</style>
 <script src="https://unpkg.com/htmx.org@2.0.4">

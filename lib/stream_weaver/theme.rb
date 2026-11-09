@@ -149,101 +149,30 @@ module StreamWeaver
       font_mono: { css: "--sw-font-mono", type: :string }
     }.freeze
 
-    # Built-in theme definitions (matches CSS in views.rb)
-    BUILT_IN_THEMES = {
-      default: {
-        name: "Default",
-        description: "Warm Industrial",
-        variables: {
-          font_display: "'Source Sans 3', system-ui, sans-serif",
-          font_body: "'Source Sans 3', system-ui, sans-serif",
-          font_size_base: "17px",
-          line_height: "1.7",
-          color_primary: "#a16207",
-          color_bg: "#f2ede4",
-          color_text: "#111111",
-          spacing_md: "1.25rem",
-          card_border_left: "3px solid var(--sw-color-primary)"
-        }
-      },
-      dashboard: {
-        name: "Dashboard",
-        description: "Data Dense",
-        variables: {
-          font_display: "'Source Sans 3', system-ui, sans-serif",
-          font_body: "'Source Sans 3', system-ui, sans-serif",
-          font_size_base: "15px",
-          line_height: "1.5",
-          color_primary: "#a16207",
-          color_bg: "#fafafa",
-          color_text: "#111111",
-          spacing_md: "0.75rem",
-          card_border_left: "1px solid var(--sw-color-border)"
-        }
-      },
-      document: {
-        name: "Document",
-        description: "Reading Mode",
-        variables: {
-          font_display: "'Source Sans 3', system-ui, sans-serif",
-          font_body: "'Crimson Pro', Georgia, 'Times New Roman', serif",
-          font_size_base: "19px",
-          line_height: "1.85",
-          color_primary: "#6b7280",
-          color_bg: "#faf8f5",
-          color_text: "#1a1a1a",
-          spacing_md: "1.5rem",
-          card_border_left: "none"
-        }
-      },
-      doc: {
-        name: "Doc",
-        description: "Compact Editorial",
-        variables: {
-          font_display: "Charter, 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif",
-          font_body: "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif",
-          font_size_base: "15px",
-          line_height: "1.65",
-          color_primary: "#1E4ED8",
-          color_bg: "#F5F4EF",
-          color_text: "#181714",
-          spacing_md: "1rem",
-          card_border_left: "none"
-        }
-      },
-      ide: {
-        name: "IDE",
-        description: "Editor Workspace",
-        # Loaded by the page head whenever this theme is active.
-        fonts: ["JetBrains+Mono:wght@400;500;600;700"],
-        stylesheets: ["https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.8/index.css"],
-        variables: {
-          font_display: "'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-          font_body: "'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-          font_size_base: "15px",
-          line_height: "1.6",
-          color_primary: "#2e7d16",
-          color_bg: "#ffffff",
-          color_text: "#1a1a1e",
-          spacing_md: "1rem",
-          card_border_left: "none"
-        }
-      }
-    }.freeze
-
-    attr_reader :name, :variables, :base_theme, :label, :description
+    attr_reader :name, :variables, :base_theme, :label, :description, :fonts, :stylesheets
 
     # @param name [Symbol] Theme identifier
     # @param variables [Hash] Theme variable overrides
     # @param base [Symbol] Base theme to inherit from (:default, :dashboard, :document)
     # @param label [String] Human-readable name
     # @param description [String] Short description
-    def initialize(name, variables = {}, base: :default, label: nil, description: nil)
+    # @param fonts [Array<String>] Google Fonts entries (Fonts.google_fonts_href format) the page head loads
+    # @param stylesheets [Array<String>] Stylesheet URLs the page head loads
+    # @param built_in [Boolean] true for the framework's own themes, whose CSS lives in master_theme_css
+    def initialize(name, variables = {}, base: :default, label: nil, description: nil,
+                   fonts: [], stylesheets: [], built_in: false)
       @name = name.to_sym
       @base_theme = base.to_sym
       @variables = normalize_variables(variables)
       @label = label || name.to_s.split('_').map(&:capitalize).join(' ')
       @description = description || "Custom theme"
+      @fonts = fonts
+      @stylesheets = stylesheets
+      @built_in = built_in
+    end
+
+    def built_in?
+      @built_in
     end
 
     # Generate CSS variable declarations for this theme
@@ -573,24 +502,27 @@ module StreamWeaver
     end
   end
 
-  # Theme registry - stores custom themes
+  # Theme registry: the built-in themes (theme/built_ins.rb) and any custom ones
   @themes = {}
 
   class << self
     # Access the theme registry
     #
-    # @return [Hash<Symbol, Theme>] Registered themes
+    # @return [Hash<Symbol, Theme>] Registered themes, built-ins first
     def themes
       @themes
     end
 
-    # Register a custom theme
+    # Register a theme
     #
     # @param name [Symbol] Theme identifier (used in theme: :name)
     # @param variables [Hash] CSS variable overrides
     # @param base [Symbol] Base theme to inherit from
     # @param label [String] Human-readable name
     # @param description [String] Short description
+    # @param fonts [Array<String>] Google Fonts entries the page head loads
+    # @param stylesheets [Array<String>] Stylesheet URLs the page head loads
+    # @param built_in [Boolean] only for theme/built_ins.rb
     # @return [Theme] The registered theme
     #
     # @example Basic registration
@@ -603,10 +535,19 @@ module StreamWeaver
     #   StreamWeaver.register_theme :compact_corporate, {
     #     color_primary: "#0066cc"
     #   }, base: :dashboard
-    def register_theme(name, variables = {}, base: :default, label: nil, description: nil)
-      theme = Theme.new(name, variables, base: base, label: label, description: description)
+    def register_theme(name, variables = {}, base: :default, label: nil, description: nil,
+                       fonts: [], stylesheets: [], built_in: false)
+      theme = Theme.new(name, variables, base: base, label: label, description: description,
+                                         fonts: fonts, stylesheets: stylesheets, built_in: built_in)
       @themes[name.to_sym] = theme
       theme
+    end
+
+    # Names of the framework's own themes, in registry order
+    #
+    # @return [Array<Symbol>]
+    def built_in_themes
+      @themes.values.select(&:built_in?).map(&:name)
     end
 
     # Get a theme by name (custom or built-in)
@@ -614,29 +555,23 @@ module StreamWeaver
     # @param name [Symbol] Theme name
     # @return [Theme, nil] The theme or nil if not found
     def get_theme(name)
-      name = name.to_sym
-      @themes[name] || (Theme::BUILT_IN_THEMES[name] && Theme.new(
-        name,
-        Theme::BUILT_IN_THEMES[name][:variables],
-        label: Theme::BUILT_IN_THEMES[name][:name],
-        description: Theme::BUILT_IN_THEMES[name][:description]
-      ))
+      @themes[name.to_sym]
     end
 
-    # Google Fonts entries (Fonts.google_fonts_href format) a built-in theme loads.
+    # Google Fonts entries (Fonts.google_fonts_href format) a theme loads.
     #
     # @param name [Symbol, nil] Theme name
     # @return [Array<String>]
     def theme_fonts(name)
-      Theme::BUILT_IN_THEMES.dig(name&.to_sym, :fonts) || []
+      (name && get_theme(name)&.fonts) || []
     end
 
-    # Stylesheet URLs a built-in theme loads (version-pinned CDN fonts).
+    # Stylesheet URLs a theme loads (version-pinned CDN fonts).
     #
     # @param name [Symbol, nil] Theme name
     # @return [Array<String>]
     def theme_stylesheets(name)
-      Theme::BUILT_IN_THEMES.dig(name&.to_sym, :stylesheets) || []
+      (name && get_theme(name)&.stylesheets) || []
     end
 
     # Check if a theme exists (custom or built-in)
@@ -644,30 +579,25 @@ module StreamWeaver
     # @param name [Symbol] Theme name
     # @return [Boolean]
     def theme_exists?(name)
-      name = name.to_sym
-      @themes.key?(name) || Theme::BUILT_IN_THEMES.key?(name)
+      @themes.key?(name.to_sym)
     end
 
     # Get all available theme names
     #
     # @return [Array<Symbol>] Theme names
     def available_themes
-      (Theme::BUILT_IN_THEMES.keys + @themes.keys).uniq
+      @themes.keys
     end
 
     # Get all themes as an array suitable for theme_switcher
     #
     # @return [Array<Hash>] Array of theme info hashes
     def all_themes_for_switcher
-      built_in = Theme::BUILT_IN_THEMES.map do |id, info|
-        { id: id, label: info[:name], description: info[:description] }
-      end
-
-      custom = @themes.map do |id, theme|
+      @themes.map do |id, theme|
         { id: id, label: theme.label, description: theme.description }
       end
-
-      built_in + custom
     end
   end
 end
+
+require_relative 'theme/built_ins'

@@ -6,7 +6,7 @@ sw-theme-ide sw-layout-fluid
 <title>StreamWeaver Canvas: probe</title>
 <style>[css 2434f41c5b7f]</style>
 <style>[css d3037a149254]</style>
-<style>[css 752de517273c]</style>
+<style>[css 6073a2c531a5]</style>
 <style>[css 9daf8e10ee84]</style>
 <script>[script 1fecbf6d34b7, 2232 bytes]</script>
 <script src="https://unpkg.com/htmx.org@2.0.4">

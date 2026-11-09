@@ -104,7 +104,7 @@ html.dark .sw-callout--risk {
 
 }
 
-/* ==== css 752de517273c (91693 bytes) ==== */
+/* ==== css 6073a2c531a5 (91673 bytes) ==== */
 @layer stream-weaver {
 /* ===========================================
    shadcn Token Layer
@@ -3488,8 +3488,8 @@ body.sw-embedded #app-container {
    Dark Theme (Cabinet Control style)
    =========================================== */
 body.sw-theme-dark {
-  --sw-font-display: 'Outfit', 'Source Sans 3', system-ui, sans-serif;
-  --sw-font-body: 'Outfit', 'Source Sans 3', system-ui, sans-serif;
+  --sw-font-display: 'Source Sans 3', system-ui, sans-serif;
+  --sw-font-body: 'Source Sans 3', system-ui, sans-serif;
   --sw-font-family: var(--sw-font-body);
   --sw-font-mono: 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
   --sw-font-size-base: 15px;
@@ -4838,7 +4838,7 @@ code {
     }
   }
 
-/* ==== css 803bce1b36cf (102136 bytes) ==== */
+/* ==== css 284cd8cfb380 (102116 bytes) ==== */
 /* ===========================================
    shadcn Token Layer
    Bridge: tokens fall back to --sw-* vars,
@@ -8221,8 +8221,8 @@ body.sw-embedded #app-container {
    Dark Theme (Cabinet Control style)
    =========================================== */
 body.sw-theme-dark {
-  --sw-font-display: 'Outfit', 'Source Sans 3', system-ui, sans-serif;
-  --sw-font-body: 'Outfit', 'Source Sans 3', system-ui, sans-serif;
+  --sw-font-display: 'Source Sans 3', system-ui, sans-serif;
+  --sw-font-body: 'Source Sans 3', system-ui, sans-serif;
   --sw-font-family: var(--sw-font-body);
   --sw-font-mono: 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
   --sw-font-size-base: 15px;
@@ -8759,7 +8759,7 @@ html.dark .sw-table--alternating .sw-table__row--alt {
   border: 1px solid var(--sw-color-border, #e0e0e0);
 }
 
-/* ==== css a0f2c345cf68 (91668 bytes) ==== */
+/* ==== css 424b68ee886c (91648 bytes) ==== */
 /* ===========================================
    shadcn Token Layer
    Bridge: tokens fall back to --sw-* vars,
@@ -12142,8 +12142,8 @@ body.sw-embedded #app-container {
    Dark Theme (Cabinet Control style)
    =========================================== */
 body.sw-theme-dark {
-  --sw-font-display: 'Outfit', 'Source Sans 3', system-ui, sans-serif;
-  --sw-font-body: 'Outfit', 'Source Sans 3', system-ui, sans-serif;
+  --sw-font-display: 'Source Sans 3', system-ui, sans-serif;
+  --sw-font-body: 'Source Sans 3', system-ui, sans-serif;
   --sw-font-family: var(--sw-font-body);
   --sw-font-mono: 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
   --sw-font-size-base: 15px;
