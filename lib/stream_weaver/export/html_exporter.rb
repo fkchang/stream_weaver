@@ -164,6 +164,7 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
         @app.rebuild_with_state(@state, deferred_target: App::ALL_DEFERRED) if @app.block
 
         body_html = render_body
+        @page = StreamWeaver::PageShell.resolve(@app, theme: @app.theme)
         body_html = inline_images_in_html(body_html) if inline_images
         inline_mermaid = offline && components_include?(Components::Mermaid)
 
@@ -302,17 +303,13 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
           parts << "<style>#{StreamWeaver::CSS.layer_wrap(theme.to_css)}</style>"
         end
 
-        parts << StreamWeaver::PageShell.user_css_html(inline_stylesheets: @app.inline_stylesheets)
+        parts << StreamWeaver::PageShell.head(@page).user_css
         parts.join("\n")
       end
 
       def custom_theme
         theme = @app.theme && StreamWeaver.get_theme(@app.theme)
         theme unless theme&.built_in?
-      end
-
-      def body_class
-        "sw-theme-#{@app.theme} sw-layout-#{@app.layout}"
       end
 
       # Collect CDN script URLs based on what's actually in the rendered
@@ -457,7 +454,7 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
             #{script_tags}
           #{css_html}
           </head>
-          <body class="#{body_class}">
+          <body class="#{@page.body_class}">
           <!-- #app-container is a DIRECT body child, as the canvas and reader
                render it: theme/sidebar_toc selectors use the ">" combinator
                against body[class*="sw-layout-"] > #app-container. -->

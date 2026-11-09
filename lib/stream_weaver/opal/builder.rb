@@ -3,6 +3,7 @@ require "fileutils"
 require_relative "shell"
 require_relative "../css"
 require_relative "../theme"
+require_relative "../page_shell"
 
 module StreamWeaver
   module Opal
@@ -130,9 +131,19 @@ module StreamWeaver
             replay_js: local_asset("sw-replay.js"),
             theme_css: File.exist?(output_path("sw-theme.css")) ? "sw-theme.css" : nil,
             google_fonts_url: google_fonts_url_for_build,
-            body_theme: @theme ? "sw-theme-default sw-theme-#{@theme}" : "sw-theme-default",
+            body_theme: page.body_class,
             dark_mode_script: StreamWeaver::Theme::AutoMode.inline_script
           ))
+      end
+
+      # The build-time page. An Opal build has no App (it receives a file name)
+      # and no layout class, and reads --theme as a theme name; its stylesheet
+      # scopes the base variables to body.sw-theme-default, so that class
+      # always comes first.
+      def page
+        @page ||= StreamWeaver::PageShell::Page.new(
+          theme: @theme, layout: nil, assets: StreamWeaver::PageShell::Assets.of(body_classes: %w[sw-theme-default])
+        ) + StreamWeaver::PageShell.resolve(nil, theme: @theme, layout: nil).assets
       end
 
       def google_fonts_url_for_build

@@ -1,5 +1,5 @@
 # body class
-sw-theme-dark sw-layout-fluid sw-reader
+sw-layout-fluid sw-theme-dark sw-reader
 # head (one tag per line; <style> and inline <script> bodies are replaced by digests)
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

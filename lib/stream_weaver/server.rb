@@ -497,7 +497,7 @@ module StreamWeaver
           status 200
           content_type 'text/plain'
           # Return the new body classes for Alpine.js to update
-          "sw-theme-#{theme} sw-layout-#{settings.streamlit_app.layout}"
+          StreamWeaver::PageShell.resolve(settings.streamlit_app, theme: theme).body_class
         else
           status 400
           content_type 'text/plain'

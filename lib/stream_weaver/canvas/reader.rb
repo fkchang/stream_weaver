@@ -779,6 +779,19 @@ module StreamWeaver
         render_doc(dsl).html
       end
 
+      # The reader shell's page for `doc`: its theme, layout and inline CSS,
+      # plus sw-reader. Browse with no file open yet has no doc, so the
+      # reader's own defaults stand in.
+      #
+      # @param doc [Doc, nil]
+      # @return [StreamWeaver::PageShell::Page]
+      def self.page_for(doc)
+        theme  = doc ? doc.theme : fallback_theme
+        layout = doc ? doc.layout : fallback_layout
+        StreamWeaver::PageShell.resolve(nil, theme: theme, layout: layout) +
+          StreamWeaver::PageShell::Assets.of(user_css: doc ? doc.inline_stylesheets : [], body_classes: %w[sw-reader])
+      end
+
       # Neutral, not red -- this isn't a bug in the doc or in canvas-read,
       # it's just the wrong kind of file (stream_weaver-gnj8). Red/"error"
       # styling here would read as "something's broken," which is the

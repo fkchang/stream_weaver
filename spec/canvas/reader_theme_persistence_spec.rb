@@ -111,17 +111,17 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'theme reaches the rendered page' d
 
   it 'uses the doc-declared theme/layout in the body class' do
     get '/?file=1'
-    expect(last_response.body).to include('<body class="sw-theme-doc sw-layout-wide sw-reader">')
+    expect(last_response.body).to include('<body class="sw-layout-wide sw-theme-doc sw-reader">')
   end
 
   it 'uses the default theme/layout for a doc that declares none' do
     get '/?file=0'
-    expect(last_response.body).to include('<body class="sw-theme-default sw-layout-fluid sw-reader">')
+    expect(last_response.body).to include('<body class="sw-layout-fluid sw-theme-default sw-reader">')
   end
 
   it 'mirrors the body class onto #app-container so afterSwap can restore it' do
     get '/?file=1'
     expect(last_response.body)
-      .to include('data-sw-body-class="sw-theme-doc sw-layout-wide sw-reader"')
+      .to include('data-sw-body-class="sw-layout-wide sw-theme-doc sw-reader"')
   end
 end

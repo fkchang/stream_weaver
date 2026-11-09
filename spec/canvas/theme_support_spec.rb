@@ -70,7 +70,7 @@ RSpec.describe 'Canvas theme support' do
       StreamWeaver::Canvas::BridgeServer.bridge.create_session('doc-session', theme: :doc)
       get '/canvas/doc-session'
       expect(last_response.status).to eq(200)
-      expect(last_response.body).to include('class="sw-theme-doc sw-layout-fluid"')
+      expect(last_response.body).to include('class="sw-layout-fluid sw-theme-doc"')
       expect(last_response.body).to include('body.sw-theme-doc')
       expect(last_response.body).to include('data-sw-theme')
     end
@@ -79,7 +79,7 @@ RSpec.describe 'Canvas theme support' do
       StreamWeaver::Canvas::BridgeServer.bridge.create_session('default-session')
       get '/canvas/default-session'
       expect(last_response.status).to eq(200)
-      expect(last_response.body).to include('class="sw-theme-default sw-layout-fluid"')
+      expect(last_response.body).to include('class="sw-layout-fluid sw-theme-default"')
     end
 
     it 'pins cascade layer order and wraps SW_STYLES in the framework layer (stream_weaver-oeo)' do

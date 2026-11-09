@@ -48,7 +48,7 @@ RSpec.describe StreamWeaver::Export::HtmlExporter do
       expect(html).to include("<html")
       expect(html).to include("</html>")
       expect(html).to include("<head>")
-      expect(html).to include('<body class="sw-theme-default sw-layout-default">')
+      expect(html).to include('<body class="sw-layout-default sw-theme-default">')
     end
 
     it "wraps the body content in #app-container, as the canvas and reader do" do
@@ -63,7 +63,7 @@ RSpec.describe StreamWeaver::Export::HtmlExporter do
         text "hi"
       end
       html = described_class.new(app).to_html
-      expect(html).to include('<body class="sw-theme-doc sw-layout-wide">')
+      expect(html).to include('<body class="sw-layout-wide sw-theme-doc">')
     end
 
     it "emits the doc's use_stylesheet CSS unlayered, after the framework CSS" do

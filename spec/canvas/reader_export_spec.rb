@@ -61,14 +61,14 @@ RSpec.describe StreamWeaver::Canvas::Reader, 'HTML export' do
     it 'carries the doc theme/layout onto the exported body' do
       get "/export?file=#{doc_index}"
 
-      expect(last_response.body).to include('<body class="sw-theme-default sw-layout-fluid">')
+      expect(last_response.body).to include('<body class="sw-layout-fluid sw-theme-default">')
     end
 
     it 'honours canvas-read --theme/--layout fallbacks so the file matches the screen' do
       described_class.configure_defaults!(theme: 'doc', layout: 'wide')
       get "/export?file=#{doc_index}"
 
-      expect(last_response.body).to include('<body class="sw-theme-doc sw-layout-wide">')
+      expect(last_response.body).to include('<body class="sw-layout-wide sw-theme-doc">')
     end
 
     it '404s on an out-of-range index instead of wrapping to the last file' do

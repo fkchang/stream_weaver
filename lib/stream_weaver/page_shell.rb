@@ -590,6 +590,11 @@ module StreamWeaver
     # A resolved page: the theme and layout in effect and everything they,
     # the app and its components need.
     Page = Data.define(:theme, :layout, :assets) do
+      # A host's own additions (its user CSS, its extra body classes) after the page's.
+      def +(more)
+        with(assets: assets + more)
+      end
+
       def body_class
         assets.body_classes.join(" ")
       end

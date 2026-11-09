@@ -346,6 +346,17 @@ module StreamWeaver
       end
 
       def render_canvas_page(session_name, session)
+        # The pushed DSL's App is gone by now (session.html was rendered at
+        # push time), so the page resolves from the session's theme and
+        # layout, plus the CSS its `use_stylesheet` calls carried
+        # (stream_weaver-9uk): canvas has no route to serve a referenced
+        # asset file across processes, so the bridge inlines the raw content
+        # it was handed. session.stylesheets is already deduped per push.
+        page = StreamWeaver::PageShell.resolve(nil, theme: session.theme, layout: session.layout) +
+               StreamWeaver::PageShell::Assets.of(user_css: session.stylesheets,
+                                                  body_classes: session.annotate? ? %w[sw-annotate-on] : [])
+        page_head = StreamWeaver::PageShell.head(page)
+
         # Create adapter in websocket mode
         adapter = StreamWeaver::Adapter::AlpineJS.new(
           url_prefix: "/canvas/#{session_name}",
@@ -386,7 +397,7 @@ module StreamWeaver
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>StreamWeaver Canvas: #{session_name}</title>
             #{StreamWeaver::PageShell.framework_css_html}
-            #{inline_stylesheets_html(session)}
+            #{page_head.user_css}
             <script>#{StreamWeaver::Theme::AutoMode.inline_script}</script>
             #{adapter.cdn_scripts.join("\n")}
             <!-- Chart.js for charts -->
@@ -408,7 +419,7 @@ module StreamWeaver
             <!-- Kick off CDN fetch immediately so mermaid is ready before first push arrives -->
             <script>if (window.swMermaidPreload) window.swMermaidPreload();</script>
           </head>
-          <body class="sw-theme-#{session.theme} sw-layout-#{session.layout}#{' sw-annotate-on' if session.annotate?}">
+          <body class="#{page.body_class}">
             <div id="app-container" #{container_attrs(session.state, adapter)}>
               #{initial_content}
             </div>
@@ -425,16 +436,6 @@ module StreamWeaver
           </body>
           </html>
         HTML
-      end
-
-      # CSS carried by the pushed DSL's `use_stylesheet` calls (stream_weaver-9uk)
-      # -- canvas has no route to serve a referenced asset file across
-      # processes, so the bridge inlines the raw content it was handed
-      # instead. `session.stylesheets` is already deduped/replaced per push
-      # (Session#set_stylesheets), so no further digest bookkeeping is
-      # needed here to avoid stacking duplicate tags across re-pushes.
-      def inline_stylesheets_html(session)
-        StreamWeaver::PageShell.user_css_html(inline_stylesheets: session.stylesheets)
       end
 
       # Floating "Save as doc" button + Alpine.js modal that POSTs the

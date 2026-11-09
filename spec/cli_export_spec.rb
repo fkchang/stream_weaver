@@ -43,7 +43,7 @@ RSpec.describe StreamWeaver::CLI, '.export_html' do
     expect { described_class.export_html([doc, '-o', out]) }
       .to output(/Exported/).to_stdout
 
-    expect(File.read(out)).to include('<body class="sw-theme-default sw-layout-fluid">')
+    expect(File.read(out)).to include('<body class="sw-layout-fluid sw-theme-default">')
   end
 
   it 'accepts --output=PATH as well as -o PATH' do

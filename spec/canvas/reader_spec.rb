@@ -443,7 +443,7 @@ RSpec.describe StreamWeaver::Canvas::Reader, type: :request do
 
     it 'gives <body> the doc theme + layout classes' do
       get '/?file=0'
-      expect(last_response.body).to match(/<body class="sw-theme-\w+ sw-layout-\w+ sw-reader"/)
+      expect(last_response.body).to match(/<body class="sw-layout-\w+ sw-theme-\w+ sw-reader"/)
     end
 
     it 'drops the old #main/#content two-pane wrapper entirely' do
@@ -457,7 +457,7 @@ RSpec.describe StreamWeaver::Canvas::Reader, type: :request do
     # afterSwap handler reads the incoming doc's classes off this attribute.
     it 'carries the body classes on #app-container for the afterSwap handler' do
       get '/?file=0'
-      expect(last_response.body).to match(/<div id="app-container" data-sw-body-class="sw-theme-\w+ sw-layout-\w+ sw-reader"/)
+      expect(last_response.body).to match(/<div id="app-container" data-sw-body-class="sw-layout-\w+ sw-theme-\w+ sw-reader"/)
     end
   end
 

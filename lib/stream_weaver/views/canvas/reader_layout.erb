@@ -1,15 +1,10 @@
 <%
   doc            = @doc
-  # Browse (stream_weaver-rdh) can land here with no file open yet
-  # (GET /browse before any file is clicked) -- doc.theme/layout have
-  # nothing to fall back to in that case, so the body class falls back to
-  # the reader's own defaults instead of reading through a nil doc.
-  body_class     = if doc
-                     "sw-theme-#{doc.theme} sw-layout-#{doc.layout} sw-reader"
-                   else
-                     "sw-theme-#{StreamWeaver::Canvas::Reader.fallback_theme} " \
-                     "sw-layout-#{StreamWeaver::Canvas::Reader.fallback_layout} sw-reader"
-                   end
+  # Browse (stream_weaver-rdh) can land here with no file open yet; page_for
+  # then falls back to the reader's own theme and layout.
+  page           = StreamWeaver::Canvas::Reader.page_for(doc)
+  page_head      = StreamWeaver::PageShell.head(page)
+  body_class     = page.body_class
   browse_mode    = !!@browse_mode
   # docs_groups/history_groups are meaningless in Browse mode (its sidebar
   # replaces them entirely) -- skipping them isn't just wasted work, it
@@ -59,7 +54,7 @@
 
   <%# The doc's own use_stylesheet CSS -- unlayered, so it wins everything.
       Nothing to inline with no doc open yet (a bare Browse listing). %>
-  <%= StreamWeaver::PageShell.user_css_html(inline_stylesheets: doc ? doc.inline_stylesheets : []) %>
+  <%= page_head.user_css %>
 
   <%# Reader chrome. BOTH layered and #sw-reader-*-scoped, on purpose:
       scoping alone would let CANVAS_CSS/master_theme_css's bare h1..h6/p/a
