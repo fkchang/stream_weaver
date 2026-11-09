@@ -28,6 +28,8 @@ module StreamWeaver
     #     end
     #   end
     class IdeShell < Base
+      css Ide::CSS, layered: true
+
       attr_reader :children, :options
 
       def initialize(**options)

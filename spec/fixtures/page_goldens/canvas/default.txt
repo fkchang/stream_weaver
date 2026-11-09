@@ -36,8 +36,8 @@ tags. Without this, only a chart present in the page's very first HTML render
 <script>[script 9c072ae7f4a0, 55 bytes]</script>
 # body <link>, <script> and <style> tags, in document order
 <script type="application/json" id="sw-state-data">[script 4f82429f09a6, 17 bytes]</script>
+<style>[css 084aca0b782a]</style>
 <style>[css c0406a386c36]</style>
-<style>[css 30f5c5254d95]</style>
 <style>[css 7fa80ed195d5]</style>
 <script>[script ba218c0b8a49, 826 bytes]</script>
 <script>[script d6fb14de67f3, 29347 bytes]</script>

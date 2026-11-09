@@ -1765,15 +1765,14 @@ module StreamWeaver
       # Render the ide_shell grid. One Alpine flag, railOpen, drives the
       # off-canvas right rail below the mobile breakpoint: the nav toggle
       # opens it and focus moves into the rail; the backdrop and Escape
-      # close it and focus returns to the toggle. Adds the shared ide
-      # stylesheet for every ide_* region inside it.
+      # close it and focus returns to the toggle. The shared ide stylesheet
+      # is IdeShell's css macro (components/ide/styles.rb).
       #
       # @param view [Phlex::HTML] The Phlex view instance
       # @param component [Components::IdeShell]
       # @param state [Hash] Current state hash
       # @return [void] Renders to view
       def render_ide_shell(view, component, state)
-        inject_component_css(view, :ide, Components::Ide::CSS)
         has_right_rail = component.children.any? { |c| c.is_a?(Components::IdeRailRight) }
 
         attrs = framework_attrs("sw-ide-shell", component.options).merge(

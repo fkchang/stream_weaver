@@ -9,6 +9,222 @@
 #
 #   streamweaver canvas-push NAME < examples/ide/streamweaver_landing_body.rb
 
+# This page's own styles: the hero, pills, buttons, cards and transcript
+# are plain divs with these classes, no component behind them. Inside the
+# framework's cascade layer, where they sat when they shipped in the ide
+# stylesheet, so theme overrides and user CSS still outrank them.
+use_stylesheet <<~CSS
+  @layer #{StreamWeaver::CSS::LAYER_NAME} {
+    .sw-ide-h2 {
+      margin: 0 0 12px;
+      padding: 0;
+      border: 0;
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--ide-text, var(--sw-color-text));
+    }
+    .sw-ide-lead {
+      margin: 0 0 var(--sw-spacing-lg, 24px);
+      font-size: 17px;
+      line-height: 1.55;
+      color: var(--ide-muted, var(--sw-color-text-muted));
+    }
+    .sw-ide-hero__title {
+      margin: 18px 0 8px;
+      font-size: clamp(44px, 8vw, 84px);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      color: var(--ide-text, var(--sw-color-text));
+    }
+    .sw-ide-hero__tagline {
+      margin: 0 0 14px;
+      font-size: clamp(20px, 2.6vw, 28px);
+      font-weight: 600;
+      line-height: 1.25;
+      color: var(--ide-text, var(--sw-color-text));
+    }
+    .sw-ide-hero__lede {
+      max-width: 620px;
+      margin: 0 0 var(--sw-spacing-lg, 24px);
+      font-size: 17px;
+      line-height: 1.6;
+      color: var(--ide-muted, var(--sw-color-text-muted));
+    }
+    .sw-ide-hero__meta {
+      margin: 22px 0 0;
+      font-family: var(--ide-font-mono, var(--sw-font-mono));
+      font-size: 12px;
+      color: var(--ide-hint, var(--sw-color-text-light));
+    }
+    .sw-ide-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--sw-spacing-sm, 8px);
+    }
+    .sw-ide-pill {
+      padding: 3px 10px;
+      border: 1px solid var(--ide-border2, var(--sw-color-border-strong));
+      border-radius: 999px;
+      font-family: var(--ide-font-mono, var(--sw-font-mono));
+      font-size: 11px;
+      color: var(--ide-muted, var(--sw-color-text-muted));
+    }
+    .sw-ide-pill p,
+    .sw-ide-card__icon p,
+    .sw-ide-transcript__label p,
+    .sw-ide-transcript__line p,
+    .sw-ide-transcript__choice p,
+    .sw-ide-transcript__cta p {
+      margin: 0;
+      color: inherit;
+    }
+    .sw-ide-h3 {
+      margin: var(--sw-spacing-lg, 24px) 0 var(--sw-spacing-sm, 8px);
+    }
+    .sw-ide-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .sw-ide-btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 11px 20px;
+      border: 1px solid var(--ide-border2, var(--sw-color-border-strong));
+      border-radius: 4px;
+      background: transparent;
+      color: var(--ide-text, var(--sw-color-text));
+      font-weight: 500;
+      text-decoration: none;
+    }
+    .sw-ide-btn:hover {
+      background: var(--ide-hover, var(--sw-color-bg-hover));
+    }
+    .sw-ide-btn--primary {
+      border-color: var(--ide-accent, var(--sw-color-primary));
+      background: var(--ide-accent, var(--sw-color-primary));
+      color: var(--ide-on-accent, #fff);
+    }
+    .sw-ide-btn--primary:hover {
+      background: var(--ide-accent-hover, var(--sw-color-primary-hover));
+    }
+    .sw-ide-btn:focus-visible {
+      outline: 2px solid var(--ide-accent, var(--sw-color-primary));
+      outline-offset: 2px;
+    }
+    .sw-ide-beat {
+      margin: 0 0 var(--sw-spacing-lg, 24px);
+    }
+    .sw-ide-beat h3 {
+      margin: 0 0 6px;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .sw-ide-beat p {
+      margin: 0;
+      line-height: 1.6;
+      color: var(--ide-muted, var(--sw-color-text-muted));
+    }
+    .sw-ide-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+      margin: 0 0 var(--sw-spacing-xl, 32px);
+    }
+    .sw-ide-card {
+      padding: var(--sw-spacing-md, 16px) 18px;
+      border: 1px solid var(--ide-border2, var(--sw-color-border-strong));
+      border-radius: 4px;
+      background: var(--ide-header, var(--sw-color-bg-card));
+    }
+    .sw-ide-card__head {
+      display: flex;
+      align-items: center;
+      gap: var(--sw-spacing-sm, 8px);
+      margin-bottom: 8px;
+    }
+    .sw-ide-card__head h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .sw-ide-card__icon {
+      font-family: var(--ide-font-mono, var(--sw-font-mono));
+      font-size: 13px;
+      color: var(--ide-accent, var(--sw-color-primary));
+    }
+    .sw-ide-card > p {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--ide-muted, var(--sw-color-text-muted));
+    }
+    .sw-ide-transcript {
+      display: grid;
+      gap: 14px;
+      margin: 0 0 var(--sw-spacing-lg, 24px);
+    }
+    .sw-ide-transcript__panel {
+      border: 1px solid var(--ide-border2, var(--sw-color-border-strong));
+      border-radius: 4px;
+      background: var(--ide-header, var(--sw-color-bg-card));
+      overflow: hidden;
+    }
+    .sw-ide-transcript__label {
+      padding: 6px 14px;
+      border-bottom: 1px solid var(--ide-border, var(--sw-color-border));
+      font-family: var(--ide-font-mono, var(--sw-font-mono));
+      font-size: 11px;
+      letter-spacing: 0.4px;
+      color: var(--ide-hint, var(--sw-color-text-light));
+    }
+    .sw-ide-transcript__body {
+      padding: 12px 14px;
+      font-family: var(--ide-font-mono, var(--sw-font-mono));
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--ide-text, var(--sw-color-text));
+    }
+    .sw-ide-transcript__line {
+      white-space: pre-wrap;
+    }
+    .sw-ide-transcript__line--out {
+      color: var(--ide-green, var(--sw-color-success));
+    }
+    .sw-ide-transcript__panel--page .sw-ide-transcript__body {
+      font-family: var(--ide-font-sans, var(--sw-font-body));
+      background: var(--ide-workspace, var(--sw-color-bg));
+    }
+    .sw-ide-transcript__panel--page h3 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+    .sw-ide-transcript__choices {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .sw-ide-transcript__choice {
+      padding: 14px;
+      border: 1px solid var(--ide-border2, var(--sw-color-border-strong));
+      border-radius: 4px;
+      background: var(--ide-header, var(--sw-color-bg-card));
+    }
+    .sw-ide-transcript__cta {
+      display: inline-block;
+      padding: 8px 16px;
+      border-radius: 4px;
+      background: var(--ide-accent, var(--sw-color-primary));
+      color: var(--ide-on-accent, #fff);
+      font-weight: 500;
+    }
+  }
+CSS
+
 dsl_sample = <<~RUBY
   require "stream_weaver"
 
