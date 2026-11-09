@@ -1,0 +1,15 @@
+# body class
+sw-theme-default sw-layout-default
+# head (one tag per line; <style> and inline <script> bodies are replaced by digests)
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StreamWeaver Export</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap">
+<style>[css 2434f41c5b7f]</style>
+<style>[css d3037a149254]</style>
+<style>[css 752de517273c]</style>
+<style>[css 9daf8e10ee84]</style>
+# body <style> blocks, in document order
+<style>[css c0406a386c36]</style>

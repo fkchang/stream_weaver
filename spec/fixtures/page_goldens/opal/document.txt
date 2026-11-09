@@ -1,0 +1,28 @@
+# body class
+sw-theme-default sw-theme-document
+# head (one tag per line; <style> and inline <script> bodies are replaced by digests)
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Page Probe</title>
+<script>[script 1fecbf6d34b7, 2232 bytes]</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap">
+<style>[css f5c8a17b00c9]</style>
+<link rel="stylesheet" href="prism-tomorrow.min.css">
+<script src="marked.umd.js">
+</script>
+<script src="morphdom.min.js">
+</script>
+<script src="prism.min.js">
+</script>
+<script src="mermaid.min.js">
+</script>
+<script src="sw-mermaid-zoom.js">
+</script>
+<script src="sw-replay.js">
+</script>
+<script src="diff.min.js">
+</script>
+# body <style> blocks, in document order
+
