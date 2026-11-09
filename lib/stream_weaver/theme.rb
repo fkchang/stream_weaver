@@ -610,6 +610,7 @@ module StreamWeaver
     #   }, base: :dashboard
     def register_theme(name, variables = {}, base: :default, label: nil, description: nil,
                        fonts: [], stylesheets: [], dark: {}, css: nil)
+      warn_replacing_built_in_theme(name.to_sym)
       if fonts.any?(Hash)
         fonts = Fonts.resolve(fonts, File.dirname(File.expand_path(caller_locations(1, 1).first.path)))
       end
@@ -629,6 +630,20 @@ module StreamWeaver
     private def register_built_in_theme(name, label:, description:, fonts: [], stylesheets: [])
       @themes[name.to_sym] = Theme.new(name, label: label, description: description,
                                              fonts: fonts, stylesheets: stylesheets, built_in: true)
+    end
+
+    # Registering a built-in's name replaces it with a custom theme: its page
+    # wears the base class plus its own (sw-theme-default sw-theme-default),
+    # loses the hand-tuned CSS and drops out of built_in_themes. Say so once.
+    private def warn_replacing_built_in_theme(name)
+      return unless get_theme(name)&.built_in?
+
+      @warned_built_in_names ||= []
+      return if @warned_built_in_names.include?(name)
+
+      @warned_built_in_names << name
+      warn "StreamWeaver: register_theme #{name.inspect} replaces the built-in #{name.inspect} theme " \
+           "with a custom one; pick another name and base: #{name.inspect} to build on it."
     end
 
     # Get a theme by name (custom or built-in)
