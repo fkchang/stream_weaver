@@ -880,7 +880,7 @@ Canvas: a pushed body's `use_theme :ide` themes the open canvas live, so `canvas
 
 A page is described once (`PageShell.resolve`); every host (standalone, canvas, reader, export, Opal) builds its head and body class from that. Full guide: `docs/theming-hooks.md`.
 
-**Add a theme** with `register_theme(name, tokens = {}, dark: {}, fonts: [], stylesheets: [], css: nil, label: nil, base: :default)`. `fonts:` takes Google entries or `{ family:, src: }` (self-hosted; a relative `src` resolves against the calling file). The page wears `sw-theme-<base>` and `sw-theme-<name>`.
+**Add a theme** with `register_theme(name, tokens = {}, dark: {}, fonts: [], stylesheets: [], css: nil, label: nil, description: nil, base: :default)`. `fonts:` takes Google entries or `{ family:, src: }` (self-hosted; a relative `src` resolves against the calling file). The page wears `sw-theme-<base>` and `sw-theme-<name>`.
 
 ```ruby
 StreamWeaver.register_theme :harbor,
@@ -892,7 +892,7 @@ StreamWeaver.register_theme :harbor,
 StreamWeaver::App.new("Harbor", theme: :harbor) { header2 "Hello" }
 ```
 
-**Override tokens** from any DSL body with `theme_tokens(dark: {}, **tokens)`; `App.new(theme_overrides: {...})` is the same call. Token names are the keys of `Theme::VARIABLE_SCHEMA` (`color_primary`, `color_bg`, `color_text`, `font_body`, `spacing_md`, `radius_md`, `shadow_md`, ...); an unknown name warns. Accent tokens (primary, accent, type, spacing) apply in both modes; surface tokens (`Theme::SURFACE_TOKENS`: `color_text*`, `color_bg*`, `color_border*`, `shadow_*`) apply in light mode only unless `dark:` gives them a value. Not rendered in an Opal build (it warns once).
+**Override tokens** from any DSL body with `theme_tokens(dark: {}, **tokens)`; `App.new(theme_overrides: {...})` is the same call. Token names are the keys of `Theme::VARIABLE_SCHEMA` (`color_primary`, `color_bg`, `color_text`, `font_body`, `spacing_md`, `radius_md`, `shadow_md`, ...); an unknown name warns. Accent tokens (primary, accent, type, spacing) apply in both modes; surface tokens (`Theme::SURFACE_TOKENS`: `color_text*`, `color_bg*`, `color_border*`, `shadow_*`) apply in light mode only unless `dark:` gives them a value. `dark:` emits under `html.dark` and `html[data-sw-theme="dark"]`. Not rendered in an Opal build (it warns once).
 
 ```ruby
 theme_tokens color_primary: "#a21caf", dark: { color_bg: "#120712" }
@@ -900,9 +900,9 @@ theme_tokens color_primary: "#a21caf", dark: { color_bg: "#120712" }
 
 **Canvas pushes apply live, no reload**: a pushed `use_theme`, `theme_tokens`, theme fonts, theme and component CSS and stylesheets show on the open canvas (the session theme is only the fallback). Push CSS (`use_stylesheet`, `theme_tokens`) is replaced as a group on every push; head asset tags (fonts, stylesheets, component CSS) are append-only, so a font link from an earlier theme stays until reload. A push that fails to evaluate changes nothing and the CLI says `Push rejected: <name> still shows its previous page`.
 
-**Component assets**: class macros on a `Components::Base` subclass reach every host: `css "...", layered: false` (`layered: true` puts it in `@layer stream-weaver`, for framework components), `css_path`, `js_path`, `font family:, src:`. Relative paths resolve against the declaring file.
+**Component assets**: class macros on a `Components::Base` subclass reach every host: `css "..."` (unlayered; the optional `layered: true` puts it in `@layer stream-weaver`, for framework components), `css_path`, `js_path`, `font family:, src:`. Relative paths resolve against the declaring file.
 
-**Extension points**: `Assets` (`Data` of `fonts, stylesheets, framework_css, user_css, scripts, body_classes`; `+` merges and dedups), `PageShell.resolve(app, theme:)` returns a `Page` (`assets`, `body_class`), `PageShell.head(page, delivery)` returns a `Head` (`Head#to_s` is the whole asset part of a head), and `Delivery::Served` (a `/sw-asset` URL), `Delivery::Inline` (embedded, export), `Delivery::Copied.new(root)` (copied beside the page, Opal) answer `ref(path, kind)` for `:stylesheet`, `:script`, `:font`.
+**Extension points**: `Assets` (`Data` of `fonts, stylesheets, framework_css, user_css, scripts, body_classes`; `+` merges and dedups), `PageShell.resolve(app, theme:)` returns a `Page` (`theme`, `layout`, `assets`, `body_class`; call it after `app.generate` has rendered the body, or tokens and component assets are missing), `PageShell.head(page, delivery)` returns a `Head` that renders a Page's assets (`Head#to_s` for export and the reader, `Head#asset_tags` for the live canvas, per-bucket methods for standalone and Opal), a component is used by `StreamWeaver.register_component(Klass, dsl: :name)` and then `name` in a body, and `Delivery::Served` (a `/sw-asset` URL), `Delivery::Inline` (embedded, export), `Delivery::Copied.new(root)` (copied beside the page, Opal) answer `ref(path, kind)` for `:stylesheet`, `:script`, `:font`.
 
 | To add | Touch |
 |---|---|

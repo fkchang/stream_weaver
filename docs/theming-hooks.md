@@ -380,6 +380,7 @@ StreamWeaver::App.new("Harbor", theme: :harbor) { header2 "Hello" }
 | `stylesheets:` | Stylesheet URLs the head loads |
 | `css:` | Extra CSS emitted after the generated token CSS |
 | `label:` | Name shown in the theme switcher |
+| `description:` | Optional short text for the theme (default "Custom theme") |
 | `base:` | Built-in theme whose look it inherits (default `:default`) |
 
 The generated light and dark CSS lives under `body.sw-theme-harbor`, and
@@ -400,7 +401,9 @@ theme_tokens color_primary: "#a21caf", dark: { color_bg: "#120712" }
 `theme_tokens` works inside any DSL body (a standalone app, a canvas push,
 a `canvas-read` doc, an export). `App.new(..., theme_overrides: { ... })` is
 the same call. It emits a layered `body[class*="sw-theme-"]` block, so it
-applies over whatever theme the page wears.
+applies over whatever theme the page wears. `dark:` values emit under the
+same two dark selectors as a registered theme's (`html.dark` and
+`html[data-sw-theme="dark"]`).
 
 Token names (`Theme::VARIABLE_SCHEMA`; an unknown name warns):
 
@@ -459,12 +462,18 @@ class Panel < StreamWeaver::Components::Base
     view.div(class: "harbor-panel") { view.plain "hi" }
   end
 end
+StreamWeaver.register_component(Panel, dsl: :harbor_panel)
+
+StreamWeaver::App.new("Harbor") { harbor_panel }   # or `harbor_panel` in a canvas push
 ```
 
-Relative `css_path`, `js_path` and `font` sources resolve against the file
-that declares the class. Each class contributes once per page, however many
-instances render. `layered: true` is for framework components; an app's
-own component CSS stays unlayered so it wins.
+`register_component` defines the DSL method (`harbor_panel`), which a body
+then calls like any component. A relative `css_path`, `js_path` or `font`
+`src` resolves against the file that declares the class (here, the
+directory of the file holding `Panel`); an absolute path works too. Each
+class contributes once per page, however many instances render. `layered:`
+is optional: the default `false` is unlayered, so an app's component CSS
+wins over the framework; `layered: true` is for framework components.
 
 ### The extension points: `Assets`, `PageShell`, `Delivery`
 
@@ -474,18 +483,28 @@ own component CSS stays unlayered so it wins.
   CSS is layered, user CSS is not. `+` concatenates bucket by bucket and
   drops repeats, so the framework, theme, layout, components and app each
   contribute one and are merged. `Assets.of(framework_css: [...])` builds one.
-- **`PageShell.resolve(app, theme:, ...)`** returns a `PageShell::Page`
-  (`theme`, `layout`, merged `assets`, and `body_class`). Call it once per
-  render, after the body has rendered, because components register CSS
-  while they render. `app` is `nil` for a host with no App (the canvas, an
-  Opal build). `PageShell.fragment_page` is the same for a DSL fragment
-  whose App is gone.
-- **`PageShell.head(page, delivery)`** returns a `Head`. `Head#to_s` is the
-  whole asset part of a head in one fixed order (layer pin, fonts, framework
-  CSS, theme and component CSS, stylesheets, user CSS, scripts), and is
-  what the canvas, the reader and export emit. The standalone view still
-  places the per-bucket methods (`fonts`, `stylesheets`, `framework_css`,
-  `user_css`, `scripts`) itself.
+- **`PageShell.resolve(app, theme:, ...)`** returns a `PageShell::Page`:
+  the `theme` and `layout` in effect, the merged `assets`, and
+  `body_class` (the body's class string, computed in this one place). It
+  must run *after* the body has rendered, because components register their
+  CSS while they render and the app's `theme_tokens` run in the body. `app`
+  is `nil` for a host with no App (a canvas page, an Opal build).
+  `PageShell.fragment_page` is the same for a DSL fragment whose App is gone.
+- **`PageShell.head(page, delivery)`** returns a `Head`, which renders a
+  `Page`'s assets as tags through a `Delivery`. Which methods a host calls:
+  - `Head#to_s` is the whole asset part of a head in one fixed order (layer
+    pin, fonts, framework CSS, theme and component CSS, stylesheets, user
+    CSS, scripts). Export and the reader call it (the reader passes
+    `extra_layers:` for its chrome).
+  - `Head#asset_tags` returns the page's own tags (font tags, the layered
+    theme and component CSS block, stylesheet tags) as an array of strings,
+    without scripts or user CSS. The live canvas keys each by a digest and
+    appends the ones the open page lacks after a push; scripts are left out
+    because one appended later would not run in page order, and user CSS is
+    left out because the canvas replaces it as a group.
+  - The per-bucket methods (`fonts`, `stylesheets`, `framework_css`,
+    `user_css`, `scripts`) let a host place each piece itself. The standalone
+    view and the Opal builder do.
 - **`Delivery`** answers one question per host, `ref(path, kind)`, which
   returns the markup that loads a local file as `:stylesheet`, `:script` or
   `:font`. `Delivery::Served` gives a `/sw-asset` URL (standalone, canvas,
@@ -494,10 +513,18 @@ own component CSS stays unlayered so it wins.
   relative href (Opal). A remote URL passes through unchanged.
 
 ```ruby
+app = StreamWeaver::App.new("Harbor", theme: :harbor) do
+  theme_tokens color_primary: "#a21caf"
+  harbor_panel
+end
+app.generate    # renders the body: components and tokens register while it renders
 page = StreamWeaver::PageShell.resolve(app, theme: :harbor)
 puts page.body_class                                           # sw-layout-default sw-theme-document sw-theme-harbor
 puts StreamWeaver::PageShell.head(page, StreamWeaver::Delivery::Served.new)
 ```
+
+Resolve before `app.generate` and the page is missing the app's token CSS and
+its components' assets: both are collected during the render.
 
 ### One place per axis
 
@@ -529,20 +556,55 @@ git diff spec/fixtures/page_goldens                                # name each d
 ```
 
 - **A new host**: add its name to `PageGoldens::HOSTS` and a
-  `render_<host>(theme)` method; if its body is filled in the browser, add it
-  to `BROWSER_FILLED`.
-- **A new probe**: add a constant for it (as `VARIANT_DSL`, `OVERRIDES` and
-  `REGISTERED_THEME` do), render it in `render_all`, and add an `it` for it
-  in the spec.
-- **Exclusions**: `PageGoldens::EXCLUSIONS` lists, with a reason, each part
-  that cannot be rendered without a browser or a full compile (the Opal
+  `render_<host>(theme)` method returning the page's HTML; if its body is
+  filled in the browser, add it to `BROWSER_FILLED`.
+- **Exclusions**: `PageGoldens::EXCLUSIONS` is a Hash of `'part of a host' =>
+  'why it cannot be rendered without a browser or a full compile'` (the Opal
   `app.js`, runtime theme switching, the `/live` body, the extension head).
-  A browser-filled host must name one.
+  A browser-filled host must name one, and the spec checks that the reason
+  is a sentence.
 - **Size limit**: CSS is stored once in `css_blocks.css`, referenced by digest.
   The git hygiene hook (`bin/check_git_hygiene`) blocks a staged file over
   500,000 bytes, and `css_blocks.css` is already close to it. A new probe
   or host adds a CSS block per theme and can push it over; keep new probes
   lean, as `REGISTERED_DSL` does, by leaving out the `ide_shell`.
+
+#### How the helper is built
+
+- `PageGoldens.render_all` takes no arguments and returns a
+  `Hash{String => String}`: a fixture path relative to
+  `spec/fixtures/page_goldens/` (`"export/default.txt"`) to the text recorded
+  for it. It always includes `"css_blocks.css"`. The spec renders it once in
+  `before(:all)`, as `@fresh`.
+- A probe constant holds a String (a DSL body, as `PROBE_DSL`, `VARIANT_DSL`,
+  `REGISTERED_DSL`) or a Hash (App options or tokens, as `VARIANT_APP_OPTIONS`,
+  `OVERRIDES`); hosts are Arrays of Symbols.
+- `record(html)` reduces a page to its body class, head tags and body asset
+  tags, and stores each CSS block once in `css_blocks.css` by digest.
+- An example compares a render with its fixture like this (from the spec):
+  `expect(@fresh.fetch("export/tokens.txt")).to eq(golden("export/tokens.txt"))`,
+  where `golden(path)` reads the file and raises `missing golden ...` if there is none.
+- Fixtures are named `<host>/<name>.txt` and are written only by
+  `UPDATE_GOLDENS=1`, which deletes the directory and rewrites it from `render_all`.
+
+#### Add a new probe in 5 steps
+
+Followed end to end (and reverted) on a throwaway probe, this recipe turned a
+missing fixture into a green spec:
+
+1. Add the probe's inputs as constants in `spec/support/page_goldens.rb`, e.g.
+   `TOKENS_HOSTS = %i[export].freeze` and
+   `TOKENS_DSL = "theme_tokens color_primary: '#a21caf'\nheader1 'Tokens probe'\n"`.
+2. Add one render method per host, returning `record(html)`:
+   `def render_tokens_export; record(StreamWeaver::Export::HtmlExporter.from_dsl(TOKENS_DSL, theme: :default).to_html); end`.
+3. In `render_all`, add
+   `TOKENS_HOSTS.each { |host| pages["#{host}/tokens.txt"] = send("render_tokens_#{host}") }`.
+4. In `spec/page_goldens_spec.rb`, add an `it` per host comparing
+   `@fresh.fetch(path)` with `golden(path)`.
+5. Run `UPDATE_GOLDENS=1 bundle exec rspec spec/page_goldens_spec.rb`, read
+   `git diff spec/fixtures/page_goldens` (a new file, plus any growth in
+   `css_blocks.css`; mind the size limit), run the spec again without the
+   variable, and commit the constants, the method, the `it` and the fixtures together.
 
 ### Known follow-ups
 

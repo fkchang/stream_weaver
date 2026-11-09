@@ -10,7 +10,7 @@ change to the framework's CSS model, but it found gaps worth knowing about.
   the whole viewport.
 - **The cascade layer.** Framework CSS sits in `@layer stream-weaver`, so
   unlayered component CSS wins without specificity fights.
-- **`register_theme` and `BUILT_IN_THEMES`.** `:ide` is an ordinary theme with a
+- **`register_theme`.** `:ide` is an ordinary theme with a
   light and a dark palette; nothing special-cased.
 - **Theme-declared fonts.** The theme names Geist and JetBrains Mono and the
   page loads them on every host.
@@ -27,17 +27,22 @@ change to the framework's CSS model, but it found gaps worth knowing about.
 | Self-hosted fonts were not emitted (`fonts:` took Google Fonts only) | Fixed: a theme or a component's `font` macro declares `{ family:, src: }` and every host emits the `@font-face`, the file served, inlined or copied by its Delivery | disc-254 |
 | `css_path` links reached neither the canvas nor Opal builds | Fixed: each host's Delivery serves (standalone, canvas, reader), inlines (export) or copies (Opal) `css_path` and `js_path` files, so a component stylesheet no longer has to be a string constant | disc-255 |
 | No DSL token API | Fixed: `theme_tokens color_primary: "#a21caf"` in any DSL body (or `theme_overrides:`), on every host except Opal; `register_theme` takes `dark:`, `fonts:` and `css:` | disc-258 |
-| Exclusive `register_layout` is skipped on the canvas path (`app.rb`) | `ide_shell` had to be a container component, not a layout; related to disc-127 | not filed (mark limit), see disc-127 |
+| Exclusive `register_layout` is skipped on the canvas path (`app.rb`) | `ide_shell` had to be a container component, not a layout; see disc-259 | disc-259 (open) |
 | Exports and Opal builds did not load theme-declared fonts | Fixed: every host's head comes from `PageShell.resolve`, so an exported or Opal `:ide` page loads Geist and JetBrains Mono | disc-250 |
 | The `:doc` dark selector keys only on `data-sw-theme`, not `html.dark` | Fixed: `:doc` dark mode follows either signal | disc-251 |
-| The file tree is flat for screen readers (no nested structure) | The right-rail tree does not announce depth | disc-252 |
+| The file tree is flat for screen readers (no nested structure) | The right-rail tree does not announce depth; still open | disc-252 (open) |
+| Landing-page CSS shipped in the framework ide stylesheet | Fixed: the landing-page rules moved out of `Components::Ide::CSS` into the example | disc-256 |
+| `CSS.full_stylesheet` regex-extracted its CSS from `views.rb` and degraded to a stub | Fixed: `CSS.full_stylesheet` asks `master_theme_css` directly, and only a missing view layer falls back | disc-194 |
+| Export rejects a DSL whose code sample mentions `run!` | Open, found while checking this work | disc-262 (open) |
+| Code blocks are highlighted live on a canvas push but not after a reload | Open | disc-263 (open) |
 | The `:ide` theme did not declare `--sw-spacing-*` | Tab triggers computed to zero padding; fixed in the theme | fixed |
 
 ## Verdict
 
 A bespoke, theme-quality page is a theme (tokens), one component stylesheet,
 and `sw-` hooks, which matches `docs/theming-hooks.md`. The weak spots are the
-edges that remain: the exclusive layout skipped on the canvas, and the Opal
-build, which does not render DSL tokens. Dark-mode overrides, fonts and
+edges that remain: the exclusive layout skipped on the canvas (disc-259), the
+flat file tree (disc-252), the two open canvas and export items above, and the
+Opal build, which does not render DSL tokens. Dark-mode overrides, fonts and
 component assets now reach every host through one page description
 (`PageShell.resolve`); see `docs/theming-hooks.md`.

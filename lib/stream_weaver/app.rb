@@ -1488,9 +1488,10 @@ module StreamWeaver
     # other token applies in both modes. Each render starts from
     # theme_overrides: alone, so state-dependent tokens do not pile up.
     #
-    # Limits: a canvas push broadcasts only the new HTML to open pages, so
-    # changed tokens show after a reload (as use_stylesheet does); an Opal
-    # build does not render them and warns once (OpalRuntime).
+    # Limits: a canvas push applies them live, with no reload (the push
+    # carries its resolved page); an Opal build does not render them and
+    # warns once, for theme_tokens in OpalRuntime and for theme_overrides:
+    # in opal_entry.rb.
     #
     # @example
     #   theme_tokens color_primary: '#a21caf', dark: { color_bg: '#120712' }
