@@ -1315,7 +1315,7 @@ module StreamWeaver
       # Check for DSL errors reported back from the bridge
       if response && response[:type] == 'push_error'
         $stderr.puts "DSL Error: #{response[:message]}"
-        $stderr.puts "Pushed with error to #{session_name}"
+        $stderr.puts "Push rejected: #{session_name} still shows its previous page"
         exit 1
       elsif response && response[:type] == 'error'
         $stderr.puts "Error: #{response[:message]}"

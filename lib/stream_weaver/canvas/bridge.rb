@@ -130,9 +130,11 @@ module StreamWeaver
 
         # A push that fails to evaluate changes nothing: the open page keeps
         # its content, body class and assets, and the agent gets the error.
-        result = begin
+        # SystemStackError is not a StandardError: a body that recurses
+        # without end would otherwise kill the socket thread unanswered.
+        fragment = begin
           render(dsl, session)
-        rescue ScriptError, StandardError => e
+        rescue ScriptError, StandardError, SystemStackError => e
           return { type: 'push_error', message: e.message }
         end
 
@@ -141,12 +143,8 @@ module StreamWeaver
         # source_dir are the last good push's too: saving re-skins nothing
         # (stream_weaver-9uk) and source_dir never desyncs from its DSL
         # (canvas-doc-location-and-discovery.md).
-        session.set_look(result.theme, result.layout)
-        session.set_stylesheets(result.inline_stylesheets)
-        session.set_html(result.html)
-        session.set_dsl(dsl)
-        session.set_source_dir(source_dir)
-        session.broadcast({ type: 'update', html: result.html })
+        session.publish(fragment, dsl: dsl, source_dir: source_dir)
+        session.broadcast({ type: 'update', html: fragment.html })
         session.doc_pushed!
         { type: 'push_ok' }
       end
@@ -175,14 +173,14 @@ module StreamWeaver
       end
 
       # canvas-snapshot's DSL/body source (stream_weaver-ps84): returns the
-      # session's current in-memory dsl plus the theme/layout it was created
-      # with, since the bridge only sets those at Session.new and neither
-      # can drift afterward (Session has no theme=/layout= setter).
+      # session's current in-memory dsl plus the theme/layout on the page
+      # now (the last good push's use_theme/use_layout, else the ones the
+      # session was created with).
       def handle_get_dsl(name)
         session = get_session(name)
         return { type: 'error', message: "Session not found: #{name}" } unless session
 
-        { type: 'dsl', name: name, dsl: session.dsl, theme: session.theme, layout: session.layout }
+        { type: 'dsl', name: name, dsl: session.dsl, theme: session.current_theme, layout: session.current_layout }
       end
 
       # Drain viewer comments (canvas-notes). A name drains that session; no

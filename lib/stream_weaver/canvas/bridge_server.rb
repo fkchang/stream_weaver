@@ -166,15 +166,19 @@ module StreamWeaver
         end
 
         content_type :json
-        {
+        # ?v= is the version the page already shows: its page (body class,
+        # head tags, push CSS) is sent only when this one is newer.
+        snapshot = session.snapshot(since: params[:v] && params[:v].to_i)
+        response = {
           state: session.state,
-          html: session.html,
-          version: session.html_version,
+          html: snapshot[:html],
+          version: snapshot[:version],
           toasts: session.pop_toasts,
           regions: session.regions_newer_than(region_versions_param),
-          annotate: session.annotate?,
-          page: live_page(session.page)
-        }.to_json
+          annotate: session.annotate?
+        }
+        response[:page] = live_page(snapshot[:page]) if snapshot[:page]
+        response.to_json
       end
 
       # Save the session's last-good DSL as a persistent canvas doc (Tier 2).
@@ -198,7 +202,7 @@ module StreamWeaver
         # ternary treats anything other than 'global' as :repo, which would
         # silently misroute a gist save into a file write).
         if body[:scope] == 'gist'
-          return handle_gist_save(session.dsl, doc_name, theme: session.theme, layout: session.layout)
+          return handle_gist_save(session.dsl, doc_name, theme: session.current_theme, layout: session.current_layout)
         end
 
         # The Save-as-doc toggle (stream_weaver-j3b3): 'global' always means
@@ -230,7 +234,7 @@ module StreamWeaver
         # Carry the live session's theme/layout into the saved text -- canvas-read
         # re-renders the file with no session to inherit from (stream_weaver-csf).
         dsl = StreamWeaver::Canvas::DocStore.dsl_with_metadata(
-          session.dsl, theme: session.theme, layout: session.layout
+          session.dsl, theme: session.current_theme, layout: session.current_layout
         )
 
         rescue_save_errors do
@@ -368,15 +372,18 @@ module StreamWeaver
       end
 
       def render_canvas_page(session_name, session)
-        # The last good push's page (Session#page): its theme and layout,
-        # plus the CSS its `use_stylesheet` and `theme_tokens` calls carried
-        # (stream_weaver-9uk). That push CSS is marked so the poll script
-        # can replace it on the next push (#live_page).
-        page = session.page + StreamWeaver::Assets.of(body_classes: session.annotate? ? %w[sw-annotate-on] : [])
-        live = live_page(session.page)
-        page_head = [StreamWeaver::PageShell.head(page.with(assets: page.assets.with(user_css: [])),
-                                                  StreamWeaver::Delivery::Served.new).to_s,
-                     *page.assets.user_css.map { |css| "<style data-sw-push-css>#{css}</style>" }].join("\n")
+        # The last good push's content and page, read together: its theme
+        # and layout, plus the CSS its `use_stylesheet` and `theme_tokens`
+        # calls carried (stream_weaver-9uk).
+        snapshot = session.snapshot
+        page = snapshot[:page] + StreamWeaver::Assets.of(body_classes: session.annotate? ? %w[sw-annotate-on] : [])
+        live = live_page(snapshot[:page])
+        # The page's own tags and its push CSS go last in <head>, after every
+        # fixed tag, where the poll script's swApplyPage puts them after a
+        # push: an unlayered rule then wins or loses the same way live and
+        # after a reload. The push CSS is marked so the next push replaces it.
+        page_tags = (live[:assets].map { |a| a[:html] } +
+                     live[:push_css].map { |css| "<style data-sw-push-css>#{css}</style>" }).join("\n")
 
         # Create adapter in websocket mode
         adapter = StreamWeaver::Adapter::AlpineJS.new(
@@ -385,8 +392,8 @@ module StreamWeaver
         )
 
         # If session already has HTML, show it; otherwise show waiting message
-        initial_content = if session.html
-          session.html
+        initial_content = if snapshot[:html]
+          snapshot[:html]
         else
           <<~WAITING
             <div class="sw-canvas-waiting">
@@ -417,7 +424,7 @@ module StreamWeaver
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title>StreamWeaver Canvas: #{session_name}</title>
-            #{page_head}
+            #{StreamWeaver::PageShell.framework_css_html}
             <script>#{StreamWeaver::Theme::AutoMode.inline_script}</script>
             #{adapter.cdn_scripts.join("\n")}
             <!-- Chart.js for charts -->
@@ -438,6 +445,7 @@ module StreamWeaver
             <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-replay.js'), encoding: 'UTF-8')}</script>
             <!-- Kick off CDN fetch immediately so mermaid is ready before first push arrives -->
             <script>if (window.swMermaidPreload) window.swMermaidPreload();</script>
+            #{page_tags}
           </head>
           <body class="#{page.body_class}">
             <div id="app-container" #{container_attrs(session.state, adapter)}>
@@ -451,7 +459,7 @@ module StreamWeaver
             <!-- Comment overlay: outside #app-container so the poll swap cannot remove it or an open composer -->
             <script>#{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-canvas-notes.js'), encoding: 'UTF-8')}</script>
             <script>
-              #{polling_script(session_name, session.html_version, session.regions_newer_than.transform_values { |r| r[:version] },
+              #{polling_script(session_name, snapshot[:version], session.regions_newer_than.transform_values { |r| r[:version] },
                                live[:assets].map { |a| a[:key] })}
             </script>
           </body>
@@ -571,29 +579,7 @@ module StreamWeaver
               }
             }
 
-            // Wear the pushed page: its body class (keeping annotate mode,
-            // which the page owns), the head tags it lacks, and its push CSS
-            // in place of the last push's, after the appended tags so theme
-            // tokens still follow the theme's own CSS.
-            function applyPage(page) {
-              if (!page) return;
-              const annotating = document.body.classList.contains('sw-annotate-on');
-              document.body.className = page.body_class;
-              document.body.classList.toggle('sw-annotate-on', annotating);
-              page.assets.forEach(asset => {
-                if (pageAssets.has(asset.key)) return;
-                pageAssets.add(asset.key);
-                document.head.insertAdjacentHTML('beforeend', asset.html);
-              });
-              document.querySelectorAll('style[data-sw-push-css]').forEach(el => el.remove());
-              page.push_css.forEach(css => {
-                const el = document.createElement('style');
-                el.setAttribute('data-sw-push-css', '');
-                el.textContent = css;
-                document.head.appendChild(el);
-              });
-            }
-
+            #{File.read(File.join(__dir__, '..', 'assets', 'js', 'sw-canvas-page.js'), encoding: 'UTF-8')}
             function escapeHtml(text) {
               const div = document.createElement('div');
               div.textContent = text;
@@ -602,8 +588,8 @@ module StreamWeaver
 
             async function poll() {
               try {
-                const rv = Object.keys(regionVersions).map(n => 'rv[' + encodeURIComponent(n) + ']=' + regionVersions[n]).join('&');
-                const resp = await fetch(rv ? pollBase + '?' + rv : pollBase);
+                const rv = Object.keys(regionVersions).map(n => '&rv[' + encodeURIComponent(n) + ']=' + regionVersions[n]).join('');
+                const resp = await fetch(pollBase + '?v=' + currentVersion + rv);
                 if (!resp.ok) {
                   if (resp.status === 404 && !sessionClosed) {
                     sessionClosed = true;
@@ -653,7 +639,7 @@ module StreamWeaver
                   const wasNearBottom = (window.innerHeight + window.scrollY) >=
                     (document.documentElement.scrollHeight - 150);
 
-                  applyPage(data.page);
+                  window.swApplyPage(data.page, pageAssets);
                   container.innerHTML = data.html;
 
                   // Scroll-to-top hint (round-9 UAT): a push that reshapes

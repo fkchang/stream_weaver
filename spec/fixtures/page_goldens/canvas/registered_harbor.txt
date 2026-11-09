@@ -5,11 +5,9 @@ sw-layout-fluid sw-theme-default sw-theme-harbor
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>StreamWeaver Canvas: probe</title>
 <style>[css 2434f41c5b7f]</style>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
 <style>[css d3037a149254]</style>
 <style>[css 6732a632695e]</style>
 <style>[css 9daf8e10ee84]</style>
-<style>[css 4f1fd0711e6c]</style>
 <script>[script 1fecbf6d34b7, 2232 bytes]</script>
 <script src="https://unpkg.com/htmx.org@2.0.4">
 </script>
@@ -36,10 +34,12 @@ tags. Without this, only a chart present in the page's very first HTML render
 <script>[script 626d1f8fabb5, 6629 bytes]</script>
 <!-- Kick off CDN fetch immediately so mermaid is ready before first push arrives -->
 <script>[script 9c072ae7f4a0, 55 bytes]</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
+<style>[css 4f1fd0711e6c]</style>
 # body <link>, <script> and <style> tags, in document order
 <script type="application/json" id="sw-state-data">[script 4f82429f09a6, 17 bytes]</script>
 <style>[css c0406a386c36]</style>
 <style>[css 7fa80ed195d5]</style>
 <script>[script ba218c0b8a49, 826 bytes]</script>
 <script>[script d6fb14de67f3, 29347 bytes]</script>
-<script>[script 487f13d6234c, 8324 bytes]</script>
+<script>[script f3061814faae, 8773 bytes]</script>

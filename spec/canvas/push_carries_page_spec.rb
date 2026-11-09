@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../support/body_class_helper'
+require_relative '../support/node_js'
 require 'spec_helper'
 require 'json'
 require 'rack/test'
@@ -96,7 +97,18 @@ RSpec.describe 'A canvas push carries its page', type: :request do
   end
 
   describe 'a push that fails to evaluate' do
-    before { push(IDE_BODY) }
+    let(:session) { bridge.get_session('s1') }
+    let(:sent) { [] }
+
+    before do
+      bridge.handle_claude_message(type: 'push', name: 's1', dsl: IDE_BODY, source_dir: '/repo/one')
+      session.add_note(text: 'a comment', target: 'h1')
+      session.send_queued
+      session.drain_notes # the agent has read it: 'seen', which a push would move to 'working'
+      socket = Object.new
+      socket.define_singleton_method(:send) { |message| sent << message }
+      session.add_websocket(socket)
+    end
 
     it 'leaves the previous page untouched: content, version, body class and assets' do
       before_poll = poll
@@ -106,6 +118,19 @@ RSpec.describe 'A canvas push carries its page', type: :request do
       expect(after_poll.values_at('html', 'version', 'page')).to eq(before_poll.values_at('html', 'version', 'page'))
       get '/canvas/s1'
       expect(body_classes(last_response.body)).to include('sw-theme-ide')
+    end
+
+    it 'keeps the DSL, source_dir, theme and layout, leaves the notes alone and broadcasts nothing' do
+      notes = session.notes_snapshot
+      push("use_theme :doc\nuse_layout :wide\nraise 'boom'")
+      expect([session.dsl, session.source_dir]).to eq([IDE_BODY, '/repo/one'])
+      expect([session.current_theme, session.current_layout]).to eq(%i[ide fluid])
+      expect(session.notes_snapshot).to eq(notes)
+      expect(sent).to be_empty
+    end
+
+    it 'answers push_error for a body that recurses without end, instead of killing the socket thread' do
+      expect(push("def deep = deep\ndeep")[:type]).to eq('push_error')
     end
 
     it 'leaves a never-pushed session waiting' do
@@ -130,13 +155,105 @@ RSpec.describe 'A canvas push carries its page', type: :request do
     expect(poll.dig('page', 'body_class').split).to include('sw-theme-default')
   end
 
-  describe 'agreement with canvas-read' do
+  it 'reports the theme and layout on show, as the list and save-doc see them' do
+    push("use_theme :ide\nuse_layout :wide\nheader1 'Themed'")
+    expect(bridge.list_sessions.first).to include(theme: :ide, layout: :wide)
+  end
+
+  describe 'poll payload' do
+    it 'leaves the page out when the client already has this version' do
+      push(IDE_BODY)
+      version = poll['version']
+      get "/canvas/s1/poll?v=#{version}"
+      expect(JSON.parse(last_response.body)).not_to have_key('page')
+      get "/canvas/s1/poll?v=#{version - 1}"
+      expect(JSON.parse(last_response.body)).to have_key('page')
+    end
+
+    it 'reads html, version and page as one snapshot of the session' do
+      push(IDE_BODY)
+      snapshot = bridge.get_session('s1').snapshot
+      expect(snapshot.keys).to eq(%i[html version page])
+      expect(snapshot[:page].body_class).to include('sw-theme-ide')
+    end
+  end
+
+  describe 'head order: the push CSS is last, live and after a reload' do
+    include NodeJS
+
+    HEAD_TAG = %r{<!--.*?-->|<(style|script|title)\b[^>]*>.*?</\1>|<(?:link|meta)\b[^>]*>}m
+
+    def head_tags(html)
+      html[%r{<head>(.*?)</head>}m, 1].to_enum(:scan, HEAD_TAG).map { Regexp.last_match(0) }
+    end
+
+    # The poll script's applyPage (sw-canvas-page.js) against a head made
+    # of `tags`, with a document shim just big enough for it.
+    def apply_page_in_node(tags, page)
+      shim = <<~JS
+        const items = #{tags.to_json}.map(html => ({ html }));
+        const classes = new Set(['sw-layout-fluid', 'sw-theme-default', 'sw-annotate-on']);
+        function pushStyle() {
+          const el = { textContent: '', setAttribute() {}, remove() { items.splice(items.indexOf(el), 1); } };
+          Object.defineProperty(el, 'html', { get: () => '<style data-sw-push-css>' + el.textContent + '</style>' });
+          return el;
+        }
+        global.window = global;
+        global.document = {
+          body: {
+            get className() { return [...classes].join(' '); },
+            set className(v) { classes.clear(); v.split(' ').forEach(c => classes.add(c)); },
+            classList: { contains: c => classes.has(c), toggle: (c, on) => on ? classes.add(c) : classes.delete(c) }
+          },
+          head: {
+            insertAdjacentHTML(_where, html) { items.push({ html }); },
+            appendChild(el) { items.push(el); },
+            querySelectorAll() {
+              return items.filter(i => i.html.startsWith('<style data-sw-push-css>'))
+                          .map(i => ({ remove() { items.splice(items.indexOf(i), 1); } }));
+            }
+          },
+          createElement: pushStyle
+        };
+      JS
+      driver = <<~JS
+        swApplyPage(#{page.to_json}, new Set());
+        console.log(JSON.stringify({ head: items.map(i => i.html), bodyClass: document.body.className }));
+      JS
+      js = File.read(File.expand_path('../../lib/stream_weaver/assets/js/sw-canvas-page.js', __dir__))
+      run_node_json(shim, js, driver)
+    end
+
+    it 'puts the push CSS last in <head>, after highlight.js and the chart CSS, on a fresh render' do
+      push(IDE_BODY)
+      get '/canvas/s1'
+      tags = head_tags(last_response.body)
+      expect(tags.last).to start_with('<style data-sw-push-css>')
+      highlight = tags.index { |t| t.start_with?('<link') && t.include?('highlightjs') }
+      chart_css = tags.index { |t| t == "<style>#{StreamWeaver::Adapter::AlpineJS::CHART_CSS}</style>" }
+      font = tags.index { |t| t.start_with?('<link') && t.include?('JetBrains') }
+      expect([highlight, chart_css].max).to be < font
+    end
+
+    it 'builds the same head live (a plain page, then applyPage) as a reload of the pushed page' do
+      get '/canvas/s1'
+      plain_head = head_tags(last_response.body)
+      push(IDE_BODY)
+      live = apply_page_in_node(plain_head, poll['page'])
+      get '/canvas/s1'
+      expect(live['head']).to eq(head_tags(last_response.body))
+      expect(live['head'].last).to start_with('<style data-sw-push-css>')
+      expect(live['bodyClass'].split).to match_array(%w[sw-layout-fluid sw-theme-ide sw-annotate-on])
+    end
+  end
+
+  describe 'Bridge#render and Reader.render_doc agree on the page' do
     [
       IDE_BODY,
       "header1 'Plain'",
       "use_theme :doc\nuse_layout :wide\nuse_stylesheet '.x { color: red; }'\nheader1 'Doc'"
     ].each do |body|
-      it "resolves the same page for #{body.lines.first.strip.inspect}" do
+      it "resolves the same theme, layout and assets for #{body.lines.first.strip.inspect}" do
         push(body)
         canvas = bridge.get_session('s1').page
         reader = StreamWeaver::Canvas::Reader.page_for(StreamWeaver::Canvas::Reader.render_doc(body))

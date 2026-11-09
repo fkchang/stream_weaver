@@ -8,7 +8,6 @@ sw-layout-fluid sw-theme-default
 <style>[css d3037a149254]</style>
 <style>[css 6732a632695e]</style>
 <style>[css 9daf8e10ee84]</style>
-<style data-sw-push-css>[css 6f95914459c9]</style>
 <script>[script 1fecbf6d34b7, 2232 bytes]</script>
 <script src="https://unpkg.com/htmx.org@2.0.4">
 </script>
@@ -35,6 +34,7 @@ tags. Without this, only a chart present in the page's very first HTML render
 <script>[script 626d1f8fabb5, 6629 bytes]</script>
 <!-- Kick off CDN fetch immediately so mermaid is ready before first push arrives -->
 <script>[script 9c072ae7f4a0, 55 bytes]</script>
+<style data-sw-push-css>[css 6f95914459c9]</style>
 # body <link>, <script> and <style> tags, in document order
 <script type="application/json" id="sw-state-data">[script 4f82429f09a6, 17 bytes]</script>
 <style>[css 084aca0b782a]</style>
@@ -42,4 +42,4 @@ tags. Without this, only a chart present in the page's very first HTML render
 <style>[css 7fa80ed195d5]</style>
 <script>[script ba218c0b8a49, 826 bytes]</script>
 <script>[script d6fb14de67f3, 29347 bytes]</script>
-<script>[script 9e1e6ee0597b, 8287 bytes]</script>
+<script>[script cc39ffba7872, 8736 bytes]</script>
