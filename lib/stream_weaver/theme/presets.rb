@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../fonts' unless RUBY_ENGINE == 'opal' # google_fonts_url delegates to Fonts
+
 module StreamWeaver
   class Theme
     # Curated theme presets for visual skills components.

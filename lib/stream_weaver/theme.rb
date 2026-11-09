@@ -623,15 +623,12 @@ module StreamWeaver
     end
 
     # Registering a built-in's name replaces it with a custom theme: its page
-    # wears the base class plus its own (sw-theme-default sw-theme-default),
-    # loses the hand-tuned CSS and drops out of built_in_themes. Say so once.
+    # keeps the sw-theme-<name> class but gets the custom token CSS on top of
+    # the hand-tuned block, and the name drops out of built_in_themes. Once
+    # replaced the name is no longer built-in, so this warns once per name.
     private def warn_replacing_built_in_theme(name)
       return unless get_theme(name)&.built_in?
 
-      @warned_built_in_names ||= []
-      return if @warned_built_in_names.include?(name)
-
-      @warned_built_in_names << name
       warn "StreamWeaver: register_theme #{name.inspect} replaces the built-in #{name.inspect} theme " \
            "with a custom one; pick another name and base: #{name.inspect} to build on it."
     end

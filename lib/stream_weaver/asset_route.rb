@@ -5,8 +5,8 @@ require_relative "delivery"
 
 module StreamWeaver
   # The /sw-asset route Delivery::Served points at, for every server that
-  # renders pages in-process (the standalone server, the canvas bridge, the
-  # reader): `register StreamWeaver::AssetRoute`.
+  # renders pages in-process (the standalone server, Service, the canvas
+  # bridge, the reader): `register StreamWeaver::AssetRoute`.
   #
   # Only files whose absolute path was registered are served (no traversal:
   # the key is a hash of that path, never derived from the request). The

@@ -25,26 +25,14 @@ RSpec.describe 'built-in theme registry' do
 
   it 'warns, once per name, when register_theme replaces a built-in' do
     original = StreamWeaver.get_theme(:dashboard)
-    expect do
-      2.times { StreamWeaver.register_theme(:dashboard, { color_primary: '#123456' }) }
-    end.to output(/register_theme :dashboard replaces the built-in :dashboard theme/).to_stderr
+    expect { StreamWeaver.register_theme(:dashboard, { color_primary: '#123456' }) }
+      .to output(/register_theme :dashboard replaces the built-in :dashboard theme/).to_stderr
+    expect { StreamWeaver.register_theme(:dashboard, { color_primary: '#654321' }) }.not_to output.to_stderr
     expect(StreamWeaver.built_in_themes).not_to include(:dashboard)
     expect { StreamWeaver.register_theme(:registry_spec_quiet, {}) }.not_to output.to_stderr
   ensure
     StreamWeaver.themes[:dashboard] = original
     StreamWeaver.themes.delete(:registry_spec_quiet)
-  end
-
-  it 'warns once even after the built-in is put back' do
-    original = StreamWeaver.get_theme(:doc)
-    warnings = []
-    allow(StreamWeaver).to receive(:warn) { |message| warnings << message }
-    StreamWeaver.register_theme(:doc, {})
-    StreamWeaver.themes[:doc] = original
-    StreamWeaver.register_theme(:doc, {})
-    expect(warnings.grep(/:doc/).size).to eq(1)
-  ensure
-    StreamWeaver.themes[:doc] = original
   end
 
   it 'still renders a custom theme’s CSS and never a built-in’s (views.rb render_custom_theme_css)' do
