@@ -109,6 +109,15 @@ RSpec.describe 'page goldens (page-assets gate)' do
     end
   end
 
+  # Fails here, with the shard named, before the pre-commit hook refuses it.
+  it 'keeps every css_blocks shard under the git hygiene hook limit' do
+    hook = File.read(File.expand_path('../bin/check_git_hygiene', __dir__))
+    limit = Integer(hook[/^MAX_FILE_BYTES\s*=\s*([\d_]+)/, 1].delete('_'))
+    shards = Dir[File.join(PageGoldens::ROOT, PageGoldens::CSS_STORE_DIR, '*.css')]
+    expect(shards).not_to be_empty
+    shards.each { |shard| expect(File.size(shard)).to be < limit, "#{File.basename(shard)} is #{File.size(shard)} bytes" }
+  end
+
   it 'renders the same output twice (nothing nondeterministic leaks in)' do
     PageGoldens.reset!
     expect(PageGoldens.render_all).to eq(@fresh)

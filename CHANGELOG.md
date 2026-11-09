@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Removed with no shim**: `App::BUILT_IN_THEMES`, `App::VALID_THEMES` and `Theme::BUILT_IN_THEMES` (ask `StreamWeaver.built_in_themes` or `StreamWeaver.get_theme(name)&.built_in?`), `Theme.google_fonts_url` and `Fonts.google_fonts?` (use `Fonts.google_fonts_href`). `Components::Ide::CSS` is now `IdeShell`'s layered `css` macro and no longer carries the landing-page rules, which moved to `examples/ide/streamweaver_landing_body.rb`.
 - **Dark mode for registered themes**: an already-registered custom theme's non-surface tokens (`color_primary` and the other accent, type and spacing tokens) now carry into dark mode; its surface tokens (`Theme::SURFACE_TOKENS`) do not unless `dark:` is given.
 - **Presets**: `Theme::Presets` dark blocks now match both dark signals, `html.dark` and `html[data-sw-theme="dark"]`.
+- **`register_theme` with a built-in's name warns** (once per name): it replaces the hand-tuned built-in with a custom theme; use another name with `base:` instead.
 - See docs/theming-hooks.md ("Upgrade notes" and "Known follow-ups").
 
 ### Changed
