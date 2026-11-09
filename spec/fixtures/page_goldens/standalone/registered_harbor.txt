@@ -1,5 +1,5 @@
 # body class
-sw-layout-default sw-theme-harbor
+sw-layout-default sw-theme-default sw-theme-harbor
 # head (one tag per line; <style> and inline <script> bodies are replaced by digests)
 <style>[css 2434f41c5b7f]</style>
 <title>Page probe</title>

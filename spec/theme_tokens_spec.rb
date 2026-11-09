@@ -95,6 +95,21 @@ RSpec.describe 'theme token CSS (page-assets token-css-generator)' do
       CSS
     end
 
+    it "wears its base theme's class first, so the page gets the base theme's type, spacing and radius" do
+      StreamWeaver.register_theme(:tokens_spec_harbor, { color_primary: '#0e7490' })
+      page = StreamWeaver::PageShell.resolve(nil, theme: :tokens_spec_harbor, layout: nil)
+
+      expect(StreamWeaver.get_theme(:tokens_spec_harbor).base_theme).to eq(:default)
+      expect(page.body_class).to eq('sw-theme-default sw-theme-tokens_spec_harbor')
+    end
+
+    it 'wears a named base theme' do
+      StreamWeaver.register_theme(:tokens_spec_harbor, {}, base: :dashboard)
+
+      expect(StreamWeaver::PageShell.resolve(nil, theme: :tokens_spec_harbor, layout: nil).body_class)
+        .to eq('sw-theme-dashboard sw-theme-tokens_spec_harbor')
+    end
+
     it 'reaches an Opal build, whose stylesheet carries the theme CSS' do
       require 'stream_weaver/opal/builder'
       theme = StreamWeaver.register_theme(:tokens_spec_harbor, { color_primary: '#0e7490' })

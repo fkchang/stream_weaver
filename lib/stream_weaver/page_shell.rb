@@ -558,7 +558,7 @@ module StreamWeaver
       def resolve(app, theme:, layout: app&.layout, layout_entry: app&.layout_entry, injected_css: {},
                   theme_css: true)
         page_assets = theme_assets(theme, css: theme_css) + layout_assets(layout_entry, layout) +
-                      Assets.of(body_classes: theme ? ["sw-theme-#{theme}"] : [])
+                      Assets.of(body_classes: theme_body_classes(theme))
         # The app's theme_tokens are theme CSS: right after the theme's own,
         # which they must follow to win the specificity tie.
         page_assets += Assets.of(framework_css: app.theme_token_css) if app && theme_css
@@ -602,6 +602,17 @@ module StreamWeaver
         custom_css = css && custom && !custom.built_in? ? [custom.to_css] : []
         Assets.of(fonts: StreamWeaver.theme_fonts(theme), stylesheets: StreamWeaver.theme_stylesheets(theme),
                   framework_css: custom_css)
+      end
+
+      # A registered theme wears its base theme's class first: the base's
+      # type, spacing and radius come from that class's CSS, and the theme's
+      # own block (same specificity, later) overrides what it sets.
+      def theme_body_classes(theme)
+        return [] unless theme
+
+        custom = StreamWeaver.get_theme(theme)
+        base = custom && !custom.built_in? ? ["sw-theme-#{custom.base_theme}"] : []
+        base + ["sw-theme-#{theme}"]
       end
 
       # An exclusive layout names its own body classes instead of sw-layout-*.
