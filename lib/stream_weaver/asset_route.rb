@@ -20,7 +20,16 @@ module StreamWeaver
         halt 404 unless File.basename(abs_path) == params[:filename]
         etag Digest::MD5.hexdigest("#{File.mtime(abs_path).to_i}-#{File.size(abs_path)}")
         content_type StreamWeaver::Delivery.mime_type(abs_path)
-        File.binread(abs_path)
+        if File.extname(abs_path) == ".css"
+          # A relative url() in a served stylesheet would resolve under
+          # /sw-asset/<key>/, which no route answers: point each file it
+          # names at its own /sw-asset URL instead.
+          StreamWeaver::Delivery.rewrite_css_urls(File.read(abs_path), File.dirname(abs_path)) do |file|
+            StreamWeaver::ComponentAssets.url(file)
+          end
+        else
+          File.binread(abs_path)
+        end
       end
     end
   end

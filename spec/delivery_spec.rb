@@ -39,6 +39,15 @@ RSpec.describe StreamWeaver::Delivery do
       expect(subject.ref(js, :script)).to match(%r{\A<script src="/sw-asset/\h+/widget\.js"></script>\z})
       expect(subject.ref(font, :font)).to match(%r{\Aurl\("/sw-asset/\h+/probe\.woff2"\)\z})
     end
+
+    it "serves a stylesheet with its relative url() pointed at the file's own /sw-asset URL" do
+      route = Class.new(Sinatra::Base) { register StreamWeaver::AssetRoute }
+      request = Rack::MockRequest.new(route)
+      served_css = request.get(subject.ref(css, :stylesheet)[/href="([^"]+)"/, 1]).body
+      font_url = served_css[%r{url\("(/sw-asset/\h+/probe\.woff2)"\)}, 1]
+      expect(served_css).to include("url(https://x.test/a.png)")
+      expect(request.get(font_url).body).to eq("wOF2-probe")
+    end
   end
 
   describe described_class::Inline do

@@ -16,6 +16,14 @@ module StreamWeaver
         key
       end
 
+      # The /sw-asset URL that serves a local file (AssetRoute), registering it.
+      #
+      # @param abs_path [String]
+      # @return [String]
+      def url(abs_path)
+        "/sw-asset/#{register_file(abs_path)}/#{File.basename(abs_path)}"
+      end
+
       # Resolve a key back to an absolute path, or nil if unknown.
       def resolve_file(key)
         @file_registry[key]
