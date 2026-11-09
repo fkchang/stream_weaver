@@ -23,7 +23,7 @@ RSpec.describe "IDE theme (sw-theme-ide)" do
 
   describe "registration" do
     it "is a recognized built-in theme" do
-      expect(StreamWeaver::App::BUILT_IN_THEMES).to include(:ide)
+      expect(StreamWeaver.built_in_themes).to include(:ide)
       expect(StreamWeaver.theme_exists?(:ide)).to be true
     end
 

@@ -307,9 +307,8 @@ BARE_CSS = "<style>body{padding:0;background:transparent}" \
       end
 
       def custom_theme
-        return nil if @app.theme.nil? || StreamWeaver::App::BUILT_IN_THEMES.include?(@app.theme)
-
-        StreamWeaver.get_theme(@app.theme)
+        theme = @app.theme && StreamWeaver.get_theme(@app.theme)
+        theme unless theme&.built_in?
       end
 
       def body_class

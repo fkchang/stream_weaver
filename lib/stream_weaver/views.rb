@@ -3821,11 +3821,9 @@ module StreamWeaver
       # Render CSS for custom registered themes
       def render_custom_theme_css
         theme_name = effective_theme
-        # Only render if it's a custom theme (not built-in)
-        return if StreamWeaver::App::BUILT_IN_THEMES.include?(theme_name)
-
+        # Only a custom theme; a built-in's CSS is already in master_theme_css
         custom_theme = StreamWeaver.get_theme(theme_name)
-        return unless custom_theme
+        return if custom_theme.nil? || custom_theme.built_in?
 
         style do
           raw(safe(StreamWeaver::CSS.layer_wrap(custom_theme.to_css)))

@@ -2,6 +2,7 @@
 
 require 'digest'
 require 'set'
+require_relative 'theme'
 require_relative 'resource'
 
 module StreamWeaver
@@ -38,12 +39,6 @@ module StreamWeaver
         self.url_tab_keys = []
       end
     end
-
-    # Built-in themes, derived from the registry (theme/built_ins.rb); custom
-    # themes are checked via StreamWeaver.theme_exists?
-    BUILT_IN_THEMES = StreamWeaver.built_in_themes.freeze
-    # For backwards compatibility
-    VALID_THEMES = BUILT_IN_THEMES
 
     attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :scripts, :stylesheets, :inline_stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions, :action_updates, :action_primary
 
@@ -152,8 +147,8 @@ module StreamWeaver
 
     def validate_theme(theme)
       theme = theme.to_sym
-      # Accept built-in themes or custom registered themes
-      return theme if BUILT_IN_THEMES.include?(theme) || StreamWeaver.theme_exists?(theme)
+      # Accept any registered theme, built-in (theme/built_ins.rb) or custom
+      return theme if StreamWeaver.theme_exists?(theme)
       warn "StreamWeaver: Unknown theme '#{theme}', falling back to :default"
       :default
     end

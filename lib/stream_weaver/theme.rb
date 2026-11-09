@@ -522,7 +522,6 @@ module StreamWeaver
     # @param description [String] Short description
     # @param fonts [Array<String>] Google Fonts entries the page head loads
     # @param stylesheets [Array<String>] Stylesheet URLs the page head loads
-    # @param built_in [Boolean] only for theme/built_ins.rb
     # @return [Theme] The registered theme
     #
     # @example Basic registration
@@ -536,11 +535,9 @@ module StreamWeaver
     #     color_primary: "#0066cc"
     #   }, base: :dashboard
     def register_theme(name, variables = {}, base: :default, label: nil, description: nil,
-                       fonts: [], stylesheets: [], built_in: false)
-      theme = Theme.new(name, variables, base: base, label: label, description: description,
-                                         fonts: fonts, stylesheets: stylesheets, built_in: built_in)
-      @themes[name.to_sym] = theme
-      theme
+                       fonts: [], stylesheets: [])
+      @themes[name.to_sym] = Theme.new(name, variables, base: base, label: label, description: description,
+                                                        fonts: fonts, stylesheets: stylesheets)
     end
 
     # Names of the framework's own themes, in registry order
@@ -548,6 +545,13 @@ module StreamWeaver
     # @return [Array<Symbol>]
     def built_in_themes
       @themes.values.select(&:built_in?).map(&:name)
+    end
+
+    # The framework's own themes register here (theme/built_ins.rb): listed
+    # like any theme, but their CSS lives in master_theme_css.
+    private def register_built_in_theme(name, label:, description:, fonts: [], stylesheets: [])
+      @themes[name.to_sym] = Theme.new(name, label: label, description: description,
+                                             fonts: fonts, stylesheets: stylesheets, built_in: true)
     end
 
     # Get a theme by name (custom or built-in)

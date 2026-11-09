@@ -1,18 +1,40 @@
 # frozen_string_literal: true
 
-# The built-in themes are one list: each registers through register_theme
-# with its label and fonts, and App's list is derived from the registry.
-# Their CSS stays in AppView.master_theme_css.
+# The built-in themes are one list: each registers in theme/built_ins.rb with
+# its label and fonts, and everything else asks the registry. Their CSS
+# stays in AppView.master_theme_css.
 RSpec.describe 'built-in theme registry' do
   let(:built_ins) { %i[default dashboard document dark doc ide] }
 
-  it 'derives App::BUILT_IN_THEMES from the registry' do
+  it 'lists the built-ins from the registry' do
     expect(StreamWeaver.built_in_themes).to eq(built_ins)
-    expect(StreamWeaver::App::BUILT_IN_THEMES).to eq(built_ins)
   end
 
-  it 'keeps no second list of built-ins on Theme' do
+  it 'keeps no second list of built-ins on Theme or App' do
     expect(StreamWeaver::Theme.const_defined?(:BUILT_IN_THEMES, false)).to be false
+    expect(StreamWeaver::App.const_defined?(:BUILT_IN_THEMES, false)).to be false
+  end
+
+  it 'does not let register_theme mark a theme built-in' do
+    expect { StreamWeaver.register_theme(:registry_spec_fake, built_in: true) }.to raise_error(ArgumentError)
+    expect { StreamWeaver.register_built_in_theme(:registry_spec_fake, label: 'x', description: 'x') }
+      .to raise_error(NoMethodError)
+  ensure
+    StreamWeaver.themes.delete(:registry_spec_fake)
+  end
+
+  it 'still renders a custom theme’s CSS and never a built-in’s (views.rb render_custom_theme_css)' do
+    StreamWeaver.register_theme(:registry_spec_css, { color_primary: '#123456' })
+    render = lambda do |theme|
+      app = StreamWeaver::App.new('t', theme: theme) {}
+      app.rebuild_with_state({})
+      StreamWeaver::Views::AppView.new(app, {}, StreamWeaver::Adapter::AlpineJS.new).call
+    end
+    expect(render.call(:registry_spec_css)).to include('body.sw-theme-registry_spec_css {')
+    # A built-in registers no variables, so rendering it as custom would emit an empty block.
+    expect(render.call(:doc)).not_to match(/body\.sw-theme-doc \{\s*\}/)
+  ensure
+    StreamWeaver.themes.delete(:registry_spec_css)
   end
 
   it 'registers :dark, so the theme switcher offers it' do
