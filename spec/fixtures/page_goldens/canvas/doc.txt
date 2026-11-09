@@ -34,6 +34,7 @@ tags. Without this, only a chart present in the page's very first HTML render
 <script>[script 626d1f8fabb5, 6629 bytes]</script>
 <!-- Kick off CDN fetch immediately so mermaid is ready before first push arrives -->
 <script>[script 9c072ae7f4a0, 55 bytes]</script>
+<meta name="sw-page-end">
 # body <link>, <script> and <style> tags, in document order
 <script type="application/json" id="sw-state-data">[script 4f82429f09a6, 17 bytes]</script>
 <style>[css 084aca0b782a]</style>
@@ -41,4 +42,4 @@ tags. Without this, only a chart present in the page's very first HTML render
 <style>[css 7fa80ed195d5]</style>
 <script>[script ba218c0b8a49, 826 bytes]</script>
 <script>[script d6fb14de67f3, 29347 bytes]</script>
-<script>[script cc39ffba7872, 8736 bytes]</script>
+<script>[script 149065bbac1f, 8976 bytes]</script>

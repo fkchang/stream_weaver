@@ -178,7 +178,7 @@ RSpec.describe 'A canvas push carries its page', type: :request do
     end
   end
 
-  describe 'head order: the push CSS is last, live and after a reload' do
+  describe 'head order: the push CSS ends the page tags, live and after a reload' do
     include NodeJS
 
     HEAD_TAG = %r{<!--.*?-->|<(style|script|title)\b[^>]*>.*?</\1>|<(?:link|meta)\b[^>]*>}m
@@ -206,8 +206,12 @@ RSpec.describe 'A canvas push carries its page', type: :request do
             classList: { contains: c => classes.has(c), toggle: (c, on) => on ? classes.add(c) : classes.delete(c) }
           },
           head: {
-            insertAdjacentHTML(_where, html) { items.push({ html }); },
-            appendChild(el) { items.push(el); },
+            querySelector() {
+              const end = items.find(i => i.html === '<meta name="sw-page-end">');
+              end.insertAdjacentHTML = (_where, html) => items.splice(items.indexOf(end), 0, { html });
+              return end;
+            },
+            insertBefore(el, ref) { items.splice(items.indexOf(ref), 0, el); },
             querySelectorAll() {
               return items.filter(i => i.html.startsWith('<style data-sw-push-css>'))
                           .map(i => ({ remove() { items.splice(items.indexOf(i), 1); } }));
@@ -224,11 +228,11 @@ RSpec.describe 'A canvas push carries its page', type: :request do
       run_node_json(shim, js, driver)
     end
 
-    it 'puts the push CSS last in <head>, after highlight.js and the chart CSS, on a fresh render' do
+    it 'puts the push CSS last among the page tags, after highlight.js and the chart CSS, on a fresh render' do
       push(IDE_BODY)
       get '/canvas/s1'
       tags = head_tags(last_response.body)
-      expect(tags.last).to start_with('<style data-sw-push-css>')
+      expect(tags.last(2)).to match([start_with('<style data-sw-push-css>'), '<meta name="sw-page-end">'])
       highlight = tags.index { |t| t.start_with?('<link') && t.include?('highlightjs') }
       chart_css = tags.index { |t| t == "<style>#{StreamWeaver::Adapter::AlpineJS::CHART_CSS}</style>" }
       font = tags.index { |t| t.start_with?('<link') && t.include?('JetBrains') }
@@ -242,7 +246,7 @@ RSpec.describe 'A canvas push carries its page', type: :request do
       live = apply_page_in_node(plain_head, poll['page'])
       get '/canvas/s1'
       expect(live['head']).to eq(head_tags(last_response.body))
-      expect(live['head'].last).to start_with('<style data-sw-push-css>')
+      expect(live['head'].last(2).first).to start_with('<style data-sw-push-css>')
       expect(live['bodyClass'].split).to match_array(%w[sw-layout-fluid sw-theme-ide sw-annotate-on])
     end
   end

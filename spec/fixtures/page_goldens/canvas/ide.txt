@@ -36,6 +36,7 @@ tags. Without this, only a chart present in the page's very first HTML render
 <script>[script 9c072ae7f4a0, 55 bytes]</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.8/index.css">
+<meta name="sw-page-end">
 # body <link>, <script> and <style> tags, in document order
 <script type="application/json" id="sw-state-data">[script 4f82429f09a6, 17 bytes]</script>
 <style>[css 084aca0b782a]</style>
@@ -43,4 +44,4 @@ tags. Without this, only a chart present in the page's very first HTML render
 <style>[css 7fa80ed195d5]</style>
 <script>[script ba218c0b8a49, 826 bytes]</script>
 <script>[script d6fb14de67f3, 29347 bytes]</script>
-<script>[script 8e8dde38dea9, 8773 bytes]</script>
+<script>[script 5ac16278aab6, 9013 bytes]</script>

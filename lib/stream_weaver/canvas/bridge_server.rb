@@ -378,12 +378,15 @@ module StreamWeaver
         snapshot = session.snapshot
         page = snapshot[:page] + StreamWeaver::Assets.of(body_classes: session.annotate? ? %w[sw-annotate-on] : [])
         live = live_page(snapshot[:page])
-        # The page's own tags and its push CSS go last in <head>, after every
-        # fixed tag, where the poll script's swApplyPage puts them after a
-        # push: an unlayered rule then wins or loses the same way live and
-        # after a reload. The push CSS is marked so the next push replaces it.
+        # The page's own tags and its push CSS go after every fixed tag and
+        # before the sw-page-end marker, which is where the poll script's
+        # swApplyPage puts them after a push: an unlayered rule then wins or
+        # loses the same way live and after a reload, and styles scripts add
+        # to <head> while the page loads still land after the marker. The
+        # push CSS is marked so the next push replaces it.
         page_tags = (live[:assets].map { |a| a[:html] } +
-                     live[:push_css].map { |css| "<style data-sw-push-css>#{css}</style>" }).join("\n")
+                     live[:push_css].map { |css| "<style data-sw-push-css>#{css}</style>" } +
+                     ['<meta name="sw-page-end">']).join("\n")
 
         # Create adapter in websocket mode
         adapter = StreamWeaver::Adapter::AlpineJS.new(
