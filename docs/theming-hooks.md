@@ -535,8 +535,8 @@ its components' assets: both are collected during the render.
 | A built-in theme | Two places: a `register_built_in_theme` line in `theme/built_ins.rb` (label, fonts) and its hand-tuned `body.sw-theme-<name>` block in `Views::AppView.master_theme_css`; the golden gate picks it up from `StreamWeaver.built_in_themes` |
 | A DSL token override | `theme_tokens` (or `theme_overrides:`) |
 | Component CSS, scripts or fonts | The `css`, `css_path`, `js_path`, `font` macros on the class; they reach every host |
-| An output host | One `Delivery` class plus a call to `PageShell.resolve` and `PageShell.head` |
-| A font source | `Fonts` (`google_fonts_href` for Google, `font_face_css` for self-hosted files); the Google URL builders are still duplicated, see the follow-ups |
+| An output host | Not yet single-place. One `Delivery` class plus calls to `PageShell.resolve` and `PageShell.head`, and by hand: the framework's Google Fonts link (`Fonts::BASE_HREF`) and the two `preconnect` links (as `views.rb`, `css.rb` and `opal/builder.rb` do), and either `Head#to_s` or its own placement of `Head`'s buckets |
+| A font source | Not yet single-place. Google fonts and self-hosted files are filtered separately (`Fonts.google_fonts_href`, `Fonts.font_face_css`) and `Head#font_tags` knows both kinds, so a third kind touches all three; the component `font` macro declares only self-hosted files |
 | A gem layout | `register_layout` (unchanged); its `css_path` reaches every host |
 
 ### The golden gate
@@ -619,8 +619,26 @@ missing fixture into a green spec:
 
 ### Known follow-ups
 
-- The Google Fonts URL builders still exist in three places (`Fonts`,
-  `Theme`, `Presets`).
+- One Google Fonts URL builder is left, `Fonts.google_fonts_href`
+  (`Presets.google_fonts_url` delegates to it). The component `font` macro
+  cannot declare a Google font, so the sketch mode's Caveat link
+  (`adapter/alpinejs.rb`, `inject_sketch_mode`) is still built by hand.
+- `Head#to_s` is used by 2 of 5 hosts (export, reader). The canvas emits
+  `framework_css_html` plus `Head#asset_tags`; the standalone view and the
+  Opal builder place the buckets themselves. Moving `AppView` onto
+  `Head#to_s` (the divergence comment in `views.rb`, `AppView#view_template`)
+  is not done and is a stated golden diff when it is.
+- Adding a host still needs `Fonts::BASE_HREF` and the `preconnect` links
+  by hand: the design's single `Fonts.assets(entry)` branch was not built,
+  so Google and self-hosted fonts are filtered separately
+  (`Fonts.google_fonts_href`, `Fonts.font_face_css`) and `Head#font_tags`
+  knows both.
+- A `js_path` script is inert on a live canvas push: the poll replaces the
+  page with `container.innerHTML` (`canvas/bridge_server.rb`, the poll
+  script), which never runs scripts, so it runs only after a reload.
+- `Canvas::Session#snapshot` re-creates the page recipe
+  (`PageShell.fragment_page`) that `Canvas::Fragment#page` already holds,
+  instead of keeping the pushed Fragment.
 - `streamweaver export` rejects a DSL whose code sample mentions `run!`
   (disc-262).
 - The reader takes theme fonts only from the first doc it opens.
@@ -628,3 +646,22 @@ missing fixture into a green spec:
   (head asset tags are append-only).
 - Code blocks are highlighted live but not after a reload (disc-263).
 - Exclusive layouts are skipped on the canvas path (disc-259).
+
+### Upgrade notes
+
+- `App::BUILT_IN_THEMES`, `App::VALID_THEMES` and `Theme::BUILT_IN_THEMES`
+  are gone, with no shim: ask `StreamWeaver.built_in_themes` or
+  `StreamWeaver.get_theme(name)&.built_in?`. `Theme.google_fonts_url` and
+  `Fonts.google_fonts?` are gone too: use `Fonts.google_fonts_href`.
+- `Components::Ide::CSS` is now `IdeShell`'s `css` macro (layered) rather
+  than injected by `render_ide_shell`, and no longer carries the landing-page
+  rules (hero, pills, buttons, cards, transcript): they live in
+  `examples/ide/streamweaver_landing_body.rb`.
+- An already-registered custom theme's non-surface tokens (`color_primary`
+  and the other accent, type and spacing tokens) now carry into dark mode;
+  its surface tokens (`Theme::SURFACE_TOKENS`) still do not unless you pass
+  `dark:`.
+- `Theme::Presets` dark blocks now match both dark signals, `html.dark` and
+  `html[data-sw-theme="dark"]`, not only one.
+- `register_theme` with a built-in's name now warns (once per name): it
+  replaces the hand-tuned built-in with a custom theme.
