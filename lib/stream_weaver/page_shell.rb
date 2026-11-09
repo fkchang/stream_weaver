@@ -15,11 +15,10 @@ module StreamWeaver
   # extracting it here is what lets the other two call the same ordering
   # instead of re-deriving it (stream_weaver-mdc).
   #
-  # Deliberately narrow scope: only the framework <style> blocks plus
-  # optional user CSS. Body-class computation (session theme overrides,
-  # chrome: false, exclusive-layout registry entries), <title>/favicon, CDN
-  # scripts, and chrome/widgets all stay with each caller -- this is NOT a
-  # canonical replacement for AppView's full standalone shell.
+  # PageShell.resolve is the one description of what a page needs (its
+  # Assets and body class) for every host: standalone AppView, the canvas,
+  # the reader, the exporter and the Opal builder. <title>/favicon, adapter
+  # CDN scripts and chrome/widgets stay with each caller.
   module PageShell
     # Canvas-specific CSS -- moved verbatim from Canvas::BridgeServer's old
     # SW_STYLES constant when this module was extracted (stream_weaver-39j).
@@ -524,6 +523,122 @@ module StreamWeaver
       # @return [String] HTML <style> tags
       def user_css_html(inline_stylesheets: [])
         inline_stylesheets.map { |css| "<style>#{css}</style>" }.join("\n")
+      end
+
+      # What one page needs, resolved once per render AFTER its body has
+      # rendered (components register CSS while they render, so earlier
+      # would miss it). Every host reads its body class and its theme-,
+      # app- and component-owned head tags from the result.
+      #
+      # @param app [StreamWeaver::App, nil] nil for a host with no App (the
+      #   canvas page, an Opal build): only the theme and layout contribute
+      # @param theme [Symbol, nil] the theme in effect (a session override
+      #   wins over app.theme, so the caller decides)
+      # @param layout [Symbol, nil] nil omits the sw-layout-* class
+      # @param components [Hash{Symbol=>String}] component CSS registered
+      #   during the body render, keyed so each block appears once
+      # @return [Page]
+      def resolve(app, theme:, layout: app&.layout, components: {})
+        page_assets = theme_assets(theme) + layout_assets(app, layout) +
+                      Assets.of(body_classes: theme ? ["sw-theme-#{theme}"] : [])
+        page_assets = app_assets(app) + page_assets if app
+        Page.new(theme: theme, layout: layout,
+                 assets: page_assets + Assets.of(framework_css: components.values))
+      end
+
+      # @param page [Page]
+      # @return [Head] the page's head tags, one method per bucket
+      def head(page)
+        Head.new(page.assets)
+      end
+
+      private
+
+      def theme_assets(theme)
+        Assets.of(fonts: StreamWeaver.theme_fonts(theme), stylesheets: StreamWeaver.theme_stylesheets(theme))
+      end
+
+      # An exclusive layout names its own body classes instead of sw-layout-*.
+      def layout_assets(app, layout)
+        entry = app&.layout_entry
+        return Assets.of(body_classes: entry[:body_classes]) if entry&.dig(:exclusive)
+
+        Assets.of(body_classes: layout ? ["sw-layout-#{layout}"] : [])
+      end
+
+      def app_assets(app)
+        Assets.of(fonts: app.fonts, stylesheets: app.stylesheets, user_css: app.inline_stylesheets,
+                  scripts: app.scripts)
+      end
+    end
+
+    # One page's assets, by owner and kind. framework_css is layered
+    # (StreamWeaver::CSS::LAYER_NAME) and user_css is not, which is the
+    # whole reason they are two buckets. `+` concatenates bucket by bucket
+    # and drops repeats, so the framework, the theme, the layout, the
+    # components and the app can each contribute one and be merged.
+    Assets = Data.define(:fonts, :stylesheets, :framework_css, :user_css, :scripts, :body_classes) do
+      def self.of(**buckets)
+        new(**members.to_h { |bucket| [bucket, []] }, **buckets)
+      end
+
+      def +(other)
+        self.class.new(**to_h { |bucket, entries| [bucket, (entries + other.public_send(bucket)).uniq] })
+      end
+    end
+
+    # A resolved page: the theme and layout in effect and everything they,
+    # the app and its components need.
+    Page = Data.define(:theme, :layout, :assets) do
+      def body_class
+        assets.body_classes.join(" ")
+      end
+    end
+
+    # A page's head tags, one method per Assets bucket. Each host places
+    # them in its own head: the hosts' tag orders differ, and the cascade
+    # depends on order, so the shared part is what each tag is, not where
+    # a host puts it.
+    class Head
+      def initialize(assets)
+        @assets = assets
+      end
+
+      # One Google Fonts stylesheet for every declared Google font.
+      def fonts
+        href = StreamWeaver::Fonts.google_fonts_href(@assets.fonts)
+        href ? stylesheet_link(href) : ""
+      end
+
+      def stylesheets
+        @assets.stylesheets.map { |href| stylesheet_link(href) }.join("\n")
+      end
+
+      # Component CSS, one layered block.
+      def framework_css
+        return "" if @assets.framework_css.empty?
+
+        "<style>#{StreamWeaver::CSS.layer_wrap(@assets.framework_css.join("\n"))}</style>"
+      end
+
+      def user_css
+        PageShell.user_css_html(inline_stylesheets: @assets.user_css)
+      end
+
+      def scripts
+        @assets.scripts.map { |src| %(<script src="#{attribute(src)}"></script>) }.join("\n")
+      end
+
+      private
+
+      def stylesheet_link(href)
+        %(<link rel="stylesheet" href="#{attribute(href)}">)
+      end
+
+      # Escapes exactly what Phlex escapes in an attribute, so a Phlex host
+      # and a heredoc host render the same tag.
+      def attribute(value)
+        value.to_s.gsub('"', "&quot;")
       end
     end
   end

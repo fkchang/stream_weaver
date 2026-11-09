@@ -21,9 +21,6 @@ module StreamWeaver
         @adapter = adapter
         @is_agentic = is_agentic
         @session_theme = session_theme
-        @scripts = app.scripts
-        @stylesheets = app.stylesheets
-        @inline_stylesheets = app.inline_stylesheets
       end
 
       def view_template
@@ -35,6 +32,8 @@ module StreamWeaver
         # (stream_weaver-1lo). Captured rather than appended directly so it
         # can be replayed into <body> after <head> is emitted.
         body_html = capture { render_page_body }
+        page = StreamWeaver::PageShell.resolve(@app, theme: effective_theme, components: component_css_registry)
+        page_head = StreamWeaver::PageShell.head(page)
 
         doctype
         html do
@@ -65,26 +64,14 @@ module StreamWeaver
             # (stream_weaver-oeo) so this ordering is now a nicety, not a
             # requirement -- an unlayered user rule wins even if it lands
             # earlier in the document.
-            unless component_css_registry.empty?
-              style { raw(safe(StreamWeaver::CSS.layer_wrap(component_css_registry.values.join("\n")))) }
-            end
+            raw(safe(page_head.framework_css))
 
-            # Add custom stylesheets, then any the active theme declares
-            (@stylesheets + StreamWeaver.theme_stylesheets(effective_theme)).each do |href|
-              link(rel: "stylesheet", href: href)
-            end
-
-            # Inline stylesheets declared via `use_stylesheet` in the DSL
-            # body (stream_weaver-9uk) -- same document-order/cascade
-            # position as the linked stylesheets above.
-            @inline_stylesheets.each do |css|
-              style { raw(safe(css)) }
-            end
-
-            # Add custom scripts
-            @scripts.each do |src|
-              script(src: src)
-            end
+            # The app's and the theme's stylesheets, then the inline CSS
+            # declared via `use_stylesheet` (stream_weaver-9uk), then the
+            # app's scripts.
+            raw(safe(page_head.stylesheets))
+            raw(safe(page_head.user_css))
+            raw(safe(page_head.scripts))
 
             # Component-scoped CSS/JS (declared via css/css_path/js_path class macros)
             render_component_assets
@@ -104,15 +91,11 @@ module StreamWeaver
               @adapter.render_routing_scripts(self)
             end
 
-            # Google Fonts: Source Sans 3 + Crimson Pro (for document theme) + any app- or theme-declared fonts
+            # Google Fonts: Source Sans 3 + Crimson Pro (for document theme), then the app's and theme's fonts
             link(rel: "preconnect", href: "https://fonts.googleapis.com")
             link(rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "anonymous")
-            link(rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap")
-            fonts = @app.fonts + StreamWeaver.theme_fonts(effective_theme)
-            if fonts.any?
-              custom_href = Fonts.google_fonts_href(fonts)
-              link(rel: "stylesheet", href: custom_href) if custom_href
-            end
+            link(rel: "stylesheet", href: Fonts::BASE_HREF)
+            raw(safe(page_head.fonts))
             style do
               raw(safe(StreamWeaver::CSS.layer_wrap(self.class.master_theme_css)))
             end
@@ -136,7 +119,7 @@ module StreamWeaver
               raw(safe(StreamWeaver::Theme::AutoMode.inline_script(default_mode: theme_toggle&.mode || :auto)))
             end
           end
-          body(class: body_classes) do
+          body(class: page.body_class) do
             raw(safe(body_html))
           end
         end
@@ -3762,21 +3745,6 @@ module StreamWeaver
             "hx-post" => "/submit",
             "hx-include" => @adapter.input_selector
           ) { "🤖 Submit to Agent" }
-        end
-      end
-
-      # Generate body classes for layout and theme.
-      # Exclusive layouts supply their own body_classes; the sw-layout-* class is omitted.
-      def body_classes
-        effective_theme = @session_theme || @app.theme
-        theme_class = "sw-theme-#{effective_theme}"
-
-        layout_entry = @app.layout_entry
-        if layout_entry&.dig(:exclusive)
-          extra = layout_entry[:body_classes].join(" ")
-          [extra, theme_class].reject(&:empty?).join(" ")
-        else
-          "sw-layout-#{@app.layout} #{theme_class}"
         end
       end
 

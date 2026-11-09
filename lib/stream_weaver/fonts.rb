@@ -8,6 +8,10 @@ module StreamWeaver
   #   { google: "Family:wght@400;700" } — explicit Google font
   #   { src: "/fonts/foo.woff2", family: "Foo" } — self-hosted (future, not yet emitted)
   module Fonts
+    # The framework's own fonts: Source Sans 3 for body text, Crimson Pro
+    # for the document theme.
+    BASE_HREF = "https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=Source+Sans+3:wght@400;500;600;700&display=swap"
+
     # Build a combined Google Fonts href from the entries that declare Google fonts.
     #
     # @param fonts [Array<String, Hash>]
