@@ -40,7 +40,7 @@ module StreamWeaver
       end
     end
 
-    attr_reader :title, :block, :layout, :chrome, :theme, :theme_overrides, :theme_token_css, :scripts, :stylesheets, :inline_stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions, :action_updates, :action_primary
+    attr_reader :title, :block, :layout, :chrome, :theme, :theme_token_css, :scripts, :stylesheets, :inline_stylesheets, :fonts, :stream_block, :timers, :transient_keys, :favicon_value, :route_key, :routes, :route_rules, :resource_defs, :endpoints, :loading_indicators, :render_state, :actions, :action_updates, :action_primary
 
     # HTTP verbs supported by the `endpoint` DSL (real Rack routes, not state routing)
     ENDPOINT_VERBS = %i[get post put patch delete].freeze
@@ -115,8 +115,7 @@ module StreamWeaver
       @allowed_asset_dirs = ([@script_dir] + assets_dirs.map { |d| File.expand_path(d) }).uniq
       @stylesheets = stylesheets.map { |href| resolve_stylesheet_href(href) }
       @inline_stylesheets = []
-      @theme_token_css = []
-      theme_tokens(**theme_overrides.transform_keys(&:to_sym))
+      reset_theme_tokens
       @fonts = fonts
       @transient_keys = Set.new
       @timers = []
@@ -323,6 +322,7 @@ module StreamWeaver
       @render_state.deferred_target = deferred_target&.to_s
       apply_scope_lifecycle
       flash_messages if chrome
+      reset_theme_tokens
       evaluate_dsl_block(@block)
       @render_state.checkbox_keys = collect_checkbox_keys(components)
       @timers_frozen = true
@@ -1485,14 +1485,19 @@ module StreamWeaver
     # the DSL body, so a canvas push carries them too. theme_overrides: is
     # the same call. Owner decision 2: a surface token (Theme::SURFACE_TOKENS)
     # applies in light mode only unless dark: gives it a dark value; every
-    # other token applies in both modes.
+    # other token applies in both modes. Each render starts from
+    # theme_overrides: alone, so state-dependent tokens do not pile up.
+    #
+    # Limits: a canvas push broadcasts only the new HTML to open pages, so
+    # changed tokens show after a reload (as use_stylesheet does); an Opal
+    # build does not render them and warns once (OpalRuntime).
     #
     # @example
     #   theme_tokens color_primary: '#a21caf', dark: { color_bg: '#120712' }
     def theme_tokens(dark: {}, **tokens)
       return if tokens.empty? && dark.empty?
 
-      css = Theme.token_css(Theme::TOKEN_SCOPE, tokens, Theme.dark_tokens(tokens, dark))
+      css = Theme.token_css(Theme::TOKEN_SCOPE, tokens, dark: dark, carry: true)
       return if @theme_token_css.include?(css)
 
       warn_unknown_theme_tokens(tokens.keys + dark.keys)
@@ -1619,10 +1624,21 @@ module StreamWeaver
       ComponentAssets.url(abs_path)
     end
 
+    def reset_theme_tokens
+      @theme_token_css = []
+      theme_tokens(**@theme_overrides.transform_keys(&:to_sym))
+    end
+
+    # A raw custom property ("--x-y") is named on purpose; only a bare key
+    # that matches no schema entry is suspect. Once per key per App, since
+    # every render re-declares the tokens.
     def warn_unknown_theme_tokens(keys)
-      unknown = keys.reject { |key| Theme::VARIABLE_SCHEMA.key?(key.to_sym) }
+      @_warned_theme_tokens ||= Set.new
+      unknown = keys.reject { |key| key.to_s.start_with?("--") || Theme::VARIABLE_SCHEMA.key?(key.to_sym) }
+      unknown = unknown.reject { |key| @_warned_theme_tokens.include?(key.to_sym) }
       return if unknown.empty?
 
+      @_warned_theme_tokens.merge(unknown.map(&:to_sym))
       warn "StreamWeaver: Unknown theme token(s) #{unknown.map(&:inspect).join(', ')} -- " \
            "no matching entry in Theme::VARIABLE_SCHEMA, so each is emitted as a raw --sw- custom property " \
            "that no built-in styling reads."

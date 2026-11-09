@@ -111,7 +111,10 @@ module StreamWeaver
 
   module Opal
     module Kernel
-      def app(title, **_opts, &block)
+      def app(title, **opts, &block)
+        if opts[:theme_overrides]&.any?
+          warn "StreamWeaver: theme_overrides: is not rendered in an Opal build; the page keeps its theme's tokens."
+        end
         adapter = Adapter::Opal.new
         runtime = OpalRuntime.new(adapter: adapter)
         runtime.set_block(&block)

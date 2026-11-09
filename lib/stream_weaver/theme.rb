@@ -168,19 +168,29 @@ module StreamWeaver
     # the page theme.
     TOKEN_SCOPE = 'body[class*="sw-theme-"]'
 
-    # The selectors that mean "dark mode": AutoMode sets both on <html>, and
-    # the built-in themes key on one or the other.
+    # The selectors that mean "dark mode": AutoMode and the theme toggle set
+    # both on <html>, and the built-in themes key on one or the other.
+    # Generated CSS matches either, so a host that sets only
+    # data-sw-theme="dark" on :default (which keys on html.dark alone) gets a
+    # dark: background with :default's light-mode text unless dark: also
+    # gives a text token.
     DARK_SIGNALS = ['html.dark', 'html[data-sw-theme="dark"]'].freeze
+
+    # The scope that means <html> itself, where the dark signals live.
+    ROOT_SCOPE = ":root"
 
     # The one token CSS generator: scope {} for the light tokens, then the
     # scope under either dark signal for the dark tokens (left out if none).
     #
-    # @param scope [String] a selector, or ":root" for <html> itself
+    # @param scope [String] a selector, or ROOT_SCOPE for <html> itself
     # @param light [Hash] VARIABLE_SCHEMA keys or raw custom property names => values
     # @param dark [Hash] the same, for dark mode
+    # @param carry [Boolean] true carries the light tokens into dark mode
+    #   under owner decision 2 (dark_tokens); false uses dark: as given
     # @return [String] CSS
-    def self.token_css(scope, light, dark)
-      dark_scope = DARK_SIGNALS.map { |signal| scope == ":root" ? signal : "#{signal} #{scope}" }.join(", ")
+    def self.token_css(scope, light, dark: {}, carry: false)
+      dark = dark_tokens(light, dark) if carry
+      dark_scope = DARK_SIGNALS.map { |signal| scope == ROOT_SCOPE ? signal : "#{signal} #{scope}" }.join(", ")
       [[scope, light], [dark_scope, dark]].reject { |_, tokens| tokens.empty? }.map do |selector, tokens|
         "#{selector} {\n#{tokens.map { |key, value| "  #{css_property(key)}: #{value};" }.join("\n")}\n}\n"
       end.join
@@ -236,8 +246,8 @@ module StreamWeaver
     #
     # @return [String] CSS
     def to_css
-      scope = "body.sw-theme-#{@name}"
-      "#{Theme.token_css(scope, @variables, Theme.dark_tokens(@variables, @dark))}#{@css && "#{@css}\n"}"
+      tokens = Theme.token_css("body.sw-theme-#{@name}", @variables, dark: @dark, carry: true)
+      @css ? "#{tokens}#{@css}\n" : tokens
     end
 
     # Export as Ruby registration code

@@ -401,7 +401,8 @@ module StreamWeaver
         preset = get(preset_name)
         return "" unless preset
 
-        tokens = Theme.token_css(":root", css_variables(preset, mode: :light), css_variables(preset, mode: :dark))
+        tokens = Theme.token_css(Theme::ROOT_SCOPE, css_variables(preset, mode: :light),
+                                dark: css_variables(preset, mode: :dark))
         fonts = preset[:fonts]
 
         <<~CSS

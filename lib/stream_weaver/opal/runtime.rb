@@ -139,6 +139,7 @@ module StreamWeaver
         app = StreamWeaver::App.new("__opal__", &@block)
         @state.track(DSL_BUILD_DEPENDENCY) { app.rebuild_with_state(@state) }
         @watchers_initialized = true
+        warn_unrendered_theme_tokens(app)
 
         register_component_callbacks(app.components)
 
@@ -173,12 +174,22 @@ module StreamWeaver
         app = StreamWeaver::App.new("__opal__", &@block)
         app.rebuild_with_state(@state)
         @watchers_initialized = true
+        warn_unrendered_theme_tokens(app)
 
         renderer = OpalRenderer.new(@adapter, @state)
         app.components.each { |component| component.render(renderer, @state) }
         renderer.to_html
       ensure
         OpalRuntime.current = nil
+      end
+
+      # An Opal page has no theme token CSS path yet (App#theme_tokens), so
+      # say so once rather than drop the tokens silently.
+      def warn_unrendered_theme_tokens(app)
+        return if @warned_theme_tokens || app.theme_token_css.empty?
+
+        @warned_theme_tokens = true
+        warn "StreamWeaver: theme_tokens is not rendered in an Opal build; the page keeps its theme's tokens."
       end
 
       # --- state-update-loop reporting ---------------------------------------
