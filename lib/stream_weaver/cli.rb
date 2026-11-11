@@ -2923,7 +2923,8 @@ module StreamWeaver
         'streamweaver-canvas-safe' => File.join(__dir__, 'skills', 'streamweaver-canvas-safe', 'SKILL.md'),
         'visual-plan' => File.join(__dir__, 'skills', 'visual-plan', 'SKILL.md'),
         'visual-recap' => File.join(__dir__, 'skills', 'visual-recap', 'SKILL.md'),
-        'sw-annotate' => File.join(__dir__, 'skills', 'sw-annotate', 'SKILL.md')
+        'sw-annotate' => File.join(__dir__, 'skills', 'sw-annotate', 'SKILL.md'),
+        'streamweaver-session-tabs' => File.join(__dir__, 'skills', 'streamweaver-session-tabs', 'SKILL.md')
       }
 
       # Symlink the whole skill directory (not just SKILL.md) so sibling
