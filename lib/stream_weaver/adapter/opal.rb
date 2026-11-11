@@ -22,8 +22,12 @@ module StreamWeaver
 
       # Not in Base — defined fresh here
       def render_div(view, component, state)
-        opts = component.respond_to?(:html_options) ? component.html_options : {}
-        view.div(**opts) do
+        options = component.instance_variable_get(:@options) || {}
+        attrs = {}
+        attrs[:class] = options[:class] if options[:class]
+        attrs[:style] = options[:style] if options[:style]
+        attrs[:id] = options[:id] if options[:id]
+        view.div(**attrs) do
           Array(component.children).each { |c| c.render(view, state) }
         end
       end

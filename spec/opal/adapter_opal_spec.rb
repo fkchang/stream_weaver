@@ -108,9 +108,17 @@ RSpec.describe StreamWeaver::Adapter::Opal do
 
   describe "#render_div" do
     it "renders a div container" do
-      component = double("Div", children: [], html_options: { class: "foo" })
+      component = StreamWeaver::Components::Div.new(class: "foo")
       adapter.render_div(view, component, state)
       expect(view.to_html).to include('<div class="foo">')
+    end
+
+    it "keeps style and id, so inline-styled layout survives the extension render" do
+      component = StreamWeaver::Components::Div.new(style: "display:flex;gap:6px", id: "bar")
+      adapter.render_div(view, component, state)
+      html = view.to_html
+      expect(html).to include('style="display:flex;gap:6px"')
+      expect(html).to include('id="bar"')
     end
   end
 
