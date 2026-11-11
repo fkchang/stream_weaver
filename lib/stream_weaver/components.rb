@@ -381,7 +381,7 @@ module StreamWeaver
     # Div component for layout containers with optional hover support
     class Div < Base
       attr_accessor :children
-      attr_reader :hover_class
+      attr_reader :hover_class, :options
 
       # @param options [Hash] Options (e.g., class: "container")
       # @option options [String] :hover_class CSS class to add on hover (client-side)

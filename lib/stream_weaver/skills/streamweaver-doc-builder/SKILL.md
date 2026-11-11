@@ -105,6 +105,25 @@ cat shared/pm_discount_shared.rb my-doc.rb | streamweaver canvas-push my-doc
 
 Never hardcode an absolute home-directory path as a fallback. Full rationale, the per-mode `__dir__` truth table with code cites, the org-mode answers, and a proposal for a first-class `dsl_fragment` helper: `docs/shared-dsl-fragments.md` in the stream_weaver repo.
 
+## Writing a Doc That Exports to Readable `.org`
+
+A doc shared as a gist or saved as `.org` should read as plain org on GitHub, with no extension. `Org::Writer` (`lib/stream_weaver/org/writer.rb`, `render_component`) writes a fixed set of components as native org, and keeps everything else as a raw `#+begin_src ruby :streamweaver-raw t` block that the reader splices back as Ruby (so the extension still renders it).
+
+| Native org | Raw block (readable only as code) |
+|---|---|
+| `md`, `table(headers:, rows:)`, `callout`, `card`, `comparison`, `mermaid`, `code_block`, `replay`, `tabs` (as headlines) | `div(style:)`, `text`, `badge`, any call the recording context lacks (charts, `app_shell`), section headers inside tabs |
+
+Live controls (`button`, `select`, form fields) are dropped, not kept as source.
+
+Keep the non-org parts to a minimum, and shape them so the source can be recovered:
+
+1. **One top-level statement per raw part, helpers inside it.** Source recovery pairs top-level statements with top-level components by position (`SourceSplitter`). A top-level `bar = lambda ...` or a loop adds a statement with no component, the counts stop matching, and the writer emits `# unrecognized component: Div` and loses the content. Define helper lambdas inside the one `div ... do ... end` that uses them.
+2. **No recovery below top level.** An unrecognized component inside a `callout`, `card` or tab has no source to recover. Inside `tabs` it also disqualifies the group from becoming headlines, and the whole `tabs` statement turns into one raw block (an unreadable `.org`). Put the raw part above or between the tabs, not inside one.
+3. **Tabs must hold only native constructs and no `doc_section_header`.** Make each section its own tab (the tab label is the heading). Use `md` inside a callout, never `text`.
+4. **Use native shapes for prose rows.** A styled div-row layout becomes raw source; `md "- **Label.** Text"` bullets, a `table`, or a `callout` map cleanly.
+
+Check before sharing: `streamweaver org-export doc.rb`, then `grep -c "unrecognized" doc.org` must be `0` and `grep -c "streamweaver-raw" doc.org` should equal the number of raw parts you meant to keep (a tabbed doc also needs `grep -c STREAMWEAVER_TAB` to show one per tab). Publish the `.org` for readers and the `.rb` for the extension. See `docs/shared-dsl-fragments.md` for the fragment caveats, since a fragment's `__dir__` is `nil` under `org-export`.
+
 ## Component Reference
 
 ### `doc_header` — title block

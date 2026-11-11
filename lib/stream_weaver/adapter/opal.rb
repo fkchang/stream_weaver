@@ -22,7 +22,7 @@ module StreamWeaver
 
       # Not in Base — defined fresh here
       def render_div(view, component, state)
-        options = component.instance_variable_get(:@options) || {}
+        options = component.options
         attrs = {}
         attrs[:class] = options[:class] if options[:class]
         attrs[:style] = options[:style] if options[:style]
