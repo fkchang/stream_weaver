@@ -3,11 +3,18 @@
 # CONTRIBUTING, each one a file_section of the editor.
 #
 # A bare DSL body: no app wrapper, no constants, no methods defined outside
-# it, so the same file runs standalone (streamweaver_landing.rb evals it
-# inside an :ide app) and as a canvas push (the canvas session must be
-# created with theme :ide; a pushed use_theme is ignored, disc-127):
+# it, so the same file runs two ways:
 #
-#   streamweaver canvas-push NAME < examples/ide/streamweaver_landing_body.rb
+#   bundle exec ruby examples/ide/streamweaver_landing.rb   # server, opens a tab
+#
+#   bundle exec streamweaver canvas NAME                    # open a canvas
+#   bundle exec streamweaver canvas-push NAME < examples/ide/streamweaver_landing_body.rb
+#
+# (bundle exec because this page needs the checkout's lib, not an older
+# installed gem.) The use_theme line below themes a plain canvas session,
+# because a pushed use_theme applies live; in the standalone app, which is
+# already :ide, it changes nothing.
+use_theme :ide
 
 # This page's own styles: the hero, pills, buttons, cards and transcript
 # are plain divs with these classes, no component behind them. They are

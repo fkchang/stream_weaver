@@ -3,8 +3,9 @@
 
 # ide_shell with all five regions and enough filler to scroll the editor.
 #
-# Run with: ruby examples/ide/shell_demo.rb
-# (SW_NO_OPEN=1 skips opening a browser tab.)
+# Run with: bundle exec ruby examples/ide/shell_demo.rb
+# (SW_NO_OPEN=1 skips opening a browser tab. Use bundle exec from a checkout:
+# plain ruby can pick up an older installed stream_weaver gem with no :ide theme.)
 #
 # Resize below 1180px to send the right rail off-canvas behind the menu
 # button, and below 840px to hide the left rail.
